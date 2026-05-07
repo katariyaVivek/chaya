@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Download arrow icon -->
+    <group
+        android:translateX="24"
+        android:translateY="24">
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M30,40 L30,10 L0,10 L0,40 Z M10,30 L20,30 L20,18 L10,18 Z"
+            android:strokeWidth="0" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M30,0 L0,0 L0,30 L30,30 Z"
+            android:strokeWidth="4"
+            android:strokeColor="#FFFFFF" />
+    </group>
+</vector>

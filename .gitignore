@@ -6,3 +6,16 @@ build/
 *.iml
 local.properties
 .idea/
+app/build/
+*.apk
+*.aab
+*.ap_
+*.dex
+bin/
+gen/
+out/
+.cxx/
+*.log
+*.hprof
+captures/
+.externalNativeBuild/
