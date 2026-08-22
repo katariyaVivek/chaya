@@ -396,3 +396,9 @@ private fun ActionIcon(
         Icon(imageVector = icon, contentDescription = description, tint = tint)
     }
 }
+
+private fun iconForMime(mimeType: String?): ImageVector = when {
+    mimeType?.startsWith("video/") == true -> Icons.Default.Movie
+    mimeType?.startsWith("audio/") == true -> Icons.Default.MusicNote
+    else -> Icons.Default.Movie
+}

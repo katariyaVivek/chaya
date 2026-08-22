@@ -57,11 +57,10 @@ class StreamDownloader(
 
     /** Wraps the HTTP factory so each data source picks up the latest headers. */
     private val upstreamFactory = DataSource.Factory {
-        httpFactory.createDataSource().apply {
-            currentHeaders.get().forEach { (k, v) ->
-                runCatching { addRequestProperty(k, v) }
-            }
+        currentHeaders.get().takeIf { it.isNotEmpty() }?.let { headers ->
+            httpFactory.setDefaultRequestProperties(headers)
         }
+        httpFactory.createDataSource()
     }
 
     private val cacheDataSourceFactory = CacheDataSource.Factory()
@@ -145,8 +144,8 @@ class StreamDownloader(
     }
 
     fun pauseStream(taskId: Long) {
-        val contentId = taskToContentId[taskId] ?: return
-        downloadManager.stopDownload(contentId)
+        // Media3 has per-app (not per-item) stop; all Chaya streams pause together.
+        downloadManager.pauseDownloads()
     }
 
     fun resumeStream(
@@ -159,8 +158,10 @@ class StreamDownloader(
     ) {
         applyHeaders(userAgent, cookies, referer)
         val contentId = taskToContentId[taskId]
-        if (contentId != null && downloadManager.currentDownloads.any { it.request.id == contentId }) {
-            downloadManager.startDownload(contentId)
+        if (contentId != null &&
+            downloadManager.currentDownloads.any { it.request.id == contentId && it.state == Download.STATE_STOPPED }
+        ) {
+            downloadManager.resumeDownloads()
         } else {
             startStreamDownload(taskId, url, mimeType, userAgent, cookies, referer)
         }

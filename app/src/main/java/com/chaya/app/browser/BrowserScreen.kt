@@ -169,7 +169,7 @@ fun BrowserScreen(
     }
 
     fun exitFullscreen() {
-        customViewCallback?.onCustomViewReturned()
+        customViewCallback?.onCustomViewHidden()
         customViewCallback = null
         customView = null
         showSystemBars()
@@ -305,8 +305,8 @@ fun BrowserScreen(
                                 trailingIcon = {
                                     AnimatedVisibility(
                                         visible = urlInput.isNotEmpty(),
-                                        enter = scaleIn(0.7f) + fadeIn(ChayaMotion.tweenShort()),
-                                        exit = scaleOut(0.7f) + fadeOut(ChayaMotion.tweenShort())
+                                        enter = scaleIn(initialScale = 0.7f) + fadeIn(ChayaMotion.tweenShort()),
+                                        exit = scaleOut(targetScale = 0.7f) + fadeOut(ChayaMotion.tweenShort())
                                     ) {
                                         IconButton(onClick = { urlInput = "" }) {
                                             Icon(
