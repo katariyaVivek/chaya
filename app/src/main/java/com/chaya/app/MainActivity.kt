@@ -20,11 +20,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             ChayaTheme {
                 val navController = rememberNavController()
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Box(modifier = Modifier.padding(innerPadding)) {
-                        ChayaNavHost(navController = navController)
-                    }
-                }
+                ChayaNavHost(navController = navController)
             }
         }
     }

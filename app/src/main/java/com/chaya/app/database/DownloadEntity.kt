@@ -8,14 +8,23 @@ import com.chaya.app.download.DownloadTask
 
 @Entity(tableName = "downloads")
 data class DownloadEntity(
-    @PrimaryKey(autoGenerate = true)
-    val id: Long = 0,
+    /**
+     * Explicit primary key assigned by DownloadManager (NOT auto-generated).
+     * This guarantees the in-memory task id, the DB row id, and the id used
+     * by downloader callbacks are always the same value.
+     */
+    @PrimaryKey
+    val id: Long,
     val url: String,
     val pageUrl: String?,
     val fileName: String,
     val mimeType: String?,
     @ColumnInfo(name = "file_path")
     val filePath: String?,
+    @ColumnInfo(name = "exported_uri")
+    val exportedUri: String? = null,
+    @ColumnInfo(name = "error_message")
+    val errorMessage: String? = null,
     @ColumnInfo(name = "downloaded_bytes")
     val downloadedBytes: Long = 0,
     @ColumnInfo(name = "total_bytes")
@@ -38,6 +47,8 @@ data class DownloadEntity(
         fileName = fileName,
         mimeType = mimeType,
         filePath = filePath,
+        exportedUri = exportedUri,
+        errorMessage = errorMessage,
         downloadedBytes = downloadedBytes,
         totalBytes = totalBytes,
         state = state,
@@ -53,6 +64,8 @@ data class DownloadEntity(
             fileName = task.fileName,
             mimeType = task.mimeType,
             filePath = task.filePath,
+            exportedUri = task.exportedUri,
+            errorMessage = task.errorMessage,
             downloadedBytes = task.downloadedBytes,
             totalBytes = task.totalBytes,
             state = task.state,

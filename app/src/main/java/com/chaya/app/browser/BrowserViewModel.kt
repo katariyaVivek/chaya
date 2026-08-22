@@ -1,6 +1,8 @@
 package com.chaya.app.browser
 
 import android.app.Application
+import android.webkit.CookieManager
+import android.webkit.WebSettings
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.chaya.app.ChayaApplication
@@ -17,6 +19,8 @@ import kotlinx.coroutines.launch
 data class BrowserUiState(
     val url: String = "",
     val pageTitle: String = "",
+    /** True while the start screen overlay should cover the WebView. */
+    val homeVisible: Boolean = true,
     val isLoading: Boolean = false,
     val progress: Int = 0,
     val canGoBack: Boolean = false,
@@ -38,8 +42,10 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun onPageStarted(url: String) {
+        if (url == "about:blank") return  // home reset — keep start screen visible
         _uiState.value = _uiState.value.copy(
             url = url,
+            homeVisible = false,
             isLoading = true,
             progress = 0,
             detectedMedia = emptyList(),
@@ -49,6 +55,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun onPageFinished(url: String, title: String) {
+        if (url == "about:blank") return
         _uiState.value = _uiState.value.copy(
             url = url,
             pageTitle = title,
@@ -65,6 +72,17 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         _uiState.value = _uiState.value.copy(
             canGoBack = canGoBack,
             canGoForward = canGoForward
+        )
+    }
+
+    /** Show the start screen again (Home button). */
+    fun goHome() {
+        _uiState.value = _uiState.value.copy(
+            homeVisible = true,
+            isLoading = false,
+            detectedMedia = emptyList(),
+            showMediaSheet = false,
+            qualityPickerState = null
         )
     }
 
@@ -88,7 +106,10 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 context = getApplication(),
                 url = media.url,
                 mimeType = media.mimeType,
-                userAgent = downloadManager.userAgent
+                userAgent = WebSettings.getDefaultUserAgent(getApplication()),
+                cookies = runCatching {
+                    CookieManager.getInstance().getCookie(media.url)
+                }.getOrNull()
             )
 
             result.fold(
@@ -108,9 +129,12 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                     }
                 },
                 onFailure = { error ->
+                    // Keep the URL so "download anyway" still works.
                     _uiState.value = _uiState.value.copy(
                         qualityPickerState = QualityPickerState.Error(
-                            message = error.message ?: "Failed to analyze stream"
+                            message = error.message ?: "Failed to analyze stream",
+                            url = media.url,
+                            mimeType = media.mimeType
                         )
                     )
                 }
@@ -139,7 +163,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    /** Fallback: download the stream at default quality (all tracks). */
+    /** Fallback: download the stream at default quality when analysis failed. */
     fun downloadStreamFallback() {
         val state = _uiState.value.qualityPickerState
         if (state !is QualityPickerState.Error) return
@@ -149,7 +173,6 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             url = state.url,
             pageUrl = _uiState.value.url,
             mimeType = state.mimeType,
-            contentLength = null,
             source = com.chaya.app.model.DetectionSource.MANIFEST
         )
         downloadManager.startDownload(media)

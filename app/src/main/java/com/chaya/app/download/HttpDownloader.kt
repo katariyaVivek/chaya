@@ -5,11 +5,16 @@ import okhttp3.Request
 import okhttp3.Response
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
+import java.net.URLDecoder
 import java.util.concurrent.TimeUnit
 
 /**
- * Downloads a single file over HTTP with progress reporting, resume support,
- * and cancellation.
+ * Downloads a single file over HTTP with progress reporting, resume support
+ * (`Range` header) and cancellation.
+ *
+ * Cancellation is *silent*: [cancel] stops the transfer without invoking any
+ * callback, so [DownloadManager] stays the single owner of state transitions.
  */
 class HttpDownloader(
     private val client: OkHttpClient = OkHttpClient.Builder()
@@ -23,8 +28,14 @@ class HttpDownloader(
     private val activeCalls = mutableMapOf<Long, okhttp3.Call>()
 
     /**
-     * Start downloading [task]. Progress and completion are reported via
-     * [onProgress] and [onComplete]. Returns the task id.
+     * Start downloading [url] into [saveFile].
+     *
+     * @param fromBytes resume offset; a partial file must already exist.
+     * @param onMeta invoked once per response with the server-suggested
+     *   filename from `Content-Disposition` (null if absent), BEFORE any byte
+     *   is written — safe to rename [saveFile] inside this callback.
+     * @param onProgress throttled progress callback.
+     * @param onComplete terminal result. Never called after [cancel].
      */
     fun start(
         taskId: Long,
@@ -32,23 +43,28 @@ class HttpDownloader(
         saveFile: File,
         userAgent: String?,
         cookies: String?,
+        referer: String? = null,
         fromBytes: Long = 0,
+        onMeta: ((suggestedName: String?) -> Unit)? = null,
         onProgress: (downloadedBytes: Long, totalBytes: Long?) -> Unit,
         onComplete: (Result<File>) -> Unit
     ) {
+        saveFile.parentFile?.mkdirs()
+
         val requestBuilder = Request.Builder()
             .url(url)
             .header("Accept-Encoding", "identity")
 
         userAgent?.let { requestBuilder.header("User-Agent", it) }
         cookies?.let { requestBuilder.header("Cookie", it) }
-
+        if (!referer.isNullOrBlank()) {
+            requestBuilder.header("Referer", referer)
+        }
         if (fromBytes > 0) {
             requestBuilder.header("Range", "bytes=$fromBytes-")
         }
 
-        val request = requestBuilder.build()
-        val call = client.newCall(request)
+        val call = client.newCall(requestBuilder.build())
 
         synchronized(activeCalls) {
             activeCalls[taskId]?.cancel()
@@ -56,11 +72,10 @@ class HttpDownloader(
         }
 
         call.enqueue(object : okhttp3.Callback {
-            override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
-                synchronized(activeCalls) {
-                    if (call.isCanceled()) return
-                    activeCalls.remove(taskId)
-                }
+            override fun onFailure(call: okhttp3.Call, e: IOException) {
+                synchronized(activeCalls) { activeCalls.remove(taskId) }
+                // Silent when cancelled — manager owns the state machine.
+                if (call.isCanceled()) return
                 onComplete(Result.failure(e))
             }
 
@@ -70,50 +85,58 @@ class HttpDownloader(
                 }
 
                 response.use { resp ->
-                    if (!resp.isSuccessful && resp.code != 206) {
-                        onComplete(Result.failure(
-                            java.io.IOException("HTTP ${resp.code}: ${resp.message}")
-                        ))
+                    if (call.isCanceled()) return
+
+                    if (!resp.isSuccessful) {
+                        onComplete(Result.failure(IOException("HTTP ${resp.code}: ${resp.message}")))
                         return
                     }
+
+                    // Server ignored our Range header and returned the whole body —
+                    // restart from zero instead of corrupting the partial file.
+                    val resumed = resp.code == 206 && fromBytes > 0
 
                     val body = resp.body ?: run {
-                        onComplete(Result.failure(java.io.IOException("Empty response body")))
+                        onComplete(Result.failure(IOException("Empty response body")))
                         return
                     }
 
-                    // Determine total bytes from Content-Range (resume) or Content-Length
-                    val totalBytes = when {
+                    val totalBytes: Long? = when {
                         resp.code == 206 -> {
                             val range = resp.header("Content-Range") ?: ""
                             val idx = range.lastIndexOf('/')
-                            if (idx >= 0) range.substring(idx + 1).toLongOrNull() else null
+                            if (idx >= 0) range.substring(idx + 1).toLongOrNull()?.takeIf { it > 0 }
+                            else null
                         }
-                        else -> body.contentLength()
+                        else -> body.contentLength().takeIf { it > 0 }
                     }
 
+                    // Report server-suggested name before first write so callers can rename.
+                    onMeta?.invoke(parseContentDisposition(resp.header("Content-Disposition")))
+
+                    val append = resumed
+                    var downloaded = if (resumed) fromBytes else 0L
+
                     val source = body.source()
-                    val output = FileOutputStream(saveFile, fromBytes > 0)
-                    val buffer = ByteArray(8192)
-                    var downloaded = fromBytes
-                    var lastProgressReport = 0L
+                    val buffer = ByteArray(64 * 1024)
+                    var lastReportBytes = downloaded
+                    var lastReportTime = System.currentTimeMillis()
 
                     try {
-                        output.use { stream ->
-                            var bytesRead: Int
-                            while (source.read(buffer).also { bytesRead = it } != -1) {
-                                if (call.isCanceled()) {
-                                    onComplete(Result.failure(
-                                        java.io.IOException("Download cancelled")
-                                    ))
-                                    return
-                                }
-                                stream.write(buffer, 0, bytesRead)
-                                downloaded += bytesRead
+                        FileOutputStream(saveFile, append).use { stream ->
+                            while (true) {
+                                if (call.isCanceled()) return  // silent cancel
+                                val read = source.read(buffer)
+                                if (read == -1) break
+                                stream.write(buffer, 0, read)
+                                downloaded += read
 
-                                // Throttle progress reports to ~100ms intervals
-                                if (downloaded - lastProgressReport > 65536) {
-                                    lastProgressReport = downloaded
+                                val now = System.currentTimeMillis()
+                                if (downloaded - lastReportBytes >= 64 * 1024 ||
+                                    now - lastReportTime >= 300
+                                ) {
+                                    lastReportBytes = downloaded
+                                    lastReportTime = now
                                     onProgress(downloaded, totalBytes)
                                 }
                             }
@@ -130,6 +153,7 @@ class HttpDownloader(
         })
     }
 
+    /** Silently stop the transfer for [taskId]. Partial file is preserved. */
     fun cancel(taskId: Long) {
         synchronized(activeCalls) {
             activeCalls.remove(taskId)?.cancel()
@@ -140,6 +164,20 @@ class HttpDownloader(
         synchronized(activeCalls) {
             activeCalls.values.forEach { it.cancel() }
             activeCalls.clear()
+        }
+    }
+
+    companion object {
+        /** Extract filename from `Content-Disposition`; supports RFC 5987 `filename*`. */
+        fun parseContentDisposition(header: String?): String? {
+            if (header.isNullOrBlank()) return null
+            Regex("filename\\*=(?:UTF-8|utf-8)''([^;]+)").find(header)
+                ?.groupValues?.get(1)?.let { encoded ->
+                    return runCatching { URLDecoder.decode(encoded.trim(), "UTF-8") }
+                        .getOrNull()?.takeIf { it.isNotEmpty() }
+                }
+            return Regex("filename\\s*=\\s*\"?([^\";]+)\"?").find(header)
+                ?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() }
         }
     }
 }

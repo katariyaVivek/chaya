@@ -9,25 +9,25 @@ import java.util.Locale
 /**
  * Intercepts WebView requests and detects media URLs flowing through.
  *
- * Uses [WebResourceRequest] inspection (URL extension + MIME type from headers)
- * to identify downloadable media before the page loads them.
+ * Observer-only: returns null so the WebView loads normally.
+ *
+ * Detection is extension-based, plus an exact-match check for streaming
+ * manifest MIME types that some players put in the Accept header.
  */
 class MediaInterceptor(
     private val onMediaDetected: (DetectedMedia) -> Unit
 ) {
     /** Known media file extensions (lowercase, no dot). */
     private val mediaExtensions = setOf(
-        "mp4", "webm", "mp3", "m4a", "aac",
-        "m3u8", "mpd", "ts", "ogg", "wav", "flac", "wmv", "avi", "mkv"
+        "mp4", "m4v", "webm", "mov", "mkv", "avi", "wmv", "3gp",
+        "mp3", "m4a", "aac", "ogg", "oga", "opus", "wav", "flac", "mka",
+        "m3u8", "mpd", "ts"
     )
-
-    /** MIME type prefixes that indicate media content. */
-    private val mediaMimePrefixes = listOf("video/", "audio/")
 
     /** Exact MIME types for streaming manifests. */
     private val manifestMimeTypes = setOf(
         "application/vnd.apple.mpegurl",
-        "application/x-mpegURL",
+        "application/x-mpegurl",
         "application/dash+xml"
     )
 
@@ -35,7 +35,7 @@ class MediaInterceptor(
     private val reportedUrls = mutableSetOf<String>()
 
     /**
-     * Called from [WebViewClient.shouldInterceptRequest].
+     * Called from [android.webkit.WebViewClient.shouldInterceptRequest].
      * Returns null to let the WebView load normally — this is observer-only.
      */
     fun shouldInterceptRequest(
@@ -47,14 +47,10 @@ class MediaInterceptor(
         // Skip non-http schemes (data:, blob:, javascript:, etc.)
         if (!url.startsWith("http://") && !url.startsWith("https://")) return null
 
-        // Skip already-reported URLs
         val normalized = url.substringBefore("#")
         if (normalized in reportedUrls) return null
 
-        val mimeType = request.requestHeaders["Accept"] ?: ""
-        val detected = detect(request, pageUrl)
-
-        if (detected != null) {
+        detect(request, pageUrl)?.let { detected ->
             reportedUrls.add(normalized)
             onMediaDetected(detected)
         }
@@ -83,32 +79,19 @@ class MediaInterceptor(
                     url = url,
                     pageUrl = pageUrl,
                     mimeType = mimeTypeForExtension(ext),
-                    contentLength = null,
                     source = DetectionSource.NETWORK
                 )
             }
         }
 
-        // Check by manifest MIME type in Accept header
+        // Some players request manifests with a specific Accept header.
         val acceptHeader = request.requestHeaders["Accept"] ?: ""
-        if (acceptHeader in manifestMimeTypes) {
+        if (acceptHeader.lowercase(Locale.ROOT) in manifestMimeTypes.map { it.lowercase(Locale.ROOT) }) {
             return DetectedMedia(
                 url = url,
                 pageUrl = pageUrl,
                 mimeType = acceptHeader,
-                contentLength = null,
                 source = DetectionSource.MANIFEST
-            )
-        }
-
-        // Check by MIME prefix in Accept header
-        if (mediaMimePrefixes.any { acceptHeader.startsWith(it) }) {
-            return DetectedMedia(
-                url = url,
-                pageUrl = pageUrl,
-                mimeType = acceptHeader,
-                contentLength = null,
-                source = DetectionSource.NETWORK
             )
         }
 
@@ -116,20 +99,23 @@ class MediaInterceptor(
     }
 
     private fun mimeTypeForExtension(ext: String): String = when (ext) {
-        "mp4" -> "video/mp4"
+        "mp4", "m4v" -> "video/mp4"
         "webm" -> "video/webm"
+        "mov" -> "video/quicktime"
         "mkv" -> "video/x-matroska"
         "avi" -> "video/x-msvideo"
         "wmv" -> "video/x-ms-wmv"
+        "3gp" -> "video/3gpp"
+        "ts" -> "video/mp2t"
         "mp3" -> "audio/mpeg"
         "m4a" -> "audio/mp4"
         "aac" -> "audio/aac"
-        "ogg" -> "audio/ogg"
+        "ogg", "oga", "opus" -> "audio/ogg"
         "wav" -> "audio/wav"
         "flac" -> "audio/flac"
+        "mka" -> "audio/x-matroska"
         "m3u8" -> "application/vnd.apple.mpegurl"
         "mpd" -> "application/dash+xml"
-        "ts" -> "video/mp2t"
         else -> "application/octet-stream"
     }
 }

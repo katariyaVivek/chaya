@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Private download dir exposed so completed files can be opened on API < 29 -->
+    <files-path name="internal_downloads" path="downloads/" />
+</paths>

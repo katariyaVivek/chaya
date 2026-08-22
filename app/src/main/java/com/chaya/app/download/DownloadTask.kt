@@ -7,6 +7,10 @@ data class DownloadTask(
     val fileName: String,
     val mimeType: String?,
     val filePath: String? = null,
+    /** MediaStore URI of the copy exported to public storage (API 29+). */
+    val exportedUri: String? = null,
+    /** Failure reason shown on the downloads screen. */
+    val errorMessage: String? = null,
     val downloadedBytes: Long = 0,
     val totalBytes: Long? = null,
     val state: DownloadState = DownloadState.QUEUED,

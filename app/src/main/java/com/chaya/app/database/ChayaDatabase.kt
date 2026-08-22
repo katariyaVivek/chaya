@@ -8,7 +8,7 @@ import androidx.room.TypeConverters
 
 @Database(
     entities = [DownloadEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -25,7 +25,10 @@ abstract class ChayaDatabase : RoomDatabase() {
                     context.applicationContext,
                     ChayaDatabase::class.java,
                     "chaya.db"
-                ).build().also { INSTANCE = it }
+                )
+                    // Dev-stage schema: wipe rather than crash on migration.
+                    .fallbackToDestructiveMigration()
+                    .build().also { INSTANCE = it }
             }
         }
     }

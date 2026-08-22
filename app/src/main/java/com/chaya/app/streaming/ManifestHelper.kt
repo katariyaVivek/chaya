@@ -4,9 +4,10 @@ import android.content.Context
 import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
+import androidx.media3.common.StreamKey
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.offline.DownloadHelper
-import androidx.media3.exoplayer.source.DefaultRenderersFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -24,7 +25,8 @@ object ManifestHelper {
         context: Context,
         url: String,
         mimeType: String?,
-        userAgent: String?
+        userAgent: String?,
+        cookies: String? = null
     ): Result<List<StreamTrack>> = withContext(Dispatchers.Main) {
         suspendCancellableCoroutine { continuation ->
             try {
@@ -34,6 +36,9 @@ object ManifestHelper {
                     .setReadTimeoutMs(30_000)
                 if (userAgent != null) {
                     dataSourceFactory.setUserAgent(userAgent)
+                }
+                if (!cookies.isNullOrBlank()) {
+                    dataSourceFactory.setDefaultRequestProperties(mapOf("Cookie" to cookies))
                 }
 
                 val mediaItem = if (mimeType != null) {
@@ -86,14 +91,14 @@ object ManifestHelper {
 
                 val trackGroups = trackInfo.getTrackGroups(renderer)
                 for (group in 0 until trackGroups.length) {
-                    val trackGroup = trackGroups[group]
-                    // Use the first format in the group to build a label
-                    val format = trackGroup[0]
+                    val trackGroup = trackGroups.get(group)
+                    val format = trackGroup.getFormat(0)
                     val label = buildLabel(format, rendererType)
 
-                    // Collect all stream keys for this group
-                    val indices = (0 until trackGroup.length).toList()
-                    val streamKeys = helper.getStreamKeys(renderer, group, indices)
+                    val streamKeys = mutableListOf<StreamKey>()
+                    for (trackIndex in 0 until trackGroup.length) {
+                        streamKeys.add(StreamKey(period, group, trackIndex))
+                    }
 
                     tracks.add(StreamTrack(rendererType, label, streamKeys))
                 }
@@ -109,7 +114,8 @@ object ManifestHelper {
             if (format.height > 0) bits.add("${format.height}p")
             if (format.width > 0 && format.height > 0) bits.add("${format.width}x${format.height}")
             if (format.bitrate > 0) bits.add("${format.bitrate / 1000} kbps")
-            if (format.codecs != null) bits.add(format.codecs)
+            val codecs = format.codecs
+            if (!codecs.isNullOrEmpty()) bits.add(codecs)
             bits.joinToString(" · ").ifEmpty { "Video" }
         }
         C.TRACK_TYPE_AUDIO -> {

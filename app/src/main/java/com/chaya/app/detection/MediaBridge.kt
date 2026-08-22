@@ -6,34 +6,51 @@ import com.chaya.app.model.DetectionSource
 import java.util.Locale
 
 /**
- * JavaScript interface injected into WebView pages.
+ * JavaScript interface injected into WebView pages as `window.ChayaBridge`.
  *
- * Exposed as `window.ChayaBridge` — DOM detection scripts call
- * `ChayaBridge.onMediaDetected(url, tagName)` to report media elements
- * found in the page.
+ * The injected detector calls [onMediaDetectedWithType] to report media
+ * elements found in the DOM. Only http(s) URLs are accepted — blob:/data:
+ * URLs cannot be downloaded and would flood the list.
  */
 class MediaBridge(
+    /** Supplies the URL of the page currently loaded in the WebView. */
+    private val currentPageUrl: () -> String? = { null },
     private val onMediaDetected: (DetectedMedia) -> Unit
 ) {
     @JavascriptInterface
     fun onMediaDetected(url: String, tagName: String) {
-        val mimeType = mimeTypeForTag(tagName)
-        val media = DetectedMedia(
-            url = url,
-            pageUrl = null,
-            mimeType = mimeType,
-            contentLength = null,
-            source = DetectionSource.DOM
+        report(url, tagName, null)
+    }
+
+    @JavascriptInterface
+    fun onMediaDetectedWithType(url: String, tagName: String, typeAttr: String) {
+        report(url, tagName, typeAttr)
+    }
+
+    private fun report(rawUrl: String, tagName: String, typeAttr: String?) {
+        val url = rawUrl.trim()
+        if (!url.startsWith("http://") && !url.startsWith("https://")) return
+
+        // <source type="video/mp4; codecs=..."> — take the bare MIME part.
+        val mime = typeAttr?.trim()?.takeIf { it.isNotEmpty() }
+            ?.substringBefore(';')?.trim()?.takeIf { it.isNotEmpty() }
+            ?: mimeTypeForTag(tagName)
+
+        onMediaDetected(
+            DetectedMedia(
+                url = url,
+                pageUrl = currentPageUrl(),
+                mimeType = mime,
+                source = DetectionSource.DOM
+            )
         )
-        onMediaDetected(media)
     }
 
     private fun mimeTypeForTag(tag: String): String? {
         return when (tag.uppercase(Locale.ROOT)) {
             "VIDEO" -> "video/mp4"
             "AUDIO" -> "audio/mpeg"
-            "SOURCE" -> null  // let extension detection handle it
-            else -> null
+            else -> null  // SOURCE / others — let extension detection handle it
         }
     }
 }

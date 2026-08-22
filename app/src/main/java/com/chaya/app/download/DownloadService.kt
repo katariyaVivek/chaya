@@ -1,9 +1,13 @@
 package com.chaya.app.download
 
+import android.Manifest
 import android.app.Service
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import com.chaya.app.ChayaApplication
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -13,9 +17,15 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
+/**
+ * Foreground service that keeps downloads alive in the background and shows
+ * a progress notification.
+ */
 class DownloadService : Service() {
     private var observerJob: Job? = null
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    /** Completion notifications already shown during this service lifetime. */
+    private val notifiedCompleted = mutableSetOf<Long>()
 
     override fun onCreate() {
         super.onCreate()
@@ -25,57 +35,61 @@ class DownloadService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val app = application as ChayaApplication
 
-        // Handle notification actions
         when (intent?.action) {
             DownloadNotification.ACTION_CANCEL -> {
-                val downloadId = intent.getLongExtra(
-                    DownloadNotification.EXTRA_DOWNLOAD_ID, -1L
+                app.downloadManager.cancelDownload(
+                    intent.getLongExtra(DownloadNotification.EXTRA_DOWNLOAD_ID, -1L)
                 )
-                if (downloadId >= 0) {
-                    app.downloadManager.cancelDownload(downloadId)
-                }
+            }
+            DownloadNotification.ACTION_PAUSE -> {
+                app.downloadManager.pauseDownload(
+                    intent.getLongExtra(DownloadNotification.EXTRA_DOWNLOAD_ID, -1L)
+                )
             }
         }
 
-        // Post a pending notification immediately so Android doesn't kill us.
-        // The coroutine will update it with real progress once it starts.
-        val snapshot = app.downloadManager.downloads.value
-        val active = snapshot.filter {
-            it.state == DownloadState.DOWNLOADING || it.state == DownloadState.QUEUED
-        }
-        if (active.isNotEmpty()) {
-            val notification = DownloadNotification.buildProgressNotification(
-                this, active.last()
-            )
-            startForeground(DownloadNotification.NOTIFICATION_ID, notification)
-        }
+        // ALWAYS promote to foreground immediately — startForegroundService
+        // gives us ~5 seconds or the system crashes the app.
+        val active = app.downloadManager.downloads.value.filter { it.state.isActive }
+        startForeground(
+            DownloadNotification.NOTIFICATION_ID,
+            if (active.isNotEmpty()) {
+                DownloadNotification.buildProgressNotification(this, active.last())
+            } else {
+                DownloadNotification.buildIdleNotification(this)
+            }
+        )
 
-        // Observe download state and keep notification updated
-        if (observerJob == null || observerJob?.isActive != true) {
+        if (observerJob?.isActive != true) {
             observerJob = scope.launch {
                 app.downloadManager.downloads.collectLatest { tasks ->
-                    val currentActive = tasks.filter {
-                        it.state == DownloadState.DOWNLOADING || it.state == DownloadState.QUEUED
-                    }
+                    val currentActive = tasks.filter { it.state.isActive }
 
                     if (currentActive.isNotEmpty()) {
-                        val notification = DownloadNotification.buildProgressNotification(
-                            this@DownloadService,
-                            currentActive.last()
-                        )
-                        startForeground(DownloadNotification.NOTIFICATION_ID, notification)
-                    } else {
-                        // Show completion notification briefly
-                        val completed = tasks.filter { it.state == DownloadState.COMPLETED }
-                        if (completed.isNotEmpty()) {
-                            val notification = DownloadNotification.buildCompleteNotification(
+                        startForeground(
+                            DownloadNotification.NOTIFICATION_ID,
+                            DownloadNotification.buildProgressNotification(
                                 this@DownloadService,
-                                completed.last()
+                                currentActive.last()
                             )
-                            NotificationManagerCompat.from(this@DownloadService)
-                                .notify(completed.last().id.toInt(), notification)
-                        }
+                        )
+                    } else {
                         stopForeground(STOP_FOREGROUND_REMOVE)
+
+                        // One completion notification per finished download.
+                        tasks
+                            .filter {
+                                it.state == DownloadState.COMPLETED &&
+                                        it.id !in notifiedCompleted
+                            }
+                            .forEach { t ->
+                                notifiedCompleted += t.id
+                                safeNotify(
+                                    (DownloadNotification.COMPLETE_ID_BASE + t.id).toInt(),
+                                    DownloadNotification.buildCompleteNotification(this@DownloadService, t)
+                                )
+                            }
+
                         stopSelf()
                     }
                 }
@@ -85,6 +99,14 @@ class DownloadService : Service() {
         return START_NOT_STICKY
     }
 
+    private fun safeNotify(id: Int, notification: android.app.Notification) {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) return
+        runCatching { NotificationManagerCompat.from(this).notify(id, notification) }
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
@@ -92,3 +114,7 @@ class DownloadService : Service() {
         super.onDestroy()
     }
 }
+
+/** Active states worth keeping a foreground service around for. */
+private val DownloadState.isActive: Boolean
+    get() = this == DownloadState.DOWNLOADING || this == DownloadState.QUEUED

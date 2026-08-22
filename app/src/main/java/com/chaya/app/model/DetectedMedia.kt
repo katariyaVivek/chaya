@@ -11,7 +11,7 @@ data class DetectedMedia(
     val url: String,
     val pageUrl: String?,
     val mimeType: String?,
-    val contentLength: Long?,
+    val contentLength: Long? = null,
     val source: DetectionSource,
     val detectedAt: Long = System.currentTimeMillis()
 ) {

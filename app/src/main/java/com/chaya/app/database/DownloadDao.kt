@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
+import com.chaya.app.download.DownloadState
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -19,8 +20,20 @@ interface DownloadDao {
     @Query("SELECT * FROM downloads WHERE id = :id")
     suspend fun getById(id: Long): DownloadEntity?
 
+    @Query("SELECT COALESCE(MAX(id), 0) FROM downloads")
+    suspend fun getMaxId(): Long
+
+    @Query("UPDATE downloads SET file_name = :name, file_path = :path, updated_at = :now WHERE id = :id")
+    suspend fun updateNameAndPath(
+        id: Long,
+        name: String,
+        path: String,
+        now: Long = System.currentTimeMillis()
+    )
+
+    /** Ids are explicit — REPLACE lets us upsert rows safely. */
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insert(task: DownloadEntity): Long
+    suspend fun insert(task: DownloadEntity)
 
     @Update
     suspend fun update(task: DownloadEntity)

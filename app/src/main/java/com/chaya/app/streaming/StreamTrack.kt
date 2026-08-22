@@ -1,6 +1,6 @@
 package com.chaya.app.streaming
 
-import androidx.media3.exoplayer.offline.StreamKey
+import androidx.media3.common.StreamKey
 
 data class StreamTrack(
     val rendererType: Int,

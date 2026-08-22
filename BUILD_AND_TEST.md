@@ -4,20 +4,23 @@
 
 This is the **Chaya** Android app — a WebView-based browser with smart media detection and downloads. Built in Kotlin with Jetpack Compose.
 
-### v0.2 Features
+### Features (v0.3)
 
 | Area | What it does |
 |------|-------------|
-| **WebView browser** | Full browser with URL bar, back/forward/refresh |
-| **Network detection** | Catches media URLs flowing through `shouldInterceptRequest()` by extension (`.mp4`, `.webm`, `.mp3`, `.m4a`, `.aac`, `.m3u8`, `.mpd`) and MIME type |
-| **DOM detection** | Injected JavaScript scans `<video>`/`<audio>` elements, watches for dynamic additions via MutationObserver |
-| **Media sheet** | Floating action button with badge count → bottom sheet listing all detected media |
-| **OkHttp downloader** | Downloads regular files with progress, resume via `Range` header, cancellation, cookie/UA forwarding |
-| **Media3 streaming** | HLS (`.m3u8`) and DASH (`.mpd`) downloads via ExoPlayer's `DownloadManager` with segment caching |
-| **Quality picker** | Parses stream manifests and shows available video/audio tracks — pick what to download |
-| **Foreground service** | Keeps downloads alive in background with progress notification and cancel action |
-| **Room database** | Persists download history across app restarts |
-| **Downloads screen** | Full list with progress bars, status labels, cancel button |
+| **WebView browser** | Full browser with URL bar, back/forward/refresh, system back handling, `target=_blank` links, fullscreen video; session survives navigation |
+| **Network detection** | Extension-based detection in `shouldInterceptRequest()` (mp4/webm/mp3/m4a/aac/m4v/mov/mkv/ts/m3u8/mpd…) |
+| **DOM detection** | Injected JS: video/audio/source scanning, Shadow DOM + same-origin iframe traversal, fetch/XHR sniffing, debounced MutationObserver, blob:/data: filtered |
+| **Media sheet** | Floating FAB with badge count → bottom sheet listing all detected media |
+| **OkHttp downloader** | Progress, resume via `Range`, silent cancel, Referer/Cookie/UA forwarding, Content-Disposition filenames |
+| **Media3 streaming** | HLS/DASH downloads via ExoPlayer `DownloadManager`; pause = stopDownload, resume = startDownload; headers forwarded |
+| **Quality picker** | Parses manifests → video/audio track selection; error state keeps URL for "download anyway" |
+| **Pause/resume/retry/cancel** | Full state machine; partial files kept and reused (HTTP Range resume, Media3 cache reuse) |
+| **Public storage export** | Completed files copied to MediaStore (Movies/Music/Downloads) on API 29+; FileProvider open below |
+| **In-app player** | Completed streams play via ExoPlayer reading the same segment cache |
+| **Foreground service** | Always promotes safely, progress + Pause/Cancel actions, per-download completion notifications, permission-safe notify |
+| **Room database** | Explicit IDs (no ID mismatch), error messages stored, interrupted downloads restored as PAUSED |
+| **Downloads screen** | Per-state actions: pause/resume/retry/delete/open/play + error text + sizes |
 
 ---
 
@@ -45,6 +48,8 @@ This is the **Chaya** Android app — a WebView-based browser with smart media d
      ```
      ./gradlew assembleDebug
      ```
+
+> **Note:** the Gradle wrapper JAR is not checked in. Open the project once in Android Studio (which generates it), or run `gradle wrapper --gradle-version 8.9` if you have a local Gradle install.
 
 4. **Install** on a connected device/emulator:
    ```
@@ -81,8 +86,8 @@ This is the **Chaya** Android app — a WebView-based browser with smart media d
 
 ### 5. Downloads screen
 - Tap the downloads icon (bottom nav bar, rightmost)
-- Shows all downloads: active (progress bar), completed, failed, cancelled
-- Cancel active downloads with the ✕ button
+- Active → **pause** ⏸ / **cancel** ✕ · Paused/cancelled → **resume** ▶ / **delete** 🗑
+- Failed → **retry** ↻ (error reason shown) · Completed file → **open** ↗ · Completed stream → **play** ▶ (in-app player)
 
 ### 6. Persistence
 - Complete a download, force-stop the app, reopen
