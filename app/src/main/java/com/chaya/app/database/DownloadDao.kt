@@ -23,7 +23,7 @@ interface DownloadDao {
     @Query("SELECT COALESCE(MAX(id), 0) FROM downloads")
     suspend fun getMaxId(): Long
 
-    @Query("UPDATE downloads SET file_name = :name, file_path = :path, updated_at = :now WHERE id = :id")
+    @Query("UPDATE downloads SET fileName = :name, file_path = :path, updated_at = :now WHERE id = :id")
     suspend fun updateNameAndPath(
         id: Long,
         name: String,
