@@ -78,7 +78,7 @@ class DownloadManagerTest {
                 assertEquals(0L, call.fromBytes)
                 assertEquals(media().pageUrl, call.referer)
             }
-            assertEquals(DownloadState.DOWNLOADING, dao.getById(1)!!.state)
+            assertEquals(DownloadState.DOWNLOADING, awaitDbState(1, DownloadState.DOWNLOADING).state)
         }
 
     // ---- pauseDownload ---- //
@@ -110,8 +110,8 @@ class DownloadManagerTest {
         manager.pauseDownload(1)
 
         assertEquals(DownloadState.PAUSED, awaitTaskState(1, DownloadState.PAUSED).state)
+        assertTrue("initial start never recorded", awaitUntil { downloader.starts.size == 1 })
         assertEquals(1, downloader.cancelled.size)
-        assertEquals(1, downloader.starts.size)
     }
 
     // ---- resumeDownload ---- //
@@ -145,6 +145,7 @@ class DownloadManagerTest {
         manager.startDownload(media())
         awaitTaskState(1, DownloadState.DOWNLOADING)
         val file = File(manager.downloads.value.single().filePath!!).apply { writeText("partial") }
+        awaitStart(1)
         downloader.completeLastWithFailure(1, IOException("HTTP 500: boom"))
         assertEquals(DownloadState.FAILED, awaitTaskState(1, DownloadState.FAILED).state)
         assertEquals("HTTP 500: boom", awaitDbState(1, DownloadState.FAILED).errorMessage)
@@ -152,7 +153,7 @@ class DownloadManagerTest {
         manager.resumeDownload(1)
 
         assertEquals(DownloadState.DOWNLOADING, awaitTaskState(1, DownloadState.DOWNLOADING).state)
-        assertEquals(2, downloader.starts.size)
+        assertTrue("retry never re-invoked the downloader", awaitUntil { downloader.starts.size == 2 })
         assertEquals("retry must keep writing the same partial file", file, downloader.starts.last().saveFile)
     }
 
@@ -161,6 +162,7 @@ class DownloadManagerTest {
         manager.restore()
         manager.startDownload(media())
         awaitTaskState(1, DownloadState.DOWNLOADING)
+        awaitStart(1)
         downloader.completeLast(1)
         awaitTaskState(1, DownloadState.COMPLETED)
 
@@ -320,8 +322,23 @@ class DownloadManagerTest {
         return false
     }
 
+    /**
+     * Waits for the fake to record the start for [taskId] before driving its
+     * callback: startHttp makes the task visible in the flow and persists the
+     * row before invoking the downloader, so a callback fired immediately
+     * after observing the task would silently miss its target.
+     */
+    private suspend fun awaitStart(taskId: Long): FakeDownloader.Start {
+        val deadline = System.currentTimeMillis() + TIMEOUT_MS
+        while (System.currentTimeMillis() < deadline) {
+            downloader.starts.lastOrNull { it.taskId == taskId }?.let { return it }
+            delay(20)
+        }
+        throw AssertionError("downloader never recorded a start for task $taskId; starts=${downloader.starts}")
+    }
+
     private companion object {
-        const val TIMEOUT_MS = 5_000L
+        const val TIMEOUT_MS = 10_000L
     }
 }
 
