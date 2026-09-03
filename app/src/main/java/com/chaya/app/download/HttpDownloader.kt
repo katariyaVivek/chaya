@@ -24,7 +24,7 @@ class HttpDownloader(
         .followRedirects(true)
         .followSslRedirects(true)
         .build()
-) {
+) : MediaDownloader {
     private val activeCalls = mutableMapOf<Long, okhttp3.Call>()
 
     /**
@@ -37,15 +37,15 @@ class HttpDownloader(
      * @param onProgress throttled progress callback.
      * @param onComplete terminal result. Never called after [cancel].
      */
-    fun start(
+    override fun start(
         taskId: Long,
         url: String,
         saveFile: File,
         userAgent: String?,
         cookies: String?,
-        referer: String? = null,
-        fromBytes: Long = 0,
-        onMeta: ((suggestedName: String?) -> Unit)? = null,
+        referer: String?,
+        fromBytes: Long,
+        onMeta: ((suggestedName: String?) -> Unit)?,
         onProgress: (downloadedBytes: Long, totalBytes: Long?) -> Unit,
         onComplete: (Result<File>) -> Unit
     ) {
@@ -154,7 +154,7 @@ class HttpDownloader(
     }
 
     /** Silently stop the transfer for [taskId]. Partial file is preserved. */
-    fun cancel(taskId: Long) {
+    override fun cancel(taskId: Long) {
         synchronized(activeCalls) {
             activeCalls.remove(taskId)?.cancel()
         }

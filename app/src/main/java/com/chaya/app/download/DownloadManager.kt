@@ -32,8 +32,9 @@ import java.net.URLEncoder
 import java.util.concurrent.atomic.AtomicLong
 
 /**
- * Coordinates all downloads: creates tasks, delegates to [HttpDownloader]
- * or [StreamDownloader], persists state through [DownloadDao], and exposes
+ * Coordinates all downloads: creates tasks, delegates HTTP transfers to the
+ * injected [MediaDownloader] (production: [HttpDownloader]) and streams to
+ * [StreamDownloader], persists state through [DownloadDao], and exposes
  * state for UI observation.
  *
  * Task IDs are generated here (seeded from the DB) and used as explicit
@@ -42,10 +43,10 @@ import java.util.concurrent.atomic.AtomicLong
  */
 class DownloadManager(
     private val context: Context,
-    private val dao: DownloadDao
+    private val dao: DownloadDao,
+    private val downloader: MediaDownloader = HttpDownloader()
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val downloader = HttpDownloader()
     private val saveDir = File(context.filesDir, "downloads").also { it.mkdirs() }
 
     /** Completed once [restore] has seeded state — startDownload waits on it. */

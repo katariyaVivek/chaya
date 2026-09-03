@@ -1,0 +1,27 @@
+{
+	"version": 1,
+	"ports": {
+		"preview": 3000,
+		"additional": {}
+	},
+	"scripts": {
+		"setup": {
+			"enabled": true,
+			"comment": "Android toolchain for Chaya: JDK 17, SDK platform 35 + build-tools 35.0.0 (cmdline-tools), Gradle 8.9 (wrapper jar is deliberately not checked in - see BUILD_AND_TEST.md and CHAYA_ROADMAP.md 'Ground truth').",
+			"command": "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq openjdk-17-jdk-headless curl unzip zip && mkdir -p /opt/android-sdk/cmdline-tools && curl -fsSL -o /tmp/cmdtools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip && unzip -q -o /tmp/cmdtools.zip -d /opt/android-sdk/cmdline-tools && ([ -d /opt/android-sdk/cmdline-tools/latest ] || mv /opt/android-sdk/cmdline-tools/cmdline-tools /opt/android-sdk/cmdline-tools/latest) && yes | /opt/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses && /opt/android-sdk/cmdline-tools/latest/bin/sdkmanager \"platforms;android-35\" \"build-tools;35.0.0\" && (curl -fsSL -o /tmp/gradle.zip https://services.gradle.org/distributions/gradle-8.9-bin.zip && unzip -q -o /tmp/gradle.zip -d /opt) && ln -sf /opt/gradle-8.9/bin/gradle /usr/local/bin/gradle && printf 'sdk.dir=/opt/android-sdk\\n' > local.properties"
+		},
+		"run": {
+			"enabled": true,
+			"command": null
+		},
+		"archive": {
+			"enabled": true,
+			"command": null
+		},
+		"check": {
+			"enabled": true,
+			"command": null
+		}
+	},
+	"mcpServers": []
+}
