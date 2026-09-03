@@ -25,12 +25,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+// OpenInNew is directional — the plain Filled variant is deprecated in favor
+// of the AutoMirrored one so LTR/RTL layouts mirror the glyph correctly.
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PauseCircle
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -370,7 +372,7 @@ private fun ActionsRow(
             DownloadState.COMPLETED -> {
                 // Streams live in Media3's cache (no single file) — play in-app.
                 if (task.filePath != null || task.exportedUri != null) {
-                    ActionIcon(Icons.Default.OpenInNew, "Open", onOpen,
+                    ActionIcon(Icons.AutoMirrored.Filled.OpenInNew, "Open", onOpen,
                         tint = MaterialTheme.colorScheme.primary)
                 } else {
                     ActionIcon(Icons.Default.PlayArrow, "Play", onPlay,

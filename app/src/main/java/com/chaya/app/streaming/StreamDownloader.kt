@@ -21,14 +21,22 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.io.File
-import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Handles HLS/DASH stream downloads using Media3's [DownloadManager].
  *
- * Pause = [DownloadManager.stopDownload] (state STOPPED, cache kept),
- * resume = [DownloadManager.startDownload], delete = removeDownload.
+ * Media3 content IDs are derived from the Room task id (`chaya_task_<taskId>`)
+ * rather than a process-local counter, so a fresh instance resolves the
+ * persisted download index by computing the same ID after process death.
+ * Earlier the IDs came from an in-memory counter plus two lookup maps that
+ * died with the process: after a restart, pause/delete silently no-oped and
+ * resume re-added the download from scratch under a brand-new ID, orphaning
+ * the cached segments of the original.
+ *
+ * Pause = [DownloadManager.setStopReason] (state STOPPED, cache kept),
+ * resume = setStopReason back to [Download.STOP_REASON_NONE], delete =
+ * [DownloadManager.removeDownload].
  */
 class StreamDownloader(
     context: Context,
@@ -68,10 +76,6 @@ class StreamDownloader(
         .setUpstreamDataSourceFactory(upstreamFactory)
         .setCacheWriteDataSinkFactory(CacheDataSink.Factory().setFragmentSize(2 * 1024 * 1024))
 
-    private val contentIdCounter = AtomicLong(0)
-    internal val taskToContentId = mutableMapOf<Long, String>()
-    internal val contentIdToTask = mutableMapOf<String, Long>()
-
     val downloadManager: DownloadManager = DownloadManager(
         context,
         databaseProvider,
@@ -88,15 +92,13 @@ class StreamDownloader(
                 download: Download,
                 finalException: Exception?
             ) {
-                val taskId = contentIdToTask[download.request.id]
+                val taskId = taskIdFor(download.request.id)
                 when (download.state) {
                     Download.STATE_COMPLETED -> {
                         if (taskId != null) listener.onStreamCompleted(taskId)
-                        untrack(download.request.id)
                     }
                     Download.STATE_FAILED -> {
                         taskId?.let { listener.onStreamFailed(it, download.failureReason) }
-                        untrack(download.request.id)
                     }
                     Download.STATE_STOPPED -> {
                         taskId?.let { listener.onStreamPaused(it) }
@@ -108,10 +110,6 @@ class StreamDownloader(
                         }
                     }
                 }
-            }
-
-            override fun onDownloadRemoved(downloadManager: DownloadManager, download: Download) {
-                untrack(download.request.id)
             }
         })
     }
@@ -136,7 +134,14 @@ class StreamDownloader(
         streamKeys: List<StreamKey>? = null
     ) {
         applyHeaders(userAgent, cookies, referer)
-        val contentId = track(taskId)
+        val contentId = contentIdFor(taskId)
+        if (downloadManager.currentDownloads.any { it.request.id == contentId }) {
+            // Already known to Media3 (e.g. resume after process death) —
+            // clear the stop reason instead of re-adding, so cached segments
+            // and download progress survive.
+            downloadManager.setStopReason(contentId, Download.STOP_REASON_NONE)
+            return
+        }
         val builder = DownloadRequest.Builder(contentId, Uri.parse(url))
         mimeType?.let { builder.setMimeType(it) }
         if (!streamKeys.isNullOrEmpty()) builder.setStreamKeys(streamKeys)
@@ -144,11 +149,15 @@ class StreamDownloader(
     }
 
     fun pauseStream(taskId: Long) {
+        val contentId = contentIdFor(taskId)
+        // DownloadManager call sites also receive HTTP task ids, which are
+        // never stream downloads — skip ids absent from Media3's index rather
+        // than forwarding them.
+        if (downloadManager.currentDownloads.none { it.request.id == contentId }) return
         // setStopReason targets a single content id (verified against the
         // media3-exoplayer 1.5.1 API) — earlier this called the app-wide
         // pauseDownloads(), which silently paused every other active stream
         // download too whenever the user paused just one of them.
-        val contentId = taskToContentId[taskId] ?: return
         downloadManager.setStopReason(contentId, STOP_REASON_PAUSED)
     }
 
@@ -161,12 +170,16 @@ class StreamDownloader(
         referer: String? = null
     ) {
         applyHeaders(userAgent, cookies, referer)
-        val contentId = taskToContentId[taskId]
-        if (contentId != null &&
-            downloadManager.currentDownloads.any { it.request.id == contentId && it.state == Download.STATE_STOPPED }
-        ) {
+        val contentId = contentIdFor(taskId)
+        val stopped = downloadManager.currentDownloads.any {
+            it.request.id == contentId && it.state == Download.STATE_STOPPED
+        }
+        if (stopped) {
             downloadManager.setStopReason(contentId, Download.STOP_REASON_NONE)
         } else {
+            // Either the download is gone (completed/failed/removed) or was
+            // never a stream download — (re)start is correct in both cases
+            // and reuses the same derived content id either way.
             startStreamDownload(taskId, url, mimeType, userAgent, cookies, referer)
         }
     }
@@ -184,16 +197,13 @@ class StreamDownloader(
         return cacheDataSourceFactory
     }
 
-    /** Remove the download entirely and drop its cached data. */
     fun deleteStream(taskId: Long) {
-        val contentId = taskToContentId.remove(taskId) ?: return
-        contentIdToTask.remove(contentId)
-        downloadManager.removeDownload(contentId)
+        // Safe for any taskId: removing an id absent from Media3's index is a
+        // no-op on the index, so HTTP task ids pass through harmlessly.
+        downloadManager.removeDownload(contentIdFor(taskId))
     }
 
     fun cancelAll() {
-        taskToContentId.clear()
-        contentIdToTask.clear()
         downloadManager.removeAllDownloads()
     }
 
@@ -204,16 +214,14 @@ class StreamDownloader(
 
     // ------------------------------------------------------------------ //
 
-    private fun track(taskId: Long): String =
-        taskToContentId[taskId]
-            ?: "chaya_${contentIdCounter.incrementAndGet()}".also {
-                taskToContentId[taskId] = it
-                contentIdToTask[it] = taskId
-            }
+    /** Stable Media3 content id for a task id — computable after process death. */
+    private fun contentIdFor(taskId: Long): String = "$CONTENT_ID_PREFIX$taskId"
 
-    private fun untrack(contentId: String) {
-        contentIdToTask.remove(contentId)?.let { taskToContentId.remove(it) }
-    }
+    /** Inverse of [contentIdFor]; null for ids Chaya did not create. */
+    internal fun taskIdFor(contentId: String): Long? =
+        contentId.removePrefix(CONTENT_ID_PREFIX)
+            .takeIf { it != contentId }
+            ?.toLongOrNull()
 
     private fun applyHeaders(ua: String?, cookies: String?, referer: String?) {
         val map = buildMap {
@@ -225,15 +233,11 @@ class StreamDownloader(
     }
 
     private fun tickProgress() {
-        if (contentIdToTask.isEmpty()) return
-        val tracked = contentIdToTask.toMap()
-        val current = downloadManager.currentDownloads.associateBy { it.request.id }
-        for ((contentId, taskId) in tracked) {
-            val d = current[contentId] ?: continue
-            if (d.state == Download.STATE_DOWNLOADING) {
-                val total = d.contentLength.takeIf { it > 0 }
-                listener.onStreamProgress(taskId, d.bytesDownloaded, total)
-            }
+        for (d in downloadManager.currentDownloads) {
+            if (d.state != Download.STATE_DOWNLOADING) continue
+            val taskId = taskIdFor(d.request.id) ?: continue
+            val total = d.contentLength.takeIf { it > 0 }
+            listener.onStreamProgress(taskId, d.bytesDownloaded, total)
         }
     }
 
@@ -250,5 +254,7 @@ class StreamDownloader(
 
         /** Any non-zero value marks a download STOPPED without touching sibling downloads. */
         private const val STOP_REASON_PAUSED = 1
+
+        private const val CONTENT_ID_PREFIX = "chaya_task_"
     }
 }

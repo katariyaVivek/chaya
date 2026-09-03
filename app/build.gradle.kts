@@ -79,4 +79,15 @@ dependencies {
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.turbine)
+    testImplementation(libs.robolectric)
+}
+
+// Robolectric needs the resource-merged classpath for ApplicationProvider-style
+// context access even when tests don't inflate layouts.
+android {
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+        }
+    }
 }
