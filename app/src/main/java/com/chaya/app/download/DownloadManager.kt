@@ -10,6 +10,7 @@ import android.provider.MediaStore
 import android.webkit.CookieManager
 import android.webkit.MimeTypeMap
 import android.webkit.WebSettings
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.media3.common.StreamKey
 import androidx.media3.datasource.DataSource
@@ -90,6 +91,7 @@ class DownloadManager(
     // ------------------------------------------------------------------ //
 
     fun startDownload(media: DetectedMedia) {
+        ensureServiceRunning()
         scope.launch {
             val id = nextId()
             val (ua, ck) = sessionHeaders(media.url)
@@ -102,6 +104,7 @@ class DownloadManager(
     }
 
     fun startDownload(media: DetectedMedia, streamKeys: List<StreamKey>) {
+        ensureServiceRunning()
         scope.launch {
             val id = nextId()
             val (ua, ck) = sessionHeaders(media.url)
@@ -127,6 +130,7 @@ class DownloadManager(
     fun resumeDownload(id: Long) {
         val t0 = find(id) ?: return
         if (t0.state !in resumableStates) return
+        ensureServiceRunning()
 
         scope.launch {
             val t = find(id) ?: return@launch
@@ -375,6 +379,20 @@ class DownloadManager(
     // ------------------------------------------------------------------ //
     // Helpers
     // ------------------------------------------------------------------ //
+
+    /**
+     * Promotes [DownloadService] to the foreground before any transfer begins.
+     *
+     * Without this call the service class exists but is never instantiated,
+     * so Android is free to kill the download the instant the app backgrounds
+     * and the "Pause"/"Cancel" notification actions never appear — the
+     * foreground-service guarantee documented in BUILD_AND_TEST.md was pure
+     * fiction until a caller actually started the service.
+     */
+    private fun ensureServiceRunning() {
+        val intent = Intent(context, DownloadService::class.java)
+        ContextCompat.startForegroundService(context, intent)
+    }
 
     /** Fresh UA + WebView session cookies for the given URL. */
     private fun sessionHeaders(url: String): Pair<String?, String?> {

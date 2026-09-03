@@ -144,8 +144,12 @@ class StreamDownloader(
     }
 
     fun pauseStream(taskId: Long) {
-        // Media3 has per-app (not per-item) stop; all Chaya streams pause together.
-        downloadManager.pauseDownloads()
+        // setStopReason targets a single content id (verified against the
+        // media3-exoplayer 1.5.1 API) — earlier this called the app-wide
+        // pauseDownloads(), which silently paused every other active stream
+        // download too whenever the user paused just one of them.
+        val contentId = taskToContentId[taskId] ?: return
+        downloadManager.setStopReason(contentId, STOP_REASON_PAUSED)
     }
 
     fun resumeStream(
@@ -161,7 +165,7 @@ class StreamDownloader(
         if (contentId != null &&
             downloadManager.currentDownloads.any { it.request.id == contentId && it.state == Download.STATE_STOPPED }
         ) {
-            downloadManager.resumeDownloads()
+            downloadManager.setStopReason(contentId, Download.STOP_REASON_NONE)
         } else {
             startStreamDownload(taskId, url, mimeType, userAgent, cookies, referer)
         }
@@ -243,5 +247,8 @@ class StreamDownloader(
             if (mimeType == null) return false
             return mimeType.contains("mpegurl") || mimeType.contains("dash+xml")
         }
+
+        /** Any non-zero value marks a download STOPPED without touching sibling downloads. */
+        private const val STOP_REASON_PAUSED = 1
     }
 }
