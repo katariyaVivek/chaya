@@ -30,6 +30,9 @@ jobs:
           gradle-version: '8.9'
           cache-read-only: false
 
+      - name: Run unit tests
+        run: gradle testDebugUnitTest --no-daemon --stacktrace
+
       - name: Build debug APK
         run: gradle assembleDebug --no-daemon --stacktrace
 
