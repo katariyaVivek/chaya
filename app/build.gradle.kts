@@ -80,7 +80,7 @@ dependencies {
     // LeakCanary runs only in debug builds; release APKs are unaffected.
     debugImplementation(libs.leakcanary)
 
-    // Unit tests (JVM, no device/emulator needed)
+    // Unit tests (JVM, no device/emulator needed — Robolectric hosts Compose)
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test)
@@ -88,6 +88,17 @@ dependencies {
     testImplementation(libs.robolectric)
     testImplementation(libs.mockwebserver)
     testImplementation(libs.androidx.room.testing)
+    // Compose test APIs resolve via the BOM; ui-test-manifest supplies the
+    // required test activity for createComposeRule under Robolectric.
+    testImplementation(platform(libs.androidx.compose.bom))
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
+
+    // Compose UI tests (androidTest, emulator/CI only — see build.yml)
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 }
 
 // Robolectric needs the resource-merged classpath for ApplicationProvider-style

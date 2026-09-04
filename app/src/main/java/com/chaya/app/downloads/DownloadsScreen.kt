@@ -348,7 +348,7 @@ private fun StateChip(task: DownloadTask, state: DownloadState) {
 }
 
 @Composable
-private fun ActionsRow(
+internal fun ActionsRow(
     task: DownloadTask,
     onPause: () -> Unit,
     onResume: () -> Unit,
