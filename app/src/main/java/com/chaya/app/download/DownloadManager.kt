@@ -16,6 +16,8 @@ import androidx.media3.common.StreamKey
 import androidx.media3.datasource.DataSource
 import com.chaya.app.database.DownloadDao
 import com.chaya.app.database.DownloadEntity
+import com.chaya.app.diagnostics.ChayaEvent
+import com.chaya.app.diagnostics.EventLog
 import com.chaya.app.model.DetectedMedia
 import com.chaya.app.streaming.StreamDownloader
 import kotlinx.coroutines.CompletableDeferred
@@ -44,7 +46,9 @@ import java.util.concurrent.atomic.AtomicLong
 class DownloadManager(
     private val context: Context,
     private val dao: DownloadDao,
-    private val downloader: MediaDownloader = HttpDownloader()
+    private val downloader: MediaDownloader = HttpDownloader(),
+    /** Null in unit tests that construct the manager directly. */
+    private val eventLog: EventLog? = null,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val saveDir = File(context.filesDir, "downloads").also { it.mkdirs() }
@@ -360,13 +364,34 @@ class DownloadManager(
     }
 
     private fun apply(task: DownloadTask) {
+        // Single choke point for terminal transitions: every state flip is
+        // recorded here, not scattered across complete/fail/pause paths.
+        val previous = find(task.id)?.state
         _downloads.value = _downloads.value.map {
             if (it.id == task.id) task else it
+        }
+        if (previous != null && previous != task.state) {
+            eventLog?.record(
+                ChayaEvent.DownloadStateChanged(task.id, previous.name, task.state.name)
+            )
+            val error = task.error
+            if (task.state == DownloadState.FAILED && error != null) {
+                eventLog?.record(
+                    ChayaEvent.DownloadFailed(
+                        task.id,
+                        error::class.simpleName ?: "Unknown",
+                        error.retryable,
+                    )
+                )
+            }
         }
     }
 
     private fun append(task: DownloadTask) {
         _downloads.value = _downloads.value + task
+        eventLog?.record(
+            ChayaEvent.DownloadStateChanged(task.id, "NONE", task.state.name)
+        )
     }
 
     private fun find(id: Long): DownloadTask? =
