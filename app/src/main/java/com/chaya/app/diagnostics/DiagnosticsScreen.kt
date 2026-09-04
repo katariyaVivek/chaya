@@ -3,6 +3,7 @@ package com.chaya.app.diagnostics
 import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
@@ -11,6 +12,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -36,9 +38,9 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 
 /**
- * Lists the on-device event log (2.3) newest-last with a share action.
- * Reached from the Downloads top bar — a real-user surface, not a hidden
- * debug menu. Crash reports (2.1) will join this screen later.
+ * Lists crash reports (2.1) above the on-device event log (2.3), each with
+ * share/delete. Reached from the Downloads top bar — a real-user surface,
+ * not a hidden debug menu.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -48,11 +50,13 @@ fun DiagnosticsScreen(onNavigateBack: () -> Unit) {
         (context.applicationContext as com.chaya.app.ChayaApplication).eventLog
     }
     var lines by remember { mutableStateOf(listOf<String>()) }
+    var crashes by remember { mutableStateOf(listOf<CrashReport>()) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(eventLog) {
         lines = eventLog.snapshot().map { formatLine(it) }
+        crashes = CrashReporter.listReports(context)
     }
 
     Scaffold(
@@ -94,8 +98,40 @@ fun DiagnosticsScreen(onNavigateBack: () -> Unit) {
         Column(
             modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp),
         ) {
+            if (crashes.isNotEmpty()) {
+                Text(
+                    text = "Crash reports",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Spacer(Modifier.height(8.dp))
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(crashes, key = { it.fileName }) { report ->
+                        CrashRow(
+                            report = report,
+                            onShare = {
+                                val intent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_SUBJECT, "Chaya crash report")
+                                    putExtra(Intent.EXTRA_TEXT, report.toText())
+                                }
+                                runCatching {
+                                    context.startActivity(Intent.createChooser(intent, "Share crash report"))
+                                }.onFailure {
+                                    scope.launch { snackbarHostState.showSnackbar("No app can share this report") }
+                                }
+                            },
+                            onDelete = {
+                                CrashReporter.deleteReport(context, report.fileName)
+                                crashes = CrashReporter.listReports(context)
+                            },
+                        )
+                    }
+                }
+                Spacer(Modifier.height(16.dp))
+            }
             Text(
-                text = "On-device event log — URLs are scrubbed, nothing leaves the phone unless you share it.",
+                text = "Event log — URLs are scrubbed, nothing leaves the phone unless you share it.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -117,6 +153,30 @@ fun DiagnosticsScreen(onNavigateBack: () -> Unit) {
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+/** One crash report row: exception + device line, share and delete actions. */
+@Composable
+private fun CrashRow(
+    report: CrashReport,
+    onShare: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    Column {
+        Text(
+            text = "${report.exceptionName} · ${report.deviceModel}",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            IconButton(onClick = onShare) {
+                Icon(imageVector = Icons.Default.Share, contentDescription = "Share crash report")
+            }
+            IconButton(onClick = onDelete) {
+                Icon(imageVector = Icons.Default.Delete, contentDescription = "Delete crash report")
             }
         }
     }

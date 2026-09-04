@@ -1,7 +1,10 @@
 package com.chaya.app
 
 import android.app.Application
+import android.os.Build
+import android.os.StrictMode
 import com.chaya.app.database.ChayaDatabase
+import com.chaya.app.diagnostics.CrashReporter
 import com.chaya.app.diagnostics.EventLog
 import com.chaya.app.download.DownloadManager
 import kotlinx.coroutines.CoroutineScope
@@ -20,6 +23,27 @@ class ChayaApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        if (BuildConfig.DEBUG) {
+            // Fail fast on main-thread disk/network during development; release
+            // builds never pay for this. Log-only (no penaltyDeath) so a single
+            // slip in a manual walkthrough doesn't kill the debug session.
+            StrictMode.setThreadPolicy(
+                StrictMode.ThreadPolicy.Builder()
+                    .detectDiskReads()
+                    .detectDiskWrites()
+                    .detectNetwork()
+                    .penaltyLog()
+                    .build()
+            )
+            StrictMode.setVmPolicy(
+                StrictMode.VmPolicy.Builder()
+                    .detectLeakedSqlLiteObjects()
+                    .detectLeakedClosableObjects()
+                    .penaltyLog()
+                    .build()
+            )
+        }
+        CrashReporter.install(this, eventLog)
         val dao = database.downloadDao()
         downloadManager = DownloadManager(this, dao, eventLog = eventLog)
         // Restore persisted downloads from Room
