@@ -36,10 +36,14 @@ class CrashReporterTest {
             fileName = "crash-test-write.log",
         ) ?: throw AssertionError("writeReport returned null")
         val content = file.readText()
-        assertTrue(
-            "report file missing trace/events, got:\n$content",
-            content.contains("boom-test") && content.contains("https://example.com/a"),
-        )
+        // Report must contain the trace and both events verbatim.
+        for (needle in listOf("boom-test", "https://example.com/a", "HttpStatus", "RuntimeException")) {
+            assertTrue("report file missing [$needle], got:\n$content", content.contains(needle))
+        }
+        // Header markers the parser depends on.
+        for (marker in listOf(CrashReport.TRACE_MARKER, CrashReport.EVENTS_MARKER, "App:", "Thread:")) {
+            assertTrue("report file missing marker [$marker], got:\n$content", content.contains(marker))
+        }
 
         assertTrue(file.exists())
         val raw = file.readText()
