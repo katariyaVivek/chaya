@@ -10,7 +10,7 @@ This is the **Chaya** Android app — a WebView-based browser with smart media d
 |------|-------------|
 | **WebView browser** | Full browser with URL bar, back/forward/refresh, system back handling, `target=_blank` links, fullscreen video; session survives navigation |
 | **Network detection** | Extension-based detection in `shouldInterceptRequest()` (mp4/webm/mp3/m4a/aac/m4v/mov/mkv/ts/m3u8/mpd…) |
-| **DOM detection** | Injected JS: video/audio/source scanning, Shadow DOM + same-origin iframe traversal, fetch/XHR sniffing, debounced MutationObserver, blob:/data: filtered |
+| **DOM detection** | Injected JS scans video/audio/source elements, Shadow DOM, and same-origin iframes. Direct URLs are reported automatically; response-confirmed unknown same-origin fetch/XHR endpoints are checked only after an explicit, bounded scan. |
 | **Media sheet** | Floating FAB with badge count → bottom sheet listing all detected media |
 | **OkHttp downloader** | Progress, resume via `Range`, silent cancel, Referer/Cookie/UA forwarding, Content-Disposition filenames |
 | **Media3 streaming** | HLS/DASH downloads via ExoPlayer `DownloadManager`; pause = stopDownload, resume = startDownload; headers forwarded |
@@ -72,24 +72,31 @@ This is the **Chaya** Android app — a WebView-based browser with smart media d
 - Tap it → bottom sheet lists detected media
 - Tap a media item → download starts → snackbar confirms + notification shows progress
 
-### 3. Streaming detection (HLS/DASH)
+### 3. Thorough scan for an extensionless endpoint
+- On a trusted page with no automatically detected media, wait briefly for **Scan more thoroughly** to appear.
+- Tap it to opt in. Chaya only considers successful, same-origin `GET` fetch/XHR responses that already advertised an audio, video, HLS, DASH, or Ogg `Content-Type` to the browser.
+- At most ten unique candidate URLs are rechecked with redirect-free `HEAD` requests. The request carries the target's browser cookies, user agent, and page referrer only to that same origin.
+- A recognized `Content-Type` (for example `video/mp4` from `/media/abc123`) appears in the media sheet. JSON, failed `HEAD` responses, cross-origin endpoints, and redirects are ignored.
+- No extra `HEAD` traffic runs before the user taps the affordance; this is a deliberate privacy and network-use boundary rather than automatic background scanning.
+
+### 4. Streaming detection (HLS/DASH)
 - Visit a site with `.m3u8` or `.mpd` streams
 - Tap the stream in the media sheet
 - A **quality picker** appears showing available video resolutions and audio tracks
 - Select desired tracks and tap "Download Selected"
 - Download proceeds via Media3 with progress in notification
 
-### 4. Foreground download
+### 5. Foreground download
 - Start a download and press Home
 - Notification with progress bar stays in the shade
 - Tap "Cancel" on the notification to stop the download
 
-### 5. Downloads screen
+### 6. Downloads screen
 - Tap the downloads icon (bottom nav bar, rightmost)
 - Active → **pause** ⏸ / **cancel** ✕ · Paused/cancelled → **resume** ▶ / **delete** 🗑
 - Failed → **retry** ↻ (error reason shown) · Completed file → **open** ↗ · Completed stream → **play** ▶ (in-app player)
 
-### 6. Persistence
+### 7. Persistence
 - Complete a download, force-stop the app, reopen
 - Navigate to the downloads screen — the completed download is still there
 
@@ -101,10 +108,12 @@ This is the **Chaya** Android app — a WebView-based browser with smart media d
 com.chaya.app
 ├── browser/            WebView shell + ViewModel
 │   ├── BrowserScreen.kt       UI (URL bar, WebView, nav, FAB, sheets)
-│   └── BrowserViewModel.kt    State management + quality picker logic
+│   ├── BrowserViewModel.kt    State management + quality picker logic
+│   └── RetainedWebViewCallbacks.kt  Atomic callback rebinding for the retained WebView
 ├── detection/          Media detection layers
+│   ├── ContentTypeSniffer.kt  Cancellable, redirect-free opt-in MIME verification
 │   ├── MediaInterceptor.kt    Network-level (shouldInterceptRequest)
-│   └── MediaBridge.kt         @JavascriptInterface bridge for DOM scanning
+│   └── MediaBridge.kt         Capability-gated @JavascriptInterface DOM bridge
 ├── download/           Download infrastructure
 │   ├── DownloadManager.kt     Coordinates HTTP + stream downloads
 │   ├── HttpDownloader.kt      OkHttp single-file downloader
@@ -152,6 +161,12 @@ com.chaya.app
 ```
 WebView → shouldInterceptRequest → MediaInterceptor → DetectedMedia
 WebView → evaluateJavascript → MediaBridge → DetectedMedia
+                                      │
+                         explicit “Scan more thoroughly” opt-in
+                                      │
+                              ContentTypeSniffer (≤10 same-origin HEADs)
+                                      │
+                                 response-confirmed DetectedMedia
                                                      ↓
                                               DetectedMediaSheet
                                                      ↓
@@ -181,3 +196,4 @@ WebView → evaluateJavascript → MediaBridge → DetectedMedia
 - **Media3 for streams** — handles segment downloading, caching, and offline storage
 - **In-memory progress** — progress updates are not written to Room (too frequent); only state transitions persist
 - **Observer-only interceptor** — `shouldInterceptRequest` returns `null` so the WebView loads normally; we just watch
+- **Explicit unknown-endpoint verification** — no extensionless fetch/XHR URL is checked in the background. A user must choose **Scan more thoroughly**; native code independently enforces same-origin authorization, per-navigation capabilities, deduplication, and a ten-candidate limit.

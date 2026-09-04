@@ -5,6 +5,14 @@ import android.webkit.WebResourceResponse
 import com.chaya.app.model.DetectedMedia
 import com.chaya.app.model.DetectionSource
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicReference
+
+/** Associates intercepted subresources with the native top-level page that initiated their load. */
+private data class MediaInterceptorSession(
+    val pageUrl: String,
+    val navigationGeneration: Long,
+)
 
 /**
  * Intercepts WebView requests and detects media URLs flowing through.
@@ -15,8 +23,14 @@ import java.util.Locale
  * manifest MIME types that some players put in the Accept header.
  */
 class MediaInterceptor(
-    private val onMediaDetected: (DetectedMedia) -> Unit
+    onMediaDetected: (DetectedMedia, Long) -> Unit,
 ) {
+    /** Lets the retained WebView dispatch media events to its currently visible ViewModel. */
+    private val onMediaDetected = AtomicReference<(DetectedMedia, Long) -> Unit>(onMediaDetected)
+
+    /** Keeps request attribution independent of unreliable or privacy-trimmed Referer headers. */
+    private val activeSession = AtomicReference<MediaInterceptorSession?>(null)
+
     /** Known media file extensions (lowercase, no dot). */
     private val mediaExtensions = setOf(
         "mp4", "m4v", "webm", "mov", "mkv", "avi", "wmv", "3gp",
@@ -31,40 +45,52 @@ class MediaInterceptor(
         "application/dash+xml"
     )
 
-    /** Cache of normalized URLs already reported to avoid duplicates. */
-    private val reportedUrls = mutableSetOf<String>()
+    /** Cache of navigation-scoped normalized URLs already reported from concurrent callbacks. */
+    private val reportedUrls = ConcurrentHashMap.newKeySet<String>()
+
+    /** Starts attribution for one document before its subresource callbacks can update UI state. */
+    fun beginNavigation(pageUrl: String, navigationGeneration: Long) {
+        activeSession.set(MediaInterceptorSession(pageUrl, navigationGeneration))
+        reportedUrls.clear()
+    }
+
+    /** Drops attribution for a document when a known full-document navigation begins. */
+    fun invalidateNavigation() {
+        activeSession.set(null)
+        reportedUrls.clear()
+    }
+
+    /** Rebinds the observer when BrowserScreen reattaches its intentionally retained WebView. */
+    fun updateOnMediaDetected(callback: (DetectedMedia, Long) -> Unit) {
+        onMediaDetected.set(callback)
+    }
 
     /**
      * Called from [android.webkit.WebViewClient.shouldInterceptRequest].
      * Returns null to let the WebView load normally — this is observer-only.
      */
-    fun shouldInterceptRequest(
-        request: WebResourceRequest,
-        pageUrl: String?
-    ): WebResourceResponse? {
+    fun shouldInterceptRequest(request: WebResourceRequest): WebResourceResponse? {
+        val session = activeSession.get() ?: return null
         val url = request.url.toString()
 
         // Skip non-http schemes (data:, blob:, javascript:, etc.)
         if (!url.startsWith("http://") && !url.startsWith("https://")) return null
 
         val normalized = url.substringBefore("#")
-        if (normalized in reportedUrls) return null
-
-        detect(request, pageUrl)?.let { detected ->
-            reportedUrls.add(normalized)
-            onMediaDetected(detected)
+        val dedupeKey = session.navigationGeneration.toString() + "\u0000" + normalized
+        detect(request, session.pageUrl)?.let { detected ->
+            if (reportedUrls.add(dedupeKey) && activeSession.get() === session) {
+                onMediaDetected.get()(detected, session.navigationGeneration)
+            }
         }
 
         return null
     }
 
-    fun clearReportedUrls() {
-        reportedUrls.clear()
-    }
-
+    /** Uses only request-visible metadata while preserving the active top-level page as media provenance. */
     private fun detect(
         request: WebResourceRequest,
-        pageUrl: String?
+        pageUrl: String,
     ): DetectedMedia? {
         val url = request.url.toString()
         val path = request.url.path ?: return null
@@ -98,6 +124,7 @@ class MediaInterceptor(
         return null
     }
 
+    /** Maps recognized extensions to the downloader's MIME routing types. */
     private fun mimeTypeForExtension(ext: String): String = when (ext) {
         "mp4", "m4v" -> "video/mp4"
         "webm" -> "video/webm"
