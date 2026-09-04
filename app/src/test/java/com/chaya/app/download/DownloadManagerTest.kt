@@ -120,6 +120,8 @@ class DownloadManagerTest {
 
     @Test
     fun `startDownload fails fast with StorageFull when disk is full`() = runBlocking {
+        // New instance each test already gives a fresh FakeDownloader and a
+        // fresh in-memory DB, so id 1 is free and starts is empty.
         val fullManager = DownloadManager(context, dao, downloader, freeBytes = { 0L })
         fullManager.restore()
         fullManager.startDownload(media())

@@ -52,8 +52,13 @@ class DownloadManager(
     private val eventLog: EventLog? = null,
     // Injected for tests: reports usable bytes at a path. Production reads
     // the filesystem; tests return a fixed number. No StatFs mocking needed.
+    // Robolectric shadows StatFs with zeroes, so the default must mean
+    // "unknown, allow" rather than "no space" — otherwise every
+    // pre-existing test would fail fast under unit tests.
     private val freeBytes: (File) -> Long = { path ->
-        runCatching { StatFs(path.absolutePath).availableBytes }.getOrDefault(Long.MAX_VALUE)
+        runCatching { StatFs(path.absolutePath).availableBytes }
+            .getOrDefault(Long.MAX_VALUE)
+            .takeIf { it > 0 } ?: Long.MAX_VALUE
     },
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
