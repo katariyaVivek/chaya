@@ -42,7 +42,9 @@ class CrashReporterTest {
         )
 
         assertTrue(file.exists())
-        val report = CrashReport.read(file)!!
+        val raw = file.readText()
+        val report = CrashReport.read(file)
+            ?: throw AssertionError("CrashReport.read returned null, raw:\n$raw")
         assertTrue(report.exceptionName.contains("RuntimeException"))
         assertTrue(report.stackTrace.contains("boom-test"))
         assertEquals(2, report.recentEvents.size)
@@ -70,7 +72,8 @@ class CrashReporterTest {
         try {
             val file = File(dir, "crash-x.log")
             file.writeText(original.toText())
-            val parsed = CrashReport.read(file)!!
+            val parsed = CrashReport.read(file)
+                ?: throw AssertionError("parse returned null, raw:\n" + file.readText())
 
             assertEquals("main", parsed.threadName)
             assertEquals("java.lang.RuntimeException", parsed.exceptionName)
