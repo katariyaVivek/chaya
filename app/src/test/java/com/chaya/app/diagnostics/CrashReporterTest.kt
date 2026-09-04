@@ -34,10 +34,12 @@ class CrashReporterTest {
         val file = CrashReporter.writeReport(
             context(), log, Thread.currentThread(), RuntimeException("boom-test"),
             fileName = "crash-test-write.log",
-        )!!
-        if (file.readText().length < 100) {
-            throw AssertionError("report file suspiciously small: " + file.readText())
-        }
+        ) ?: throw AssertionError("writeReport returned null")
+        val content = file.readText()
+        assertTrue(
+            "report file missing trace/events, got:\n$content",
+            content.contains("boom-test") && content.contains("https://example.com/a"),
+        )
 
         assertTrue(file.exists())
         val report = CrashReport.read(file)!!
