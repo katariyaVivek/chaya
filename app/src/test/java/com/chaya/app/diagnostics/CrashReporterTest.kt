@@ -29,12 +29,15 @@ class CrashReporterTest {
             log.recordSync(ChayaEvent.PageLoaded(url = "https://example.com/a"))
             log.recordSync(ChayaEvent.DownloadFailed(taskId = 3, errorKind = "HttpStatus", retryable = false))
         }
-        val snapshot = kotlinx.coroutines.runBlocking { log.snapshot() }
-        assertEquals(2, snapshot.size)
+        val seed = kotlinx.coroutines.runBlocking { log.snapshot() }
+        assertEquals("seed must hold 2 events, got $seed", 2, seed.size)
         val file = CrashReporter.writeReport(
             context(), log, Thread.currentThread(), RuntimeException("boom-test"),
             fileName = "crash-test-write.log",
         )!!
+        if (file.readText().length < 100) {
+            throw AssertionError("report file suspiciously small: " + file.readText())
+        }
 
         assertTrue(file.exists())
         val report = CrashReport.read(file)!!
