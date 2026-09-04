@@ -38,6 +38,9 @@ android {
 
     buildFeatures {
         compose = true
+        // Generates com.chaya.app.BuildConfig (DEBUG/ VERSION_NAME) used by
+        // diagnostics gating (StrictMode) and crash-report app-version field.
+        buildConfig = true
     }
 }
 
@@ -73,6 +76,9 @@ dependencies {
     implementation(libs.androidx.media3.exoplayer.hls)
     implementation(libs.androidx.media3.exoplayer.dash)
     implementation(libs.androidx.media3.ui)
+
+    // LeakCanary runs only in debug builds; release APKs are unaffected.
+    debugImplementation(libs.leakcanary)
 
     // Unit tests (JVM, no device/emulator needed)
     testImplementation(libs.junit)
