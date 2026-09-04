@@ -5,6 +5,10 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+// Buildscript classpath import: Gradle Kotlin DSL scripts do not resolve
+// fully-qualified java.util references without it.
+import java.util.Properties
+
 android {
     namespace = "com.chaya.app"
     compileSdk = 35
@@ -25,7 +29,7 @@ android {
     fun hasReleaseKey(): Boolean {
         val propsFile = rootProject.file("keystore.properties")
         if (propsFile.exists()) {
-            val props = java.util.Properties()
+            val props = Properties()
             propsFile.inputStream().use { props.load(it) }
             if (!props.getProperty("storeFile").isNullOrBlank()) return true
         }
@@ -33,7 +37,7 @@ android {
     }
     signingConfigs {
         create("release") {
-            val props = java.util.Properties()
+            val props = Properties()
             val propsFile = rootProject.file("keystore.properties")
             if (propsFile.exists()) propsFile.inputStream().use { props.load(it) }
             storeFile = (props.getProperty("storeFile") ?: System.getenv("KEYSTORE_PATH"))
