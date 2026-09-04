@@ -80,6 +80,7 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.turbine)
     testImplementation(libs.robolectric)
+    testImplementation(libs.mockwebserver)
 }
 
 // Robolectric needs the resource-merged classpath for ApplicationProvider-style
