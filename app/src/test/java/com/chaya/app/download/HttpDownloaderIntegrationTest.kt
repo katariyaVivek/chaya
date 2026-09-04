@@ -50,9 +50,11 @@ class HttpDownloaderIntegrationTest {
 
     private fun saveFile(name: String) = File(tempDir, name)
 
+    /** Centralizes default session headers so each contract test only overrides what it exercises. */
     private fun startDownload(
         saveFile: File,
         fromBytes: Long = 0,
+        url: String = server.url("/media").toString(),
         referer: String? = "https://videosite.example/watch",
         onMeta: ((String?) -> Unit)? = null,
         onProgress: (Long, Long?) -> Unit = { _, _ -> },
@@ -61,7 +63,7 @@ class HttpDownloaderIntegrationTest {
     ) {
         downloader.start(
             taskId = taskId,
-            url = server.url("/media").toString(),
+            url = url,
             saveFile = saveFile,
             userAgent = "chaya-test/1.0",
             cookies = "session=abc",
@@ -394,6 +396,65 @@ class HttpDownloaderIntegrationTest {
         assertTrue(latch.await(10, TimeUnit.SECONDS))
 
         assertEquals("total must come from Content-Range, not body length", listOf(payload.size.toLong()), totals)
+    }
+
+    /** Pins the empirical contract that OkHttp 4.12.0 forwards session headers across a cross-host redirect, so no custom interceptor is needed. */
+    @Test
+    fun `resumed download across cross-host redirect forwards session headers and Range`() {
+        val payload = fixtureBytes(8192)
+        val partial = 3000L
+        val file = saveFile("out.bin")
+        file.writeBytes(payload.copyOfRange(0, partial.toInt()))
+
+        val finalServer = MockWebServer()
+        finalServer.start()
+        try {
+            val remaining = payload.copyOfRange(partial.toInt(), payload.size)
+            finalServer.enqueue(
+                MockResponse()
+                    .setResponseCode(206)
+                    .setHeader("Content-Range", "bytes $partial-${payload.size - 1}/${payload.size}")
+                    .setBody(Buffer().write(remaining))
+            )
+            // Deliberately different host from the primary server so the
+            // redirect is genuinely cross-host (localhost vs 127.0.0.1).
+            val finalUrl = finalServer.url("/final-media").toString()
+                .replace("localhost", "127.0.0.1")
+            server.enqueue(
+                MockResponse()
+                    .setResponseCode(302)
+                    .setHeader("Location", finalUrl)
+            )
+
+            val latch = CountDownLatch(1)
+            val holder = arrayOfNulls<Result<File>>(1)
+            startDownload(
+                file,
+                fromBytes = partial,
+                url = server.url("/redirect-media").toString(),
+                onComplete = {
+                    holder[0] = it
+                    latch.countDown()
+                },
+            )
+            assertTrue(latch.await(10, TimeUnit.SECONDS))
+            val result = holder[0]!!
+
+            assertTrue("expected success across redirect, got $result", result.isSuccess)
+            assertEquals(
+                "redirected resume must reassemble byte-for-byte",
+                payload.toList(),
+                file.readBytes().toList(),
+            )
+            server.takeRequest() // initial request to the redirecting origin
+            val finalRequest = finalServer.takeRequest()
+            assertEquals("session=abc", finalRequest.getHeader("Cookie"))
+            assertEquals("https://videosite.example/watch", finalRequest.getHeader("Referer"))
+            assertEquals("chaya-test/1.0", finalRequest.getHeader("User-Agent"))
+            assertEquals("bytes=$partial-", finalRequest.getHeader("Range"))
+        } finally {
+            finalServer.shutdown()
+        }
     }
 
     @Test
