@@ -6,6 +6,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.os.StatFs
 import android.provider.MediaStore
 import android.webkit.CookieManager
 import android.webkit.MimeTypeMap
@@ -49,6 +50,11 @@ class DownloadManager(
     private val downloader: MediaDownloader = HttpDownloader(),
     /** Null in unit tests that construct the manager directly. */
     private val eventLog: EventLog? = null,
+    // Injected for tests: reports usable bytes at a path. Production reads
+    // the filesystem; tests return a fixed number. No StatFs mocking needed.
+    private val freeBytes: (File) -> Long = { path ->
+        runCatching { StatFs(path.absolutePath).availableBytes }.getOrDefault(Long.MAX_VALUE)
+    },
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val saveDir = File(context.filesDir, "downloads").also { it.mkdirs() }
@@ -102,6 +108,8 @@ class DownloadManager(
             val (ua, ck) = sessionHeaders(media.url)
             if (isStream(media.url, media.mimeType)) {
                 startStream(id, media, ua, ck, null)
+            } else if (!checkStorageForNewDownload(id, media)) {
+                return@launch
             } else {
                 startHttp(id, media, ua, ck, fromBytes = 0)
             }
@@ -144,6 +152,8 @@ class DownloadManager(
             if (isStream(t.url, t.mimeType)) {
                 apply(t.copy(state = DownloadState.DOWNLOADING, error = null))
                 obtainStreamDownloader().resumeStream(id, t.url, t.mimeType, ua, ck, t.pageUrl)
+            } else if (!checkStorageForResume(t)) {
+                return@launch
             } else {
                 val file = ensureFileFor(t)
                 val from = partialBytes(t)
@@ -355,6 +365,49 @@ class DownloadManager(
         }
     }
 
+    // ------------------------------------------------------------------ //
+    // Storage pre-flight (Phase 3.2)
+    // ------------------------------------------------------------------ //
+
+    /**
+     * Refuses a brand-new download when the device is already too full to
+     * plausibly hold it. Fails the task immediately with StorageFull (no
+     * retry affordance) instead of starting a transfer doomed to die mid-way.
+     */
+    private suspend fun checkStorageForNewDownload(id: Long, media: DetectedMedia): Boolean {
+        if (freeBytes(saveDir) >= MIN_FREE_BYTES_TO_START) return true
+        val task = DownloadTask(
+            id = id,
+            url = media.url,
+            pageUrl = media.pageUrl,
+            fileName = sanitize(fileNameForMedia(media)),
+            mimeType = media.mimeType,
+            state = DownloadState.FAILED,
+            error = DownloadError.StorageFull,
+        )
+        append(task)
+        dao.insert(DownloadEntity.fromTask(task))
+        return false
+    }
+
+    /**
+     * Same guard on resume/retry: a paused task from better days must not
+     * restart into a full disk either.
+     */
+    private suspend fun checkStorageForResume(t: DownloadTask): Boolean {
+        if (freeBytes(saveDir) >= MIN_FREE_BYTES_TO_START) return true
+        val failed = t.copy(
+            state = DownloadState.FAILED,
+            error = DownloadError.StorageFull,
+            updatedAt = System.currentTimeMillis(),
+        )
+        apply(failed)
+        dao.update(DownloadEntity.fromTask(failed))
+        return false
+    }
+
+    // ---- progress ---- //
+
     private fun progress(id: Long, downloadedBytes: Long, totalBytes: Long?) {
         _downloads.value = _downloads.value.map {
             if (it.id == id) {
@@ -514,6 +567,9 @@ class DownloadManager(
         }
 
     companion object {
+        /** Refuse (re)starts below this much free space; transfers need headroom. */
+        const val MIN_FREE_BYTES_TO_START = 50L * 1024 * 1024
+
         private val ILLEGAL_CHARS = Regex("[\\\\/:*?\"<>|]")
         private val resumableStates = setOf(
             DownloadState.PAUSED, DownloadState.FAILED, DownloadState.CANCELLED
