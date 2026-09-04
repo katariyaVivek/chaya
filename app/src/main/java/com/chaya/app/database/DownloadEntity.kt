@@ -3,6 +3,7 @@ package com.chaya.app.database
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import com.chaya.app.download.DownloadError
 import com.chaya.app.download.DownloadState
 import com.chaya.app.download.DownloadTask
 
