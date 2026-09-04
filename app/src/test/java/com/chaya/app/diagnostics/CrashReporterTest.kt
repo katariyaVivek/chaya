@@ -32,9 +32,9 @@ class CrashReporterTest {
         val file = CrashReporter.writeReport(
             context(), log, Thread.currentThread(), RuntimeException("boom-test"),
             fileName = "crash-test-write.log",
-        )
+        )!!
 
-        assertTrue(file != null && file.exists())
+        assertTrue(file.exists())
         val report = CrashReport.read(file)!!
         assertTrue(report.exceptionName.contains("RuntimeException"))
         assertTrue(report.stackTrace.contains("boom-test"))
