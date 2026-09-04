@@ -50,43 +50,43 @@ data class CrashReport(
         /** Parses a report file written by [CrashReporter]; throws on unreadable input. */
         fun read(file: File): CrashReport {
             val lines = file.readText().take(MAX_BODY_CHARS).lines()
-                var appVersion = "?"; var apiLevel = 0; var deviceModel = "?"
-                var threadName = "?"; var exceptionName = "?"
-                var timestamp = file.lastModified()
-                val trace = StringBuilder()
-                val events = mutableListOf<String>()
-                var section = 0 // 0 header, 1 trace, 2 events
-                for (line in lines) {
-                    when {
-                        line.startsWith(HEADER_PREFIX) -> Unit
-                        line.startsWith("App:") -> {
-                            val parts = line.removePrefix("App:").split(FIELD_SEPARATOR)
-                            appVersion = parts.getOrElse(1) { "?" }.trim()
-                            apiLevel = parts.getOrElse(2) { "?" }.trim().toIntOrNull() ?: 0
-                            deviceModel = parts.getOrElse(3) { "?" }.trim()
-                        }
-                        line.startsWith("Thread:") -> {
-                            val rest = line.removePrefix("Thread:").split(FIELD_SEPARATOR)
-                            threadName = rest.getOrElse(1) { "?" }.trim()
-                            exceptionName = rest.getOrElse(2) { "?" }.trim()
-                        }
-                        line == TRACE_MARKER -> section = 1
-                        line == EVENTS_MARKER -> section = 2
-                        section == 1 -> trace.appendLine(line)
-                        section == 2 -> if (line != EMPTY_EVENTS_LINE) events.add(line)
+            var appVersion = "?"; var apiLevel = 0; var deviceModel = "?"
+            var threadName = "?"; var exceptionName = "?"
+            var timestamp = file.lastModified()
+            val trace = StringBuilder()
+            val events = mutableListOf<String>()
+            var section = 0 // 0 header, 1 trace, 2 events
+            for (line in lines) {
+                when {
+                    line.startsWith(HEADER_PREFIX) -> Unit
+                    line.startsWith("App:") -> {
+                        val parts = line.removePrefix("App:").split(FIELD_SEPARATOR)
+                        appVersion = parts.getOrElse(1) { "?" }.trim()
+                        apiLevel = parts.getOrElse(2) { "?" }.trim().toIntOrNull() ?: 0
+                        deviceModel = parts.getOrElse(3) { "?" }.trim()
                     }
+                    line.startsWith("Thread:") -> {
+                        val rest = line.removePrefix("Thread:").split(FIELD_SEPARATOR)
+                        threadName = rest.getOrElse(1) { "?" }.trim()
+                        exceptionName = rest.getOrElse(2) { "?" }.trim()
+                    }
+                    line == TRACE_MARKER -> section = 1
+                    line == EVENTS_MARKER -> section = 2
+                    section == 1 -> trace.appendLine(line)
+                    section == 2 -> if (line != EMPTY_EVENTS_LINE) events.add(line)
                 }
-                CrashReport(
-                    fileName = file.name,
-                    timestamp = timestamp,
-                    threadName = threadName,
-                    exceptionName = exceptionName,
-                    stackTrace = trace.toString().trimEnd(),
-                    appVersion = appVersion,
-                    apiLevel = apiLevel,
-                    deviceModel = deviceModel,
-                    recentEvents = events,
-                )
+            }
+            return CrashReport(
+                fileName = file.name,
+                timestamp = timestamp,
+                threadName = threadName,
+                exceptionName = exceptionName,
+                stackTrace = trace.toString().trimEnd(),
+                appVersion = appVersion,
+                apiLevel = apiLevel,
+                deviceModel = deviceModel,
+                recentEvents = events,
+            )
         }
     }
 }
