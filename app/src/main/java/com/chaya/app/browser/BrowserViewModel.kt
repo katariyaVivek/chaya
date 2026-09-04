@@ -7,6 +7,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.chaya.app.ChayaApplication
 import com.chaya.app.detection.sniffContentType
+import com.chaya.app.diagnostics.ChayaEvent
 import com.chaya.app.download.DownloadManager
 import com.chaya.app.model.DetectionSource
 import com.chaya.app.model.DetectedMedia
@@ -143,6 +144,9 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 )
             }
         }
+        getApplication<ChayaApplication>().eventLog.record(
+            ChayaEvent.PageLoaded(url = ChayaEvent.scrubbed(url) ?: url)
+        )
         offerThoroughScanAfterDelay(url = url, navigationGeneration = navigationGeneration)
     }
 
@@ -189,12 +193,14 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 
     /** Merges only the active document's concurrent WebView callbacks so stale media cannot overwrite its state. */
     fun onMediaDetected(media: DetectedMedia, navigationGeneration: Long? = null) {
+        var recorded = false
         _uiState.update { state ->
             if (navigationGeneration != null && navigationGeneration != state.navigationGeneration) {
                 state
             } else if (media.pageUrl != null && media.pageUrl != state.url) {
                 state
             } else if (state.detectedMedia.none { it.normalizedUrl == media.normalizedUrl }) {
+                recorded = true
                 state.copy(
                     detectedMedia = state.detectedMedia + media,
                     showThoroughScan = false,
@@ -202,6 +208,15 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             } else {
                 state
             }
+        }
+        if (recorded) {
+            getApplication<ChayaApplication>().eventLog.record(
+                ChayaEvent.MediaDetected(
+                    url = ChayaEvent.scrubbed(media.url) ?: media.url,
+                    source = media.source.name,
+                    mimeType = media.mimeType,
+                )
+            )
         }
     }
 

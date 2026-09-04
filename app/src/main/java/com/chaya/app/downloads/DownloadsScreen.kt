@@ -28,6 +28,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 // OpenInNew is directional — the plain Filled variant is deprecated in favor
 // of the AutoMirrored one so LTR/RTL layouts mirror the glyph correctly.
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DownloadDone
@@ -74,6 +75,7 @@ import kotlinx.coroutines.launch
 fun DownloadsScreen(
     onNavigateBack: () -> Unit,
     onPlayStream: (Long) -> Unit,
+    onNavigateToDiagnostics: () -> Unit = {},
     viewModel: DownloadsViewModel = viewModel()
 ) {
     val tasks by viewModel.downloads.collectAsState()
@@ -89,6 +91,14 @@ fun DownloadsScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back"
+                        )
+                    }
+                },
+                actions = {
+                    IconButton(onClick = onNavigateToDiagnostics) {
+                        Icon(
+                            imageVector = Icons.Default.BugReport,
+                            contentDescription = "Diagnostics"
                         )
                     }
                 },

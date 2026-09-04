@@ -11,6 +11,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.chaya.app.browser.BrowserScreen
+import com.chaya.app.diagnostics.DiagnosticsScreen
 import com.chaya.app.downloads.DownloadsScreen
 import com.chaya.app.ui.player.PlayerScreen
 import com.chaya.app.ui.theme.ChayaMotion
@@ -43,7 +44,10 @@ fun ChayaNavHost(navController: NavHostController) {
                 onNavigateBack = { navController.popBackStack() },
                 onPlayStream = { taskId ->
                     navController.navigate(Screen.playerRoute(taskId))
-                }
+                },
+                onNavigateToDiagnostics = {
+                    navController.navigate(Screen.Diagnostics.route)
+                },
             )
         }
         composable(
@@ -54,6 +58,9 @@ fun ChayaNavHost(navController: NavHostController) {
         ) { backStackEntry ->
             val taskId = backStackEntry.arguments?.getLong(Screen.PLAYER_ARGS) ?: -1L
             PlayerScreen(taskId = taskId, onNavigateBack = { navController.popBackStack() })
+        }
+        composable(Screen.Diagnostics.route) {
+            DiagnosticsScreen(onNavigateBack = { navController.popBackStack() })
         }
     }
 }
