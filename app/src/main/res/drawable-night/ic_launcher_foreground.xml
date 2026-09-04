@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Night variant: light-violet accent on charcoal (DESIGN.md dark primary). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#BDAEF8"
+        android:strokeWidth="7"
+        android:strokeLineCap="round"
+        android:pathData="M 66,33.2 A 24,24 0 1 1 42,33.2" />
+    <path
+        android:fillColor="#BDAEF8"
+        android:strokeColor="#BDAEF8"
+        android:strokeWidth="4"
+        android:strokeLineJoin="round"
+        android:pathData="M 54,27 L 62,43 L 46,43 Z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#E0DBFC"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:pathData="M 54,13 L 54,20" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#E0DBFC"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:pathData="M 40,84 A 26.5,26.5 0 0 0 68,84" />
+</vector>
