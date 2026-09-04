@@ -101,7 +101,7 @@ object CrashReporter {
         return dir.listFiles { f -> f.isFile && f.name.startsWith("crash-") }
             .orEmpty()
             .sortedByDescending { it.lastModified() }
-            .mapNotNull { CrashReport.read(it) }
+            .mapNotNull { runCatching { CrashReport.read(it) }.getOrNull() }
     }
 
     /** Deletes a single report by file name; true when gone. */

@@ -47,10 +47,9 @@ data class CrashReport(
         const val EVENTS_MARKER = "--- recent events ---"
         const val EMPTY_EVENTS_LINE = "(no events recorded)"
 
-        /** Parses a report file written by [CrashReporter]; null when unreadable. */
-        fun read(file: File): CrashReport? {
-            return try {
-                val lines = file.readText().take(MAX_BODY_CHARS).lines()
+        /** Parses a report file written by [CrashReporter]; throws on unreadable input. */
+        fun read(file: File): CrashReport {
+            val lines = file.readText().take(MAX_BODY_CHARS).lines()
                 var appVersion = "?"; var apiLevel = 0; var deviceModel = "?"
                 var threadName = "?"; var exceptionName = "?"
                 var timestamp = file.lastModified()
@@ -88,9 +87,6 @@ data class CrashReport(
                     deviceModel = deviceModel,
                     recentEvents = events,
                 )
-            } catch (_: Exception) {
-                null
-            }
         }
     }
 }
