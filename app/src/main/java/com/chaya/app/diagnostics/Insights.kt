@@ -65,8 +65,11 @@ data class Insights(
         /** Host of a scrubbed http(s) URL; null for anything else. */
         private fun hostOf(url: String): String? {
             return try {
-                val uri = android.net.Uri.parse(url)
-                uri.host?.takeIf { it.isNotBlank() }
+                // Plain parsing: no Android framework needed, Robolectric-safe.
+                val afterScheme = url.substringAfter("://", "")
+                if (afterScheme.isEmpty()) return null
+                afterScheme.substringBefore('/').substringBefore(':').substringBefore('?')
+                    .takeIf { it.isNotBlank() && '.' in it }
             } catch (_: Exception) {
                 null
             }
