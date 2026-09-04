@@ -73,7 +73,8 @@ data class CrashReport(
                     line == TRACE_MARKER -> section = 1
                     line == EVENTS_MARKER -> section = 2
                     section == 1 -> trace.appendLine(line)
-                    section == 2 -> if (line != EMPTY_EVENTS_LINE) events.add(line)
+                    // Trailing newline yields a final blank line; it is not an event.
+                    section == 2 -> if (line.isNotBlank() && line != EMPTY_EVENTS_LINE) events.add(line)
                 }
             }
             return CrashReport(
