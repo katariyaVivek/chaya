@@ -57,6 +57,26 @@ This is the **Chaya** Android app — a WebView-based browser with smart media d
    ```
    Or just press **Run** (▶) in Android Studio.
 
+### Release builds (signed APK via GitHub Releases)
+
+1. **Create a keystore once** (keep it backed up — losing it means a new app identity):
+   ```
+   keytool -genkeypair -keystore chaya-release.keystore -alias chaya \
+     -keyalg RSA -keysize 2048 -validity 10000
+   ```
+2. **Local builds:** copy `keystore.properties.example` to `keystore.properties`
+   (gitignored) and fill in your path/passwords. `./gradlew assembleRelease`
+   then signs with your key; without it, release falls back to debug signing
+   for verification only — never distribute that APK.
+3. **CI releases:** store `KEYSTORE_BASE64` (base64 of the keystore file),
+   `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD` as repo secrets, then
+   push a tag (`git tag v0.3.0 && git push origin v0.3.0`). The `release` job
+   runs tests, builds the signed APK, and publishes it on the GitHub Release.
+4. **Distribution decision (5.2):** direct APK via GitHub Releases. Play Store
+   is deferred — a media downloader is policy-adjacent there (copyrighted-
+   content clause) and the self-hosted diagnostics assume no Play Services.
+   See `LIMITATIONS.md` and `PRIVACY_POLICY.md` for the positioning.
+
 ---
 
 ## How to Test
