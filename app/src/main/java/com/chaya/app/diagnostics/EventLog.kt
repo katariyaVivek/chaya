@@ -37,6 +37,15 @@ class EventLog(context: Context) {
         }
     }
 
+    /** Test-only synchronous variant: records inline so Robolectric tests stay deterministic. */
+    suspend fun recordSync(event: ChayaEvent) {
+        mutex.withLock {
+            if (buffer.size >= MAX_ENTRIES) buffer.removeFirst()
+            buffer.addLast(event)
+        }
+        appendToFile(event)
+    }
+
     /** Latest events, newest last. Suspends briefly for the lock. */
     suspend fun snapshot(): List<ChayaEvent> = mutex.withLock { buffer.toList() }
 

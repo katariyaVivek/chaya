@@ -54,7 +54,7 @@ class EventLogTest {
         manager.restore()
 
         // Detection side: URL carries a token that must never reach the log.
-        log.record(
+        log.recordSync(
             ChayaEvent.MediaDetected(
                 url = ChayaEvent.scrubbed("https://cdn.example.com/a.mp4?sig=secret")!!,
                 source = DetectionSource.NETWORK.name,
@@ -75,6 +75,7 @@ class EventLogTest {
         FakeDownloader.lastOnComplete?.invoke(Result.failure(IOException("HTTP 403: Forbidden")))
         awaitLog { events -> events.any { it is ChayaEvent.DownloadFailed } }
 
+        awaitLog { it.isNotEmpty() }
         val events = logSnapshot()
         assertTrue(events.any {
             it is ChayaEvent.MediaDetected && it.url == "https://cdn.example.com/a.mp4"
@@ -96,7 +97,7 @@ class EventLogTest {
     @Test
     fun `buffer caps at 500 and export stays chronological`() = runBlocking {
         repeat(EventLog.MAX_ENTRIES + 50) { i ->
-            log.record(ChayaEvent.PageLoaded(url = "https://example.com/$i"))
+            log.recordSync(ChayaEvent.PageLoaded(url = "https://example.com/$i"))
         }
 
         val snapshot = logSnapshot()
