@@ -50,8 +50,8 @@ class CrashReporterTest {
             throw AssertionError("CrashReport.read threw ${it::class.simpleName}: ${it.message}")
         }
         assertTrue(report.exceptionName.contains("RuntimeException"))
-        assertTrue(report.stackTrace.contains("boom-test"))
-        assertEquals(2, report.recentEvents.size)
+        assertTrue("trace missing boom-test, got:\n" + report.stackTrace, report.stackTrace.contains("boom-test"))
+        assertEquals("events wrong: " + report.recentEvents, 2, report.recentEvents.size)
         val text = report.toText()
         assertTrue(text.contains("boom-test"))
         assertTrue(text.contains("https://example.com/a"))
@@ -82,10 +82,10 @@ class CrashReporterTest {
 
             assertEquals("main", parsed.threadName)
             assertEquals("java.lang.RuntimeException", parsed.exceptionName)
-            assertEquals("0.3.0", parsed.appVersion)
+            assertEquals("0.3.0, got [" + parsed.appVersion + "]", "0.3.0", parsed.appVersion)
             assertEquals(35, parsed.apiLevel)
             assertEquals("m d", parsed.deviceModel)
-            assertTrue(parsed.stackTrace.contains("B.c"))
+            assertTrue("trace missing B.c, got:\n" + parsed.stackTrace, parsed.stackTrace.contains("B.c"))
             assertEquals(listOf("page: https://example.com/"), parsed.recentEvents)
         } finally {
             dir.deleteRecursively()
