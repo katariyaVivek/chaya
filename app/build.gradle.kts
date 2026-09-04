@@ -81,6 +81,8 @@ dependencies {
     testImplementation(libs.turbine)
     testImplementation(libs.robolectric)
     testImplementation(libs.mockwebserver)
+    testImplementation(libs.androidx.room.testing)
+    testImplementation(libs.androidx.test.core)
 }
 
 // Robolectric needs the resource-merged classpath for ApplicationProvider-style

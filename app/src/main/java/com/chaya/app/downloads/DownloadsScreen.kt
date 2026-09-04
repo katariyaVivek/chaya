@@ -309,7 +309,7 @@ private fun StateChip(task: DownloadTask, state: DownloadState) {
         DownloadState.PAUSED -> "Paused · ${formatFileSize(task.downloadedBytes)}"
         DownloadState.COMPLETED ->
             "Saved · ${formatFileSize(task.totalBytes ?: task.downloadedBytes)}"
-        DownloadState.FAILED -> task.errorMessage?.takeIf { it.isNotBlank() }?.let { "Failed · $it" }
+        DownloadState.FAILED -> task.error?.userMessage?.takeIf { it.isNotBlank() }?.let { "Failed · $it" }
             ?: "Failed"
         DownloadState.CANCELLED -> "Stopped · ${formatFileSize(task.downloadedBytes)}"
         else -> ""
@@ -365,8 +365,12 @@ private fun ActionsRow(
                 ActionIcon(Icons.Default.Delete, "Delete", onDelete)
             }
             DownloadState.FAILED -> {
-                ActionIcon(Icons.Default.PlayArrow, "Retry", onResume,
-                    tint = MaterialTheme.colorScheme.primary)
+                // Retry only when the classified error says it could help
+                // (pointless for 404s, denied links, full disks).
+                if (task.error?.retryable != false) {
+                    ActionIcon(Icons.Default.PlayArrow, "Retry", onResume,
+                        tint = MaterialTheme.colorScheme.primary)
+                }
                 ActionIcon(Icons.Default.Delete, "Delete", onDelete)
             }
             DownloadState.COMPLETED -> {

@@ -6,6 +6,7 @@ import app.cash.turbine.test
 import com.chaya.app.database.ChayaDatabase
 import com.chaya.app.database.DownloadDao
 import com.chaya.app.database.DownloadEntity
+import com.chaya.app.download.DownloadError.HttpStatus
 import com.chaya.app.model.DetectedMedia
 import com.chaya.app.model.DetectionSource
 import java.io.File
@@ -148,7 +149,9 @@ class DownloadManagerTest {
         awaitStart(1)
         downloader.completeLastWithFailure(1, IOException("HTTP 500: boom"))
         assertEquals(DownloadState.FAILED, awaitTaskState(1, DownloadState.FAILED).state)
-        assertEquals("HTTP 500: boom", awaitDbState(1, DownloadState.FAILED).errorMessage)
+        assertEquals(HttpStatus(500), awaitTaskState(1, DownloadState.FAILED).error)
+        assertEquals("HTTP", awaitDbState(1, DownloadState.FAILED).errorKind)
+        assertEquals(500, awaitDbState(1, DownloadState.FAILED).errorCode)
 
         manager.resumeDownload(1)
 
@@ -271,6 +274,8 @@ class DownloadManagerTest {
         filePath = null,
         exportedUri = null,
         errorMessage = null,
+        errorKind = null,
+        errorCode = null,
         downloadedBytes = 0,
         totalBytes = null,
         state = state,
