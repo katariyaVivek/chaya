@@ -78,23 +78,29 @@ class DownloadsActionsTest {
     }
 
     @Test
-    fun `retryable failure shows retry, fatal failure hides it`() {
+    fun `retryable failure shows retry`() {
         val retryable = render(DownloadState.FAILED, DownloadError.HttpStatus(503))
         composeRule.onNodeWithContentDescription("Retry").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Retry").performClick()
         assertEquals(listOf("resume"), retryable)
+    }
 
+    @Test
+    fun `fatal failure hides retry but keeps delete`() {
         render(DownloadState.FAILED, DownloadError.HttpStatus(404))
         composeRule.onNodeWithContentDescription("Delete").assertIsDisplayed()
         assertEquals(0, composeRule.onAllNodesWithContentDescription("Retry").fetchSemanticsNodes().size)
     }
 
     @Test
-    fun `completed file shows open, completed stream shows play`() {
+    fun `completed file shows open`() {
         val fileFired = render(DownloadState.COMPLETED)
         composeRule.onNodeWithContentDescription("Open").performClick()
         assertEquals(listOf("open"), fileFired)
+    }
 
+    @Test
+    fun `completed stream shows play`() {
         val streamFired = mutableListOf<String>()
         composeRule.setContent {
             ActionsRow(
