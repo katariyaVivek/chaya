@@ -36,6 +36,7 @@ class EventLogTest {
 
     @Before
     fun setUp() {
+        FakeDownloader.lastOnComplete = null
         val context = RuntimeEnvironment.getApplication()
         log = EventLog(context)
         db = Room.inMemoryDatabaseBuilder(context, ChayaDatabase::class.java)
@@ -70,6 +71,9 @@ class EventLogTest {
             )
         )
         awaitUntil { manager.downloads.value.isNotEmpty() }
+        // The fake records its start asynchronously inside startHttp — wait
+        // for the captured callback before firing the failure.
+        awaitUntil { FakeDownloader.lastOnComplete != null }
         awaitLog { events -> events.any { it is ChayaEvent.DownloadStateChanged } }
         // Fail the in-flight download through the fake's captured callback.
         FakeDownloader.lastOnComplete?.invoke(Result.failure(IOException("HTTP 403: Forbidden")))
