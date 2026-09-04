@@ -24,9 +24,6 @@ class CrashReporterTest {
     @Test
     fun `writeReport persists trace plus recent events and reads back`() {
         val log = EventLog(context())
-        val crashDir = File(context().filesDir, CrashReport.DIR_NAME)
-        crashDir.deleteRecursively()
-
         // Synchronous seed so the report deterministically includes events.
         kotlinx.coroutines.runBlocking {
             log.recordSync(ChayaEvent.PageLoaded(url = "https://example.com/a"))
@@ -34,12 +31,11 @@ class CrashReporterTest {
         }
         val file = CrashReporter.writeReport(
             context(), log, Thread.currentThread(), RuntimeException("boom-test"),
+            fileName = "crash-test-write.log",
         )
 
         assertTrue(file != null && file.exists())
-        val reports = CrashReporter.listReports(context())
-        assertEquals(1, reports.size)
-        val report = reports.single()
+        val report = CrashReport.read(file)!!
         assertTrue(report.exceptionName.contains("RuntimeException"))
         assertTrue(report.stackTrace.contains("boom-test"))
         assertEquals(2, report.recentEvents.size)
@@ -84,8 +80,10 @@ class CrashReporterTest {
     @Test
     fun `deleteReport removes one file and rejects path tricks`() {
         val log = EventLog(context())
+        File(context().filesDir, CrashReport.DIR_NAME).deleteRecursively()
         val file = CrashReporter.writeReport(
             context(), log, Thread.currentThread(), RuntimeException("del"),
+            fileName = "crash-test-delete.log",
         )!!
 
         assertTrue(CrashReporter.deleteReport(context(), file.name))
@@ -108,7 +106,9 @@ class CrashReporterTest {
 
         assertEquals(1, previousCalls.size)
         assertEquals(error, previousCalls.single().second)
-        assertEquals(1, CrashReporter.listReports(context()).size)
+        assertTrue(
+            CrashReporter.listReports(context()).any { it.stackTrace.contains("chain-test") }
+        )
         // Restore a neutral handler so later tests start clean.
         CrashReporter.resetForTests()
         Thread.setDefaultUncaughtExceptionHandler(null)

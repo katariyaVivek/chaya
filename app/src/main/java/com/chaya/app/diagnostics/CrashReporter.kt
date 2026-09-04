@@ -55,11 +55,14 @@ object CrashReporter {
         eventLog: EventLog,
         thread: Thread,
         throwable: Throwable,
+        // Injected in tests so the file under assertion is unambiguous even
+        // when tests share a filesDir; production passes nothing (timestamped).
+        fileName: String? = null,
     ): File? {
         return try {
             val dir = File(context.filesDir, CrashReport.DIR_NAME).also { it.mkdirs() }
             val stamp = SimpleDateFormat("yyyyMMdd-HHmmss-SSS", Locale.US).format(Date())
-            val file = File(dir, "crash-$stamp.log")
+            val file = File(dir, fileName ?: "crash-$stamp.log")
             val traceWriter = StringWriter()
             throwable.printStackTrace(PrintWriter(traceWriter))
             val recentEvents = runCatching {
