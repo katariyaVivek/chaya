@@ -1,5 +1,6 @@
 package com.chaya.app.database
 
+import androidx.room.Room
 import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.sqlite.db.SupportSQLiteOpenHelper
 import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
@@ -8,6 +9,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.annotation.Config
 import java.io.File
 import java.nio.file.Files
 
@@ -16,7 +21,10 @@ import java.nio.file.Files
  * framework SQLite (no instrumentation harness needed): builds a real
  * v2-shaped database file, runs [ChayaDatabase.MIGRATION_2_3] against
  * it, and asserts rows survive with the new columns present and NULL.
+ * Robolectric supplies the framework Context the SQLite helper needs.
  */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [35])
 class ChayaDatabaseMigrationTest {
 
     /** Same table shape the shipped v2 app wrote. */
@@ -39,7 +47,9 @@ class ChayaDatabaseMigrationTest {
     private fun createV2Database(): File {
         val dir = Files.createTempDirectory("chaya-mig-test").toFile()
         val file = File(dir, "test.db")
-        val config = SupportSQLiteOpenHelper.Configuration.builder(null)
+        // Robolectric provides a working Context so framework SQLite can open a real file.
+        val context = RuntimeEnvironment.getApplication()
+        val config = SupportSQLiteOpenHelper.Configuration.builder(context)
             .name(file.absolutePath)
             .callback(v2Callback())
             .build()
@@ -71,7 +81,9 @@ class ChayaDatabaseMigrationTest {
     fun `migrate 2 to 3 preserves rows and adds nullable error columns`() {
         val file = createV2Database()
         try {
-            val config = SupportSQLiteOpenHelper.Configuration.builder(null)
+            // Same Robolectric Context for the migration pass.
+            val context = RuntimeEnvironment.getApplication()
+            val config = SupportSQLiteOpenHelper.Configuration.builder(context)
                 .name(file.absolutePath)
                 .callback(object : SupportSQLiteOpenHelper.Callback(3) {
                     override fun onCreate(db: SupportSQLiteDatabase) = Unit
