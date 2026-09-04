@@ -110,6 +110,7 @@ import com.chaya.app.detection.MediaInterceptor
 import com.chaya.app.model.DetectedMedia
 import com.chaya.app.streaming.StreamDownloader
 import com.chaya.app.ui.components.DetectedMediaSheet
+import com.chaya.app.ui.components.NotificationRationaleSheet
 import com.chaya.app.ui.components.QualitySelectorSheet
 import com.chaya.app.ui.theme.ChayaMotion
 import com.chaya.app.ui.theme.StaggeredAppear
