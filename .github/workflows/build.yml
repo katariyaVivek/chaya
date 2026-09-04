@@ -16,8 +16,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Detect what changed so test-only PRs skip the APK build (it cannot fail
-  # if no main-source file changed) while every PR still runs the unit tests.
+  # Detect what changed without extra API calls: compare the PR merge-base
+  # against HEAD using git (checkout fetches full history). Test-only PRs
+  # skip the APK build (it cannot fail if no main-source file changed)
+  # while every PR still runs the unit tests.
   changes:
     runs-on: ubuntu-latest
     outputs:
@@ -25,18 +27,22 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Check changed paths
         id: filter
-        uses: dorny/paths-filter@v3
-        with:
-          filters: |
-            main_code:
-              - 'app/src/main/**'
-              - 'app/build.gradle.kts'
-              - 'gradle/**'
-              - 'build.gradle.kts'
-              - 'settings.gradle.kts'
-              - 'gradle.properties'
+        run: |
+          BASE="${{ github.event.pull_request.base.sha }}"
+          if [ -z "$BASE" ]; then BASE="HEAD~1"; fi
+          echo "Diff base: $BASE"
+          if git diff --name-only "$BASE" HEAD -- \
+            'app/src/main/**' 'app/build.gradle.kts' 'gradle/**' \
+            'build.gradle.kts' 'settings.gradle.kts' 'gradle.properties' \
+            | grep -q .; then
+            echo "main_code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "main_code=false" >> "$GITHUB_OUTPUT"
+          fi
 
   build:
     runs-on: ubuntu-latest
