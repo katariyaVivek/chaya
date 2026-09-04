@@ -74,7 +74,7 @@ object CrashReporter {
                 threadName = thread.name,
                 exceptionName = throwable::class.java.name,
                 stackTrace = traceWriter.toString().take(CrashReport.MAX_BODY_CHARS / 2),
-                appVersion = BuildConfig.VERSION_NAME,
+                appVersion = appVersion(context),
                 apiLevel = Build.VERSION.SDK_INT,
                 deviceModel = "${Build.MANUFACTURER} ${Build.MODEL}".trim(),
                 recentEvents = recentEvents,
@@ -85,6 +85,13 @@ object CrashReporter {
         } catch (_: Exception) {
             null
         }
+    }
+
+    /** Reads the version from the package manager so unit tests (no BuildConfig) work too. */
+    private fun appVersion(context: Context): String {
+        return runCatching {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "?"
+        }.getOrElse { BuildConfig.VERSION_NAME }
     }
 
     /** Lists persisted reports newest-first for the viewer. */
