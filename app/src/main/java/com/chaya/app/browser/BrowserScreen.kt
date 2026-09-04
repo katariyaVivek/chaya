@@ -110,6 +110,7 @@ import com.chaya.app.detection.MediaInterceptor
 import com.chaya.app.model.DetectedMedia
 import com.chaya.app.streaming.StreamDownloader
 import com.chaya.app.ui.components.DetectedMediaSheet
+import com.chaya.app.ui.components.NotificationRationaleSheet
 import com.chaya.app.ui.components.QualitySelectorSheet
 import com.chaya.app.ui.theme.ChayaMotion
 import com.chaya.app.ui.theme.StaggeredAppear
@@ -199,6 +200,25 @@ fun BrowserScreen(
 
     // Pending download waiting for notification permission
     var pendingMedia by remember { mutableStateOf<DetectedMedia?>(null) }
+    // One-line rationale before the system dialog (Phase 0.5): the download
+    // is not obviously notification-related, so explain first. "Not now"
+    // still downloads — matches the silent fallback below.
+    var rationaleMedia by remember { mutableStateOf<DetectedMedia?>(null) }
+
+    // First-run hint (Phase 4.5): shown once, persisted in SharedPreferences.
+    // Plain SharedPreferences — one boolean, no DataStore dependency warranted.
+    var showOnboardingHint by remember {
+        mutableStateOf(
+            context.getSharedPreferences("chaya_prefs", android.content.Context.MODE_PRIVATE)
+                .getBoolean("onboarding_seen", true)
+                .not()
+        )
+    }
+    fun dismissOnboardingHint() {
+        showOnboardingHint = false
+        context.getSharedPreferences("chaya_prefs", android.content.Context.MODE_PRIVATE)
+            .edit().putBoolean("onboarding_seen", true).apply()
+    }
 
     val notifPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -342,13 +362,30 @@ fun BrowserScreen(
                 context, Manifest.permission.POST_NOTIFICATIONS
             ) != PackageManager.PERMISSION_GRANTED
         ) {
+            rationaleMedia = media
+        } else {
+            viewModel.downloadMedia(media)
+            scope.launch {
+                snackbarHostState.showSnackbar(
+                    message = "Downloading ${media.url.substringAfterLast("/").take(32)}",
+                    duration = SnackbarDuration.Short
+                )
+            }
+        }
+    }
+
+    /** Fires after the rationale sheet: Allow shows the system dialog, Not now downloads silently. */
+    fun proceedFromRationale(allow: Boolean) {
+        val media = rationaleMedia ?: return
+        rationaleMedia = null
+        if (allow) {
             pendingMedia = media
             notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         } else {
             viewModel.downloadMedia(media)
             scope.launch {
                 snackbarHostState.showSnackbar(
-                    message = "Downloading ${media.url.substringAfterLast("/").take(32)}",
+                    message = "Downloading (notifications off)",
                     duration = SnackbarDuration.Short
                 )
             }
@@ -543,6 +580,8 @@ fun BrowserScreen(
 
                 StartScreenOverlay(
                     visible = uiState.homeVisible,
+                    showOnboardingHint = showOnboardingHint,
+                    onDismissOnboardingHint = { dismissOnboardingHint() },
                     onSelectUrl = { target -> navigateToUrl(target) }
                 )
 
@@ -656,6 +695,16 @@ fun BrowserScreen(
                         }
                     )
                 }
+
+                // Notification rationale (Phase 0.5): one sentence before the
+                // system dialog; declining still starts the download.
+                rationaleMedia?.let { media ->
+                    NotificationRationaleSheet(
+                        fileName = media.url.substringAfterLast("/").take(48),
+                        onAllow = { proceedFromRationale(true) },
+                        onNotNow = { proceedFromRationale(false) },
+                    )
+                }
             }
         }
 
@@ -674,7 +723,7 @@ fun BrowserScreen(
     }
 }
 
-/** Bottom-bar action with consistent disabled styling. */
+/** Bottom-bar action with consistent disabled styling and press feedback. */
 @Composable
 private fun NavAction(
     icon: ImageVector,
@@ -682,7 +731,7 @@ private fun NavAction(
     enabled: Boolean,
     onClick: () -> Unit
 ) {
-    IconButton(onClick = onClick, enabled = enabled) {
+    IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.pressScale(0.88f)) {
         Icon(
             imageVector = icon,
             contentDescription = label,
@@ -700,6 +749,8 @@ private fun NavAction(
 @Composable
 private fun StartScreenOverlay(
     visible: Boolean,
+    showOnboardingHint: Boolean = false,
+    onDismissOnboardingHint: () -> Unit = {},
     onSelectUrl: (String) -> Unit
 ) {
     AnimatedVisibility(
@@ -818,6 +869,15 @@ private fun StartScreenOverlay(
                         )
                     }
                 }
+
+                // First-run hint (Phase 4.5): one line pointing at the FAB,
+                // part of the home screen itself — no overlay, no carousel.
+                if (showOnboardingHint) {
+                    Spacer(Modifier.height(24.dp))
+                    StaggeredAppear(index = 3) {
+                        OnboardingHint(onDismiss = onDismissOnboardingHint)
+                    }
+                }
             }
         }
     }
@@ -852,6 +912,35 @@ private fun HowItWorksStep(index: Int, text: String) {
             lineHeight = MaterialTheme.typography.bodyLarge.lineHeight,
             modifier = Modifier.padding(top = 2.dp)
         )
+    }
+}
+
+/** One-line first-run pointer at the floating media button (Phase 4.5). */
+@Composable
+private fun OnboardingHint(onDismiss: () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.primaryContainer,
+        modifier = Modifier.fillMaxWidth().pressScale(0.99f).clickable { onDismiss() }
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.FileDownload,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.size(22.dp)
+            )
+            Spacer(Modifier.width(12.dp))
+            Text(
+                text = "Play any video — when media appears, the button pops up here. Tap to dismiss.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.weight(1f)
+            )
+        }
     }
 }
 
