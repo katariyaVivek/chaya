@@ -29,6 +29,8 @@ class CrashReporterTest {
             log.recordSync(ChayaEvent.PageLoaded(url = "https://example.com/a"))
             log.recordSync(ChayaEvent.DownloadFailed(taskId = 3, errorKind = "HttpStatus", retryable = false))
         }
+        val snapshot = kotlinx.coroutines.runBlocking { log.snapshot() }
+        assertEquals(2, snapshot.size)
         val file = CrashReporter.writeReport(
             context(), log, Thread.currentThread(), RuntimeException("boom-test"),
             fileName = "crash-test-write.log",
