@@ -26,8 +26,8 @@ data class CrashReport(
     /** Human-readable rendering shared by the viewer and the share sheet. */
     fun toText(): String = buildString {
         appendLine("$HEADER_PREFIX$HEADER_SEPARATOR$fileName")
-        appendLine("App: $appVersion$FIELD_SEPARATOR API $apiLevel$FIELD_SEPARATOR $deviceModel")
-        appendLine("Thread: $threadName$FIELD_SEPARATOR $exceptionName")
+        appendLine("App:$FIELD_SEPARATOR$appVersion$FIELD_SEPARATOR$apiLevel$FIELD_SEPARATOR$deviceModel")
+        appendLine("Thread:$FIELD_SEPARATOR$threadName$FIELD_SEPARATOR$exceptionName")
         appendLine()
         appendLine(TRACE_MARKER)
         appendLine(stackTrace)
@@ -60,16 +60,16 @@ data class CrashReport(
                 for (line in lines) {
                     when {
                         line.startsWith(HEADER_PREFIX) -> Unit
-                        line.startsWith("App: ") -> {
-                            val parts = line.removePrefix("App: ").split(FIELD_SEPARATOR)
-                            appVersion = parts.getOrElse(0) { "?" }.trim()
-                            apiLevel = parts.getOrElse(1) { "API ?" }.removePrefix("API ").trim().toIntOrNull() ?: 0
-                            deviceModel = parts.getOrElse(2) { "?" }.trim()
+                        line.startsWith("App:") -> {
+                            val parts = line.removePrefix("App:").split(FIELD_SEPARATOR)
+                            appVersion = parts.getOrElse(1) { "?" }.trim()
+                            apiLevel = parts.getOrElse(2) { "?" }.trim().toIntOrNull() ?: 0
+                            deviceModel = parts.getOrElse(3) { "?" }.trim()
                         }
-                        line.startsWith("Thread: ") -> {
-                            val rest = line.removePrefix("Thread: ").split(FIELD_SEPARATOR)
-                            threadName = rest.getOrElse(0) { "?" }.trim()
-                            exceptionName = rest.getOrElse(1) { "?" }.trim()
+                        line.startsWith("Thread:") -> {
+                            val rest = line.removePrefix("Thread:").split(FIELD_SEPARATOR)
+                            threadName = rest.getOrElse(1) { "?" }.trim()
+                            exceptionName = rest.getOrElse(2) { "?" }.trim()
                         }
                         line == TRACE_MARKER -> section = 1
                         line == EVENTS_MARKER -> section = 2
