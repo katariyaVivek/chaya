@@ -38,6 +38,9 @@ android {
 
     buildFeatures {
         compose = true
+        // Generates com.chaya.app.BuildConfig (DEBUG/ VERSION_NAME) used by
+        // diagnostics gating (StrictMode) and crash-report app-version field.
+        buildConfig = true
     }
 }
 
