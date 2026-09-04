@@ -5,6 +5,10 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+// Buildscript classpath import: Gradle Kotlin DSL scripts do not resolve
+// fully-qualified java.util references without it.
+import java.util.Properties
+
 android {
     namespace = "com.chaya.app"
     compileSdk = 35
@@ -17,12 +21,44 @@ android {
         versionName = "0.3.0"
     }
 
+    // Release signing (Phase 5.1): credentials never live in the repo.
+    // Local: copy keystore.properties.example to keystore.properties
+    // (gitignored) and fill in your key. CI: KEYSTORE_* secrets, see build.yml.
+    // True when either source provides a keystore path (checked at
+    // configuration time; assembleRelease falls back to debug signing).
+    fun hasReleaseKey(): Boolean {
+        val propsFile = rootProject.file("keystore.properties")
+        if (propsFile.exists()) {
+            val props = Properties()
+            propsFile.inputStream().use { props.load(it) }
+            if (!props.getProperty("storeFile").isNullOrBlank()) return true
+        }
+        return !System.getenv("KEYSTORE_PATH").isNullOrBlank()
+    }
+    signingConfigs {
+        create("release") {
+            val props = Properties()
+            val propsFile = rootProject.file("keystore.properties")
+            if (propsFile.exists()) propsFile.inputStream().use { props.load(it) }
+            storeFile = (props.getProperty("storeFile") ?: System.getenv("KEYSTORE_PATH"))
+                ?.let { file(it) }
+            storePassword = props.getProperty("storePassword") ?: System.getenv("KEYSTORE_PASSWORD")
+            keyAlias = props.getProperty("keyAlias") ?: System.getenv("KEY_ALIAS")
+            keyPassword = props.getProperty("keyPassword") ?: System.getenv("KEY_PASSWORD")
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
+            )
+            // Unsigned until credentials exist (local keystore.properties or
+            // CI secrets); assembleRelease still works for verification.
+            signingConfig = signingConfigs.findByName(
+                if (hasReleaseKey()) "release" else "debug"
             )
         }
     }

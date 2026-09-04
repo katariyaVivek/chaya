@@ -5,6 +5,7 @@ build/
 .gradle/
 *.iml
 local.properties
+keystore.properties
 .idea/
 app/build/
 *.apk
