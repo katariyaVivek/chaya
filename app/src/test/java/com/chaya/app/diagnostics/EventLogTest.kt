@@ -75,8 +75,9 @@ class EventLogTest {
         FakeDownloader.lastOnComplete?.invoke(Result.failure(IOException("HTTP 403: Forbidden")))
         awaitLog { events -> events.any { it is ChayaEvent.DownloadFailed } }
 
-        awaitLog { it.isNotEmpty() }
-        val events = logSnapshot()
+        val events = awaitLogAndSnapshot(
+            predicate = { snap -> snap.filterIsInstance<ChayaEvent.DownloadFailed>().size == 1 },
+        )
         assertTrue(events.any {
             it is ChayaEvent.MediaDetected && it.url == "https://cdn.example.com/a.mp4"
         })
@@ -109,6 +110,19 @@ class EventLogTest {
     }
 
     private suspend fun logSnapshot() = log.snapshot()
+
+    /** Polls until [predicate] holds on the snapshot, then returns that snapshot. */
+    private suspend fun awaitLogAndSnapshot(
+        predicate: (List<ChayaEvent>) -> Boolean,
+    ): List<ChayaEvent> {
+        val deadline = System.currentTimeMillis() + 10_000
+        while (System.currentTimeMillis() < deadline) {
+            val snapshot = log.snapshot()
+            if (predicate(snapshot)) return snapshot
+            delay(20)
+        }
+        return log.snapshot()
+    }
 
     /** Polls the log (suspend snapshot) until [predicate] holds. */
     private suspend fun awaitLog(predicate: (List<ChayaEvent>) -> Boolean): Boolean {
