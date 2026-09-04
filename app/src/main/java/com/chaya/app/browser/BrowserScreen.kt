@@ -65,6 +65,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Stream
 import androidx.compose.material3.Badge
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -81,6 +82,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -120,7 +122,17 @@ import java.net.URLEncoder
  * (history, page, cookies) survives trips to the Downloads screen and back.
  */
 private object WebViewHolder {
+    /** Retains browsing history and renderer state while Compose destinations swap. */
     var instance: WebView? = null
+
+    /** Retains the secured bridge captured by the WebViewClient across destination reattachment. */
+    var mediaBridge: MediaBridge? = null
+
+    /** Retains the request observer captured by the WebViewClient across destination reattachment. */
+    var mediaInterceptor: MediaInterceptor? = null
+
+    /** Retains dynamic UI routing for WebViewClient and WebChromeClient callbacks after reattachment. */
+    var callbacks: RetainedWebViewCallbacks? = null
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -184,9 +196,6 @@ fun BrowserScreen(
 
     // Back: exit fullscreen first, then WebView history, then default (exit app)
     BackHandler(enabled = customView != null) { exitFullscreen() }
-    BackHandler(enabled = customView == null && uiState.canGoBack) {
-        WebViewHolder.instance?.goBack()
-    }
 
     // Pending download waiting for notification permission
     var pendingMedia by remember { mutableStateOf<DetectedMedia?>(null) }
@@ -209,19 +218,83 @@ fun BrowserScreen(
     }
 
     val interceptor = remember {
-        MediaInterceptor { media -> viewModel.onMediaDetected(media) }
+        WebViewHolder.mediaInterceptor?.also {
+            it.updateOnMediaDetected { media, navigationGeneration ->
+                viewModel.onMediaDetected(media, navigationGeneration)
+            }
+        } ?: MediaInterceptor { media, navigationGeneration ->
+            viewModel.onMediaDetected(media, navigationGeneration)
+        }.also {
+            WebViewHolder.mediaInterceptor = it
+        }
     }
     val bridge = remember {
-        MediaBridge(
-            currentPageUrl = { viewModel.uiState.value.url },
-            onMediaDetected = { media -> viewModel.onMediaDetected(media) }
+        WebViewHolder.mediaBridge?.also {
+            it.updateCallbacks(
+                onMediaDetected = { media, navigationGeneration ->
+                    viewModel.onMediaDetected(media, navigationGeneration)
+                },
+                onMediaCandidate = { candidate, navigationGeneration ->
+                    viewModel.verifyMediaCandidate(candidate, navigationGeneration)
+                },
+            )
+        } ?: MediaBridge(
+            onMediaDetected = { media, navigationGeneration ->
+                viewModel.onMediaDetected(media, navigationGeneration)
+            },
+            onMediaCandidate = { candidate, navigationGeneration ->
+                viewModel.verifyMediaCandidate(candidate, navigationGeneration)
+            },
+        ).also { WebViewHolder.mediaBridge = it }
+    }
+    // Rebind detector callbacks synchronously after every composition so retained objects never route to old state.
+    SideEffect {
+        interceptor.updateOnMediaDetected { media, navigationGeneration ->
+            viewModel.onMediaDetected(media, navigationGeneration)
+        }
+        bridge.updateCallbacks(
+            onMediaDetected = { media, navigationGeneration ->
+                viewModel.onMediaDetected(media, navigationGeneration)
+            },
+            onMediaCandidate = { candidate, navigationGeneration ->
+                viewModel.verifyMediaCandidate(candidate, navigationGeneration)
+            },
         )
+    }
+
+    // Packages all destination-specific WebView callbacks so one atomic router update owns their lifetime together.
+    val callbackState = RetainedWebViewCallbackState(
+        onNavigationInvalidated = viewModel::onNavigationInvalidated,
+        onPageStarted = viewModel::onPageStarted,
+        onPageFinished = viewModel::onPageFinished,
+        onProgressChanged = viewModel::onProgressChanged,
+        onNavigationStateChanged = viewModel::onNavigationStateChanged,
+        onEnterFullscreen = ::enterFullscreen,
+        onExitFullscreen = ::exitFullscreen,
+    )
+    val webViewCallbacks = remember {
+        WebViewHolder.callbacks?.also {
+            it.update(callbackState)
+        } ?: RetainedWebViewCallbacks(
+            initialState = callbackState,
+        ).also { WebViewHolder.callbacks = it }
+    }
+    // Keeps every retained WebView client callback bound to the latest Compose-local fullscreen state.
+    SideEffect {
+        webViewCallbacks.update(callbackState)
     }
     val detectorJs = remember {
         runCatching {
             context.assets.open("detection/chaya_media_detector.js")
                 .bufferedReader().readText()
         }.getOrDefault("")
+    }
+
+    // Stops old-page callbacks and HEAD work before any explicit top-level navigation request reaches WebView.
+    fun invalidateDetectionSession() {
+        bridge.invalidateNavigation()
+        interceptor.invalidateNavigation()
+        webViewCallbacks.onNavigationInvalidated()
     }
 
     fun navigateToUrl(rawInput: String) {
@@ -234,8 +307,33 @@ fun BrowserScreen(
             else -> "https://www.google.com/search?q=${URLEncoder.encode(query, "UTF-8")}"
         }
         urlInput = targetUrl
+        invalidateDetectionSession()
         WebViewHolder.instance?.loadUrl(targetUrl)
-        viewModel.onPageStarted(targetUrl)
+    }
+
+    LaunchedEffect(uiState.thoroughScanRequest) {
+        val scanRequest = uiState.thoroughScanRequest ?: return@LaunchedEffect
+        val webView = WebViewHolder.instance ?: return@LaunchedEffect
+        if (uiState.homeVisible ||
+            uiState.url != scanRequest.pageUrl ||
+            uiState.navigationGeneration != scanRequest.navigationGeneration ||
+            webView.url != scanRequest.pageUrl ||
+            !bridge.enableThoroughScan(scanRequest.pageUrl, scanRequest.navigationGeneration)
+        ) {
+            viewModel.completeThoroughScanRequest(scanRequest)
+            return@LaunchedEffect
+        }
+
+        viewModel.completeThoroughScanRequest(scanRequest)
+        webView.evaluateJavascript(
+            "window.__chayaScanMoreThoroughly && window.__chayaScanMoreThoroughly();",
+            null,
+        )
+    }
+
+    BackHandler(enabled = customView == null && uiState.canGoBack) {
+        invalidateDetectionSession()
+        WebViewHolder.instance?.goBack()
     }
 
     fun requestPermissionAndDownload(media: DetectedMedia) {
@@ -381,19 +479,26 @@ fun BrowserScreen(
                                 icon = Icons.AutoMirrored.Filled.ArrowBack,
                                 label = "Back",
                                 enabled = uiState.canGoBack
-                            ) { WebViewHolder.instance?.goBack() }
+                            ) {
+                                invalidateDetectionSession()
+                                WebViewHolder.instance?.goBack()
+                            }
 
                             NavAction(
                                 icon = Icons.AutoMirrored.Filled.ArrowForward,
                                 label = "Forward",
                                 enabled = uiState.canGoForward
-                            ) { WebViewHolder.instance?.goForward() }
+                            ) {
+                                invalidateDetectionSession()
+                                WebViewHolder.instance?.goForward()
+                            }
 
                             NavAction(
                                 icon = Icons.Default.Home,
                                 label = "Home",
                                 enabled = true
                             ) {
+                                invalidateDetectionSession()
                                 WebViewHolder.instance?.loadUrl("about:blank")
                                 viewModel.goHome()
                             }
@@ -406,6 +511,7 @@ fun BrowserScreen(
                                 if (uiState.homeVisible) {
                                     navigateToUrl("https://www.google.com")
                                 } else {
+                                    invalidateDetectionSession()
                                     WebViewHolder.instance?.reload()
                                 }
                             }
@@ -428,9 +534,7 @@ fun BrowserScreen(
                             bridge = bridge,
                             interceptor = interceptor,
                             detectorJs = detectorJs,
-                            viewModel = viewModel,
-                            onEnterFullscreen = ::enterFullscreen,
-                            onExitFullscreen = ::exitFullscreen
+                            callbacks = webViewCallbacks,
                         ).also { WebViewHolder.instance = it }
                     },
                     modifier = Modifier.fillMaxSize(),
@@ -441,6 +545,34 @@ fun BrowserScreen(
                     visible = uiState.homeVisible,
                     onSelectUrl = { target -> navigateToUrl(target) }
                 )
+
+                // Opt-in inspection stays separate from ordinary detection to avoid background HEAD traffic.
+                AnimatedVisibility(
+                    visible = !uiState.homeVisible &&
+                            uiState.showThoroughScan &&
+                            uiState.detectedMedia.isEmpty(),
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 20.dp, bottom = 20.dp),
+                    enter = scaleIn(initialScale = 0.8f, animationSpec = ChayaMotion.springSmooth()) +
+                            fadeIn(ChayaMotion.tweenShort()),
+                    exit = scaleOut(targetScale = 0.8f, animationSpec = ChayaMotion.tweenShort()) +
+                            fadeOut(ChayaMotion.tweenShort())
+                ) {
+                    ExtendedFloatingActionButton(
+                        onClick = { viewModel.requestThoroughScan() },
+                        icon = {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = null,
+                            )
+                        },
+                        text = { Text("Scan more thoroughly") },
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.pressScale(0.96f),
+                    )
+                }
 
                 // Floating detected-media button — spring entrance + live badge
                 AnimatedVisibility(
@@ -612,7 +744,7 @@ private fun StartScreenOverlay(
                         )
                         Spacer(Modifier.height(6.dp))
                         Text(
-                            text = "Catch video & audio from any page.",
+                            text = "Find direct video, audio & HLS/DASH streams.",
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -762,17 +894,34 @@ private fun QuickChip(
 // WebView construction
 // --------------------------------------------------------------------- //
 
+/** Holds one detector capability and generation while the WebView finishes its active document. */
+private data class DetectorNavigationSession(
+    val pageUrl: String,
+    val navigationGeneration: Long,
+    val capability: String,
+)
+
+/** Creates a WebView whose clients always dispatch through the mutable retained callback router. */
 @SuppressLint("SetJavaScriptEnabled")
 private fun createChayaWebView(
     ctx: android.content.Context,
     bridge: MediaBridge,
     interceptor: MediaInterceptor,
     detectorJs: String,
-    viewModel: BrowserViewModel,
-    onEnterFullscreen: (View, WebChromeClient.CustomViewCallback) -> Unit,
-    onExitFullscreen: () -> Unit
+    callbacks: RetainedWebViewCallbacks,
 ): WebView {
     return WebView(ctx).apply {
+        // Tracks injection eligibility so a superseded redirect cannot reintroduce an old capability on finish.
+        var activeDetectorSession: DetectorNavigationSession? = null
+
+        // Invalidates every page-scoped collaborator before a transition can deliver stale callbacks.
+        fun invalidateDetectorNavigation() {
+            activeDetectorSession = null
+            bridge.invalidateNavigation()
+            interceptor.invalidateNavigation()
+            callbacks.onNavigationInvalidated()
+        }
+
         layoutParams = ViewGroup.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT
@@ -791,45 +940,82 @@ private fun createChayaWebView(
             useWideViewPort = true
         }
 
+        // The bridge is visible to every frame, so its callbacks validate a per-navigation capability.
         addJavascriptInterface(bridge, "ChayaBridge")
 
         webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                interceptor.clearReportedUrls()
-                url?.let { viewModel.onPageStarted(it) }
-                // Inject early so fetch/XHR hooks catch requests during page load.
-                if (detectorJs.isNotEmpty() && url != null && url != "about:blank") {
-                    evaluateJavascript(detectorJs, null)
+                val pageUrl = url ?: run {
+                    invalidateDetectorNavigation()
+                    return
+                }
+                val navigationGeneration = callbacks.onPageStarted(pageUrl)
+                if (pageUrl == "about:blank") {
+                    activeDetectorSession = null
+                    bridge.invalidateNavigation()
+                    interceptor.invalidateNavigation()
+                    return
+                }
+
+                val capability = bridge.beginNavigation(pageUrl, navigationGeneration)
+                interceptor.beginNavigation(pageUrl, navigationGeneration)
+                activeDetectorSession = DetectorNavigationSession(
+                    pageUrl = pageUrl,
+                    navigationGeneration = navigationGeneration,
+                    capability = capability,
+                )
+                // Inject early and only into the main document so the capability stays out of iframes.
+                if (detectorJs.isNotEmpty()) {
+                    view?.evaluateJavascript(
+                        detectorScriptWithCapability(detectorJs, capability),
+                        null,
+                    )
                 }
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
-                url?.let { viewModel.onPageFinished(it, view?.title ?: "") }
-                view?.let {
-                    viewModel.onNavigationStateChanged(it.canGoBack(), it.canGoForward())
-                    if (detectorJs.isNotEmpty() && url != null && url != "about:blank") {
-                        it.evaluateJavascript(detectorJs, null)
+                val pageUrl = url ?: return
+                val session = activeDetectorSession
+                if (session?.pageUrl == pageUrl) {
+                    callbacks.onPageFinished(
+                        pageUrl,
+                        view?.title.orEmpty(),
+                        session.navigationGeneration,
+                    )
+                    // Reinject after commit because a load-start evaluation can be discarded with the old document.
+                    if (detectorJs.isNotEmpty()) {
+                        view?.evaluateJavascript(
+                            detectorScriptWithCapability(detectorJs, session.capability),
+                            null,
+                        )
                     }
+                }
+                view?.let {
+                    callbacks.onNavigationStateChanged(it.canGoBack(), it.canGoForward())
                 }
             }
 
             override fun shouldOverrideUrlLoading(
                 view: WebView?,
                 request: WebResourceRequest?
-            ): Boolean = false
+            ): Boolean {
+                if (request?.isForMainFrame == true) {
+                    invalidateDetectorNavigation()
+                }
+                return false
+            }
 
             override fun shouldInterceptRequest(
                 view: WebView?,
                 request: WebResourceRequest?
             ): WebResourceResponse? {
                 if (request == null) return null
-                val pageUrl = request.requestHeaders["Referer"]
-                return interceptor.shouldInterceptRequest(request = request, pageUrl = pageUrl)
+                return interceptor.shouldInterceptRequest(request)
             }
 
             override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
                 view?.let {
-                    viewModel.onNavigationStateChanged(it.canGoBack(), it.canGoForward())
+                    callbacks.onNavigationStateChanged(it.canGoBack(), it.canGoForward())
                 }
                 super.doUpdateVisitedHistory(view, url, isReload)
             }
@@ -837,15 +1023,17 @@ private fun createChayaWebView(
 
         webChromeClient = object : WebChromeClient() {
             override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                viewModel.onProgressChanged(newProgress)
+                activeDetectorSession?.let { session ->
+                    callbacks.onProgressChanged(newProgress, session.navigationGeneration)
+                }
             }
 
             override fun onShowCustomView(view: View?, callback: CustomViewCallback) {
-                view?.let { onEnterFullscreen(it, callback) }
+                view?.let { callbacks.onEnterFullscreen(it, callback) }
             }
 
             override fun onHideCustomView() {
-                onExitFullscreen()
+                callbacks.onExitFullscreen()
             }
 
             /** target="_blank" links open in the same WebView instead of doing nothing. */
@@ -863,6 +1051,7 @@ private fun createChayaWebView(
                             request: WebResourceRequest?
                         ): Boolean {
                             request?.url?.let {
+                                invalidateDetectorNavigation()
                                 view.loadUrl(it.toString())
                                 wv?.destroy()
                             }
@@ -876,4 +1065,9 @@ private fun createChayaWebView(
             }
         }
     }
+}
+
+/** Prepends the random main-document capability without interpolating page-controlled content. */
+private fun detectorScriptWithCapability(detectorJs: String, capability: String): String {
+    return "window.__chayaBridgeCapability = '$capability';\n$detectorJs"
 }
