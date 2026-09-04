@@ -6,6 +6,7 @@ import app.cash.turbine.test
 import com.chaya.app.database.ChayaDatabase
 import com.chaya.app.database.DownloadDao
 import com.chaya.app.database.DownloadEntity
+import com.chaya.app.download.DownloadError
 import com.chaya.app.download.DownloadError.HttpStatus
 import com.chaya.app.model.DetectedMedia
 import com.chaya.app.model.DetectionSource
@@ -113,6 +114,58 @@ class DownloadManagerTest {
         assertEquals(DownloadState.PAUSED, awaitTaskState(1, DownloadState.PAUSED).state)
         assertTrue("initial start never recorded", awaitUntil { downloader.starts.size == 1 })
         assertEquals(1, downloader.cancelled.size)
+    }
+
+    // ---- storage pre-flight (Phase 3.2) ---- //
+
+    @Test
+    fun `startDownload fails fast with StorageFull when disk is full`() = runBlocking {
+        // New instance each test already gives a fresh FakeDownloader and a
+        // fresh in-memory DB, so id 1 is free and starts is empty.
+        val fullManager = DownloadManager(context, dao, downloader, freeBytes = { 0L })
+        fullManager.restore()
+        fullManager.startDownload(media())
+
+        val task = awaitManagerTaskState(fullManager, 1, DownloadState.FAILED)
+        assertEquals(DownloadError.StorageFull, task.error)
+        assertTrue("downloader must never start", downloader.starts.isEmpty())
+    }
+
+    @Test
+    fun `resumeDownload fails fast with StorageFull when disk filled while paused`() = runBlocking {
+        manager.restore()
+        manager.startDownload(media())
+        awaitTaskState(1, DownloadState.DOWNLOADING)
+        awaitStart(1)
+        manager.pauseDownload(1)
+        awaitTaskState(1, DownloadState.PAUSED)
+        val startsBefore = downloader.starts.size
+
+        // Disk filled while paused: rebuild the manager with a full disk over
+        // the same DAO rows (production: same process, StatFs now reports low).
+        val fullManager = DownloadManager(context, dao, downloader, freeBytes = { 0L })
+        fullManager.restore()
+        fullManager.resumeDownload(1)
+
+        val task = awaitManagerTaskState(fullManager, 1, DownloadState.FAILED)
+        assertEquals(DownloadError.StorageFull, task.error)
+        assertEquals("resume must not re-invoke the downloader", startsBefore, downloader.starts.size)
+    }
+
+    /** Polls another manager instance's flow until [id] reaches [state]. */
+    private suspend fun awaitManagerTaskState(
+        other: DownloadManager,
+        id: Long,
+        state: DownloadState,
+    ): DownloadTask {
+        val deadline = System.currentTimeMillis() + TIMEOUT_MS
+        while (System.currentTimeMillis() < deadline) {
+            other.downloads.value.firstOrNull { it.id == id }
+                ?.takeIf { it.state == state }
+                ?.let { return it }
+            delay(20)
+        }
+        throw AssertionError("task $id never reached $state; downloads=${other.downloads.value}")
     }
 
     // ---- resumeDownload ---- //
