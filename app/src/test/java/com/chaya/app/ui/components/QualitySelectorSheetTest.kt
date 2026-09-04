@@ -30,11 +30,18 @@ class QualitySelectorSheetTest {
         StreamTrack(rendererType = 1, label = "English", streamKeys = emptyList(), selected = true),
     )
 
+    /** Ready picker for a manifest URL; url/mime route the download after picking. */
+    private fun readyState() = QualityPickerState.Ready(
+        tracks = tracks(),
+        url = "https://cdn.example.com/stream.m3u8",
+        mimeType = "application/vnd.apple.mpegurl",
+    )
+
     @Test
     fun `unchecking all tracks disables download, rechecking enables it`() {
         composeRule.setContent {
             QualitySelectorSheet(
-                state = QualityPickerState.Ready(tracks = tracks()),
+                state = readyState(),
                 onDismiss = {},
                 onDownload = {},
             )
@@ -54,7 +61,11 @@ class QualitySelectorSheetTest {
         val all = tracks()
         composeRule.setContent {
             QualitySelectorSheet(
-                state = QualityPickerState.Ready(tracks = all),
+                state = QualityPickerState.Ready(
+                    tracks = all,
+                    url = "https://cdn.example.com/stream.m3u8",
+                    mimeType = "application/vnd.apple.mpegurl",
+                ),
                 onDismiss = {},
                 onDownload = { chosen += it },
             )
