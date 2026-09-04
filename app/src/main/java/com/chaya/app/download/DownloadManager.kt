@@ -138,7 +138,7 @@ class DownloadManager(
             val (ua, ck) = sessionHeaders(t.url)
 
             if (isStream(t.url, t.mimeType)) {
-                apply(t.copy(state = DownloadState.DOWNLOADING, errorMessage = null))
+                apply(t.copy(state = DownloadState.DOWNLOADING, error = null))
                 obtainStreamDownloader().resumeStream(id, t.url, t.mimeType, ua, ck, t.pageUrl)
             } else {
                 val file = ensureFileFor(t)
@@ -148,7 +148,7 @@ class DownloadManager(
                         state = DownloadState.DOWNLOADING,
                         filePath = file.absolutePath,
                         downloadedBytes = from,
-                        errorMessage = null
+                        error = null
                     )
                 )
                 downloader.start(
@@ -330,7 +330,7 @@ class DownloadManager(
                 state = DownloadState.COMPLETED,
                 totalBytes = t.totalBytes?.takeIf { it > 0 } ?: t.downloadedBytes,
                 exportedUri = exported,
-                errorMessage = null,
+                error = null,
                 updatedAt = System.currentTimeMillis()
             )
             apply(finished)
@@ -343,7 +343,7 @@ class DownloadManager(
             val t = find(id) ?: return@launch
             val failed = t.copy(
                 state = DownloadState.FAILED,
-                errorMessage = error.message?.take(180) ?: "Unknown error",
+                error = DownloadError.from(error),
                 updatedAt = System.currentTimeMillis()
             )
             apply(failed)
