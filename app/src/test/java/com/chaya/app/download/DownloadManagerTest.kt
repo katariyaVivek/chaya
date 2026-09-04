@@ -123,6 +123,10 @@ class DownloadManagerTest {
             manager.restore()
             manager.startDownload(media())
             val started = awaitTaskState(1, DownloadState.DOWNLOADING)
+            // Wait for the fake to record the start before writing the
+            // partial: startHttp launches the downloader asynchronously, so
+            // pausing immediately can win the race and record fromBytes = 0.
+            awaitStart(1)
             File(started.filePath!!).writeText("partial")
             manager.pauseDownload(1)
             awaitTaskState(1, DownloadState.PAUSED)

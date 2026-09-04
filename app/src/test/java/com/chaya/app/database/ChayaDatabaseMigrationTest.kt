@@ -125,7 +125,9 @@ class ChayaDatabaseMigrationTest {
     }
 
     @Test
-    fun `classified error round-trips through encode and decode`() {
+    fun `classified error round-trips through kind and code`() {
+        // Network/Unknown wrap a cause instance, so equality is on the
+        // taxonomy slot (class + persisted columns), not data-class equals.
         for (original in listOf<DownloadError>(
             DownloadError.Network(RuntimeException("x")),
             DownloadError.HttpStatus(404),
@@ -138,7 +140,12 @@ class ChayaDatabaseMigrationTest {
             val (kind, code, message) = DownloadEntity.encodeError(original)
             val decoded = DownloadEntity.decodeError(kind, code, message)
 
-            assertEquals(original, decoded)
+            assertEquals(original::class, decoded!!::class)
+            assertEquals(original.userMessage, decoded.userMessage)
+            assertEquals(original.retryable, decoded.retryable)
+            if (original is DownloadError.HttpStatus) {
+                assertEquals(original.code, (decoded as DownloadError.HttpStatus).code)
+            }
         }
     }
 
