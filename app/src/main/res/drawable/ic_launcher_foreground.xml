@@ -1,21 +1,43 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Chaya launcher foreground: a vessel (open tonal ring) cradling a falling
+  droplet-arrow — light/shadow + descent in one mark. Quiet competence, no
+  loud downloader cliché. Accent: DESIGN.md primary #6D57AF; deep #392863
+  grounds the mark. Artwork inside the central 72dp safe circle.
+  Geometry: ring center (54,54) r=24, 60° gap at top (edges (66,33.2) /
+  (42,33.2)); droplet triangle apex (54,27), base y=43; stem 13→20.
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Download arrow icon -->
-    <group
-        android:translateX="24"
-        android:translateY="24">
-        <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M30,40 L30,10 L0,10 L0,40 Z M10,30 L20,30 L20,18 L10,18 Z"
-            android:strokeWidth="0" />
-        <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M30,0 L0,0 L0,30 L30,30 Z"
-            android:strokeWidth="4"
-            android:strokeColor="#FFFFFF" />
-    </group>
+    <!-- Vessel: near-full ring, long way around the bottom (large-arc + sweep) -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#6D57AF"
+        android:strokeWidth="7"
+        android:strokeLineCap="round"
+        android:pathData="M 66,33.2 A 24,24 0 1 1 42,33.2" />
+    <!-- Droplet-arrow falling through the gap; round joins keep it soft -->
+    <path
+        android:fillColor="#6D57AF"
+        android:strokeColor="#6D57AF"
+        android:strokeWidth="4"
+        android:strokeLineJoin="round"
+        android:pathData="M 54,27 L 62,43 L 46,43 Z" />
+    <!-- Stem: speed/light hint above the droplet -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#392863"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:pathData="M 54,13 L 54,20" />
+    <!-- Ground shadow: shallow smile arc under the vessel -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#392863"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:pathData="M 40,84 A 26.5,26.5 0 0 0 68,84" />
 </vector>
