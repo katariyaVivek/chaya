@@ -24,6 +24,7 @@ private const val MAX_THOROUGH_SCAN_CANDIDATES = 10
 private data class MediaBridgeCallbacks(
     val onMediaDetected: (DetectedMedia, Long) -> Unit,
     val onMediaCandidate: (DetectedMedia, Long) -> Unit,
+    val onPageMeta: (PageMeta, Long) -> Unit,
 )
 
 /** Enforces the user's scan consent in native code instead of trusting an arbitrary page script. */
@@ -79,13 +80,14 @@ private data class MediaBridgeSession(
 class MediaBridge(
     onMediaDetected: (DetectedMedia, Long) -> Unit,
     onMediaCandidate: (DetectedMedia, Long) -> Unit = { _, _ -> },
+    onPageMeta: (PageMeta, Long) -> Unit = { _, _ -> },
 ) {
     /** Produces unpredictable tokens so iframe guesses cannot invoke native code. */
     private val secureRandom = SecureRandom()
 
     /** Rebinds media destinations safely when Compose reattaches the retained WebView. */
     private val callbacks = AtomicReference(
-        MediaBridgeCallbacks(onMediaDetected, onMediaCandidate),
+        MediaBridgeCallbacks(onMediaDetected, onMediaCandidate, onPageMeta),
     )
 
     /** Publishes one capability, source page, and native scan state across WebView callback threads. */
@@ -128,8 +130,9 @@ class MediaBridge(
     fun updateCallbacks(
         onMediaDetected: (DetectedMedia, Long) -> Unit,
         onMediaCandidate: (DetectedMedia, Long) -> Unit,
+        onPageMeta: (PageMeta, Long) -> Unit = { _, _ -> },
     ) {
-        callbacks.set(MediaBridgeCallbacks(onMediaDetected, onMediaCandidate))
+        callbacks.set(MediaBridgeCallbacks(onMediaDetected, onMediaCandidate, onPageMeta))
     }
 
     /** Accepts DOM reports only when their document holds the active capability. */
@@ -172,6 +175,18 @@ class MediaBridge(
             ),
             session.navigationGeneration,
         )
+    }
+
+    /**
+     * Accepts page and player hints used only to rank and name media, from the
+     * capability-holding main document; malformed or oversized reports are dropped.
+     */
+    @JavascriptInterface
+    fun onPageMeta(capability: String?, json: String?) {
+        val session = activeSessionFor(capability) ?: return
+        val meta = PageMetaParser.parse(json) ?: return
+        if (activeSession.get() !== session) return
+        callbacks.get().onPageMeta(meta, session.navigationGeneration)
     }
 
     /** Avoids comparing malformed token sizes while preserving constant-time checks for viable capabilities. */

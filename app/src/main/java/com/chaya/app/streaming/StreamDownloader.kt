@@ -242,14 +242,17 @@ class StreamDownloader(
     }
 
     companion object {
+        /** Judges the path only, so signed manifests such as `master.m3u8?token=…` still route as streams. */
         fun isStreamingUrl(url: String): Boolean {
-            val lower = url.lowercase()
-            return lower.endsWith(".m3u8") || lower.endsWith(".mpd")
+            val path = url.substringBefore('#').substringBefore('?').lowercase()
+            return path.endsWith(".m3u8") || path.endsWith(".mpd")
         }
 
+        /** Case-insensitive: servers send both `application/x-mpegurl` and `application/x-mpegURL`. */
         fun isStreamingMime(mimeType: String?): Boolean {
             if (mimeType == null) return false
-            return mimeType.contains("mpegurl") || mimeType.contains("dash+xml")
+            val lower = mimeType.lowercase()
+            return lower.contains("mpegurl") || lower.contains("dash+xml")
         }
 
         /** Any non-zero value marks a download STOPPED without touching sibling downloads. */

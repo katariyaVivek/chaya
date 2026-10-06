@@ -106,4 +106,36 @@ class DownloadManagerCompanionTest {
     fun `isStream false when both url and mime are unrelated`() {
         assertFalse(DownloadManager.isStream("https://cdn.example.com/page.html", "text/html"))
     }
+
+    @Test
+    fun `isStream true for signed manifests and uppercase mpegURL mime`() {
+        assertTrue(DownloadManager.isStream("https://cdn.example.com/master.m3u8?token=abc", null))
+        assertTrue(DownloadManager.isStream("https://cdn.example.com/live", "application/x-mpegURL"))
+    }
+
+    // ---- titled downloads (media sheet names) ---- //
+
+    @Test
+    fun `fileNameForMedia uses the sheet title and saves streams as mp4`() {
+        val name = DownloadManager.fileNameForMedia(
+            media("https://cdn.example.com/x36xhzz/x36xhzz.m3u8").copy(suggestedName = "Big Buck Bunny (720p)")
+        )
+        assertEquals("Big Buck Bunny (720p).mp4", name)
+    }
+
+    @Test
+    fun `fileNameForMedia keeps a titled file's own extension`() {
+        val name = DownloadManager.fileNameForMedia(
+            media("https://cdn.example.com/a8f3b2c9.webm?sig=1", "video/webm").copy(suggestedName = "Interview")
+        )
+        assertEquals("Interview.webm", name)
+    }
+
+    @Test
+    fun `fileNameForMedia derives a titled extension from the mime type when the url has none`() {
+        val name = DownloadManager.fileNameForMedia(
+            media("https://cdn.example.com/track?id=1", "audio/mp4").copy(suggestedName = "Episode 12")
+        )
+        assertEquals("Episode 12.m4a", name)
+    }
 }

@@ -1,5 +1,6 @@
 package com.chaya.app.browser
 
+import com.chaya.app.detection.PageMeta
 import com.chaya.app.model.DetectionSource
 import com.chaya.app.model.DetectedMedia
 import org.junit.Assert.assertEquals
@@ -86,5 +87,67 @@ class BrowserViewModelDetectionTest {
         assertTrue(state.isLoading)
         assertEquals(0, state.progress)
         assertTrue(state.detectedMedia.isEmpty())
+    }
+
+    /** The v0.3 flood: both detection layers reported every HLS piece as its own downloadable item. */
+    @Test
+    fun `stream pieces are counted once across layers and never listed`() {
+        val pageUrl = "https://media.example/watch"
+        val generation = viewModel.onPageStarted(pageUrl)
+        fun piece(index: Int, source: DetectionSource) = DetectedMedia(
+            url = "https://cdn.example/hls/url_$index/193039199_mp4_h264_aac_hd_7.ts",
+            pageUrl = pageUrl,
+            mimeType = "video/mp2t",
+            source = source,
+        )
+
+        viewModel.onMediaDetected(piece(0, DetectionSource.NETWORK), generation)
+        viewModel.onMediaDetected(piece(0, DetectionSource.XHR_FETCH), generation)
+        viewModel.onMediaDetected(piece(1, DetectionSource.NETWORK), generation)
+
+        val state = viewModel.uiState.value
+        assertTrue(state.detectedMedia.isEmpty())
+        assertEquals(2, state.hiddenSegmentCount)
+    }
+
+    /** Byte-range fetches of one file become a single item pointing at the whole file. */
+    @Test
+    fun `byte-range requests merge into one whole-file item`() {
+        val pageUrl = "https://media.example/watch"
+        val generation = viewModel.onPageStarted(pageUrl)
+        listOf("bytestart=0&byteend=999", "bytestart=1000&byteend=1999").forEach { range ->
+            viewModel.onMediaDetected(
+                DetectedMedia(
+                    url = "https://video.fbcdn.example/clip.mp4?_nc_cat=1&$range",
+                    pageUrl = pageUrl,
+                    mimeType = "video/mp4",
+                    source = DetectionSource.NETWORK,
+                ),
+                generation,
+            )
+        }
+
+        val media = viewModel.uiState.value.detectedMedia
+        assertEquals(listOf("https://video.fbcdn.example/clip.mp4?_nc_cat=1"), media.map { it.url })
+    }
+
+    /** Page hints follow the same generation rules as media: stale reports never land, navigation clears them. */
+    @Test
+    fun `page meta is kept for the active document only and cleared on navigation`() {
+        val generation = viewModel.onPageStarted("https://media.example/watch")
+        val meta = PageMeta(
+            title = "Watch", ogTitle = null, siteName = null, ogImage = null, videoUrls = emptyList(),
+            ldName = null, ldThumbnail = null, ldDurationSeconds = null, players = emptyList(),
+        )
+
+        viewModel.onPageMeta(meta, generation - 1)
+        assertEquals(null, viewModel.uiState.value.pageMeta)
+
+        viewModel.onPageMeta(meta, generation)
+        assertEquals(meta, viewModel.uiState.value.pageMeta)
+
+        viewModel.onPageStarted("https://media.example/next")
+        assertEquals(null, viewModel.uiState.value.pageMeta)
+        assertEquals(0, viewModel.uiState.value.hiddenSegmentCount)
     }
 }

@@ -6,6 +6,9 @@ import android.webkit.WebSettings
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.chaya.app.ChayaApplication
+import com.chaya.app.detection.MediaNamer
+import com.chaya.app.detection.MediaUrlClassifier
+import com.chaya.app.detection.PageMeta
 import com.chaya.app.detection.sniffContentType
 import com.chaya.app.diagnostics.ChayaEvent
 import com.chaya.app.download.DownloadManager
@@ -47,6 +50,10 @@ data class BrowserUiState(
     val canGoBack: Boolean = false,
     val canGoForward: Boolean = false,
     val detectedMedia: List<DetectedMedia> = emptyList(),
+    /** Page and player hints from the injected detector, used to rank and name [detectedMedia]. */
+    val pageMeta: PageMeta? = null,
+    /** Stream pieces seen on this page; counted for the sheet footnote, never listed. */
+    val hiddenSegmentCount: Int = 0,
     val showMediaSheet: Boolean = false,
     /** Shows an explicit opt-in only when ordinary detection found no media. */
     val showThoroughScan: Boolean = false,
@@ -68,6 +75,9 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     /** Retains cancellable native HEAD checks so navigation stops requests that no longer serve the visible page. */
     private val mediaVerificationJobs = ConcurrentHashMap.newKeySet<Job>()
 
+    /** Generation-scoped keys of stream pieces already counted, so both detection layers count each once. */
+    private val countedSegments = ConcurrentHashMap.newKeySet<String>()
+
     fun onUrlChanged(url: String) {
         _uiState.value = _uiState.value.copy(url = url)
     }
@@ -80,6 +90,8 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             state.copy(
                 navigationGeneration = navigationGeneration,
                 detectedMedia = emptyList(),
+                pageMeta = null,
+                hiddenSegmentCount = 0,
                 showMediaSheet = false,
                 showThoroughScan = false,
                 thoroughScanRequest = null,
@@ -102,6 +114,8 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                     isLoading = false,
                     progress = 0,
                     detectedMedia = emptyList(),
+                    pageMeta = null,
+                    hiddenSegmentCount = 0,
                     showMediaSheet = false,
                     showThoroughScan = false,
                     thoroughScanRequest = null,
@@ -115,6 +129,8 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                     isLoading = true,
                     progress = 0,
                     detectedMedia = emptyList(),
+                    pageMeta = null,
+                    hiddenSegmentCount = 0,
                     showMediaSheet = false,
                     showThoroughScan = false,
                     thoroughScanRequest = null,
@@ -183,6 +199,8 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 isLoading = false,
                 progress = 0,
                 detectedMedia = emptyList(),
+                pageMeta = null,
+                hiddenSegmentCount = 0,
                 showMediaSheet = false,
                 showThoroughScan = false,
                 thoroughScanRequest = null,
@@ -193,16 +211,22 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 
     /** Merges only the active document's concurrent WebView callbacks so stale media cannot overwrite its state. */
     fun onMediaDetected(media: DetectedMedia, navigationGeneration: Long? = null) {
+        // Every byte-range request of one file is the same download: the whole file.
+        val whole = media.copy(url = MediaUrlClassifier.withoutRangeParams(media.url))
+        if (MediaUrlClassifier.isSegment(whole.url)) {
+            countSegment(whole, navigationGeneration)
+            return
+        }
         var recorded = false
         _uiState.update { state ->
             if (navigationGeneration != null && navigationGeneration != state.navigationGeneration) {
                 state
-            } else if (media.pageUrl != null && media.pageUrl != state.url) {
+            } else if (whole.pageUrl != null && whole.pageUrl != state.url) {
                 state
-            } else if (state.detectedMedia.none { it.normalizedUrl == media.normalizedUrl }) {
+            } else if (state.detectedMedia.none { it.normalizedUrl == whole.normalizedUrl }) {
                 recorded = true
                 state.copy(
-                    detectedMedia = state.detectedMedia + media,
+                    detectedMedia = state.detectedMedia + whole,
                     showThoroughScan = false,
                 )
             } else {
@@ -212,11 +236,34 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         if (recorded) {
             getApplication<ChayaApplication>().eventLog.record(
                 ChayaEvent.MediaDetected(
-                    url = ChayaEvent.scrubbed(media.url) ?: media.url,
-                    source = media.source.name,
-                    mimeType = media.mimeType,
+                    url = ChayaEvent.scrubbed(whole.url) ?: whole.url,
+                    source = whole.source.name,
+                    mimeType = whole.mimeType,
                 )
             )
+        }
+    }
+
+    /** Counts a stream piece once per document; pieces are never listed or logged. */
+    private fun countSegment(media: DetectedMedia, navigationGeneration: Long?) {
+        val state = _uiState.value
+        if (navigationGeneration != null && navigationGeneration != state.navigationGeneration) return
+        if (media.pageUrl != null && media.pageUrl != state.url) return
+        val key = "${state.navigationGeneration}\u0000${media.normalizedUrl}"
+        if (!countedSegments.add(key)) return
+        _uiState.update { current ->
+            if (current.navigationGeneration != state.navigationGeneration) {
+                current
+            } else {
+                current.copy(hiddenSegmentCount = current.hiddenSegmentCount + 1)
+            }
+        }
+    }
+
+    /** Keeps the active document's latest page and player hints; reports from a retired document are dropped. */
+    fun onPageMeta(meta: PageMeta, navigationGeneration: Long) {
+        _uiState.update { state ->
+            if (navigationGeneration != state.navigationGeneration) state else state.copy(pageMeta = meta)
         }
     }
 
@@ -316,8 +363,11 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         mediaVerificationJobs.clear()
     }
 
-    /** Start manifest analysis — shows loading, then quality picker or error. */
-    fun analyzeStream(media: DetectedMedia) {
+    /**
+     * Start manifest analysis — shows loading, then quality picker or error.
+     * [durationSeconds], when the page's player knows it, lets the picker estimate sizes.
+     */
+    fun analyzeStream(media: DetectedMedia, durationSeconds: Double? = null) {
         _uiState.value = _uiState.value.copy(
             qualityPickerState = QualityPickerState.Loading
         )
@@ -344,7 +394,9 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                             qualityPickerState = QualityPickerState.Ready(
                                 tracks = tracks,
                                 url = media.url,
-                                mimeType = media.mimeType
+                                mimeType = media.mimeType,
+                                suggestedName = media.suggestedName,
+                                durationSeconds = durationSeconds,
                             )
                         )
                     }
@@ -355,7 +407,8 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                         qualityPickerState = QualityPickerState.Error(
                             message = error.message ?: "Failed to analyze stream",
                             url = media.url,
-                            mimeType = media.mimeType
+                            mimeType = media.mimeType,
+                            suggestedName = media.suggestedName,
                         )
                     )
                 }
@@ -369,11 +422,14 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         if (state !is QualityPickerState.Ready) return
 
         _uiState.value = _uiState.value.copy(qualityPickerState = null)
+        // The chosen rendition, not the one the page happened to be playing, names the file.
+        val chosenHeight = tracks.maxOfOrNull { it.height }?.takeIf { it > 0 }
         val media = DetectedMedia(
             url = state.url,
             pageUrl = _uiState.value.url,
             mimeType = state.mimeType,
-            source = com.chaya.app.model.DetectionSource.MANIFEST
+            source = com.chaya.app.model.DetectionSource.MANIFEST,
+            suggestedName = state.suggestedName?.let { MediaNamer.fileBaseName(it, chosenHeight) },
         )
 
         val streamKeys = tracks.flatMap { it.streamKeys }
@@ -394,7 +450,8 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             url = state.url,
             pageUrl = _uiState.value.url,
             mimeType = state.mimeType,
-            source = com.chaya.app.model.DetectionSource.MANIFEST
+            source = com.chaya.app.model.DetectionSource.MANIFEST,
+            suggestedName = state.suggestedName,
         )
         downloadManager.startDownload(media)
     }

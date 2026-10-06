@@ -104,6 +104,11 @@ dependencies {
     // OkHttp
     implementation(libs.okhttp)
 
+    // Coil: poster/page thumbnails in the media sheet. Its own OkHttp client
+    // carries no WebView cookies, so thumbnails load anonymously.
+    implementation(libs.coil.compose)
+    implementation(libs.coil.network.okhttp)
+
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
 

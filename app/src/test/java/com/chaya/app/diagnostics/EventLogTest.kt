@@ -47,6 +47,8 @@ class EventLogTest {
 
     @After
     fun tearDown() {
+        // In-flight Room writes would otherwise fail after close and leak into the next test.
+        runBlocking { manager.drainBackgroundWork() }
         db.close()
     }
 

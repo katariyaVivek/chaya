@@ -46,14 +46,205 @@
     } catch (e) { return false; }
   }
 
+  // stream pieces are never whole files; mirrors MediaUrlClassifier.isSegment on the native side
+  function isSegment(u) {
+    try {
+      var path = new URL(u, location.href).pathname;
+      var name = path.substring(path.lastIndexOf('/') + 1).toLowerCase();
+      if (/\.(ts|m4s|cmfv|cmfa|m4f)$/.test(name)) return true;
+      return /(^|[-_.])(seg|segment|chunk|frag|fragment)[-_]?\d+/.test(name) ||
+        /(^|[-_.])init([-_.]|$)/.test(name);
+    } catch (e) { return false; }
+  }
+
   function sendMedia(rawUrl, tagName, typeAttr) {
     if (!rawUrl) return;
     var url = absolute(rawUrl);
     if (!isHttp(url)) return;              // skip blob:, data:, about:, ...
-    if (reported[url]) return;
+    if (reported[url] || isSegment(url)) return;
     if (postMedia(url, tagName || '', typeAttr || '')) {
       reported[url] = true;
     }
+  }
+
+  // ---- page and player hints for ranking and naming (read-only DOM, no network) ----
+
+  var watchedPlayers = [];
+  var pageMetaTimer = null;
+  var lastPageMetaJson = '';
+  var AD_TOKEN = /(^|[\s_-])(ad|ads|advert|advertisement|adunit|adslot|adcontainer|preroll|midroll|postroll|sponsor|sponsored|promo|ima|vast|vpaid|outstream|dfp|gpt)([\s_-]|$)/i;
+
+  function clip(value, max) {
+    return typeof value === 'string' ? value.replace(/\s+/g, ' ').trim().slice(0, max) : '';
+  }
+
+  function httpUrlOrNull(value) {
+    if (typeof value !== 'string' || !value) return null;
+    var url = absolute(value);
+    return isHttp(url) ? url : null;
+  }
+
+  // remembers each media element once and re-reports hints when its playback state changes
+  function watchPlayer(el) {
+    if (el.__chayaWatched) return;
+    el.__chayaWatched = true;
+    watchedPlayers.push(el);
+    ['loadedmetadata', 'durationchange', 'play', 'playing', 'pause', 'emptied'].forEach(function (type) {
+      el.addEventListener(type, schedulePageMeta);
+    });
+  }
+
+  // walks out through shadow roots so ad slots wrapping custom players are still recognized
+  function inAdContainer(el) {
+    var node = el;
+    for (var depth = 0; node && depth < 10; depth++) {
+      if (node.nodeType === 1) {
+        var cls = typeof node.className === 'string' ? node.className : (node.getAttribute('class') || '');
+        if (AD_TOKEN.test(node.id || '') || AD_TOKEN.test(cls)) return true;
+        if (node.hasAttribute('data-ad') || node.hasAttribute('data-ad-slot')) return true;
+      }
+      node = node.parentNode || node.host || null;
+    }
+    return false;
+  }
+
+  function titleHint(el) {
+    var title = el.getAttribute('title') || el.getAttribute('aria-label') || el.getAttribute('data-title') || '';
+    if (!title && el.closest) {
+      var figure = el.closest('figure');
+      var caption = figure && figure.querySelector('figcaption');
+      if (caption) title = caption.textContent || '';
+    }
+    return clip(title, 200) || null;
+  }
+
+  function playerMeta(el) {
+    var rect = el.getBoundingClientRect();
+    var style = window.getComputedStyle ? window.getComputedStyle(el) : null;
+    var visible = rect.width > 0 && rect.height > 0 && (!style ||
+      (style.display !== 'none' && style.visibility !== 'hidden' && parseFloat(style.opacity || '1') > 0.05));
+    var src = el.currentSrc || el.src || '';
+    var duration = el.duration;
+    return {
+      src: httpUrlOrNull(src),
+      blob: src.indexOf('blob:') === 0,
+      audio: el.tagName === 'AUDIO',
+      w: Math.round(rect.width),
+      h: Math.round(rect.height),
+      visible: visible,
+      duration: (typeof duration === 'number' && isFinite(duration) && duration > 0) ? duration : null,
+      vw: el.videoWidth || null,
+      vh: el.videoHeight || null,
+      playing: !el.paused && !el.ended,
+      played: !!(el.played && el.played.length > 0),
+      muted: !!el.muted,
+      autoplay: !!el.autoplay,
+      loop: !!el.loop,
+      controls: !!el.controls,
+      poster: httpUrlOrNull(el.getAttribute('poster') || ''),
+      title: titleHint(el),
+      ad: inAdContainer(el)
+    };
+  }
+
+  function findVideoObject(node, depth) {
+    if (!node || typeof node !== 'object' || depth > 5) return null;
+    if (Array.isArray(node)) {
+      for (var i = 0; i < node.length && i < 50; i++) {
+        var found = findVideoObject(node[i], depth + 1);
+        if (found) return found;
+      }
+      return null;
+    }
+    var type = node['@type'];
+    if (type === 'VideoObject' || (Array.isArray(type) && type.indexOf('VideoObject') >= 0)) return node;
+    return findVideoObject(node['@graph'], depth + 1) ||
+      findVideoObject(node.video, depth + 1) ||
+      findVideoObject(node.mainEntity, depth + 1);
+  }
+
+  function jsonLdVideo() {
+    var scripts = document.querySelectorAll('script[type="application/ld+json"]');
+    for (var i = 0; i < scripts.length && i < 10; i++) {
+      try {
+        var found = findVideoObject(JSON.parse(scripts[i].textContent || 'null'), 0);
+        if (found) return found;
+      } catch (e) {}
+    }
+    return null;
+  }
+
+  function metaContent(selector) {
+    var node = document.querySelector(selector);
+    return node ? (node.getAttribute('content') || '') : '';
+  }
+
+  function firstString(value) {
+    if (typeof value === 'string') return value;
+    if (Array.isArray(value)) {
+      for (var i = 0; i < value.length; i++) {
+        if (typeof value[i] === 'string') return value[i];
+      }
+    }
+    if (value && typeof value === 'object' && typeof value.url === 'string') return value.url;
+    return '';
+  }
+
+  function collectPageMeta() {
+    var ld = jsonLdVideo();
+    var videoUrls = [];
+    ['meta[property="og:video:secure_url"]', 'meta[property="og:video:url"]',
+      'meta[property="og:video"]', 'meta[name="twitter:player:stream"]'].forEach(function (selector) {
+      var url = httpUrlOrNull(metaContent(selector));
+      if (url && videoUrls.indexOf(url) < 0) videoUrls.push(url);
+    });
+    var ldUrl = ld && httpUrlOrNull(firstString(ld.contentUrl));
+    if (ldUrl && videoUrls.indexOf(ldUrl) < 0) videoUrls.push(ldUrl);
+
+    var players = [];
+    for (var i = 0; i < watchedPlayers.length; i++) {
+      if (watchedPlayers[i].isConnected === false) continue;
+      try { players.push(playerMeta(watchedPlayers[i])); } catch (e) {}
+    }
+    players.sort(function (a, b) { return (b.w * b.h) - (a.w * a.h); });
+
+    return {
+      title: clip(document.title, 300),
+      ogTitle: clip(metaContent('meta[property="og:title"]'), 300),
+      siteName: clip(metaContent('meta[property="og:site_name"]'), 120),
+      ogImage: httpUrlOrNull(metaContent('meta[property="og:image"]')),
+      videoUrls: videoUrls.slice(0, 8),
+      ldName: ld ? clip(firstString(ld.name), 300) : '',
+      ldThumbnail: ld ? httpUrlOrNull(firstString(ld.thumbnailUrl)) : null,
+      ldDuration: ld ? clip(firstString(ld.duration), 40) : '',
+      players: players.slice(0, 8)
+    };
+  }
+
+  // reports only from the capability-holding main document, and only when something changed
+  function postPageMeta() {
+    pageMetaTimer = null;
+    var capability = window.__chayaBridgeCapability;
+    var bridge = window.ChayaBridge;
+    if (!capability || !bridge || !bridge.onPageMeta) return;
+    try {
+      var meta = collectPageMeta();
+      var json = JSON.stringify(meta);
+      if (json.length > 30000) {
+        meta.players = meta.players.slice(0, 2);
+        json = JSON.stringify(meta);
+        if (json.length > 30000) return;
+      }
+      if (json === lastPageMetaJson) return;
+      lastPageMetaJson = json;
+      bridge.onPageMeta(capability, json);
+    } catch (e) {}
+  }
+
+  // coalesces bursts of media events and DOM mutations into one report
+  function schedulePageMeta() {
+    if (pageMetaTimer) return;
+    pageMetaTimer = setTimeout(postPageMeta, 750);
   }
 
   function scanRoot(root) {
@@ -63,6 +254,7 @@
     var mediaEls = root.querySelectorAll('video, audio');
     for (var i = 0; i < mediaEls.length; i++) {
       var el = mediaEls[i];
+      watchPlayer(el);
       var src = el.currentSrc || el.src;
       if (src) {
         sendMedia(src, el.tagName, '');
@@ -108,6 +300,8 @@
         if (doc) scanRoot(doc);
       } catch (e) { /* cross-origin */ }
     }
+
+    schedulePageMeta();
   }
 
   function scheduleScan() {

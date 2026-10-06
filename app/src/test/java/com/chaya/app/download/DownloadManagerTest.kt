@@ -52,8 +52,12 @@ class DownloadManagerTest {
         manager = DownloadManager(context, dao, downloader)
     }
 
+    /** Managers built inside individual tests; drained with [manager] before the database closes. */
+    private val extraManagers = mutableListOf<DownloadManager>()
+
     @After
     fun tearDown() {
+        runBlocking { (extraManagers + manager).forEach { it.drainBackgroundWork() } }
         db.close()
     }
 
@@ -123,6 +127,7 @@ class DownloadManagerTest {
         // New instance each test already gives a fresh FakeDownloader and a
         // fresh in-memory DB, so id 1 is free and starts is empty.
         val fullManager = DownloadManager(context, dao, downloader, freeBytes = { 0L })
+            .also { extraManagers += it }
         fullManager.restore()
         fullManager.startDownload(media())
 
@@ -144,6 +149,7 @@ class DownloadManagerTest {
         // Disk filled while paused: rebuild the manager with a full disk over
         // the same DAO rows (production: same process, StatFs now reports low).
         val fullManager = DownloadManager(context, dao, downloader, freeBytes = { 0L })
+            .also { extraManagers += it }
         fullManager.restore()
         fullManager.resumeDownload(1)
 

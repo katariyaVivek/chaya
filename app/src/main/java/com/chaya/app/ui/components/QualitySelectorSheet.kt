@@ -2,6 +2,7 @@ package com.chaya.app.ui.components
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,6 +34,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -45,21 +47,36 @@ import androidx.compose.ui.unit.dp
 import com.chaya.app.streaming.StreamTrack
 import com.chaya.app.ui.theme.ChayaMotion
 import com.chaya.app.ui.theme.pressScale
+import java.util.Locale
+import kotlin.math.roundToLong
 
 sealed interface QualityPickerState {
     data object Loading : QualityPickerState
     data class Ready(
         val tracks: List<StreamTrack>,
         val url: String,
-        val mimeType: String?
+        val mimeType: String?,
+        /** Title chosen in the media sheet, carried through to the saved file. */
+        val suggestedName: String? = null,
+        /** Known playback length; turns each rendition's bitrate into a size estimate. */
+        val durationSeconds: Double? = null,
     ) : QualityPickerState
     data class Error(
         val message: String,
         val url: String = "",
-        val mimeType: String? = null
+        val mimeType: String? = null,
+        val suggestedName: String? = null,
     ) : QualityPickerState
 }
 
+/** media3 `C.TRACK_TYPE_VIDEO`; kept local so the picker stays free of player imports. */
+private const val TRACK_TYPE_VIDEO = 2
+
+/**
+ * Lets a person pick one video quality (best preselected) plus any audio
+ * tracks. Video renditions are alternatives, not additions: downloading
+ * several of them only multiplies the data for no visible gain.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QualitySelectorSheet(
@@ -76,7 +93,7 @@ fun QualitySelectorSheet(
     ) {
         Column(modifier = Modifier.padding(bottom = 24.dp)) {
             Text(
-                text = "Select quality",
+                text = "Choose quality",
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 6.dp)
             )
@@ -128,20 +145,35 @@ fun QualitySelectorSheet(
                 }
 
                 is QualityPickerState.Ready -> {
-                    var selectedTracks by remember(state.tracks) {
-                        mutableStateOf(state.tracks.map { it.selected })
+                    // Tracks arrive best-first, so the first video rendition is the default choice.
+                    var selectedVideo by remember(state.tracks) {
+                        mutableIntStateOf(state.tracks.indexOfFirst { it.rendererType == TRACK_TYPE_VIDEO })
+                    }
+                    var selectedAudio by remember(state.tracks) {
+                        mutableStateOf(
+                            state.tracks.indices
+                                .filter { state.tracks[it].rendererType != TRACK_TYPE_VIDEO && state.tracks[it].selected }
+                                .toSet()
+                        )
                     }
 
-                    LazyColumn {
+                    // Shrinks to fit so the Download button stays on screen however many renditions there are.
+                    LazyColumn(modifier = Modifier.weight(1f, fill = false)) {
                         itemsIndexed(state.tracks) { index, track ->
+                            val isVideo = track.rendererType == TRACK_TYPE_VIDEO
                             TrackRow(
                                 index = index,
                                 track = track,
                                 tracks = state.tracks,
-                                selected = selectedTracks[index],
-                                onToggle = { checked ->
-                                    selectedTracks = selectedTracks.toMutableList().apply {
-                                        set(index, checked)
+                                selected = if (isVideo) index == selectedVideo else index in selectedAudio,
+                                exclusive = isVideo,
+                                sizeEstimate = if (isVideo) estimateSize(track.bitrate, state.durationSeconds) else null,
+                                onClick = {
+                                    if (isVideo) {
+                                        selectedVideo = if (selectedVideo == index) -1 else index
+                                    } else {
+                                        selectedAudio = if (index in selectedAudio) selectedAudio - index
+                                        else selectedAudio + index
                                     }
                                 }
                             )
@@ -150,12 +182,12 @@ fun QualitySelectorSheet(
 
                     Spacer(Modifier.height(16.dp))
 
+                    val chosenVideo = state.tracks.getOrNull(selectedVideo)
                     Button(
                         onClick = {
-                            val chosen = state.tracks.filterIndexed { i, _ -> selectedTracks[i] }
-                            onDownload(chosen)
+                            onDownload(state.tracks.filterIndexed { i, _ -> i == selectedVideo || i in selectedAudio })
                         },
-                        enabled = selectedTracks.any { it },
+                        enabled = chosenVideo != null || selectedAudio.isNotEmpty(),
                         shape = RoundedCornerShape(14.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.primary
@@ -167,8 +199,11 @@ fun QualitySelectorSheet(
                             .pressScale(0.98f)
                     ) {
                         Text(
-                            text = "Download ${selectedTracks.count { it }} track" +
-                                    if ((selectedTracks.count { it }) == 1) "" else "s",
+                            text = when {
+                                chosenVideo != null -> "Download ${chosenVideo.label}"
+                                selectedAudio.isNotEmpty() -> "Download audio only"
+                                else -> "Choose a quality"
+                            },
                             style = MaterialTheme.typography.labelLarge
                         )
                     }
@@ -176,6 +211,14 @@ fun QualitySelectorSheet(
             }
         }
     }
+}
+
+/** "≈ 490 MB" from bits per second and seconds; null when either is unknown. */
+internal fun estimateSize(bitsPerSecond: Int, durationSeconds: Double?): String? {
+    if (bitsPerSecond <= 0 || durationSeconds == null || durationSeconds <= 0) return null
+    val megabytes = bitsPerSecond * durationSeconds / 8.0 / 1_000_000.0
+    return if (megabytes >= 1000) "≈ %.1f GB".format(Locale.ROOT, megabytes / 1000)
+    else "≈ ${megabytes.roundToLong().coerceAtLeast(1)} MB"
 }
 
 private enum class TrackKind { VIDEO, AUDIO }
@@ -186,12 +229,13 @@ private fun TrackRow(
     track: StreamTrack,
     tracks: List<StreamTrack>,
     selected: Boolean,
-    onToggle: (Boolean) -> Unit
+    exclusive: Boolean,
+    sizeEstimate: String?,
+    onClick: () -> Unit
 ) {
-    // C.TRACK_TYPE_VIDEO == 2, C.TRACK_TYPE_AUDIO == 1 (media3 constants)
-    val kind = if (track.rendererType == 2) TrackKind.VIDEO else TrackKind.AUDIO
+    val kind = if (track.rendererType == TRACK_TYPE_VIDEO) TrackKind.VIDEO else TrackKind.AUDIO
     val previousKind = if (index == 0) null
-    else if (tracks[index - 1].rendererType == 2) TrackKind.VIDEO else TrackKind.AUDIO
+    else if (tracks[index - 1].rendererType == TRACK_TYPE_VIDEO) TrackKind.VIDEO else TrackKind.AUDIO
 
     Column {
         if (kind != previousKind) {
@@ -228,39 +272,78 @@ private fun TrackRow(
                 .clip(RoundedCornerShape(12.dp))
                 .background(rowBg)
                 .pressScale(0.985f)
-                .clickable { onToggle(!selected) }
+                .clickable(onClick = onClick)
                 .padding(horizontal = 10.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Custom checkbox — round, animated check
-            Box(
-                modifier = Modifier
-                    .size(22.dp)
-                    .clip(CircleShape)
-                    .background(
-                        if (selected) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.outlineVariant
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                if (selected) {
-                    Icon(
-                        imageVector = Icons.Default.Check,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(14.dp)
-                    )
-                }
-            }
+            if (exclusive) RadioMark(selected) else CheckMark(selected)
 
             Spacer(Modifier.width(12.dp))
 
-            Text(
-                text = track.label,
-                style = MaterialTheme.typography.bodyLarge.copy(
-                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
-                ),
-                color = MaterialTheme.colorScheme.onSurface
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = track.label,
+                    style = MaterialTheme.typography.bodyLarge.copy(
+                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                val facts = listOfNotNull(track.detail.ifBlank { null }, sizeEstimate).joinToString(" · ")
+                if (facts.isNotEmpty()) {
+                    Text(
+                        text = facts,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Single-choice indicator: a ring with a filled center when chosen. */
+@Composable
+private fun RadioMark(selected: Boolean) {
+    Box(
+        modifier = Modifier
+            .size(22.dp)
+            .border(
+                width = 2.dp,
+                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+                shape = CircleShape
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        if (selected) {
+            Box(
+                modifier = Modifier
+                    .size(11.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary)
+            )
+        }
+    }
+}
+
+/** Independent toggle: a round check, matching the rest of the app's selection vocabulary. */
+@Composable
+private fun CheckMark(selected: Boolean) {
+    Box(
+        modifier = Modifier
+            .size(22.dp)
+            .clip(CircleShape)
+            .background(
+                if (selected) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.outlineVariant
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        if (selected) {
+            Icon(
+                imageVector = Icons.Default.Check,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimary,
+                modifier = Modifier.size(14.dp)
             )
         }
     }
