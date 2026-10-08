@@ -488,10 +488,13 @@ fun BrowserScreen(
                                 keyboardActions = KeyboardActions(
                                     onGo = {
                                         navigateToUrl(urlInput)
-                                        // Clearing focus alone left the keyboard open (seen in the emulator walkthrough),
-                                        // covering the page and the download button, so hide it explicitly too.
                                         keyboardController?.hide()
-                                        focusManager.clearFocus()
+                                        // Give the page the focus instead of just clearing it. After an Enter from a
+                                        // physical or Bluetooth keyboard, Android hands cleared focus straight back
+                                        // to the first text field, which reopens the keyboard over the page and the
+                                        // download button (seen in the emulator walkthrough).
+                                        val page = WebViewHolder.instance
+                                        if (page == null || !page.requestFocus()) focusManager.clearFocus()
                                     }
                                 ),
                                 textStyle = MaterialTheme.typography.bodyMedium.copy(

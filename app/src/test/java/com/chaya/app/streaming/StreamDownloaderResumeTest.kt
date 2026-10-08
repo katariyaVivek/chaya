@@ -171,6 +171,27 @@ class StreamDownloaderResumeTest {
         assertFalse(sd.taskIdFor("chaya_task_0") == null)
     }
 
+    /**
+     * Media3's DownloadManager starts out paused when it is used without a DownloadService. Nothing
+     * resumed it, so every stream download sat in the queue at 0% for ever; the tests above only
+     * checked that a download appeared, which is true while it is queued, so this went unnoticed.
+     */
+    @Test
+    fun aStartedDownloadActuallyStartsInsteadOfWaitingInTheQueue() {
+        val sd = newDownloader()
+        assertFalse("downloads must not start paused", sd.downloadManager.downloadsPaused)
+
+        sd.startStreamDownload(
+            taskId, startHangingMediaServer(), "application/x-mpegurl", userAgent = null, cookies = null
+        )
+
+        val running = awaitUntil {
+            prefixDownloads(sd).firstOrNull { it.request.id == contentId }?.state == Download.STATE_DOWNLOADING
+        }
+        assertTrue("the download never left the queue", running)
+        assertTrue("nothing asked the server for the stream", awaitUntil { heldSockets.isNotEmpty() })
+    }
+
     @Test
     fun freshInstanceSeesPausedDownloadPersistedByPreviousProcess() {
         val hungUrl = startHangingMediaServer()

@@ -58,6 +58,10 @@ jobs:
           target: default
           arch: x86_64
           profile: pixel_6
+          # The default 2 GB / 2 cores let a playing 720p page, the app and a download starve each other
+          # until the emulator stopped answering; the runner has room for more.
+          ram-size: 4096M
+          cores: 3
           disable-animations: true
           script: python3 .github/scripts/walkthrough.py
 
