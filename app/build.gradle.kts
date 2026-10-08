@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.chaquopy)
 }
 
 // Buildscript classpath import: Gradle Kotlin DSL scripts do not resolve
@@ -19,6 +20,12 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "0.3.0"
+
+        // The Python runtime ships a native build per ABI. Phones are arm64; x86_64 is for emulators
+        // (and the CI walkthrough). 32-bit ABIs are left out to keep the APK from growing further.
+        ndk {
+            abiFilters += listOf("arm64-v8a", "x86_64")
+        }
     }
 
     // Release signing (Phase 5.1): credentials never live in the repo.
@@ -109,6 +116,9 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
 
+    // QuickJS: runs yt-dlp's YouTube challenge solver inside the app (no separate JS runtime to ship).
+    implementation(libs.quickjs.kt)
+
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
 
@@ -140,6 +150,19 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.test.ext.junit)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+}
+
+// Python on Android (Chaquopy) runs yt-dlp, which finds what a YouTube, Instagram, TikTok or X
+// link points to. Both packages are pure Python, so no Android-specific builds are involved, and they
+// are pinned together: yt-dlp checks its challenge-solver scripts against the yt-dlp-ejs release it shipped with.
+chaquopy {
+    defaultConfig {
+        version = "3.13"
+        pip {
+            install("yt-dlp==2026.8.19")
+            install("yt-dlp-ejs==0.8.0")
+        }
+    }
 }
 
 // Robolectric needs the resource-merged classpath for ApplicationProvider-style
