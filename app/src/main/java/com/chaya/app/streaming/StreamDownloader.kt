@@ -85,6 +85,10 @@ class StreamDownloader(
     ).apply {
         maxParallelDownloads = 3
         requirements = Requirements(0)
+        // Used directly instead of through a DownloadService, Media3's manager starts out paused, so every
+        // download would sit in the queue at 0% for ever. Pausing is per download (stop reasons, below),
+        // so nothing pauses the manager as a whole.
+        resumeDownloads()
 
         addListener(object : DownloadManager.Listener {
             override fun onDownloadChanged(
