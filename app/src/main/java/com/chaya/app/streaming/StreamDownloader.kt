@@ -2,6 +2,7 @@ package com.chaya.app.streaming
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import androidx.media3.common.StreamKey
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DefaultHttpDataSource
@@ -45,7 +46,8 @@ class StreamDownloader(
     interface Listener {
         fun onStreamProgress(taskId: Long, downloadedBytes: Long, totalBytes: Long?)
         fun onStreamCompleted(taskId: Long)
-        fun onStreamFailed(taskId: Long, reason: Int)
+        /** [cause] is what Media3 reported, when it reported one; it decides how the failure is explained. */
+        fun onStreamFailed(taskId: Long, reason: Int, cause: Exception?)
         fun onStreamPaused(taskId: Long)
     }
 
@@ -71,10 +73,12 @@ class StreamDownloader(
         httpFactory.createDataSource()
     }
 
+    // The sink factory needs the cache itself: handed over bare, every data source created from this
+    // factory threw a NullPointerException, so no stream download or playback could ever start.
     private val cacheDataSourceFactory = CacheDataSource.Factory()
         .setCache(cache)
         .setUpstreamDataSourceFactory(upstreamFactory)
-        .setCacheWriteDataSinkFactory(CacheDataSink.Factory().setFragmentSize(2 * 1024 * 1024))
+        .setCacheWriteDataSinkFactory(CacheDataSink.Factory().setCache(cache).setFragmentSize(2 * 1024 * 1024))
 
     val downloadManager: DownloadManager = DownloadManager(
         context,
@@ -102,7 +106,8 @@ class StreamDownloader(
                         if (taskId != null) listener.onStreamCompleted(taskId)
                     }
                     Download.STATE_FAILED -> {
-                        taskId?.let { listener.onStreamFailed(it, download.failureReason) }
+                        Log.w(TAG, "Stream download failed (reason ${download.failureReason}): ${download.request.uri}", finalException)
+                        taskId?.let { listener.onStreamFailed(it, download.failureReason, finalException) }
                     }
                     Download.STATE_STOPPED -> {
                         taskId?.let { listener.onStreamPaused(it) }
@@ -263,5 +268,7 @@ class StreamDownloader(
         private const val STOP_REASON_PAUSED = 1
 
         private const val CONTENT_ID_PREFIX = "chaya_task_"
+
+        private const val TAG = "StreamDownloader"
     }
 }
