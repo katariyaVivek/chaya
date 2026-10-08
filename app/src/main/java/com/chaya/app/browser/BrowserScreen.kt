@@ -96,6 +96,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -151,6 +152,7 @@ fun BrowserScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
 
     // Fullscreen video state (WebChromeClient custom view)
     var customView by remember { mutableStateOf<View?>(null) }
@@ -481,7 +483,11 @@ fun BrowserScreen(
                                     imeAction = ImeAction.Go
                                 ),
                                 keyboardActions = KeyboardActions(
-                                    onGo = { navigateToUrl(urlInput) }
+                                    onGo = {
+                                        navigateToUrl(urlInput)
+                                        // Clearing focus closes the keyboard so it stops covering the page and the download button.
+                                        focusManager.clearFocus()
+                                    }
                                 ),
                                 textStyle = MaterialTheme.typography.bodyMedium.copy(
                                     fontWeight = FontWeight.Medium
