@@ -56,6 +56,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
@@ -65,6 +66,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -92,6 +94,7 @@ import com.chaya.app.ui.theme.pressScale
  * shortcut. On a page it collapses to the site name with a lock; tapping it
  * edits the address.
  */
+@OptIn(ExperimentalComposeUiApi::class)
 @Composable
 internal fun AddressBar(
     url: String,
@@ -106,6 +109,7 @@ internal fun AddressBar(
     var editing by remember { mutableStateOf(false) }
     var hadFocus by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
     val focusRequester = remember { FocusRequester() }
 
     if (homeVisible || editing) {
@@ -178,7 +182,9 @@ internal fun AddressBar(
             keyboardActions = KeyboardActions(
                 onGo = {
                     onGo()
-                    // Clearing focus closes the keyboard so it stops covering the page and the download pill.
+                    // Clearing focus alone left the keyboard open (seen in the emulator walkthrough),
+                    // covering the page and the download pill, so hide it explicitly too.
+                    keyboardController?.hide()
                     focusManager.clearFocus()
                 }
             ),
