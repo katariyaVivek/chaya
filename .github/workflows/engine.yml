@@ -1,0 +1,48 @@
+name: Engine tests
+
+# The Python half of the YouTube / Instagram / TikTok / X engine: its helper functions, and the one place
+# chaya reaches into yt-dlp's internals (the provider that solves YouTube's JavaScript challenges). Takes
+# about half a minute, and uses the same pinned versions the app is built with, so a yt-dlp upgrade that
+# moves those internals fails here rather than on a phone.
+
+on:
+  pull_request:
+    paths:
+      - 'app/src/main/python/**'
+      - 'app/src/test/python/**'
+      - 'app/build.gradle.kts'
+      - '.github/workflows/engine.yml'
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'app/src/main/python/**'
+      - 'app/src/test/python/**'
+      - 'app/build.gradle.kts'
+  workflow_dispatch:
+
+concurrency:
+  group: engine-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      # The pins live in app/build.gradle.kts (chaquopy { pip { install(...) } }); read them from there.
+      - name: Install the packages the app ships, at its pinned versions
+        run: |
+          PINS=$(grep -oE 'install\("[^"]+"\)' app/build.gradle.kts | sed -E 's/install\("(.*)"\)/\1/')
+          echo "Pinned: $PINS"
+          test -n "$PINS"
+          pip install pytest $PINS
+
+      - name: Run the engine tests
+        run: pytest app/src/test/python -q

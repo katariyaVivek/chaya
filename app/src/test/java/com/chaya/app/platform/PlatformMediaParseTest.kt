@@ -49,6 +49,17 @@ class PlatformMediaParseTest {
             mapOf("User-Agent" to "Mozilla/5.0", "Accept-Language" to "en-us,en;q=0.5"),
             video.headers,
         )
+        assertEquals("SDR", video.dynamicRange)
+        assertNull(video.languagePreference)
+    }
+
+    @Test
+    fun `an audio track keeps its language rank`() {
+        val audio = PlatformMedia.parse(FULL).formats.last()
+
+        assertEquals("en", audio.language)
+        assertEquals(5, audio.languagePreference)
+        assertNull(audio.dynamicRange)
     }
 
     @Test
@@ -196,11 +207,13 @@ class PlatformMediaParseTest {
                  "protocol": "https", "width": 640, "height": 360, "fps": 25,
                  "vcodec": "avc1.42001E", "acodec": "mp4a.40.2", "tbr": 392.5, "abr": 96,
                  "filesize": null, "filesize_approx": 10485760, "format_note": "360p", "language": null,
+                 "language_preference": null, "dynamic_range": "SDR",
                  "http_headers": {"User-Agent": "Mozilla/5.0", "Accept-Language": "en-us,en;q=0.5"}},
                 {"format_id": "140", "url": "https://rr1.googlevideo.com/videoplayback?id=140", "ext": "m4a",
                  "protocol": "https", "width": null, "height": null, "fps": null,
                  "vcodec": "none", "acodec": "mp4a.40.2", "tbr": 129.5, "abr": 129.5,
                  "filesize": 3452816, "filesize_approx": null, "format_note": "medium", "language": "en",
+                 "language_preference": 5, "dynamic_range": null,
                  "http_headers": {}}
               ]
             }}

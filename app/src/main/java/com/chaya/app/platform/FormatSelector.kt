@@ -29,17 +29,24 @@ data class PlatformChoice(
  */
 object FormatSelector {
 
-    /** Prefers MP4 (plays everywhere), then the higher bitrate. */
+    /** Prefers MP4 (plays everywhere), then SDR, then the higher bitrate. */
     private val byPreference = compareByDescending<PlatformFormat> { it.ext == "mp4" }
+        .thenByDescending { it.isStandardRange }
         .thenByDescending { it.bitrateKbps ?: 0.0 }
 
-    /** For picture-only tracks that will be joined to sound: MP4 container, then H.264, then bitrate. */
+    /** For picture-only tracks that will be joined to sound: MP4 container, then H.264, then SDR, then bitrate. */
     private val byMergeCompatibility = compareByDescending<PlatformFormat> { it.ext == "mp4" }
         .thenByDescending { it.videoCodec?.startsWith("avc") == true }
+        .thenByDescending { it.isStandardRange }
         .thenByDescending { it.bitrateKbps ?: 0.0 }
 
-    /** M4A first (it joins to MP4 without re-encoding), then the higher bitrate. */
-    private val byAudioPreference = compareByDescending<PlatformFormat> { it.ext == "m4a" }
+    /**
+     * The original-language track (never a dub), then the plain track over the loudness-compressed one,
+     * then M4A (it joins to MP4 without re-encoding), then the higher bitrate.
+     */
+    private val byAudioPreference = compareByDescending<PlatformFormat> { it.languagePreference ?: 0 }
+        .thenByDescending { !it.isLoudnessCompressed }
+        .thenByDescending { it.ext == "m4a" }
         .thenByDescending { it.audioBitrateKbps ?: it.bitrateKbps ?: 0.0 }
 
     /**

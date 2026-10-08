@@ -123,6 +123,63 @@ class FormatSelectorTest {
     }
 
     @Test
+    fun `the original-language sound beats a dub whatever the bitrate`() {
+        val media = media(
+            pictureOnly("137", 1920, 1080, vcodec = "avc1.640028"),
+            audio("140-1", ext = "m4a", abr = 129.0, languagePreference = -1), // a dub
+            audio("140-0", ext = "m4a", abr = 48.0, languagePreference = 10), // the original
+        )
+
+        val choices = FormatSelector.choices(media, canMerge = true)
+
+        assertEquals("140-0", choices.first().audioToMerge?.id)
+        assertEquals("140-0", choices.last().file.id)
+    }
+
+    @Test
+    fun `plain sound is chosen over its loudness-compressed copy`() {
+        val media = media(
+            audio("140-drc", ext = "m4a", abr = 130.0, note = "medium, DRC"),
+            audio("140", ext = "m4a", abr = 129.0, note = "medium"),
+        )
+
+        assertEquals("140", FormatSelector.choices(media, canMerge = false).single().file.id)
+    }
+
+    @Test
+    fun `a loudness-compressed copy is recognized by its id even without a note`() {
+        val media = media(
+            audio("251-drc", ext = "m4a", abr = 200.0),
+            audio("251", ext = "m4a", abr = 100.0),
+        )
+
+        assertEquals("251", FormatSelector.choices(media, canMerge = false).single().file.id)
+    }
+
+    @Test
+    fun `SDR is chosen over HDR at the same quality`() {
+        val ready = media(
+            complete("hdr", 1920, 1080, tbr = 9000.0, dynamicRange = "HDR10"),
+            complete("sdr", 1920, 1080, tbr = 4000.0, dynamicRange = "SDR"),
+        )
+        val pair = media(
+            pictureOnly("av1-hdr", 1920, 1080, vcodec = "av01.0.12M.10", tbr = 5000.0, dynamicRange = "HDR10"),
+            pictureOnly("av1-sdr", 1920, 1080, vcodec = "av01.0.08M.08", tbr = 3000.0, dynamicRange = "SDR"),
+            audio("140", ext = "m4a"),
+        )
+
+        assertEquals("sdr", FormatSelector.choices(ready, canMerge = false).single().file.id)
+        assertEquals("av1-sdr", FormatSelector.choices(pair, canMerge = true).first().file.id)
+    }
+
+    @Test
+    fun `HDR is still offered when it is the only picture at that quality`() {
+        val media = media(complete("hdr", 1920, 1080, dynamicRange = "HDR10"))
+
+        assertEquals("hdr", FormatSelector.choices(media, canMerge = false).single().file.id)
+    }
+
+    @Test
     fun `a ready-made file beats a merge at the same quality`() {
         val media = media(
             complete("22", 1280, 720),
@@ -307,9 +364,10 @@ class FormatSelectorTest {
         fps: Double? = null,
         tbr: Double? = null,
         size: Long? = null,
+        dynamicRange: String? = null,
     ) = PlatformFormatFixtures.format(
         id = id, ext = ext, width = width, height = height, fps = fps, tbr = tbr, size = size,
-        vcodec = "avc1.42001E", acodec = "mp4a.40.2",
+        vcodec = "avc1.42001E", acodec = "mp4a.40.2", dynamicRange = dynamicRange,
     )
 
     private fun pictureOnly(
@@ -320,13 +378,23 @@ class FormatSelectorTest {
         vcodec: String,
         tbr: Double? = null,
         size: Long? = null,
+        dynamicRange: String? = null,
     ) = PlatformFormatFixtures.format(
         id = id, ext = ext, width = width, height = height, tbr = tbr, size = size,
-        vcodec = vcodec, acodec = "none",
+        vcodec = vcodec, acodec = "none", dynamicRange = dynamicRange,
     )
 
-    private fun audio(id: String, ext: String, abr: Double? = null, size: Long? = null) =
-        PlatformFormatFixtures.format(id = id, ext = ext, abr = abr, size = size, vcodec = "none", acodec = "mp4a.40.2")
+    private fun audio(
+        id: String,
+        ext: String,
+        abr: Double? = null,
+        size: Long? = null,
+        note: String? = null,
+        languagePreference: Int? = null,
+    ) = PlatformFormatFixtures.format(
+        id = id, ext = ext, abr = abr, size = size, vcodec = "none", acodec = "mp4a.40.2",
+        note = note, languagePreference = languagePreference,
+    )
 
     private fun stream(id: String, width: Int, height: Int, acodec: String = "mp4a.40.2") =
         PlatformFormatFixtures.format(
@@ -355,6 +423,9 @@ internal object PlatformFormatFixtures {
         tbr: Double? = null,
         abr: Double? = null,
         size: Long? = null,
+        note: String? = null,
+        languagePreference: Int? = null,
+        dynamicRange: String? = null,
     ) = PlatformFormat(
         id = id,
         url = url,
@@ -368,8 +439,10 @@ internal object PlatformFormatFixtures {
         bitrateKbps = tbr,
         audioBitrateKbps = abr,
         sizeBytes = size,
-        note = null,
+        note = note,
         language = null,
         headers = emptyMap(),
+        languagePreference = languagePreference,
+        dynamicRange = dynamicRange,
     )
 }

@@ -20,6 +20,10 @@ from chaya_engine import extract as engine
     ('<urlopen error [Errno -2] Name or service not known>', 'network'),
     ('Unable to download webpage: HTTP Error 503', 'network'),
     ('The read operation timed out', 'network'),
+    ('HTTP Error 429: Too Many Requests', 'network'),
+    ('Your IP address is blocked from accessing this post', 'network'),
+    ('Join this channel to get access to members-only content like this video', 'needs_login'),
+    ('No video could be found in this tweet', 'unavailable'),
     ('something nobody has seen before', 'unknown'),
 ])
 def test_failures_are_sorted_into_kinds_the_app_can_explain(message, kind):
@@ -45,6 +49,7 @@ def test_only_what_the_app_needs_is_kept():
         'formats': [
             {'format_id': '18', 'url': 'https://example.com/18', 'ext': 'mp4', 'width': 640, 'height': 360,
              'vcodec': 'avc1', 'acodec': 'mp4a', 'fragments': [{'url': 'piece'}] * 5,
+             'language_preference': 10, 'dynamic_range': 'SDR',
              'http_headers': {'User-Agent': 'UA'}},
             {'format_id': 'sb0', 'ext': 'mhtml'},  # a placeholder without an address
         ],
@@ -57,6 +62,9 @@ def test_only_what_the_app_needs_is_kept():
     assert [f['format_id'] for f in shaped['formats']] == ['18']
     assert 'fragments' not in shaped['formats'][0]
     assert shaped['formats'][0]['http_headers'] == {'User-Agent': 'UA'}
+    # which audio track is the original, and whether a picture is HDR, decide what the app picks
+    assert shaped['formats'][0]['language_preference'] == 10
+    assert shaped['formats'][0]['dynamic_range'] == 'SDR'
     json.dumps(shaped)  # must be plain data all the way down
 
 

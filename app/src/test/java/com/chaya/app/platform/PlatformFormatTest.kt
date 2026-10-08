@@ -68,6 +68,24 @@ class PlatformFormatTest {
     }
 
     @Test
+    fun `a loudness-compressed track is recognized by its note or its id`() {
+        assertTrue(format(note = "medium, DRC").isLoudnessCompressed)
+        assertTrue(format(note = "low, drc").isLoudnessCompressed)
+        assertTrue(format(id = "140-drc").isLoudnessCompressed)
+        assertFalse(format(id = "140", note = "medium").isLoudnessCompressed)
+        assertFalse(format(id = "140", note = null).isLoudnessCompressed)
+    }
+
+    @Test
+    fun `a picture is standard range unless it says otherwise`() {
+        assertTrue(format(dynamicRange = null).isStandardRange)
+        assertTrue(format(dynamicRange = "SDR").isStandardRange)
+        assertTrue(format(dynamicRange = "sdr").isStandardRange)
+        assertFalse(format(dynamicRange = "HDR10").isStandardRange)
+        assertFalse(format(dynamicRange = "HLG").isStandardRange)
+    }
+
+    @Test
     fun `quality is the shorter side so vertical videos are named like landscape ones`() {
         assertEquals(1080, format(width = 1920, height = 1080).quality)
         assertEquals(1080, format(width = 1080, height = 1920).quality)
@@ -84,6 +102,7 @@ class PlatformFormatTest {
     }
 
     private fun format(
+        id: String = "f",
         ext: String? = "mp4",
         protocol: String? = "https",
         url: String = "https://cdn.example/video",
@@ -91,8 +110,10 @@ class PlatformFormatTest {
         height: Int? = null,
         vcodec: String? = null,
         acodec: String? = null,
+        note: String? = null,
+        dynamicRange: String? = null,
     ) = PlatformFormat(
-        id = "f",
+        id = id,
         url = url,
         ext = ext,
         protocol = protocol,
@@ -104,8 +125,9 @@ class PlatformFormatTest {
         bitrateKbps = null,
         audioBitrateKbps = null,
         sizeBytes = null,
-        note = null,
+        note = note,
         language = null,
         headers = emptyMap(),
+        dynamicRange = dynamicRange,
     )
 }

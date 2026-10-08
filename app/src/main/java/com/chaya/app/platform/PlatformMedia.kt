@@ -23,6 +23,10 @@ data class PlatformFormat(
     val language: String?,
     /** Headers the file's server expects (referer, user agent...), applied when downloading. */
     val headers: Map<String, String>,
+    /** yt-dlp's rank for an audio track's language: 10 original, 5 the site's default, -1 other dubs, -10 descriptive. */
+    val languagePreference: Int? = null,
+    /** "SDR", "HDR10", "HLG" and so on; null when unknown. */
+    val dynamicRange: String? = null,
 ) {
     // yt-dlp writes "none" for a missing track. Anything else, including unknown, counts as present:
     // simple extractors often leave the codecs out of a file that has both.
@@ -43,6 +47,13 @@ data class PlatformFormat(
 
     /** A single file with both picture and sound. */
     val isCompleteFile: Boolean get() = isDirectFile && hasVideo && hasAudio
+
+    /** YouTube's "DRC" tracks are the same sound with its loudness range squeezed; the plain track is preferred. */
+    val isLoudnessCompressed: Boolean
+        get() = note?.contains("DRC", ignoreCase = true) == true || id.endsWith("-drc", ignoreCase = true)
+
+    /** HDR pictures look washed out on screens and players that cannot show HDR, so SDR is preferred. */
+    val isStandardRange: Boolean get() = dynamicRange == null || dynamicRange.equals("SDR", ignoreCase = true)
 
     /**
      * The side of the picture people name a quality by: 1920x1080 and 1080x1920 are both "1080p".
@@ -128,6 +139,8 @@ data class PlatformMedia(
                 note = f.str("format_note"),
                 language = f.str("language"),
                 headers = headers,
+                languagePreference = f.int("language_preference"),
+                dynamicRange = f.str("dynamic_range"),
             )
         }
 

@@ -12,7 +12,8 @@ from . import jsc_provider  # noqa: F401  (importing registers the embedded Java
 # What the app needs to choose a quality and download it; everything else yt-dlp knows is left behind.
 _FORMAT_FIELDS = (
     'format_id', 'url', 'ext', 'protocol', 'width', 'height', 'fps', 'vcodec', 'acodec',
-    'tbr', 'abr', 'filesize', 'filesize_approx', 'format_note', 'language', 'http_headers',
+    'tbr', 'abr', 'filesize', 'filesize_approx', 'format_note', 'language', 'language_preference',
+    'dynamic_range', 'http_headers',
 )
 _INFO_FIELDS = (
     'id', 'title', 'uploader', 'channel', 'duration', 'webpage_url', 'extractor_key', 'is_live',
@@ -79,14 +80,19 @@ def _kind_of(error):
         return 'bot_check'
     if 'private' in text:
         return 'private'
-    if any(word in text for word in ('log in', 'login', 'sign in', 'cookies', 'authentication')):
+    if any(word in text for word in (
+            'log in', 'login', 'sign in', 'cookies', 'authentication', 'members-only', 'members only',
+            'join this channel')):
         return 'needs_login'
     if any(word in text for word in ('geo', 'not available in your country', 'region')):
         return 'geo'
     if 'unsupported url' in text:
         return 'unsupported'
-    if any(word in text for word in ('not available', 'unavailable', 'removed', 'not found', 'does not exist', '404')):
+    if any(word in text for word in (
+            'not available', 'unavailable', 'removed', 'not found', 'does not exist', '404', 'no video')):
         return 'unavailable'
-    if any(word in text for word in ('timed out', 'timeout', 'unable to download', 'name or service', 'connection')):
+    if any(word in text for word in (
+            'timed out', 'timeout', 'unable to download', 'name or service', 'connection',
+            'too many requests', 'ip address is blocked')):
         return 'network'
     return 'unknown'
