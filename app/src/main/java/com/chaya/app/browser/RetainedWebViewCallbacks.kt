@@ -13,6 +13,8 @@ internal data class RetainedWebViewCallbackState(
     val onNavigationStateChanged: (Boolean, Boolean) -> Unit,
     val onEnterFullscreen: (View, WebChromeClient.CustomViewCallback) -> Unit,
     val onExitFullscreen: () -> Unit,
+    /** The page's address changed, possibly without a new document (a video site moving to another video). */
+    val onAddressChanged: (String) -> Unit = {},
 )
 
 /** Rebinds retained WebView callbacks so they never retain an obsolete Compose destination. */
@@ -46,6 +48,11 @@ internal class RetainedWebViewCallbacks(initialState: RetainedWebViewCallbackSta
     /** Updates browser history controls in the currently composed destination. */
     fun onNavigationStateChanged(canGoBack: Boolean, canGoForward: Boolean) {
         state.get().onNavigationStateChanged(canGoBack, canGoForward)
+    }
+
+    /** Reports the address the page now shows, to the destination currently attached to the retained WebView. */
+    fun onAddressChanged(url: String) {
+        state.get().onAddressChanged(url)
     }
 
     /** Delivers fullscreen entry to the screen that is currently rendering the retained WebView. */

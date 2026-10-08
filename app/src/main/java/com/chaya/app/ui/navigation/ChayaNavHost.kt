@@ -5,11 +5,15 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import com.chaya.app.SharedLinks
 import com.chaya.app.browser.BrowserScreen
 import com.chaya.app.diagnostics.DiagnosticsScreen
 import com.chaya.app.downloads.DownloadsScreen
@@ -22,6 +26,12 @@ private fun exitTween() = tween<Float>(ChayaMotion.DurationShort, easing = Chaya
 
 @Composable
 fun ChayaNavHost(navController: NavHostController) {
+    // A link shared to Chaya is opened by the browser; bring it forward if another screen is showing.
+    val sharedLink by SharedLinks.pending.collectAsState()
+    LaunchedEffect(sharedLink) {
+        if (sharedLink != null) navController.popBackStack(Screen.Browser.route, inclusive = false)
+    }
+
     NavHost(
         navController = navController,
         startDestination = Screen.Browser.route,
