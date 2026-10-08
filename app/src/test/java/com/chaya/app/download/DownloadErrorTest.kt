@@ -89,6 +89,24 @@ class DownloadErrorTest {
     }
 
     @Test
+    fun `a join that failed classifies as a retryable combine error`() {
+        val error = DownloadError.from(CombineException("no picture track"))
+
+        assertTrue(error is DownloadError.CouldNotCombine)
+        assertEquals("Couldn't combine the picture and sound", error.userMessage)
+        assertTrue(error.retryable)
+    }
+
+    @Test
+    fun `a join that ran out of room is reported as a full disk, not as a join problem`() {
+        val error = DownloadError.from(
+            CombineException("Couldn't combine", IOException("write failed: ENOSPC (No space left on device)")),
+        )
+
+        assertEquals(DownloadError.StorageFull, error)
+    }
+
+    @Test
     fun `cancellation is never shown as a failure`() {
         val error = DownloadError.from(java.util.concurrent.CancellationException("cancelled"))
 

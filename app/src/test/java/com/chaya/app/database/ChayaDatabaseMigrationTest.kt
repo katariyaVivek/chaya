@@ -122,7 +122,7 @@ class ChayaDatabaseMigrationTest {
             val context = RuntimeEnvironment.getApplication()
             val config = SupportSQLiteOpenHelper.Configuration.builder(context)
                 .name(file.absolutePath)
-                .callback(object : SupportSQLiteOpenHelper.Callback(4) {
+                .callback(object : SupportSQLiteOpenHelper.Callback(5) {
                     override fun onCreate(db: SupportSQLiteDatabase) = Unit
                     override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
                 })
@@ -171,6 +171,60 @@ class ChayaDatabaseMigrationTest {
     }
 
     @Test
+    fun `migrate 2 to 5 keeps every row and adds empty request headers and no sound file`() {
+        migratedFromV2(ChayaDatabase.MIGRATION_2_3, ChayaDatabase.MIGRATION_3_4, ChayaDatabase.MIGRATION_4_5) { db ->
+            db.query("SELECT fileName, request_headers, audio_url, audio_request_headers FROM downloads ORDER BY id")
+                .use { cursor ->
+                    assertEquals(2, cursor.count)
+                    assertTrue(cursor.moveToFirst())
+                    assertEquals("a.mp4", cursor.getString(0))
+                    assertTrue(cursor.isNull(1))
+                    assertTrue(cursor.isNull(2))
+                    assertTrue(cursor.isNull(3))
+                    assertTrue(cursor.moveToNext())
+                    assertEquals("b.mp4", cursor.getString(0))
+                }
+        }
+    }
+
+    @Test
+    fun `migrated rows decode into tasks with no engine request`() {
+        migratedFromV2(ChayaDatabase.MIGRATION_2_3, ChayaDatabase.MIGRATION_3_4, ChayaDatabase.MIGRATION_4_5) { db ->
+            db.execSQL(
+                "UPDATE downloads SET request_headers = 'User-Agent: UA\nReferer: https://site.example/', " +
+                    "audio_url = 'https://cdn.example/audio', audio_request_headers = 'User-Agent: UA2' WHERE id = 2",
+            )
+            db.query("SELECT request_headers, audio_url, audio_request_headers FROM downloads WHERE id = 2").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                val entity = DownloadEntity(
+                    id = 2, url = "u", pageUrl = null, fileName = "b.mp4", mimeType = null, filePath = null,
+                    totalBytes = null,
+                    requestHeaders = cursor.getString(0),
+                    audioUrl = cursor.getString(1),
+                    audioRequestHeaders = cursor.getString(2),
+                )
+                val task = entity.toTask()
+
+                assertEquals(mapOf("User-Agent" to "UA", "Referer" to "https://site.example/"), task.requestHeaders)
+                assertEquals("https://cdn.example/audio", task.audioUrl)
+                assertEquals(mapOf("User-Agent" to "UA2"), task.audioRequestHeaders)
+                assertTrue(task.hasOwnRequest)
+            }
+        }
+    }
+
+    @Test
+    fun `an old row has no engine request`() {
+        val task = DownloadEntity(
+            id = 1, url = "u", pageUrl = null, fileName = "a.mp4", mimeType = null, filePath = null, totalBytes = null,
+        ).toTask()
+
+        assertEquals(emptyMap<String, String>(), task.requestHeaders)
+        assertNull(task.audioUrl)
+        assertEquals(false, task.hasOwnRequest)
+    }
+
+    @Test
     fun `legacy row without kind decodes to retryable unknown`() {
         val error = DownloadEntity.decodeError(null, null, "HTTP 403: Forbidden")
 
@@ -189,6 +243,7 @@ class ChayaDatabaseMigrationTest {
             DownloadError.HttpStatus(503),
             DownloadError.StorageFull,
             DownloadError.UnsupportedFormat,
+            DownloadError.CouldNotCombine(RuntimeException("x")),
             DownloadError.Cancelled,
             DownloadError.Unknown(RuntimeException("x")),
         )) {

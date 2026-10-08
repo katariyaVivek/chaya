@@ -180,6 +180,20 @@ class FormatSelectorTest {
     }
 
     @Test
+    fun `only pictures the app can join are paired with sound`() {
+        val media = media(
+            pictureOnly("h264-1080", 1920, 1080, vcodec = "avc1.640028"),
+            pictureOnly("av1-2160", 3840, 2160, vcodec = "av01.0.12M.08"),
+            pictureOnly("h264-720", 1280, 720, vcodec = "avc1.4d401f"),
+            audio("140", ext = "m4a"),
+        )
+
+        val choices = FormatSelector.choices(media) { it.videoCodec?.startsWith("avc") == true }
+
+        assertEquals(listOf("1080p", "720p", "Audio only"), choices.map { it.label })
+    }
+
+    @Test
     fun `a ready-made file beats a merge at the same quality`() {
         val media = media(
             complete("22", 1280, 720),
@@ -426,6 +440,7 @@ internal object PlatformFormatFixtures {
         note: String? = null,
         languagePreference: Int? = null,
         dynamicRange: String? = null,
+        headers: Map<String, String> = emptyMap(),
     ) = PlatformFormat(
         id = id,
         url = url,
@@ -441,7 +456,7 @@ internal object PlatformFormatFixtures {
         sizeBytes = size,
         note = note,
         language = null,
-        headers = emptyMap(),
+        headers = headers,
         languagePreference = languagePreference,
         dynamicRange = dynamicRange,
     )

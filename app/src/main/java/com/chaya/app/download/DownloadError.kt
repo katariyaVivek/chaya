@@ -42,6 +42,12 @@ sealed class DownloadError(
         retryable = false,
     )
 
+    /** Picture and sound arrived but could not be joined into one file; retrying only repeats the join. */
+    data class CouldNotCombine(val cause: Throwable) : DownloadError(
+        "Couldn't combine the picture and sound",
+        retryable = true,
+    )
+
     /** User-cancelled; recorded for completeness, never shown as a failure. */
     object Cancelled : DownloadError("Cancelled", retryable = false)
 
@@ -58,7 +64,9 @@ sealed class DownloadError(
         /** Classifies a raw failure into the taxonomy above. */
         fun from(throwable: Throwable): DownloadError {
             if (throwable is java.util.concurrent.CancellationException) return Cancelled
+            // Before the join check: a join that ran out of room says so deep in its cause chain.
             if (isStorageFull(throwable)) return StorageFull
+            if (throwable is CombineException) return CouldNotCombine(throwable)
             httpStatusPattern.find(throwable.message ?: "")?.let { match ->
                 return HttpStatus(match.groupValues[1].toInt())
             }

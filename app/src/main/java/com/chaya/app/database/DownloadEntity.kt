@@ -6,6 +6,7 @@ import androidx.room.PrimaryKey
 import com.chaya.app.download.DownloadError
 import com.chaya.app.download.DownloadState
 import com.chaya.app.download.DownloadTask
+import com.chaya.app.download.HeaderCodec
 
 @Entity(tableName = "downloads")
 data class DownloadEntity(
@@ -47,6 +48,14 @@ data class DownloadEntity(
     val thumbnailUrl: String? = null,
     @ColumnInfo(name = "quality_height")
     val qualityHeight: Int? = null,
+    /** Headers the engine says [url] needs, as "Name: value" lines (v5+). */
+    @ColumnInfo(name = "request_headers")
+    val requestHeaders: String? = null,
+    /** Separate sound file joined to the picture at [url] when both have arrived (v5+). */
+    @ColumnInfo(name = "audio_url")
+    val audioUrl: String? = null,
+    @ColumnInfo(name = "audio_request_headers")
+    val audioRequestHeaders: String? = null,
 ) {
     val progressFraction: Float
         get() = if (totalBytes != null && totalBytes > 0) {
@@ -70,6 +79,9 @@ data class DownloadEntity(
         title = title,
         thumbnailUrl = thumbnailUrl,
         qualityHeight = qualityHeight,
+        requestHeaders = HeaderCodec.decode(requestHeaders),
+        audioUrl = audioUrl,
+        audioRequestHeaders = HeaderCodec.decode(audioRequestHeaders),
     )
 
     companion object {
@@ -87,6 +99,7 @@ data class DownloadEntity(
                 "HTTP" -> DownloadError.HttpStatus(code ?: 0)
                 "STORAGE_FULL" -> DownloadError.StorageFull
                 "UNSUPPORTED_FORMAT" -> DownloadError.UnsupportedFormat
+                "COMBINE" -> DownloadError.CouldNotCombine(RuntimeException(legacyMessage ?: "combine"))
                 "CANCELLED" -> DownloadError.Cancelled
                 else -> DownloadError.Unknown(RuntimeException(legacyMessage ?: "unknown"))
             }
@@ -99,6 +112,7 @@ data class DownloadEntity(
             is DownloadError.HttpStatus -> Triple("HTTP", error.code, error.userMessage)
             DownloadError.StorageFull -> Triple("STORAGE_FULL", null, error.userMessage)
             DownloadError.UnsupportedFormat -> Triple("UNSUPPORTED_FORMAT", null, error.userMessage)
+            is DownloadError.CouldNotCombine -> Triple("COMBINE", null, error.userMessage)
             DownloadError.Cancelled -> Triple("CANCELLED", null, error.userMessage)
             is DownloadError.Unknown -> Triple("UNKNOWN", null, error.userMessage)
         }
@@ -124,6 +138,9 @@ data class DownloadEntity(
             title = task.title,
             thumbnailUrl = task.thumbnailUrl,
             qualityHeight = task.qualityHeight,
+            requestHeaders = HeaderCodec.encode(task.requestHeaders),
+            audioUrl = task.audioUrl,
+            audioRequestHeaders = HeaderCodec.encode(task.audioRequestHeaders),
             )
         }
     }
