@@ -56,6 +56,17 @@ class DownloadRequestsTest {
     }
 
     @Test
+    fun `a video with no picture size is named after its title alone`() {
+        val bare = PlatformFormatFixtures.format(id = "direct", ext = "mp4")
+
+        val request = PlatformChoice("Video", "", null, bare, null, isAudioOnly = false)
+            .toDownloadRequest(media(title = "Clip"))
+
+        assertEquals("Clip.mp4", request.fileName)
+        assertNull(request.qualityHeight)
+    }
+
+    @Test
     fun `sound alone is named audio and has no picture quality`() {
         val request = PlatformChoice("Audio only", "", null, sound, null, isAudioOnly = true)
             .toDownloadRequest(media(title = "Song"))

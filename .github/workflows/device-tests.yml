@@ -1,0 +1,80 @@
+name: Device tests
+
+# Runs the on-device tests (app/src/androidTest) in a cloud emulator. They check what a plain JVM cannot:
+# Python and yt-dlp running inside the app, the QuickJS engine running yt-dlp's solver scripts, and the real
+# picture-plus-sound join with the phone's own media framework. They are hermetic (a local test server, media
+# made on the spot) apart from one test that needs the internet and skips itself without it.
+#
+#   Pull request: add the `ui-check` label (the same label also runs the emulator walkthrough).
+#                 It re-runs on every push while the label is on.
+#   Manually:     Actions > Device tests > Run workflow.
+#
+# Numbers worth knowing, such as how long the solver takes on YouTube's player and how much memory it touches,
+# are in device-numbers.txt in the uploaded evidence.
+
+on:
+  pull_request:
+    types: [opened, labeled, synchronize, reopened]
+  workflow_dispatch:
+
+concurrency:
+  group: device-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  device:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ui-check')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+          cache-read-only: false
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run the device tests in an emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          # Plain Android image, as in the walkthrough: the Google image's Play services restart themselves.
+          target: default
+          arch: x86_64
+          profile: pixel_6
+          ram-size: 4096M
+          cores: 3
+          disable-animations: true
+          # Each line runs on its own. A failed test run is recorded rather than stopping here, so the numbers
+          # are still collected; the last line then fails the step.
+          script: |
+            mkdir -p evidence
+            adb logcat -c
+            gradle connectedDebugAndroidTest --stacktrace || echo failed > evidence/failed
+            adb logcat -d -s ChayaDevice:I > evidence/device-numbers.txt
+            test ! -e evidence/failed
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: device-test-evidence
+          path: |
+            evidence/
+            app/build/reports/androidTests/
+            app/build/outputs/androidTest-results/
+          if-no-files-found: warn

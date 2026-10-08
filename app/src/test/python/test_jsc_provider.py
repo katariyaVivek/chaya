@@ -1,9 +1,6 @@
 """Guards the one place chaya reaches into yt-dlp's internals: the provider that solves YouTube's
 JavaScript challenges with the QuickJS engine inside the app. If a yt-dlp release moves these
 internals, this fails here instead of on a phone."""
-import sys
-import types
-
 import pytest
 
 from yt_dlp.extractor.youtube.jsc._registry import _jsc_preferences, _jsc_providers
@@ -30,7 +27,7 @@ def test_the_provider_needs_no_runtime_binary():
     assert provider.is_available() is True
 
 
-def test_the_script_goes_to_kotlin_and_what_it_printed_comes_back(monkeypatch):
+def test_the_script_goes_to_kotlin_and_what_it_printed_comes_back(fake_java):
     seen = []
 
     class FakeSolver:
@@ -39,7 +36,7 @@ def test_the_script_goes_to_kotlin_and_what_it_printed_comes_back(monkeypatch):
             seen.append(script)
             return '{"type": "result", "responses": []}\n'
 
-    _fake_java(monkeypatch, {'com.chaya.app.platform.JsSolver': FakeSolver})
+    fake_java({'com.chaya.app.platform.JsSolver': FakeSolver})
 
     answer = _provider()._run_js_runtime('console.log(1)')
 
@@ -47,13 +44,13 @@ def test_the_script_goes_to_kotlin_and_what_it_printed_comes_back(monkeypatch):
     assert answer == '{"type": "result", "responses": []}\n'
 
 
-def test_a_failure_in_kotlin_becomes_a_provider_error(monkeypatch):
+def test_a_failure_in_kotlin_becomes_a_provider_error(fake_java):
     class BrokenSolver:
         @staticmethod
         def run(script):
             raise RuntimeError('QuickJsException: SyntaxError')
 
-    _fake_java(monkeypatch, {'com.chaya.app.platform.JsSolver': BrokenSolver})
+    fake_java({'com.chaya.app.platform.JsSolver': BrokenSolver})
 
     with pytest.raises(JsChallengeProviderError, match='SyntaxError'):
         _provider()._run_js_runtime('not javascript')
@@ -64,10 +61,3 @@ def _provider():
     provider = jsc_provider.ChayaQuickJSJCP.__new__(jsc_provider.ChayaQuickJSJCP)
     provider._available = True
     return provider
-
-
-def _fake_java(monkeypatch, classes):
-    """Stands in for Chaquopy's `java` module, which only exists inside the app."""
-    module = types.ModuleType('java')
-    module.jclass = lambda name: classes[name]
-    monkeypatch.setitem(sys.modules, 'java', module)

@@ -75,6 +75,16 @@ object FormatSelector {
             .mapNotNull { (quality, candidates) -> choiceFor(quality, candidates, mergeAudio, canJoin) }
             .toMutableList()
 
+        if (choices.isEmpty()) {
+            // A bare link to a video file, which is what yt-dlp's generic extractor finds, has no picture size
+            // to name a quality by. Offer the best complete file as it is rather than nothing.
+            media.formats
+                .filter { it.isCompleteFile && it.quality == null && !it.isAudioOnly }
+                .sortedWith(byPreference)
+                .firstOrNull()
+                ?.let { choices += unsizedVideoChoice(it) }
+        }
+
         bestAudio?.let { choices += audioChoice(it) }
         return choices
     }
@@ -111,6 +121,18 @@ object FormatSelector {
             quality = quality,
             file = file,
             audioToMerge = audio,
+            isAudioOnly = false,
+        )
+        return choice.copy(detail = detailOf(choice))
+    }
+
+    private fun unsizedVideoChoice(file: PlatformFormat): PlatformChoice {
+        val choice = PlatformChoice(
+            label = "Video",
+            detail = "",
+            quality = null,
+            file = file,
+            audioToMerge = null,
             isAudioOnly = false,
         )
         return choice.copy(detail = detailOf(choice))

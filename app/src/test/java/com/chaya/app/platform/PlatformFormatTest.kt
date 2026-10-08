@@ -35,6 +35,8 @@ class PlatformFormatTest {
     fun `audio only means sound present and picture explicitly absent`() {
         assertTrue(format(vcodec = "none", acodec = "opus").isAudioOnly)
         assertTrue(format(vcodec = null, acodec = "mp4a.40.2").isAudioOnly)
+        // A bare audio link often names no codec at all, but it does say there is no picture.
+        assertTrue(format(vcodec = "none", acodec = null).isAudioOnly)
         assertFalse(format(vcodec = "avc1", acodec = "mp4a").isAudioOnly)
         assertFalse(format(vcodec = "none", acodec = "none").isAudioOnly)
         assertFalse(format(vcodec = null, acodec = null).isAudioOnly)
