@@ -15,7 +15,11 @@ data class DownloadTask(
     val totalBytes: Long? = null,
     val state: DownloadState = DownloadState.QUEUED,
     val createdAt: Long = System.currentTimeMillis(),
-    val updatedAt: Long = System.currentTimeMillis()
+    val updatedAt: Long = System.currentTimeMillis(),
+    /** Display title (no quality or extension); null for downloads made before v4. */
+    val title: String? = null,
+    val thumbnailUrl: String? = null,
+    val qualityHeight: Int? = null,
 ) {
     val progressFraction: Float
         get() = if (totalBytes != null && totalBytes > 0) {

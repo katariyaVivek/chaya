@@ -115,6 +115,61 @@ class ChayaDatabaseMigrationTest {
         }
     }
 
+    /** Runs [migrations] in order against a fresh v2 file and hands the open database to [check]. */
+    private fun migratedFromV2(vararg migrations: androidx.room.migration.Migration, check: (SupportSQLiteDatabase) -> Unit) {
+        val file = createV2Database()
+        try {
+            val context = RuntimeEnvironment.getApplication()
+            val config = SupportSQLiteOpenHelper.Configuration.builder(context)
+                .name(file.absolutePath)
+                .callback(object : SupportSQLiteOpenHelper.Callback(4) {
+                    override fun onCreate(db: SupportSQLiteDatabase) = Unit
+                    override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+                })
+                .build()
+            val helper = FrameworkSQLiteOpenHelperFactory().create(config)
+            val db = helper.writableDatabase
+            migrations.forEach { it.migrate(db) }
+            check(db)
+            db.close()
+            helper.close()
+        } finally {
+            file.parentFile?.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `migrate 2 to 4 keeps every row and adds empty title, thumbnail and quality`() {
+        migratedFromV2(ChayaDatabase.MIGRATION_2_3, ChayaDatabase.MIGRATION_3_4) { db ->
+            db.query("SELECT fileName, title, thumbnail_url, quality_height FROM downloads ORDER BY id").use { cursor ->
+                assertEquals(2, cursor.count)
+                assertTrue(cursor.moveToFirst())
+                assertEquals("a.mp4", cursor.getString(0))
+                assertTrue(cursor.isNull(1))
+                assertTrue(cursor.isNull(2))
+                assertTrue(cursor.isNull(3))
+                assertTrue(cursor.moveToNext())
+                assertEquals("b.mp4", cursor.getString(0))
+            }
+        }
+    }
+
+    @Test
+    fun `new columns accept a title, a poster and a quality after migrating`() {
+        migratedFromV2(ChayaDatabase.MIGRATION_2_3, ChayaDatabase.MIGRATION_3_4) { db ->
+            db.execSQL(
+                "UPDATE downloads SET title = 'Big Buck Bunny', " +
+                    "thumbnail_url = 'https://img.example/poster.jpg', quality_height = 720 WHERE id = 2",
+            )
+            db.query("SELECT title, thumbnail_url, quality_height FROM downloads WHERE id = 2").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("Big Buck Bunny", cursor.getString(0))
+                assertEquals("https://img.example/poster.jpg", cursor.getString(1))
+                assertEquals(720, cursor.getInt(2))
+            }
+        }
+    }
+
     @Test
     fun `legacy row without kind decodes to retryable unknown`() {
         val error = DownloadEntity.decodeError(null, null, "HTTP 403: Forbidden")

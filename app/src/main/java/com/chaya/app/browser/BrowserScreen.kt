@@ -712,11 +712,22 @@ fun BrowserScreen(
                             if (item.kind == MediaKind.STREAM) {
                                 // The quality picker adds the chosen rendition's height to the name.
                                 viewModel.analyzeStream(
-                                    item.media.copy(suggestedName = MediaNamer.fileBaseName(item.title, null)),
+                                    item.media.copy(
+                                        suggestedName = MediaNamer.fileBaseName(item.title, null),
+                                        title = item.title,
+                                        thumbnailUrl = item.thumbnailUrl,
+                                    ),
                                     item.durationSeconds,
                                 )
                             } else {
-                                requestPermissionAndDownload(item.media.copy(suggestedName = item.fileBaseName))
+                                requestPermissionAndDownload(
+                                    item.media.copy(
+                                        suggestedName = item.fileBaseName,
+                                        title = item.title,
+                                        thumbnailUrl = item.thumbnailUrl,
+                                        qualityHeight = item.videoHeight,
+                                    )
+                                )
                             }
                         }
                     )

@@ -309,7 +309,10 @@ class DownloadManager(
             mimeType = media.mimeType,
             filePath = saveFile.absolutePath,
             downloadedBytes = fromBytes,
-            state = DownloadState.DOWNLOADING
+            state = DownloadState.DOWNLOADING,
+            title = media.title,
+            thumbnailUrl = media.thumbnailUrl,
+            qualityHeight = media.qualityHeight,
         )
         append(task)
         dao.insert(DownloadEntity.fromTask(task))
@@ -347,7 +350,10 @@ class DownloadManager(
             fileName = sanitize(fileNameForMedia(media)),
             mimeType = media.mimeType,
             filePath = null,
-            state = DownloadState.DOWNLOADING
+            state = DownloadState.DOWNLOADING,
+            title = media.title,
+            thumbnailUrl = media.thumbnailUrl,
+            qualityHeight = media.qualityHeight,
         )
         append(task)
         dao.insert(DownloadEntity.fromTask(task))
@@ -415,6 +421,9 @@ class DownloadManager(
             mimeType = media.mimeType,
             state = DownloadState.FAILED,
             error = DownloadError.StorageFull,
+            title = media.title,
+            thumbnailUrl = media.thumbnailUrl,
+            qualityHeight = media.qualityHeight,
         )
         append(task)
         dao.insert(DownloadEntity.fromTask(task))

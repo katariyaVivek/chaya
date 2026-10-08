@@ -397,6 +397,8 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                                 mimeType = media.mimeType,
                                 suggestedName = media.suggestedName,
                                 durationSeconds = durationSeconds,
+                                title = media.title,
+                                thumbnailUrl = media.thumbnailUrl,
                             )
                         )
                     }
@@ -409,6 +411,8 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                             url = media.url,
                             mimeType = media.mimeType,
                             suggestedName = media.suggestedName,
+                            title = media.title,
+                            thumbnailUrl = media.thumbnailUrl,
                         )
                     )
                 }
@@ -430,6 +434,9 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             mimeType = state.mimeType,
             source = com.chaya.app.model.DetectionSource.MANIFEST,
             suggestedName = state.suggestedName?.let { MediaNamer.fileBaseName(it, chosenHeight) },
+            title = state.title,
+            thumbnailUrl = state.thumbnailUrl,
+            qualityHeight = chosenHeight,
         )
 
         val streamKeys = tracks.flatMap { it.streamKeys }
@@ -452,6 +459,8 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             mimeType = state.mimeType,
             source = com.chaya.app.model.DetectionSource.MANIFEST,
             suggestedName = state.suggestedName,
+            title = state.title,
+            thumbnailUrl = state.thumbnailUrl,
         )
         downloadManager.startDownload(media)
     }

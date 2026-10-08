@@ -40,7 +40,13 @@ data class DownloadEntity(
     @ColumnInfo(name = "created_at")
     val createdAt: Long = System.currentTimeMillis(),
     @ColumnInfo(name = "updated_at")
-    val updatedAt: Long = System.currentTimeMillis()
+    val updatedAt: Long = System.currentTimeMillis(),
+    /** Display title without quality or extension (v4+). */
+    val title: String? = null,
+    @ColumnInfo(name = "thumbnail_url")
+    val thumbnailUrl: String? = null,
+    @ColumnInfo(name = "quality_height")
+    val qualityHeight: Int? = null,
 ) {
     val progressFraction: Float
         get() = if (totalBytes != null && totalBytes > 0) {
@@ -60,7 +66,10 @@ data class DownloadEntity(
         totalBytes = totalBytes,
         state = state,
         createdAt = createdAt,
-        updatedAt = updatedAt
+        updatedAt = updatedAt,
+        title = title,
+        thumbnailUrl = thumbnailUrl,
+        qualityHeight = qualityHeight,
     )
 
     companion object {
@@ -111,7 +120,10 @@ data class DownloadEntity(
             totalBytes = task.totalBytes,
             state = task.state,
             createdAt = task.createdAt,
-            updatedAt = task.updatedAt
+            updatedAt = task.updatedAt,
+            title = task.title,
+            thumbnailUrl = task.thumbnailUrl,
+            qualityHeight = task.qualityHeight,
             )
         }
     }
