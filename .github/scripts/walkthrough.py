@@ -64,6 +64,10 @@ PAGE = """<!doctype html>
 </body></html>
 """
 
+class AppDied(Exception):
+    """The app's process disappeared mid-scenario (e.g. the emulator's system apps restarted)."""
+
+
 results = []  # (step, ok, detail)
 shot_count = 0
 screen_w, screen_h = 1080, 2400
@@ -89,6 +93,15 @@ def adb(*args, timeout=120):
 
 def sh(command, timeout=120):
     return adb("shell", command, timeout=timeout)
+
+
+def app_alive():
+    return bool(sh(f"pidof {PKG}").strip())
+
+
+def require_app():
+    if not app_alive():
+        raise AppDied(f"{PKG} is not running")
 
 
 # --------------------------------------------------------------------------- #
@@ -167,6 +180,7 @@ def wait_for(label, timeout=40, **criteria):
     """Polls the screen until a node matches; returns (nodes, node-or-None)."""
     deadline = time.time() + timeout
     while True:
+        require_app()
         nodes, _ = ui_dump()
         dismiss_not_responding(nodes)
         node = find(nodes, **criteria)
@@ -213,11 +227,14 @@ def type_text(value, chunk=8):
         time.sleep(0.4)
 
 
-def hide_keyboard():
+def check_keyboard_closed():
+    """The app must close the keyboard itself after Go; it covered the page and download button before."""
+    require_app()
+    snapshot("after-go")
     shown = sh("dumpsys input_method | grep -E 'mInputShown|isInputViewShown'")
-    if "mInputShown=true" in shown or "isInputViewShown=true" in shown:
-        adb("shell", "input", "keyevent", "4")  # BACK closes the keyboard first
-        record("keyboard was still open after Go", False, "app should close it itself")
+    open_now = "mInputShown=true" in shown or "isInputViewShown=true" in shown
+    detail = " ".join(shown.split())[:120] if open_now else ""
+    record("keyboard closes after Go", not open_now, detail)
 
 
 # --------------------------------------------------------------------------- #
@@ -246,7 +263,7 @@ def open_url(url):
     time.sleep(1)
     adb("shell", "input", "keyevent", "66")  # Enter -> Go
     time.sleep(3)
-    hide_keyboard()
+    check_keyboard_closed()
     record(f"opened {url}", True)
 
 
@@ -262,6 +279,7 @@ def monitor_download(tag, seconds):
     last_shot = 0.0
     done = False
     while time.time() - start < seconds:
+        require_app()
         nodes, _ = ui_dump()
         texts = visible_texts(nodes)
         interesting = [t.replace("\n", " / ") for t in texts if re.search(r"\d+%|Saved|Failed|Paused|\bMB\b|\bKB\b| B /", t)]
@@ -392,7 +410,9 @@ def main():
     if size:
         screen_w, screen_h = int(size.group(1)), int(size.group(2))
     log(f"screen {screen_w}x{screen_h}")
-    time.sleep(10)
+    # Show the soft keyboard even with the emulator's hardware keyboard, so the keyboard check means something.
+    sh("settings put secure show_ime_with_hard_keyboard 1")
+    time.sleep(20)  # let the freshly booted system finish its own start-up work
 
     server = None
     try:
@@ -403,10 +423,21 @@ def main():
         record("build the local test page", False, fixture_error)
 
     for name, scenario in (("hls", scenario_hls), ("local", scenario_local)):
-        try:
-            scenario()
-        except Exception:
-            record(f"{name}: scenario raised", False, traceback.format_exc(limit=3).strip().splitlines()[-1])
+        for attempt in (1, 2):
+            first_result = len(results)
+            try:
+                scenario()
+                break
+            except AppDied as died:
+                save_logcat(f"{name}-attempt{attempt}")
+                del results[first_result:]  # the aborted attempt proves nothing either way
+                if attempt == 1:
+                    record(f"{name}: the app was killed mid-run, retrying once", True, str(died))
+                else:
+                    record(f"{name}: the app was killed again", False, str(died))
+            except Exception:
+                record(f"{name}: scenario raised", False, traceback.format_exc(limit=3).strip().splitlines()[-1])
+                break
         save_logcat(name)
 
     if server:

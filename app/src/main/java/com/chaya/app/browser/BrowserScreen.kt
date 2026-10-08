@@ -91,11 +91,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -140,7 +142,7 @@ private object WebViewHolder {
     var callbacks: RetainedWebViewCallbacks? = null
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalComposeUiApi::class)
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun BrowserScreen(
@@ -153,6 +155,7 @@ fun BrowserScreen(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
 
     // Fullscreen video state (WebChromeClient custom view)
     var customView by remember { mutableStateOf<View?>(null) }
@@ -485,7 +488,9 @@ fun BrowserScreen(
                                 keyboardActions = KeyboardActions(
                                     onGo = {
                                         navigateToUrl(urlInput)
-                                        // Clearing focus closes the keyboard so it stops covering the page and the download button.
+                                        // Clearing focus alone left the keyboard open (seen in the emulator walkthrough),
+                                        // covering the page and the download button, so hide it explicitly too.
+                                        keyboardController?.hide()
                                         focusManager.clearFocus()
                                     }
                                 ),
