@@ -144,6 +144,16 @@ object ManifestHelper {
         }
     }
 
+    /**
+     * The one-tap choice: the best video (the list is best-first) plus the first audio track.
+     * Every language is not worth the extra data when nobody picked one.
+     */
+    internal fun bestSelection(tracks: List<StreamTrack>): List<StreamTrack> =
+        listOfNotNull(
+            tracks.firstOrNull { it.rendererType == C.TRACK_TYPE_VIDEO },
+            tracks.firstOrNull { it.rendererType != C.TRACK_TYPE_VIDEO && it.selected },
+        )
+
     /** Video first, best quality on top; audio after, in manifest order. */
     internal fun orderedForPicker(tracks: List<StreamTrack>): List<StreamTrack> {
         val (video, audio) = tracks.partition { it.rendererType == C.TRACK_TYPE_VIDEO }

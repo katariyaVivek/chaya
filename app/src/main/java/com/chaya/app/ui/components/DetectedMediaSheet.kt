@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Stream
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -68,6 +69,8 @@ fun DetectedMediaSheet(
     model: MediaSheetModel,
     onDismiss: () -> Unit,
     onDownload: (RankedMedia) -> Unit,
+    /** Opens the quality picker; offered for streams, whose Download starts at the best quality. */
+    onChooseQuality: (RankedMedia) -> Unit = {},
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var adsExpanded by rememberSaveable { mutableStateOf(false) }
@@ -90,7 +93,7 @@ fun DetectedMediaSheet(
 
             model.primary?.let { primary ->
                 item(key = "primary") {
-                    PrimaryMediaCard(item = primary, onDownload = onDownload)
+                    PrimaryMediaCard(item = primary, onDownload = onDownload, onChooseQuality = onChooseQuality)
                 }
             }
 
@@ -168,7 +171,11 @@ private fun SheetHeader(count: Int) {
  * card stays compact rather than framing an empty box.
  */
 @Composable
-private fun PrimaryMediaCard(item: RankedMedia, onDownload: (RankedMedia) -> Unit) {
+private fun PrimaryMediaCard(
+    item: RankedMedia,
+    onDownload: (RankedMedia) -> Unit,
+    onChooseQuality: (RankedMedia) -> Unit,
+) {
     var thumbnailFailed by remember(item.thumbnailUrl) { mutableStateOf(false) }
     val showStage = item.thumbnailUrl != null && !thumbnailFailed
 
@@ -220,21 +227,35 @@ private fun PrimaryMediaCard(item: RankedMedia, onDownload: (RankedMedia) -> Uni
                     }
                 }
                 Spacer(Modifier.height(16.dp))
-                Button(
-                    onClick = { onDownload(item) },
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp)
-                        .pressScale(0.98f),
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.FileDownload,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp),
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text("Download", style = MaterialTheme.typography.labelLarge)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = { onDownload(item) },
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp)
+                            .pressScale(0.98f),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FileDownload,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("Download", style = MaterialTheme.typography.labelLarge)
+                    }
+                    // A stream's Download starts at the best quality; this is how to pick another.
+                    if (item.kind == MediaKind.STREAM) {
+                        FilledTonalButton(
+                            onClick = { onChooseQuality(item) },
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier
+                                .height(48.dp)
+                                .pressScale(0.98f),
+                        ) {
+                            Text("Quality", style = MaterialTheme.typography.labelLarge)
+                        }
+                    }
                 }
             }
         }

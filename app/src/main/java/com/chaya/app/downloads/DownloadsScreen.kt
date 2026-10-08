@@ -248,14 +248,11 @@ private fun EmptyDownloads(
     hasAnyDownloads: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val (title, body) = if (!hasAnyDownloads) {
-        "Nothing saved yet" to "Open a page with a video and tap the download button."
-    } else {
-        "Nothing here" to when (filter) {
-            DownloadFilter.ACTIVE -> "Nothing is running or waiting. Switch to All to see everything."
-            DownloadFilter.DONE -> "Nothing has finished yet. Switch to All to see everything."
-            DownloadFilter.ALL -> ""
-        }
+    val (title, body) = when {
+        !hasAnyDownloads -> "Nothing saved yet" to "Open a page with a video and tap the download pill."
+        filter == DownloadFilter.ACTIVE -> "All caught up" to "Nothing is running, waiting or needs attention."
+        filter == DownloadFilter.DONE -> "Nothing finished yet" to "Finished downloads show up here."
+        else -> "Nothing saved yet" to "Open a page with a video and tap the download pill."
     }
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         StaggeredAppear(index = 0) {

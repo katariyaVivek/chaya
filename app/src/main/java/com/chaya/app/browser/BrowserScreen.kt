@@ -3,6 +3,7 @@ package com.chaya.app.browser
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.content.ClipboardManager
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.os.Build
@@ -16,65 +17,39 @@ import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.Audiotrack
-import androidx.compose.material.icons.filled.Bolt
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudDownload
-import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Movie
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Stream
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
@@ -91,17 +66,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
@@ -113,13 +81,14 @@ import com.chaya.app.detection.MediaBridge
 import com.chaya.app.detection.MediaInterceptor
 import com.chaya.app.detection.MediaNamer
 import com.chaya.app.detection.MediaRanker
+import com.chaya.app.detection.RankedMedia
+import com.chaya.app.download.DownloadState
 import com.chaya.app.model.DetectedMedia
 import com.chaya.app.model.MediaKind
 import com.chaya.app.ui.components.DetectedMediaSheet
 import com.chaya.app.ui.components.NotificationRationaleSheet
 import com.chaya.app.ui.components.QualitySelectorSheet
 import com.chaya.app.ui.theme.ChayaMotion
-import com.chaya.app.ui.theme.StaggeredAppear
 import com.chaya.app.ui.theme.pressScale
 import kotlinx.coroutines.launch
 import java.net.URLEncoder
@@ -142,7 +111,7 @@ private object WebViewHolder {
     var callbacks: RetainedWebViewCallbacks? = null
 }
 
-@OptIn(ExperimentalLayoutApi::class, ExperimentalComposeUiApi::class)
+@OptIn(ExperimentalLayoutApi::class)
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun BrowserScreen(
@@ -154,8 +123,6 @@ fun BrowserScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    val focusManager = LocalFocusManager.current
-    val keyboardController = LocalSoftwareKeyboardController.current
 
     // Fullscreen video state (WebChromeClient custom view)
     var customView by remember { mutableStateOf<View?>(null) }
@@ -420,100 +387,63 @@ fun BrowserScreen(
         }
     }
 
-    // URL field focus animation: soft fill shift on focus.
-    val urlInteraction = remember { MutableInteractionSource() }
-    val urlFocused by urlInteraction.collectIsFocusedAsState()
-    val fieldFill by animateColorAsState(
-        targetValue = if (urlFocused) MaterialTheme.colorScheme.surfaceContainerHighest
-        else MaterialTheme.colorScheme.surfaceContainerHigh,
-        animationSpec = ChayaMotion.tweenShort(),
-        label = "fieldFill"
-    )
+    val downloads by viewModel.downloads.collectAsState()
+    val activeDownloads = remember(downloads) {
+        downloads.count { it.state == DownloadState.DOWNLOADING || it.state == DownloadState.QUEUED }
+    }
+    val recentDownloads = remember(downloads) {
+        downloads.filter { it.state == DownloadState.COMPLETED }.sortedByDescending { it.updatedAt }.take(3)
+    }
+
+    /** Fills the address bar from the clipboard; a link opens straight away. The clipboard is read only when Paste is tapped. */
+    fun pasteFromClipboard() {
+        val clipboard = context.getSystemService(ClipboardManager::class.java)
+        val text = clipboard?.primaryClip
+            ?.takeIf { it.itemCount > 0 }
+            ?.getItemAt(0)
+            ?.coerceToText(context)
+            ?.toString()
+            ?.trim()
+            .orEmpty()
+        when {
+            text.isEmpty() -> scope.launch {
+                snackbarHostState.showSnackbar("Your clipboard is empty", duration = SnackbarDuration.Short)
+            }
+            text.startsWith("http://") || text.startsWith("https://") -> navigateToUrl(text)
+            else -> urlInput = text
+        }
+    }
+
+    /** Replaces any message still showing, so quick successive actions never queue up stale snackbars. */
+    fun showMessage(text: String) {
+        scope.launch {
+            snackbarHostState.currentSnackbarData?.dismiss()
+            snackbarHostState.showSnackbar(message = text, duration = SnackbarDuration.Short)
+        }
+    }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
             topBar = {
                 Surface(color = MaterialTheme.colorScheme.surface) {
                     Column(modifier = Modifier.fillMaxWidth().statusBarsPadding()) {
-                        Row(
+                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                                .padding(horizontal = 12.dp, vertical = 8.dp)
                         ) {
-                            OutlinedTextField(
-                                value = urlInput,
-                                onValueChange = { urlInput = it },
-                                modifier = Modifier.weight(1f),
-                                interactionSource = urlInteraction,
-                                placeholder = {
-                                    Text(
-                                        text = "Search or enter address",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                },
-                                singleLine = true,
-                                shape = RoundedCornerShape(24.dp),
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.Search,
-                                        contentDescription = null,
-                                        tint = if (urlFocused)
-                                            MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                },
-                                trailingIcon = {
-                                    AnimatedVisibility(
-                                        visible = urlInput.isNotEmpty(),
-                                        enter = scaleIn(initialScale = 0.7f) + fadeIn(ChayaMotion.tweenShort()),
-                                        exit = scaleOut(targetScale = 0.7f) + fadeOut(ChayaMotion.tweenShort())
-                                    ) {
-                                        IconButton(onClick = { urlInput = "" }) {
-                                            Icon(
-                                                imageVector = Icons.Default.Close,
-                                                contentDescription = "Clear",
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                        }
-                                    }
-                                },
-                                keyboardOptions = KeyboardOptions(
-                                    keyboardType = KeyboardType.Uri,
-                                    imeAction = ImeAction.Go
-                                ),
-                                keyboardActions = KeyboardActions(
-                                    onGo = {
-                                        navigateToUrl(urlInput)
-                                        // Clearing focus alone left the keyboard open (seen in the emulator walkthrough),
-                                        // covering the page and the download button, so hide it explicitly too.
-                                        keyboardController?.hide()
-                                        focusManager.clearFocus()
-                                    }
-                                ),
-                                textStyle = MaterialTheme.typography.bodyMedium.copy(
-                                    fontWeight = FontWeight.Medium
-                                ),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedContainerColor = fieldFill,
-                                    unfocusedContainerColor = fieldFill,
-                                    focusedBorderColor = Color.Transparent,
-                                    unfocusedBorderColor = Color.Transparent
-                                )
+                            AddressBar(
+                                url = uiState.url,
+                                homeVisible = uiState.homeVisible,
+                                input = urlInput,
+                                onInputChange = { urlInput = it },
+                                onGo = { navigateToUrl(urlInput) },
+                                onPaste = { pasteFromClipboard() },
+                                onReload = {
+                                    invalidateDetectionSession()
+                                    WebViewHolder.instance?.reload()
+                                }
                             )
-
-                            Spacer(modifier = Modifier.width(4.dp))
-
-                            IconButton(onClick = onNavigateToDownloads) {
-                                Icon(
-                                    imageVector = Icons.Default.CloudDownload,
-                                    contentDescription = "Downloads",
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                            }
                         }
 
                         AnimatedVisibility(
@@ -575,17 +505,12 @@ fun BrowserScreen(
                             }
 
                             NavAction(
-                                icon = Icons.Default.Refresh,
-                                label = "Refresh",
-                                enabled = true
-                            ) {
-                                if (uiState.homeVisible) {
-                                    navigateToUrl("https://www.google.com")
-                                } else {
-                                    invalidateDetectionSession()
-                                    WebViewHolder.instance?.reload()
-                                }
-                            }
+                                icon = Icons.Default.CloudDownload,
+                                label = "Downloads",
+                                enabled = true,
+                                badge = activeDownloads,
+                                onClick = onNavigateToDownloads
+                            )
                         }
                     }
                 }
@@ -612,11 +537,13 @@ fun BrowserScreen(
                     onRelease = { /* keep instance alive for reattachment */ }
                 )
 
-                StartScreenOverlay(
+                HomeContent(
                     visible = uiState.homeVisible,
                     showOnboardingHint = showOnboardingHint,
                     onDismissOnboardingHint = { dismissOnboardingHint() },
-                    onSelectUrl = { target -> navigateToUrl(target) }
+                    recent = recentDownloads,
+                    onSelectUrl = { target -> navigateToUrl(target) },
+                    onOpenDownloads = onNavigateToDownloads
                 )
 
                 // Opt-in inspection stays separate from ordinary detection to avoid background HEAD traffic.
@@ -647,59 +574,18 @@ fun BrowserScreen(
                     )
                 }
 
-                // Floating detected-media button — spring entrance + live badge
+                // Floating download pill: the page's main video, one tap from its download options
                 AnimatedVisibility(
                     visible = !uiState.homeVisible && !sheetModel.isEmpty,
                     modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(end = 20.dp, bottom = 20.dp),
-                    enter = scaleIn(initialScale = 0.6f, animationSpec = ChayaMotion.springSmooth()) +
+                        .align(Alignment.BottomCenter)
+                        .padding(horizontal = 12.dp, vertical = 12.dp),
+                    enter = slideInVertically(ChayaMotion.tweenStandard()) { it } +
                             fadeIn(ChayaMotion.tweenShort()),
-                    exit = scaleOut(targetScale = 0.6f, animationSpec = ChayaMotion.tweenShort()) +
+                    exit = slideOutVertically(ChayaMotion.tweenShort()) { it } +
                             fadeOut(ChayaMotion.tweenShort())
                 ) {
-                    FloatingActionButton(
-                        onClick = { viewModel.toggleMediaSheet() },
-                        shape = CircleShape,
-                        containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                        elevation = androidx.compose.material3.FloatingActionButtonDefaults.elevation(
-                            defaultElevation = 2.dp,
-                            pressedElevation = 1.dp
-                        ),
-                        modifier = Modifier.pressScale(0.94f)
-                    ) {
-                        // BadgedBox offsets the count outside the glyph so it never covers the icon.
-                        BadgedBox(
-                            badge = {
-                                if (sheetModel.visibleCount > 0) {
-                                    Badge(
-                                        containerColor = MaterialTheme.colorScheme.primary,
-                                        contentColor = MaterialTheme.colorScheme.onPrimary,
-                                    ) {
-                                        AnimatedContent(
-                                            targetState = sheetModel.visibleCount,
-                                            transitionSpec = {
-                                                (slideInVertically(ChayaMotion.tweenShort()) { it } +
-                                                        fadeIn(ChayaMotion.tweenShort())) togetherWith
-                                                        (slideOutVertically(ChayaMotion.tweenShort()) { -it } +
-                                                        fadeOut(ChayaMotion.tweenShort()))
-                                            },
-                                            label = "badgeCount"
-                                        ) { count ->
-                                            Text("$count", style = MaterialTheme.typography.labelMedium)
-                                        }
-                                    }
-                                }
-                            }
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.FileDownload,
-                                contentDescription = "Detected media",
-                                modifier = Modifier.size(26.dp)
-                            )
-                        }
-                    }
+                    MediaPill(model = sheetModel, onClick = { viewModel.toggleMediaSheet() })
                 }
 
                 // Media detection bottom sheet
@@ -710,25 +596,18 @@ fun BrowserScreen(
                         onDownload = { item ->
                             viewModel.dismissMediaSheet()
                             if (item.kind == MediaKind.STREAM) {
-                                // The quality picker adds the chosen rendition's height to the name.
-                                viewModel.analyzeStream(
-                                    item.media.copy(
-                                        suggestedName = MediaNamer.fileBaseName(item.title, null),
-                                        title = item.title,
-                                        thumbnailUrl = item.thumbnailUrl,
-                                    ),
-                                    item.durationSeconds,
-                                )
+                                // One tap: best quality, no picker. The Quality button is for choosing.
+                                showMessage("Preparing ${item.title.take(40)}…")
+                                viewModel.downloadStreamBest(streamMediaFor(item)) { quality ->
+                                    showMessage("Downloading ${item.title.take(40)}" + (quality?.let { " ($it)" } ?: ""))
+                                }
                             } else {
-                                requestPermissionAndDownload(
-                                    item.media.copy(
-                                        suggestedName = item.fileBaseName,
-                                        title = item.title,
-                                        thumbnailUrl = item.thumbnailUrl,
-                                        qualityHeight = item.videoHeight,
-                                    )
-                                )
+                                requestPermissionAndDownload(fileMediaFor(item))
                             }
+                        },
+                        onChooseQuality = { item ->
+                            viewModel.dismissMediaSheet()
+                            viewModel.analyzeStream(streamMediaFor(item), item.durationSeconds)
                         }
                     )
                 }
@@ -775,257 +654,31 @@ fun BrowserScreen(
     }
 }
 
-/** Bottom-bar action with consistent disabled styling and press feedback. */
+/** Bottom-bar action with consistent disabled styling, press feedback and an optional count badge. */
 @Composable
 private fun NavAction(
     icon: ImageVector,
     label: String,
     enabled: Boolean,
+    badge: Int = 0,
     onClick: () -> Unit
 ) {
     IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.pressScale(0.88f)) {
-        Icon(
-            imageVector = icon,
-            contentDescription = label,
-            tint = if (enabled) MaterialTheme.colorScheme.onSurfaceVariant
-            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
-        )
-    }
-}
-
-// --------------------------------------------------------------------- //
-// Start screen
-// --------------------------------------------------------------------- //
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun StartScreenOverlay(
-    visible: Boolean,
-    showOnboardingHint: Boolean = false,
-    onDismissOnboardingHint: () -> Unit = {},
-    onSelectUrl: (String) -> Unit
-) {
-    AnimatedVisibility(
-        visible = visible,
-        enter = fadeIn(ChayaMotion.tweenStandard()),
-        exit = fadeOut(ChayaMotion.tweenShort())
-    ) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 28.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Spacer(Modifier.height(96.dp))
-
-                StaggeredAppear(index = 0) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Box(
-                            modifier = Modifier
-                                .size(64.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primaryContainer),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Bolt,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.size(32.dp)
-                            )
-                        }
-                        Spacer(Modifier.height(16.dp))
-                        Text(
-                            text = "Chaya",
-                            style = MaterialTheme.typography.headlineMedium,
-                            color = MaterialTheme.colorScheme.onBackground
-                        )
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            text = "Find direct video, audio & HLS/DASH streams.",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                Spacer(Modifier.height(48.dp))
-
-                StaggeredAppear(index = 1) {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        Text(
-                            text = "QUICK LINKS",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(bottom = 12.dp, start = 4.dp)
-                        )
-                        FlowRow(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            QuickChip(
-                                icon = Icons.Default.Movie,
-                                label = "Big Buck Bunny",
-                                url = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
-                                onClick = onSelectUrl
-                            )
-                            QuickChip(
-                                icon = Icons.Default.Stream,
-                                label = "HLS test stream",
-                                url = "https://test-streams.mux.dev",
-                                onClick = onSelectUrl
-                            )
-                            QuickChip(
-                                icon = Icons.Default.Movie,
-                                label = "Sample videos",
-                                url = "https://www.sample-videos.com",
-                                onClick = onSelectUrl
-                            )
-                            QuickChip(
-                                icon = Icons.Default.Audiotrack,
-                                label = "Sample audio",
-                                url = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
-                                onClick = onSelectUrl
-                            )
-                        }
-                    }
-                }
-
-                Spacer(Modifier.height(44.dp))
-
-                StaggeredAppear(index = 2) {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        Text(
-                            text = "HOW IT WORKS",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(bottom = 14.dp, start = 4.dp)
-                        )
-                        HowItWorksStep(
-                            index = 1,
-                            text = "Open any site or paste a link above."
-                        )
-                        HowItWorksStep(
-                            index = 2,
-                            text = "Browse and play like normal; media is detected automatically."
-                        )
-                        HowItWorksStep(
-                            index = 3,
-                            text = "Tap the floating button to review formats and download."
-                        )
-                    }
-                }
-
-                // First-run hint (Phase 4.5): one line pointing at the FAB,
-                // part of the home screen itself — no overlay, no carousel.
-                if (showOnboardingHint) {
-                    Spacer(Modifier.height(24.dp))
-                    StaggeredAppear(index = 3) {
-                        OnboardingHint(onDismiss = onDismissOnboardingHint)
-                    }
+        BadgedBox(
+            badge = {
+                if (badge > 0) {
+                    Badge(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    ) { Text("$badge") }
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun HowItWorksStep(index: Int, text: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp),
-        verticalAlignment = Alignment.Top
-    ) {
-        Box(
-            modifier = Modifier
-                .size(22.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.secondaryContainer),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = "$index",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSecondaryContainer
-            )
-        }
-        Spacer(Modifier.width(12.dp))
-        Text(
-            text = text,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            lineHeight = MaterialTheme.typography.bodyLarge.lineHeight,
-            modifier = Modifier.padding(top = 2.dp)
-        )
-    }
-}
-
-/** One-line first-run pointer at the floating media button (Phase 4.5). */
-@Composable
-private fun OnboardingHint(onDismiss: () -> Unit) {
-    Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.primaryContainer,
-        modifier = Modifier.fillMaxWidth().pressScale(0.99f).clickable { onDismiss() }
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Default.FileDownload,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                modifier = Modifier.size(22.dp)
-            )
-            Spacer(Modifier.width(12.dp))
-            Text(
-                text = "Play any video — when media appears, the button pops up here. Tap to dismiss.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                modifier = Modifier.weight(1f)
-            )
-        }
-    }
-}
-
-@Composable
-private fun QuickChip(
-    icon: ImageVector,
-    label: String,
-    url: String,
-    onClick: (String) -> Unit
-) {
-    Surface(
-        shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        modifier = Modifier
-            .pressScale()
-            .clip(RoundedCornerShape(14.dp))
-            .clickable { onClick(url) }
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 11.dp),
-            verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 imageVector = icon,
-                contentDescription = null,
-                modifier = Modifier.size(17.dp),
-                tint = MaterialTheme.colorScheme.primary
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurface
+                contentDescription = label,
+                tint = if (enabled) MaterialTheme.colorScheme.onSurfaceVariant
+                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
             )
         }
     }
@@ -1207,6 +860,21 @@ private fun createChayaWebView(
         }
     }
 }
+
+/** The media a stream download starts from; the chosen rendition later adds its height to the name. */
+private fun streamMediaFor(item: RankedMedia): DetectedMedia = item.media.copy(
+    suggestedName = MediaNamer.fileBaseName(item.title, null),
+    title = item.title,
+    thumbnailUrl = item.thumbnailUrl,
+)
+
+/** The media a plain file download starts from. */
+private fun fileMediaFor(item: RankedMedia): DetectedMedia = item.media.copy(
+    suggestedName = item.fileBaseName,
+    title = item.title,
+    thumbnailUrl = item.thumbnailUrl,
+    qualityHeight = item.videoHeight,
+)
 
 /** Short label for snackbars and the notification rationale: the chosen title, else the URL's file name. */
 private fun downloadLabel(media: DetectedMedia): String =
