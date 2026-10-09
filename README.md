@@ -91,7 +91,7 @@ app/src/main/assets/detection/      the injected page scanner
 |---|---|
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | How the app works, and where its tests live |
 | [`docs/BUILD_AND_TEST.md`](docs/BUILD_AND_TEST.md) | Toolchain, commands, CI, releases, a manual check |
-| [`docs/ROADMAP.md`](docs/ROADMAP.md) | What is in review and what is next |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | What is merged, released and next |
 | [`PRODUCT.md`](PRODUCT.md) · [`DESIGN.md`](DESIGN.md) | Product register and design system |
 | [`LIMITATIONS.md`](LIMITATIONS.md) · [`PRIVACY_POLICY.md`](PRIVACY_POLICY.md) | Scope and privacy |
 | [`CLAUDE.md`](CLAUDE.md) | Guide for coding agents |

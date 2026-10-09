@@ -18,6 +18,7 @@ import com.chaya.app.model.DetectedMedia
 import com.chaya.app.platform.LinkState
 import com.chaya.app.platform.PlatformChoice
 import com.chaya.app.platform.PlatformEngine
+import com.chaya.app.platform.PlatformFormat
 import com.chaya.app.platform.PlatformLinks
 import com.chaya.app.platform.WebViewSignIn
 import com.chaya.app.platform.toDownloadRequest
@@ -32,6 +33,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
@@ -599,10 +601,11 @@ class BrowserViewModel @JvmOverloads constructor(
     /**
      * Saves the video behind the current link at [choice]'s quality, and closes the sheet. A plain file, or a
      * picture and sound to join, goes to the engine's downloader; a streaming manifest goes through the stream
-     * downloader, as one found in a page does. [onStarted] gets the quality, for a message.
+     * downloader, as one found in a page does. [onStarted] gets the quality, for a message. An answer whose
+     * addresses may have expired is looked up again first, and the sheet stays open to show the new one.
      */
     fun downloadLink(choice: PlatformChoice, onStarted: (String) -> Unit = {}) {
-        val found = links.state.value as? LinkState.Found ?: return
+        val found = links.freshFound() ?: return
         _uiState.update { it.copy(showLinkSheet = false) }
         if (choice.file.isDirectFile) {
             downloadManager.startDownload(choice.toDownloadRequest(found.media, pageUrl = found.match.url))
@@ -625,10 +628,16 @@ class BrowserViewModel @JvmOverloads constructor(
 internal fun streamMediaFor(found: LinkState.Found, choice: PlatformChoice): DetectedMedia = DetectedMedia(
     url = choice.file.url,
     pageUrl = found.match.url,
-    mimeType = if (".mpd" in choice.file.url.lowercase()) "application/dash+xml" else "application/x-mpegURL",
+    mimeType = if (isDash(choice.file)) "application/dash+xml" else "application/x-mpegURL",
     source = DetectionSource.MANIFEST,
     suggestedName = MediaNamer.fileBaseName(found.media.title, choice.quality),
     title = found.media.title,
     thumbnailUrl = found.media.thumbnailUrl,
     qualityHeight = choice.quality,
 )
+
+/** The engine names a DASH stream in its protocol; an address can say `.mpd` too, but need not. */
+private fun isDash(format: PlatformFormat): Boolean {
+    val protocol = format.protocol?.lowercase(Locale.ROOT).orEmpty()
+    return "dash" in protocol || ("m3u" !in protocol && ".mpd" in format.url.lowercase(Locale.ROOT))
+}

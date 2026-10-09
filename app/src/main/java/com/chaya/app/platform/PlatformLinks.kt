@@ -98,8 +98,10 @@ class PlatformLinks(
             clear()
             return false
         }
-        val current = _state.value.match
-        if (!force && current != null && current.platform == match.platform && current.id == match.id) return true
+        val state = _state.value
+        val current = state.match
+        val sameVideo = current != null && current.platform == match.platform && current.id == match.id
+        if (!force && sameVideo && !(state is LinkState.Found && isStale(state))) return true
 
         val mine = ticket.incrementAndGet()
         running?.cancel()
@@ -115,6 +117,17 @@ class PlatformLinks(
             if (ticket.get() == mine) _state.value = answer
         }
         return true
+    }
+
+    /**
+     * The current answer while its addresses can still be used. An answer older than the engine's addresses
+     * last is looked up again instead, and null is returned until the new one arrives.
+     */
+    fun freshFound(): LinkState.Found? {
+        val found = _state.value as? LinkState.Found ?: return null
+        if (!isStale(found)) return found
+        look(found.match.url, force = true)
+        return null
     }
 
     /** Asks again about the current link, for a failure the person chooses to retry. */
@@ -169,6 +182,11 @@ class PlatformLinks(
             remembered[keyOf(found.match)] = Remembered(found, clock())
             while (remembered.size > REMEMBERED_LIMIT) remembered.remove(remembered.keys.first())
         }
+    }
+
+    private fun isStale(found: LinkState.Found): Boolean = synchronized(remembered) {
+        val entry = remembered[keyOf(found.match)]
+        entry == null || clock() - entry.at > REMEMBERED_FOR_MILLIS
     }
 
     private fun recall(match: PlatformMatch): LinkState.Found? = synchronized(remembered) {

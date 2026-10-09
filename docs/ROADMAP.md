@@ -9,19 +9,18 @@ planning documents live in [`history/`](history/README.md).
 with pause/resume/retry, classified errors, on-device diagnostics, signed APK on GitHub Releases.
 The PR-by-PR record is [`history/engineering-roadmap-v0.3.md`](history/engineering-roadmap-v0.3.md).
 
-## In review: the v0.4 stack
+## Merged, not yet released: v0.4
 
-Each PR builds on the one before; merge them in order. When a lower PR changes, merge its branch into
-the next one up (no rebasing).
+Merged into `main` on 9 October 2026, in stack order. Tag `v0.4.0` to release it.
 
-| PR | Branch | What it adds |
-|---|---|---|
-| [#17](https://github.com/katariyaVivek/chaya/pull/17) | `smart-media-list` | Main video first with real names, ads folded away, stream pieces hidden, one quality-picker entry per rendition; the `ui-check` emulator walkthrough; fixes that let stream downloads start at all |
-| [#18](https://github.com/katariyaVivek/chaya/pull/18) | `premium-ui` | Redesigned Downloads screen, address bar, start screen, download pill, one-tap download |
-| [#19](https://github.com/katariyaVivek/chaya/pull/19) | `platform-engine` | yt-dlp inside the app (Chaquopy, QuickJS solver) and the format selector. Also the toolchain moves: Kotlin 2.4, AGP 8.13, Gradle 8.14, compileSdk 36 |
-| [#20](https://github.com/katariyaVivek/chaya/pull/20) | `platform-download` | Picture plus sound saved as one MP4 (`MediaMuxer`), engine-supplied headers, Room v5 |
-| [#21](https://github.com/katariyaVivek/chaya/pull/21) | `device-tests` | On-device tests for the engine, the solver and the join |
-| [#22](https://github.com/katariyaVivek/chaya/pull/22) | `platform-ui` | Paste or share a YouTube, Instagram, TikTok or X link and pick a quality; optional use of the browser's sign-in |
+| PR | What it adds |
+|---|---|
+| [#17](https://github.com/katariyaVivek/chaya/pull/17) | Main video first with real names, ads folded away, stream pieces hidden, one quality-picker entry per rendition; the `ui-check` emulator walkthrough; fixes that let stream downloads start at all |
+| [#18](https://github.com/katariyaVivek/chaya/pull/18) | Redesigned Downloads screen, address bar, start screen, download pill, one-tap download |
+| [#19](https://github.com/katariyaVivek/chaya/pull/19) | yt-dlp inside the app (Chaquopy, QuickJS solver) and the format selector. Also the toolchain moves: Kotlin 2.4, AGP 8.13, Gradle 8.14, compileSdk 36 |
+| [#20](https://github.com/katariyaVivek/chaya/pull/20) | Picture plus sound saved as one MP4 (`MediaMuxer`), engine-supplied headers, Room v5 |
+| [#21](https://github.com/katariyaVivek/chaya/pull/21) | On-device tests for the engine, the solver and the join |
+| [#22](https://github.com/katariyaVivek/chaya/pull/22) | Paste or share a YouTube, Instagram, TikTok or X link and pick a quality; optional use of the browser's sign-in |
 
 ## Next
 

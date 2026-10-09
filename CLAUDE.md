@@ -15,7 +15,7 @@ looked up by yt-dlp running inside the app. It is a working app with releases, n
 |---|---|
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | How the app is put together, package by package, and where each kind of test lives |
 | [`docs/BUILD_AND_TEST.md`](docs/BUILD_AND_TEST.md) | Toolchain, commands, CI workflows, releases |
-| [`docs/ROADMAP.md`](docs/ROADMAP.md) | What is in review, what is next |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | What is released, merged, and next |
 | [`DESIGN.md`](DESIGN.md), [`PRODUCT.md`](PRODUCT.md) | Design tokens and product register; UI work must follow them |
 | [`LIMITATIONS.md`](LIMITATIONS.md), [`PRIVACY_POLICY.md`](PRIVACY_POLICY.md) | Scope and privacy promises; a change that affects either must update it |
 
@@ -43,9 +43,9 @@ platform 36, Gradle 8.14.3 and Python 3.13 (Chaquopy). Versions are in `gradle/l
 - **Privacy boundaries are features.** Keep: the per-navigation bridge capability, redirect-free
   same-origin content-type checks only after the person opts in, URLs scrubbed before logging,
   nothing uploaded, sign-in cookies used only when the person chooses and deleted afterwards.
-- **Stacked PRs.** Open work is a stack (see the roadmap). To update a PR, merge its base branch
-  into it; do not rebase or force-push shared branches. A fix that belongs low in the stack goes
-  into the lowest PR that needs it and is then merged upward, one branch at a time.
+- **Stacked PRs.** Larger work goes up as a stack, merged in order. To update a PR, merge its base
+  branch into it; do not rebase or force-push shared branches. A fix that belongs low in the stack
+  goes into the lowest PR that needs it and is then merged upward, one branch at a time.
 - **Commit messages** say what changed for the person using the app and why, in plain sentences,
   and name what verified it.
 
