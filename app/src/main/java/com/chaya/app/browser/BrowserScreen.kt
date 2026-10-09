@@ -77,6 +77,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.chaya.app.SharedLinks
 import com.chaya.app.detection.MediaBridge
 import com.chaya.app.detection.MediaInterceptor
 import com.chaya.app.detection.MediaNamer
@@ -85,8 +86,11 @@ import com.chaya.app.detection.RankedMedia
 import com.chaya.app.download.DownloadState
 import com.chaya.app.model.DetectedMedia
 import com.chaya.app.model.MediaKind
+import com.chaya.app.platform.LinkState
+import com.chaya.app.platform.PlatformChoice
 import com.chaya.app.ui.components.DetectedMediaSheet
 import com.chaya.app.ui.components.NotificationRationaleSheet
+import com.chaya.app.ui.components.PlatformSheet
 import com.chaya.app.ui.components.QualitySelectorSheet
 import com.chaya.app.ui.theme.ChayaMotion
 import com.chaya.app.ui.theme.pressScale
@@ -119,6 +123,7 @@ fun BrowserScreen(
     viewModel: BrowserViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val linkState by viewModel.linkState.collectAsState()
     var urlInput by remember { mutableStateOf("") }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -179,6 +184,9 @@ fun BrowserScreen(
     // is not obviously notification-related, so explain first. "Not now"
     // still downloads — matches the silent fallback below.
     var rationaleMedia by remember { mutableStateOf<DetectedMedia?>(null) }
+    // The same two steps for a quality chosen in a link's sheet.
+    var pendingChoice by remember { mutableStateOf<PlatformChoice?>(null) }
+    var rationaleChoice by remember { mutableStateOf<PlatformChoice?>(null) }
 
     // First-run hint (Phase 4.5): shown once, persisted in SharedPreferences.
     // Plain SharedPreferences — one boolean, no DataStore dependency warranted.
@@ -208,6 +216,17 @@ fun BrowserScreen(
                     "Downloading (notifications off)"
                 }
                 snackbarHostState.showSnackbar(message = msg, duration = SnackbarDuration.Short)
+            }
+        }
+        pendingChoice?.let { choice ->
+            pendingChoice = null
+            viewModel.downloadLink(choice) { label ->
+                scope.launch {
+                    snackbarHostState.showSnackbar(
+                        message = if (granted) "Downloading $label" else "Downloading (notifications off)",
+                        duration = SnackbarDuration.Short
+                    )
+                }
             }
         }
     }
@@ -286,6 +305,7 @@ fun BrowserScreen(
         onNavigationStateChanged = viewModel::onNavigationStateChanged,
         onEnterFullscreen = ::enterFullscreen,
         onExitFullscreen = ::exitFullscreen,
+        onAddressChanged = viewModel::onPageAddressChanged,
     )
     val webViewCallbacks = remember {
         WebViewHolder.callbacks?.also {
@@ -370,7 +390,45 @@ fun BrowserScreen(
     }
 
     /** Fires after the rationale sheet: Allow shows the system dialog, Not now downloads silently. */
+    /** Starts a quality chosen in a link's sheet, asking about notifications first as a detected file does. */
+    fun requestPermissionAndDownloadLink(choice: PlatformChoice) {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(
+                context, Manifest.permission.POST_NOTIFICATIONS
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            rationaleChoice = choice
+        } else {
+            viewModel.downloadLink(choice) { label ->
+                scope.launch {
+                    snackbarHostState.showSnackbar(
+                        message = "Downloading $label",
+                        duration = SnackbarDuration.Short
+                    )
+                }
+            }
+        }
+    }
+
     fun proceedFromRationale(allow: Boolean) {
+        val choice = rationaleChoice
+        if (choice != null) {
+            rationaleChoice = null
+            if (allow) {
+                pendingChoice = choice
+                notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            } else {
+                viewModel.downloadLink(choice) {
+                    scope.launch {
+                        snackbarHostState.showSnackbar(
+                            message = "Downloading (notifications off)",
+                            duration = SnackbarDuration.Short
+                        )
+                    }
+                }
+            }
+            return
+        }
         val media = rationaleMedia ?: return
         rationaleMedia = null
         if (allow) {
@@ -409,6 +467,8 @@ fun BrowserScreen(
             text.isEmpty() -> scope.launch {
                 snackbarHostState.showSnackbar("Your clipboard is empty", duration = SnackbarDuration.Short)
             }
+            // A link to one video on YouTube, Instagram, TikTok or X opens its download sheet straight away.
+            viewModel.openLink(text) -> Unit
             text.startsWith("http://") || text.startsWith("https://") -> navigateToUrl(text)
             else -> urlInput = text
         }
@@ -419,6 +479,16 @@ fun BrowserScreen(
         scope.launch {
             snackbarHostState.currentSnackbarData?.dismiss()
             snackbarHostState.showSnackbar(message = text, duration = SnackbarDuration.Short)
+        }
+    }
+
+    // A link shared to Chaya from another app opens its sheet once the browser is on screen.
+    val sharedText by SharedLinks.pending.collectAsState()
+    LaunchedEffect(sharedText) {
+        val text = sharedText ?: return@LaunchedEffect
+        SharedLinks.consume(text)
+        if (!viewModel.openLink(text)) {
+            showMessage("Chaya can save videos from YouTube, Instagram, TikTok and X links.")
         }
     }
 
@@ -574,9 +644,12 @@ fun BrowserScreen(
                     )
                 }
 
-                // Floating download pill: the page's main video, one tap from its download options
+                // Floating download pill: the page's main video, one tap from its download options. On a page
+                // that is one video on YouTube, Instagram, TikTok or X it shows what the engine found instead.
+                val linkPillShown = !uiState.homeVisible &&
+                    (linkState is LinkState.Looking || linkState is LinkState.Found)
                 AnimatedVisibility(
-                    visible = !uiState.homeVisible && !sheetModel.isEmpty,
+                    visible = linkPillShown || (!uiState.homeVisible && !sheetModel.isEmpty),
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .padding(horizontal = 12.dp, vertical = 12.dp),
@@ -585,7 +658,22 @@ fun BrowserScreen(
                     exit = slideOutVertically(ChayaMotion.tweenShort()) { it } +
                             fadeOut(ChayaMotion.tweenShort())
                 ) {
-                    MediaPill(model = sheetModel, onClick = { viewModel.toggleMediaSheet() })
+                    if (linkPillShown) {
+                        PlatformPill(state = linkState, onClick = { viewModel.toggleLinkSheet() })
+                    } else {
+                        MediaPill(model = sheetModel, onClick = { viewModel.toggleMediaSheet() })
+                    }
+                }
+
+                // The video behind a link on a supported site: found, with the qualities it can be saved at.
+                if (uiState.showLinkSheet && linkState !is LinkState.Idle) {
+                    PlatformSheet(
+                        state = linkState,
+                        onDismiss = { viewModel.dismissLinkSheet() },
+                        onChoose = { choice -> requestPermissionAndDownloadLink(choice) },
+                        onRetry = { viewModel.retryLink() },
+                        onRetryWithSignIn = { viewModel.retryLink(useSignIn = true) },
+                    )
                 }
 
                 // Media detection bottom sheet
@@ -632,6 +720,14 @@ fun BrowserScreen(
                 rationaleMedia?.let { media ->
                     NotificationRationaleSheet(
                         fileName = downloadLabel(media),
+                        onAllow = { proceedFromRationale(true) },
+                        onNotNow = { proceedFromRationale(false) },
+                    )
+                }
+                rationaleChoice?.let { choice ->
+                    NotificationRationaleSheet(
+                        fileName = (linkState as? LinkState.Found)?.let { "${it.media.title} (${choice.label})" }
+                            ?: choice.label,
                         onAllow = { proceedFromRationale(true) },
                         onNotNow = { proceedFromRationale(false) },
                     )
@@ -811,6 +907,8 @@ private fun createChayaWebView(
                 view?.let {
                     callbacks.onNavigationStateChanged(it.canGoBack(), it.canGoForward())
                 }
+                // Also fires when a video site moves to another video without loading a new document.
+                url?.let { callbacks.onAddressChanged(it) }
                 super.doUpdateVisitedHistory(view, url, isReload)
             }
         }

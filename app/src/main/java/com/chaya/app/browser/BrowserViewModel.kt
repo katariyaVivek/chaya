@@ -15,6 +15,12 @@ import com.chaya.app.download.DownloadManager
 import com.chaya.app.download.DownloadTask
 import com.chaya.app.model.DetectionSource
 import com.chaya.app.model.DetectedMedia
+import com.chaya.app.platform.LinkState
+import com.chaya.app.platform.PlatformChoice
+import com.chaya.app.platform.PlatformEngine
+import com.chaya.app.platform.PlatformLinks
+import com.chaya.app.platform.WebViewSignIn
+import com.chaya.app.platform.toDownloadRequest
 import com.chaya.app.streaming.ManifestHelper
 import com.chaya.app.streaming.StreamTrack
 import com.chaya.app.ui.components.QualityPickerState
@@ -60,10 +66,25 @@ data class BrowserUiState(
     val showThoroughScan: Boolean = false,
     /** Delivers a one-shot request for BrowserScreen to invoke the injected detector. */
     val thoroughScanRequest: ThoroughScanRequest? = null,
-    val qualityPickerState: QualityPickerState? = null
+    val qualityPickerState: QualityPickerState? = null,
+    /** Shows the sheet for the video behind a link on a supported site. */
+    val showLinkSheet: Boolean = false,
 )
 
-class BrowserViewModel(application: Application) : AndroidViewModel(application) {
+class BrowserViewModel @JvmOverloads constructor(
+    application: Application,
+    links: PlatformLinks? = null,
+) : AndroidViewModel(application) {
+    /**
+     * Looks up the video behind a link on YouTube, Instagram, TikTok or X, for the pill on such a page and for
+     * a link that was pasted or shared.
+     */
+    private val links: PlatformLinks =
+        links ?: PlatformLinks(viewModelScope, PlatformEngine(application), WebViewSignIn(application))
+
+    /** What is known about the video behind the current or pasted link. */
+    val linkState: StateFlow<LinkState> get() = this.links.state
+
     private val downloadManager: DownloadManager
         get() = (getApplication<ChayaApplication>()).downloadManager
 
@@ -101,6 +122,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 showThoroughScan = false,
                 thoroughScanRequest = null,
                 qualityPickerState = null,
+                showLinkSheet = false,
             )
         }
     }
@@ -125,6 +147,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                     showThoroughScan = false,
                     thoroughScanRequest = null,
                     qualityPickerState = null,
+                    showLinkSheet = false,
                 )
             } else {
                 state.copy(
@@ -140,10 +163,20 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                     showThoroughScan = false,
                     thoroughScanRequest = null,
                     qualityPickerState = null,
+                    showLinkSheet = false,
                 )
             }
         }
+        links.look(url)
         return navigationGeneration
+    }
+
+    /**
+     * The page's address changed without a new document, as a video site does when it moves to another video.
+     * Only the link lookup follows this: the page state above is deliberately tied to whole documents.
+     */
+    fun onPageAddressChanged(url: String) {
+        links.look(url)
     }
 
     /** Finalizes only the matching document generation before scheduling its optional deeper media scan. */
@@ -194,6 +227,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     /** Clears page-local detection state when the browser returns to its home overlay. */
     fun goHome() {
         cancelMediaVerifications()
+        links.clear()
         val navigationGeneration = pageGeneration.incrementAndGet()
         _uiState.update { state ->
             state.copy(
@@ -210,6 +244,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                 showThoroughScan = false,
                 thoroughScanRequest = null,
                 qualityPickerState = null,
+                showLinkSheet = false,
             )
         }
     }
@@ -532,4 +567,68 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
     fun dismissMediaSheet() {
         _uiState.value = _uiState.value.copy(showMediaSheet = false)
     }
+
+    // ------------------------------------------------------------------ //
+    // Links to a video on YouTube, Instagram, TikTok or X
+    // ------------------------------------------------------------------ //
+
+    /**
+     * Opens a pasted or shared link: looks up its video and shows the sheet. [text] may be a whole sentence,
+     * as the YouTube app shares one. Returns false when it holds no link to one video on a supported site.
+     */
+    fun openLink(text: String): Boolean {
+        val url = LINK_IN_TEXT.find(text)?.value?.trimEnd('.', ',', ')', ']', '>', '"', '\'') ?: text.trim()
+        if (!links.look(url)) return false
+        _uiState.update { it.copy(showLinkSheet = true) }
+        return true
+    }
+
+    fun toggleLinkSheet() {
+        _uiState.update { it.copy(showLinkSheet = !it.showLinkSheet) }
+    }
+
+    fun dismissLinkSheet() {
+        _uiState.update { it.copy(showLinkSheet = false) }
+    }
+
+    /** Asks again about the current link; [useSignIn] retries with the account the browser is signed in to. */
+    fun retryLink(useSignIn: Boolean = false) {
+        links.retry(useSignIn)
+    }
+
+    /**
+     * Saves the video behind the current link at [choice]'s quality, and closes the sheet. A plain file, or a
+     * picture and sound to join, goes to the engine's downloader; a streaming manifest goes through the stream
+     * downloader, as one found in a page does. [onStarted] gets the quality, for a message.
+     */
+    fun downloadLink(choice: PlatformChoice, onStarted: (String) -> Unit = {}) {
+        val found = links.state.value as? LinkState.Found ?: return
+        _uiState.update { it.copy(showLinkSheet = false) }
+        if (choice.file.isDirectFile) {
+            downloadManager.startDownload(choice.toDownloadRequest(found.media, pageUrl = found.match.url))
+        } else {
+            downloadManager.startDownload(streamMediaFor(found, choice))
+        }
+        onStarted(choice.label)
+    }
+
+    private companion object {
+        /** The first address in a piece of text, such as the sentence a share button produces. */
+        val LINK_IN_TEXT = Regex("""https?://\S+""", RegexOption.IGNORE_CASE)
+    }
 }
+
+/**
+ * A streaming quality (an HLS or DASH manifest) in the form the stream downloader takes for a stream found in
+ * a page, named after the video and the quality.
+ */
+internal fun streamMediaFor(found: LinkState.Found, choice: PlatformChoice): DetectedMedia = DetectedMedia(
+    url = choice.file.url,
+    pageUrl = found.match.url,
+    mimeType = if (".mpd" in choice.file.url.lowercase()) "application/dash+xml" else "application/x-mpegURL",
+    source = DetectionSource.MANIFEST,
+    suggestedName = MediaNamer.fileBaseName(found.media.title, choice.quality),
+    title = found.media.title,
+    thumbnailUrl = found.media.thumbnailUrl,
+    qualityHeight = choice.quality,
+)

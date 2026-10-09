@@ -14,8 +14,10 @@ import java.io.File
  * Finds out what a link to YouTube, Instagram, TikTok or X holds, by running yt-dlp (a Python program)
  * inside the app. It only looks things up: the files themselves are fetched by chaya's own downloader.
  */
-class PlatformEngine(context: Context) {
+class PlatformEngine(context: Context) : LinkFinder {
     private val appContext = context.applicationContext
+
+    override suspend fun find(url: String, cookieFile: File?): PlatformMedia = extract(url, cookieFile)
 
     // One lookup at a time keeps memory and CPU bounded on a phone; Python would serialize them anyway.
     private val oneAtATime = Mutex()

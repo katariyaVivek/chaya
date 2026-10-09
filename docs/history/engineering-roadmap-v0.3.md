@@ -31,14 +31,14 @@ session.
      the actual `media3-exoplayer-1.5.1.aar` that
      `DownloadManager.setStopReason(String id, int reason)` is the real
      per-item primitive; `pauseStream`/`resumeStream` now use it.
-- **Environment**: building requires JDK 17, Android SDK platform 36 +
-  build-tools 35.0.0, and Gradle 8.14.3 (the wrapper jar is deliberately not
+- **Environment**: building requires JDK 17, Android SDK platform 35 +
+  build-tools 35.0.0, and Gradle 8.9 (the wrapper jar is deliberately not
   checked in — see `BUILD_AND_TEST.md` and `.gitignore`). CI
   (`.github/workflows/build.yml`) installs Gradle directly via
   `gradle/actions/setup-gradle@v4` rather than using `./gradlew`. Any new
   local environment must replicate this (install JDK 17, SDK cmdline-tools,
-  accept licenses for `platforms;android-36` and `build-tools;35.0.0`,
-  either generate the wrapper with `gradle wrapper --gradle-version 8.14.3` or
+  accept licenses for `platforms;android-35` and `build-tools;35.0.0`,
+  either generate the wrapper with `gradle wrapper --gradle-version 8.9` or
   invoke `gradle` directly).
 
 Every phase below assumes this baseline. Work through phases in order where

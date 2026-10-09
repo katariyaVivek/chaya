@@ -10,7 +10,7 @@ Mobile-first Android users who browse sites with embedded or direct media and wa
 
 ## Product Purpose
 
-Chaya is a WebView browser with smart media detection and a robust download manager. It detects media flowing through pages (network-level and DOM-level), lists it, and downloads direct files (OkHttp) and HLS/DASH streams (Media3) with full pause/resume/retry support. Success: detect → tap → downloaded, without friction or confusion about where files went.
+Chaya is a WebView browser with smart media detection and a robust download manager. It detects media flowing through pages (network-level and DOM-level), puts the page's main video first with its real name, and downloads direct files (OkHttp) and HLS/DASH streams (Media3) with full pause/resume/retry support. Links to YouTube, Instagram, TikTok and X, pasted, shared or browsed, are looked up on the phone and offered one choice per quality. Success: detect → tap → downloaded, without friction or confusion about where files went.
 
 ## Brand Personality
 

@@ -1,36 +1,48 @@
 # Chaya Privacy Policy
 
-**Last updated:** September 2026. Chaya is distributed as a direct APK via
-GitHub Releases (no Play Store account, no third-party SDKs).
+**Last updated:** October 2026. Chaya is distributed as a direct APK through GitHub Releases: no Play
+Store account, no third-party SDKs.
 
 ## What Chaya accesses
 
-- **Browsing session (WebView cookies, User-Agent, Referer).** Used for one
-  purpose only: downloading media you are already viewing, including
-  authenticated content behind your own login. Cookies are forwarded to the
-  download request for that file and never stored anywhere except Android's
-  own WebView cookie jar.
-- **Storage.** Completed downloads are saved to app-private storage, with an
-  optional user-initiated export to public media storage (MediaStore).
-  Download history (URLs, filenames, progress) lives in a local Room
-  database on your device.
-- **Notifications.** Download progress notifications, only after you grant
-  the system permission — and only after an in-app explanation on first use.
+- **Your browsing session (WebView cookies, User-Agent, Referer).** Used for one purpose: downloading
+  media you are already viewing, including content behind your own login. Cookies are sent with the
+  download request for that file and are not stored anywhere except Android's own WebView cookie
+  jar.
+- **Your sign-in on YouTube, Instagram, TikTok or X, only if you choose it.** When a video needs a
+  sign-in and the browser is signed in, Chaya offers *Use my sign-in*. If you tap it, that site's
+  cookies are written to a temporary file in the app's private storage for yt-dlp to use, and the
+  file is deleted as soon as the lookup ends, whether it worked or not. Chaya never uses your
+  sign-in without that tap.
+- **Storage.** Downloads are saved to app-private storage; on Android 10 and newer, each finished
+  download is also copied to your phone's public media folders (Movies, Music, Downloads), where
+  other apps can see it. Download history (addresses, file names, progress) is kept in
+  a database on your phone.
+- **Notifications.** Download progress, only after you grant the system permission, and only after
+  an in-app explanation on first use.
 
 ## What Chaya stores, and where
 
-- Download history: **on your device only** (Room database).
-- Diagnostics (crash reports, event log with scrubbed URLs): **on your
-  device only**, under app-private files. Nothing is uploaded automatically;
-  a report leaves the phone only when you explicitly tap Share.
+- Download history: **on your phone only**.
+- Diagnostics (crash reports, an event log with addresses stripped of their query and fragment):
+  **on your phone only**, in app-private files. Nothing is uploaded automatically; a report leaves
+  the phone only when you tap Share.
+
+## Network traffic
+
+Chaya talks only to the sites involved in what you do:
+
+- the pages you open, and the media you download from them;
+- same-origin checks of a page's media types, only after you tap *Scan more thoroughly*;
+- for a YouTube, Instagram, TikTok or X video, that site, which yt-dlp (running on your phone)
+  contacts to find the video's files, both when you paste or share a link and when the page you
+  are viewing is a single video on one of those sites.
 
 ## What Chaya never does
 
-- No analytics, no tracking, no ad SDKs, no network calls except the ones
-  you trigger (page loads, media downloads, opt-in media-type checks).
-- No account, no sign-in, no server side at all — there is nowhere for your
-  data to go.
+- No analytics, no tracking, no ads, no third-party SDKs.
+- No account and no Chaya server: there is nowhere for your data to go.
 
 ## Contact
 
-File an issue on the GitHub repository for privacy questions.
+Open an issue on the GitHub repository for privacy questions.

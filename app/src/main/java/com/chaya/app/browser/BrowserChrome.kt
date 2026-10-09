@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Stream
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -75,6 +76,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.chaya.app.platform.LinkState
 import com.chaya.app.detection.MediaSheetModel
 import com.chaya.app.detection.MediaUrlClassifier
 import com.chaya.app.download.DownloadTask
@@ -373,6 +375,113 @@ internal fun MediaPill(
                         modifier = Modifier.size(20.dp)
                     )
                 }
+            }
+        }
+    }
+}
+
+/**
+ * The pill for a page that is one video on YouTube, Instagram, TikTok or X. While the video is being found it
+ * says so; once found it shows the title and the best quality it can be saved at. Tapping anywhere opens the
+ * sheet where the quality is chosen. Nothing is shown for [LinkState.Idle] or a failed lookup: a page that
+ * merely looks like a video page should not nag.
+ */
+@Composable
+internal fun PlatformPill(
+    state: LinkState,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val found = state as? LinkState.Found
+    val match = state.match
+    if (match == null || state is LinkState.Failed) return
+
+    val title = found?.media?.title ?: "Finding the video…"
+    val subtitle = found?.let { "${it.best.label} · ${match.platform.displayName}" } ?: match.platform.displayName
+
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(28.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
+        shadowElevation = 2.dp,
+        modifier = modifier
+            .fillMaxWidth()
+            .height(56.dp)
+            .pressScale(0.98f)
+            .semantics(mergeDescendants = true) {
+                contentDescription = "Video from ${match.platform.displayName}, $title"
+            }
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                contentAlignment = Alignment.Center
+            ) {
+                if (found == null) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.Movie,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    found.media.thumbnailUrl?.let { url ->
+                        AsyncImage(
+                            model = url,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.matchParentSize()
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.width(10.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Spacer(Modifier.width(8.dp))
+
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(
+                        if (found == null) MaterialTheme.colorScheme.surfaceContainerHigh
+                        else MaterialTheme.colorScheme.primary
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.FileDownload,
+                    contentDescription = null,
+                    tint = if (found == null) MaterialTheme.colorScheme.onSurfaceVariant
+                    else MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.size(20.dp)
+                )
             }
         }
     }

@@ -162,12 +162,14 @@ data class PlatformMedia(
 class PlatformException(val kind: Kind, val detail: String? = null) : Exception(kind.message) {
 
     enum class Kind(val message: String) {
-        BOT_CHECK("YouTube wants a quick sign-in check first. Open the video in the browser here, then try again."),
+        BOT_CHECK("YouTube wants to check that you're not a bot. Signing in to YouTube in this browser can help."),
         PRIVATE("This video is private."),
-        NEEDS_LOGIN("This needs a signed-in account. Sign in to the site in the browser here, then try again."),
+        NEEDS_LOGIN("This needs a signed-in account. Sign in to the site in this browser, then try again."),
         GEO("This video isn't available in your country."),
         UNSUPPORTED("This link isn't supported."),
         UNAVAILABLE("This video is unavailable or has been removed."),
+        LIVE("This is a live broadcast. Live videos can't be saved yet."),
+        NO_FORMAT("Chaya can't save any of this video's formats yet."),
         NETWORK("Couldn't reach the site. Check your connection and try again."),
         ENGINE("The video finder couldn't start. Try again in a moment."),
         UNKNOWN("Couldn't find a video to download at this link."),
