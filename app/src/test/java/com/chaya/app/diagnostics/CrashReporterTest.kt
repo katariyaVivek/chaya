@@ -9,6 +9,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import java.io.File
+import kotlin.io.path.createTempDirectory
 
 /**
  * Pins the crash-report contract: write → list → read round-trip, text
@@ -72,7 +73,7 @@ class CrashReporterTest {
             recentEvents = listOf("page: https://example.com/"),
         )
 
-        val dir = createTempDir("crash-parse")
+        val dir = createTempDirectory("crash-parse").toFile()
         try {
             val file = File(dir, "crash-x.log")
             file.writeText(original.toText())
