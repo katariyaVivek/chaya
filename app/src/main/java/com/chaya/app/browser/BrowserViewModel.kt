@@ -432,7 +432,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             suggestedName = state.suggestedName?.let { MediaNamer.fileBaseName(it, chosenHeight) },
         )
 
-        val streamKeys = tracks.flatMap { it.streamKeys }
+        val streamKeys = ManifestHelper.streamKeysFor(tracks)
         if (streamKeys.isEmpty()) {
             downloadManager.startDownload(media)
         } else {
