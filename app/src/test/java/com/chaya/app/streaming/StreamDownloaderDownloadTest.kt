@@ -128,7 +128,10 @@ class StreamDownloaderDownloadTest {
         )
 
         assertTrue("the download never completed; failures: ${listener.failed}", awaitUntil { taskId in listener.completed })
-        val download = sd.downloadManager.currentDownloads.first { it.request.id == contentId }
+        // currentDownloads leaves out finished downloads, so a completed one is only in the index.
+        val download = checkNotNull(sd.downloadManager.downloadIndex.getDownload(contentId)) {
+            "the completed download is not in Media3's index"
+        }
         assertEquals(Download.STATE_COMPLETED, download.state)
         assertTrue("only ${download.bytesDownloaded} bytes arrived", download.bytesDownloaded >= 2L * SEGMENT_BYTES)
         assertEquals(
