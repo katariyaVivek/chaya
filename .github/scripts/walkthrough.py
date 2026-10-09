@@ -337,6 +337,11 @@ def scenario_hls():
     time.sleep(2)
     tap_when("hls: open Downloads", 20, FALLBACK["downloads_button"], desc_contains="Downloads")
     monitor_download("hls", 300)
+    # 184p of this stream is about 20 MB and 720p about 170 MB. A wrong stream key once pulled in the
+    # 720p variant as well (190 MB in all), and the download still "finished", so check the size too.
+    size = cache_kb()
+    record("hls: only the chosen rendition is downloaded", isinstance(size, int) and 0 < size < 60_000,
+           f"{size // 1024 if isinstance(size, int) else size} MB in the stream cache; 184p is about 20 MB")
 
 
 def make_fixture():
