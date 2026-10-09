@@ -169,8 +169,8 @@ jobs:
           generate_release_notes: true
 
   # Instrumented Compose tests on an emulator (Phase 1.4). Emulator boot is
-  # slow (2-5 min), so this never blocks PRs: manual dispatch + nightly
-  # schedule only. True page loads stay out — fixtures over live internet.
+  # slow (2-5 min), so this never blocks PRs: manual dispatch only (there is
+  # no schedule trigger). True page loads stay out — fixtures over live internet.
   instrumented-tests:
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'

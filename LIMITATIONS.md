@@ -1,35 +1,33 @@
-# What Chaya does not do (scope boundaries)
+# What Chaya does and does not do
 
-Chaya detects and downloads **direct media files** (MP4, WebM, MP3, …) and
-**HLS/DASH streams** (`.m3u8` / `.mpd`) found while you browse. The
-boundaries below are deliberate product and technical scope decisions, not
-open bugs — please don't file them as such.
+These are deliberate scope decisions, not open bugs.
 
-## MediaSource / blob-only players
+## What Chaya covers
 
-Many video sites feed playback exclusively through
-`MediaSource.appendBuffer()` driven by JavaScript, with no media file or
-stream manifest ever visible on the network. Chaya does not attempt to
-intercept that path: it would require either a custom WebView-embedded
-media pipeline or Chromium-level hooks, both far outside this project's
-scope.
+- **Media on the pages you browse:** direct audio and video files (MP4, WebM, MP3, …) and HLS/DASH
+  streams (`.m3u8`, `.mpd`), found from network traffic and from the page itself.
+- **Extensionless endpoints** whose server reports a media `Content-Type`, after you tap *Scan more
+  thoroughly* (same-origin only, at most ten checks, no redirects followed).
+- **Links to a single video on YouTube, Instagram, TikTok and X**, looked up by yt-dlp running on
+  the phone, with one choice per quality. Where a site serves picture and sound separately, Chaya
+  downloads both and joins them into one MP4.
+- Pause, resume and retry, with a reason shown when something fails.
 
-## YouTube, Netflix, and other DRM / ToS-restricted services
+## What Chaya does not do
 
-Major platforms using the above techniques (YouTube foremost) are
-additionally out of scope on policy grounds: downloading from them
-typically violates their terms of service, and DRM-protected content
-(Encrypted Media Extensions / Widevine) cannot and must not be captured
-by a download manager. Chaya is a browser-based media manager for files
-you own or have permission to download.
+- **DRM-protected content** (Netflix and other services using Encrypted Media Extensions /
+  Widevine). It cannot and must not be captured.
+- **Players fed only through `MediaSource`** on other sites, where no file or manifest ever
+  crosses the network. Supporting them would need a custom media pipeline or Chromium-level hooks.
+- **Live broadcasts**, and videos with nothing saveable; Chaya says so instead of trying.
+- **Content behind a sign-in, unless you choose it.** When a site needs one and the browser is
+  signed in, Chaya offers to use that sign-in for the lookup. Sites can limit accounts used for
+  automated downloads, so this is always your call.
+- **Joining HEVC or AV1 pictures.** Only H.264 is joined for now, so those qualities are not offered.
+- **Saving streams as standalone files.** HLS/DASH downloads play in the app; exporting them as MP4
+  is not built yet.
 
-## What Chaya *does* cover
+## Your responsibility
 
-- Direct audio/video files behind ordinary links (`shouldInterceptRequest`
-  network sniffing + DOM `<video>`/`<audio>` scanning).
-- Extensionless endpoints whose server truthfully reports a media
-  `Content-Type` (opt-in “Scan more thoroughly”, redirect-free `HEAD`
-  verification, same-origin only).
-- HLS/DASH manifests with a per-track quality picker.
-- Resume via `Range`, pause/cancel/retry with a classified error taxonomy,
-  and a 50 MB free-space pre-flight guard.
+Chaya is for media you own or have permission to download. A site's terms of service may restrict
+downloading; following them is up to you.

@@ -697,7 +697,7 @@ class DownloadManager(
      * Without this call the service class exists but is never instantiated,
      * so Android is free to kill the download the instant the app backgrounds
      * and the "Pause"/"Cancel" notification actions never appear — the
-     * foreground-service guarantee documented in BUILD_AND_TEST.md was pure
+     * foreground-service guarantee documented in docs/BUILD_AND_TEST.md was pure
      * fiction until a caller actually started the service.
      */
     private fun ensureServiceRunning() {
