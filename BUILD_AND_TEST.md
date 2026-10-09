@@ -170,7 +170,7 @@ com.chaya.app
 | Android WebView | Browser engine |
 | OkHttp 4.12 | Regular file downloads |
 | Media3 1.5.1 (ExoPlayer) | HLS/DASH streaming downloads |
-| Room 2.6.1 | Download history persistence |
+| Room 2.7.2 | Download history persistence |
 | Kotlin Coroutines 1.9 | Async operations |
 | Navigation Compose 2.8 | Screen navigation |
 
