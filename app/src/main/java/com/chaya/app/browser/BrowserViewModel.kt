@@ -520,7 +520,7 @@ class BrowserViewModel @JvmOverloads constructor(
             qualityHeight = chosenHeight,
         )
 
-        val streamKeys = tracks.flatMap { it.streamKeys }
+        val streamKeys = ManifestHelper.streamKeysFor(tracks)
         if (streamKeys.isEmpty()) {
             downloadManager.startDownload(media)
         } else {
