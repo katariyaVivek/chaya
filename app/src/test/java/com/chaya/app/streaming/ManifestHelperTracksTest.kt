@@ -47,10 +47,10 @@ class ManifestHelperTracksTest {
     fun `one tap picks the best video and the first audio track only`() {
         val ordered = ManifestHelper.orderedForPicker(
             listOf(
-                ManifestHelper.trackFor(video(1280, 720, 2_149_280), C.TRACK_TYPE_VIDEO, StreamKey(0, 0, 0)),
-                ManifestHelper.trackFor(video(1920, 1080, 6_221_600), C.TRACK_TYPE_VIDEO, StreamKey(0, 0, 1)),
-                ManifestHelper.trackFor(Format.Builder().setLanguage("en").build(), C.TRACK_TYPE_AUDIO, StreamKey(0, 1, 0)),
-                ManifestHelper.trackFor(Format.Builder().setLanguage("hi").build(), C.TRACK_TYPE_AUDIO, StreamKey(0, 1, 1)),
+                ManifestHelper.trackFor(video(1280, 720, 2_149_280), C.TRACK_TYPE_VIDEO, listOf(StreamKey(0, 0, 0))),
+                ManifestHelper.trackFor(video(1920, 1080, 6_221_600), C.TRACK_TYPE_VIDEO, listOf(StreamKey(0, 0, 1))),
+                ManifestHelper.trackFor(Format.Builder().setLanguage("en").build(), C.TRACK_TYPE_AUDIO, listOf(StreamKey(0, 1, 0))),
+                ManifestHelper.trackFor(Format.Builder().setLanguage("hi").build(), C.TRACK_TYPE_AUDIO, listOf(StreamKey(0, 1, 1))),
             )
         )
 
@@ -62,8 +62,8 @@ class ManifestHelperTracksTest {
 
     @Test
     fun `one tap on audio-only or video-only streams picks what exists`() {
-        val videoOnly = listOf(ManifestHelper.trackFor(video(640, 360, 800_000), C.TRACK_TYPE_VIDEO, StreamKey(0, 0, 0)))
-        val audioOnly = listOf(ManifestHelper.trackFor(Format.Builder().build(), C.TRACK_TYPE_AUDIO, StreamKey(0, 0, 0)))
+        val videoOnly = listOf(ManifestHelper.trackFor(video(640, 360, 800_000), C.TRACK_TYPE_VIDEO, listOf(StreamKey(0, 0, 0))))
+        val audioOnly = listOf(ManifestHelper.trackFor(Format.Builder().build(), C.TRACK_TYPE_AUDIO, listOf(StreamKey(0, 0, 0))))
 
         assertEquals(1, ManifestHelper.bestSelection(videoOnly).size)
         assertEquals(1, ManifestHelper.bestSelection(audioOnly).size)
