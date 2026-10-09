@@ -29,7 +29,7 @@ This is the **Chaya** Android app — a WebView-based browser with smart media d
 ### Prerequisites
 
 - Android Studio (Hedgehog 2023.1+ or later)
-- Android SDK 35
+- Android SDK 36
 - JDK 17
 
 ### Steps
@@ -49,7 +49,7 @@ This is the **Chaya** Android app — a WebView-based browser with smart media d
      ./gradlew assembleDebug
      ```
 
-> **Note:** the Gradle wrapper JAR is not checked in. Open the project once in Android Studio (which generates it), or run `gradle wrapper --gradle-version 8.9` if you have a local Gradle install.
+> **Note:** the Gradle wrapper JAR is not checked in. Open the project once in Android Studio (which generates it), or run `gradle wrapper --gradle-version 8.14.3` if you have a local Gradle install.
 
 4. **Install** on a connected device/emulator:
    ```

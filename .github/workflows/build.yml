@@ -70,7 +70,7 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.9'
+          gradle-version: '8.14.3'
           cache-read-only: false
 
       # One Gradle invocation for both tasks: a single daemon, one
@@ -140,7 +140,7 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.9'
+          gradle-version: '8.14.3'
           cache-read-only: false
 
       - name: Decode keystore
@@ -193,7 +193,7 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.9'
+          gradle-version: '8.14.3'
           cache-read-only: false
 
       - name: Run instrumented tests

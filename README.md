@@ -86,7 +86,7 @@ app/src/main/java/com/chaya/app/
 
 **Easiest:** download `app-release.apk` from [Releases](https://github.com/katariyaVivek/chaya/releases) and install (allow unknown apps when asked).
 
-**From source:** JDK 17 + Android SDK 35, then `gradle testDebugUnitTest assembleDebug` (no checked-in wrapper — install Gradle 8.9 or open once in Android Studio). Full guide in [`BUILD_AND_TEST.md`](BUILD_AND_TEST.md).
+**From source:** JDK 17 + Android SDK 36, then `gradle testDebugUnitTest assembleDebug` (no checked-in wrapper — install Gradle 8.14.3 or open once in Android Studio). Full guide in [`BUILD_AND_TEST.md`](BUILD_AND_TEST.md).
 
 ---
 
