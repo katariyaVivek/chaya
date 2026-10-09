@@ -3,7 +3,6 @@ package com.chaya.app.platform
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -14,6 +13,10 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
+/**
+ * Lookups run in `backgroundScope`, so the tests drive them with `runCurrent()`: `advanceUntilIdle()` stops as
+ * soon as no foreground work is left and never runs background coroutines. Nothing here waits on virtual time.
+ */
 @OptIn(ExperimentalCoroutinesApi::class)
 class PlatformLinksTest {
 
@@ -34,7 +37,7 @@ class PlatformLinksTest {
 
         assertTrue(links.look(video))
         assertTrue(links.state.value is LinkState.Looking)
-        advanceUntilIdle()
+        runCurrent()
 
         val found = links.state.value as LinkState.Found
         assertEquals(listOf("720p", "360p"), found.choices.map { it.label })
@@ -47,7 +50,7 @@ class PlatformLinksTest {
     fun `a link that is not one supported video clears the state and says so`() = runTest {
         val links = PlatformLinks(backgroundScope, finder { media(complete("m", 1280, 720)) })
         links.look(video)
-        advanceUntilIdle()
+        runCurrent()
         assertTrue(links.state.value is LinkState.Found)
 
         assertFalse(links.look("https://www.youtube.com/@creator"))
@@ -66,7 +69,7 @@ class PlatformLinksTest {
         links.look(video)
         links.look("$video&t=42s")
         links.look("https://youtu.be/dQw4w9WgXcQ")
-        advanceUntilIdle()
+        runCurrent()
         links.look(video)
 
         assertEquals(1, finder.urls.size)
@@ -83,9 +86,9 @@ class PlatformLinksTest {
         runCurrent()
 
         links.look(other)
-        advanceUntilIdle()
+        runCurrent()
         slowFirst.complete(media(complete("first", 1280, 720), title = "First"))
-        advanceUntilIdle()
+        runCurrent()
 
         assertEquals("Second", (links.state.value as LinkState.Found).media.title)
     }
@@ -96,9 +99,9 @@ class PlatformLinksTest {
         val finder = finderByUrl { url -> media(complete(url.takeLast(6), 1280, 720)) }
         val links = PlatformLinks(backgroundScope, finder, clock = { now })
         links.look(video)
-        advanceUntilIdle()
+        runCurrent()
         links.look(other)
-        advanceUntilIdle()
+        runCurrent()
 
         links.look(video)
 
@@ -110,7 +113,7 @@ class PlatformLinksTest {
         now += 21 * 60 * 1000L
         links.look(other)
         assertTrue("an old answer must not be reused", links.state.value is LinkState.Looking)
-        advanceUntilIdle()
+        runCurrent()
         assertEquals(3, finder.urls.size)
     }
 
@@ -119,19 +122,19 @@ class PlatformLinksTest {
         val finder = finder { throw PlatformException(PlatformException.Kind.PRIVATE) }
         val links = PlatformLinks(backgroundScope, finder)
         links.look(video)
-        advanceUntilIdle()
+        runCurrent()
 
         val failed = links.state.value as LinkState.Failed
         assertEquals(PlatformException.Kind.PRIVATE, failed.problem.kind)
         assertFalse(failed.signInMayHelp)
 
         links.look(video) // the page reporting the same address again
-        advanceUntilIdle()
+        runCurrent()
         assertEquals(1, finder.urls.size)
 
         finder.answer = { _, _ -> media(complete("m", 1280, 720)) }
         links.retry()
-        advanceUntilIdle()
+        runCurrent()
 
         assertTrue(links.state.value is LinkState.Found)
         assertEquals(2, finder.urls.size)
@@ -143,7 +146,7 @@ class PlatformLinksTest {
         val loginWall = failing(PlatformException.Kind.NEEDS_LOGIN, FakeSignIn(signedIn = true), backgroundScope)
         val withoutAccount = failing(PlatformException.Kind.BOT_CHECK, FakeSignIn(signedIn = false), backgroundScope)
         val unrelated = failing(PlatformException.Kind.GEO, FakeSignIn(signedIn = true), backgroundScope)
-        advanceUntilIdle()
+        runCurrent()
 
         assertTrue((botCheck.state.value as LinkState.Failed).signInMayHelp)
         assertTrue((loginWall.state.value as LinkState.Failed).signInMayHelp)
@@ -164,12 +167,12 @@ class PlatformLinksTest {
         }
         val links = PlatformLinks(backgroundScope, finder, signIn)
         links.look(video)
-        advanceUntilIdle()
+        runCurrent()
         assertTrue((links.state.value as LinkState.Failed).signInMayHelp)
         assertNull("the first try uses no account", finder.cookieFiles.single())
 
         links.retry(useSignIn = true)
-        advanceUntilIdle()
+        runCurrent()
 
         assertTrue(links.state.value is LinkState.Found)
         assertTrue("the engine had a cookie file to read", existedWhileUsed)
@@ -185,10 +188,10 @@ class PlatformLinksTest {
             signIn,
         )
         links.look(video)
-        advanceUntilIdle()
+        runCurrent()
 
         links.retry(useSignIn = true)
-        advanceUntilIdle()
+        runCurrent()
 
         assertTrue(links.state.value is LinkState.Failed)
         assertTrue(signIn.created.isNotEmpty())
@@ -199,7 +202,7 @@ class PlatformLinksTest {
     fun `a live broadcast is explained`() = runTest {
         val links = PlatformLinks(backgroundScope, finder { media(complete("live", 1280, 720), live = true) })
         links.look(video)
-        advanceUntilIdle()
+        runCurrent()
 
         assertEquals(PlatformException.Kind.LIVE, (links.state.value as LinkState.Failed).problem.kind)
     }
@@ -209,7 +212,7 @@ class PlatformLinksTest {
         // Only an AV1 picture, which the join cannot carry yet, and no sound to offer on its own.
         val links = PlatformLinks(backgroundScope, finder { media(av1Picture()) })
         links.look(video)
-        advanceUntilIdle()
+        runCurrent()
 
         assertEquals(PlatformException.Kind.NO_FORMAT, (links.state.value as LinkState.Failed).problem.kind)
     }
@@ -226,7 +229,7 @@ class PlatformLinksTest {
             },
         )
         links.look(video)
-        advanceUntilIdle()
+        runCurrent()
 
         assertEquals(listOf("Audio only"), (links.state.value as LinkState.Found).choices.map { it.label })
     }
@@ -245,7 +248,7 @@ class PlatformLinksTest {
             },
         )
         links.look(video)
-        advanceUntilIdle()
+        runCurrent()
 
         val best = (links.state.value as LinkState.Found).best
         assertEquals("1080p", best.label)
@@ -256,7 +259,7 @@ class PlatformLinksTest {
     fun `an engine crash is reported as a problem with the finder, not left spinning`() = runTest {
         val links = PlatformLinks(backgroundScope, finder { throw IllegalStateException("boom") })
         links.look(video)
-        advanceUntilIdle()
+        runCurrent()
 
         val failed = links.state.value as LinkState.Failed
         assertEquals(PlatformException.Kind.ENGINE, failed.problem.kind)
@@ -272,7 +275,7 @@ class PlatformLinksTest {
 
         links.clear()
         pending.complete(media(complete("m", 1280, 720)))
-        advanceUntilIdle()
+        runCurrent()
 
         assertEquals(LinkState.Idle, links.state.value)
     }
