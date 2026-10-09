@@ -86,6 +86,33 @@ def test_the_player_benchmark_fetches_the_current_player_and_times_the_solver_on
     assert 'player_marker' in received[0]
 
 
+def test_the_player_id_is_found_in_the_escaped_address_the_page_really_writes(fake_java, monkeypatch):
+    import io
+    import urllib.request
+
+    fetched = []
+
+    def fake_urlopen(url, timeout=None):
+        fetched.append(url)
+        if url.endswith('iframe_api'):
+            return io.BytesIO(
+                b"var scriptUrl = 'https:\\/\\/www.youtube.com\\/s\\/player\\/0f1e2d3c\\/www-widgetapi.vflset\\/www-widgetapi.js';")
+        return io.BytesIO(b'var player_marker = 7;')
+
+    class FakeSolver:
+        @staticmethod
+        def run(script):
+            return '{"type": "result", "responses": []}\n'
+
+    monkeypatch.setattr(urllib.request, 'urlopen', fake_urlopen)
+    fake_java({'com.chaya.app.platform.JsSolver': FakeSolver})
+
+    result = json.loads(selftest.player_benchmark())
+
+    assert result['player_id'] == '0f1e2d3c'
+    assert fetched[1] == 'https://www.youtube.com/s/player/0f1e2d3c/player_ias.vflset/en_US/base.js'
+
+
 def test_the_player_benchmark_says_so_when_the_page_has_no_player(monkeypatch):
     import io
     import urllib.request
