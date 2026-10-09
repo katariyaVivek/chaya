@@ -49,12 +49,16 @@ object FormatSelector {
         .thenByDescending { it.ext == "m4a" }
         .thenByDescending { it.audioBitrateKbps ?: it.bitrateKbps ?: 0.0 }
 
+    /** All-or-nothing form of [choices]: either every picture-only track can be joined to sound, or none can. */
+    fun choices(media: PlatformMedia, canMerge: Boolean): List<PlatformChoice> =
+        choices(media) { canMerge }
+
     /**
-     * [canMerge] says whether the app can join a picture-only file to a separate sound file. While it
-     * cannot, qualities that exist only as separate tracks (most of YouTube's HD) are left out
-     * rather than offered and then failing.
+     * [canJoin] says whether the app can put a picture-only track together with a separate sound file into
+     * one MP4. Qualities that exist only as separate tracks it cannot join (much of YouTube's HD) are left
+     * out rather than offered and then failing.
      */
-    fun choices(media: PlatformMedia, canMerge: Boolean): List<PlatformChoice> {
+    fun choices(media: PlatformMedia, canJoin: (PlatformFormat) -> Boolean): List<PlatformChoice> {
         // Saving a live broadcast needs a different approach than saving a finished video.
         if (media.isLive) return emptyList()
 
@@ -63,13 +67,12 @@ object FormatSelector {
         val mergeAudio = audioOnly.filter { it.ext == "m4a" || it.ext == "mp4" }
             .sortedWith(byAudioPreference).firstOrNull()
 
-        val usableMergeAudio = mergeAudio.takeIf { canMerge }
         val choices = media.formats
             .filter { it.hasVideo && !it.isAudioOnly }
             .mapNotNull { format -> format.quality?.let { quality -> quality to format } }
             .groupBy({ (quality, _) -> quality }, { (_, format) -> format })
             .toSortedMap(reverseOrder())
-            .mapNotNull { (quality, candidates) -> choiceFor(quality, candidates, usableMergeAudio) }
+            .mapNotNull { (quality, candidates) -> choiceFor(quality, candidates, mergeAudio, canJoin) }
             .toMutableList()
 
         bestAudio?.let { choices += audioChoice(it) }
@@ -80,10 +83,15 @@ object FormatSelector {
      * One choice per quality. A ready-made file wins; then, when merging is possible, a separate picture
      * and sound (a real file in the end); a streaming manifest is the last resort.
      */
-    private fun choiceFor(quality: Int, candidates: List<PlatformFormat>, mergeAudio: PlatformFormat?): PlatformChoice? {
+    private fun choiceFor(
+        quality: Int,
+        candidates: List<PlatformFormat>,
+        mergeAudio: PlatformFormat?,
+        canJoin: (PlatformFormat) -> Boolean,
+    ): PlatformChoice? {
         val completeFile = candidates.filter { it.isCompleteFile }.sortedWith(byPreference).firstOrNull()
         val pictureOnly = candidates
-            .filter { it.isDirectFile && it.audioCodec == "none" && it.ext == "mp4" }
+            .filter { it.isDirectFile && it.audioCodec == "none" && it.ext == "mp4" && canJoin(it) }
             .sortedWith(byMergeCompatibility).firstOrNull()
         val completeStream = candidates.filter { !it.isDirectFile && it.hasAudio }.sortedWith(byPreference).firstOrNull()
 

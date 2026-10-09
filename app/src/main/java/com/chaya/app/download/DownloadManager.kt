@@ -22,6 +22,7 @@ import com.chaya.app.diagnostics.ChayaEvent
 import com.chaya.app.diagnostics.EventLog
 import com.chaya.app.model.DetectedMedia
 import com.chaya.app.streaming.StreamDownloader
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -64,6 +65,8 @@ class DownloadManager(
             .getOrDefault(Long.MAX_VALUE)
             .takeIf { it > 0 } ?: Long.MAX_VALUE
     },
+    /** Joins a picture file and a sound file into one MP4; replaced in tests, where no real media exists. */
+    private val merger: MediaMerger = Mp4Merger(),
 ) {
     /** Parent of all fire-and-forget persistence and transfer work; [drainBackgroundWork] joins it. */
     private val backgroundJob = SupervisorJob()
@@ -156,6 +159,52 @@ class DownloadManager(
         }
     }
 
+    /**
+     * Starts a download the engine worked out: one file, or a picture and a sound that are joined into one
+     * MP4 once both have arrived. A joined download briefly needs room for the parts and the result, so the
+     * space check allows for both.
+     */
+    fun startDownload(request: DownloadRequest) {
+        ensureServiceRunning()
+        scope.launch {
+            val id = nextId()
+            val saveFile = resolveFileName(saveDir, sanitizeKeepingExtension(request.fileName))
+            val task = DownloadTask(
+                id = id,
+                url = request.url,
+                pageUrl = request.pageUrl,
+                fileName = saveFile.name,
+                mimeType = request.mimeType,
+                filePath = saveFile.absolutePath,
+                totalBytes = request.expectedBytes,
+                state = DownloadState.DOWNLOADING,
+                title = request.title,
+                thumbnailUrl = request.thumbnailUrl,
+                qualityHeight = request.qualityHeight,
+                requestHeaders = request.headers,
+                audioUrl = request.audioUrl,
+                audioRequestHeaders = request.audioHeaders,
+            )
+
+            val copies = if (request.audioUrl != null) 2 else 1
+            val needed = (request.expectedBytes ?: 0L) * copies + MIN_FREE_BYTES_TO_START
+            if (freeBytes(saveDir) < needed) {
+                val failed = task.copy(
+                    state = DownloadState.FAILED,
+                    error = DownloadError.StorageFull,
+                    filePath = null,
+                )
+                append(failed)
+                dao.insert(DownloadEntity.fromTask(failed))
+                return@launch
+            }
+
+            append(task)
+            dao.insert(DownloadEntity.fromTask(task))
+            transfer(task)
+        }
+    }
+
     fun pauseDownload(id: Long) {
         val t = find(id) ?: return
         if (t.state != DownloadState.DOWNLOADING) return
@@ -185,6 +234,8 @@ class DownloadManager(
                 obtainStreamDownloader().resumeStream(id, t.url, t.mimeType, ua, ck, t.pageUrl)
             } else if (!checkStorageForResume(t)) {
                 return@launch
+            } else if (t.hasOwnRequest) {
+                resumeEngineTask(t)
             } else {
                 val file = ensureFileFor(t)
                 val from = partialBytes(t)
@@ -239,7 +290,10 @@ class DownloadManager(
         downloader.cancel(id)
         streamDownloader?.deleteStream(id)
         if (t != null) {
-            t.filePath?.let { p -> runCatching { File(p).delete() } }
+            t.filePath?.let { p ->
+                runCatching { File(p).delete() }
+                (trackFiles(p) + File("$p$JOINING_SUFFIX")).forEach { runCatching { it.delete() } }
+            }
             t.exportedUri?.let { u ->
                 runCatching { context.contentResolver.delete(Uri.parse(u), null, null) }
             }
@@ -298,7 +352,7 @@ class DownloadManager(
         ck: String?,
         fromBytes: Long
     ) {
-        val name = sanitize(fileNameForMedia(media))
+        val name = sanitizeKeepingExtension(fileNameForMedia(media))
         val saveFile = resolveFileName(saveDir, name)
 
         val task = DownloadTask(
@@ -347,7 +401,7 @@ class DownloadManager(
             id = id,
             url = media.url,
             pageUrl = media.pageUrl,
-            fileName = sanitize(fileNameForMedia(media)),
+            fileName = sanitizeKeepingExtension(fileNameForMedia(media)),
             mimeType = media.mimeType,
             filePath = null,
             state = DownloadState.DOWNLOADING,
@@ -368,6 +422,144 @@ class DownloadManager(
             streamKeys = streamKeys
         )
     }
+
+    // ------------------------------------------------------------------ //
+    // Engine downloads: one file, or a picture and a sound joined at the end
+    // ------------------------------------------------------------------ //
+
+    /** Begins, or carries on with, the transfer for a task that brings its own request. */
+    private fun transfer(t: DownloadTask) {
+        if (t.audioUrl != null) runTracks(t.id) else startSingleFile(t)
+    }
+
+    private fun startSingleFile(t: DownloadTask) {
+        val file = t.filePath?.let(::File) ?: return
+        val headers = headersFor(t.url, t.requestHeaders, t.pageUrl)
+        downloader.start(
+            taskId = t.id,
+            url = t.url,
+            saveFile = file,
+            userAgent = headers.userAgent,
+            cookies = headers.cookies,
+            referer = headers.referer,
+            fromBytes = partialBytes(t),
+            onProgress = { downloaded, total -> progress(t.id, downloaded, total ?: find(t.id)?.totalBytes) },
+            onComplete = { result ->
+                result.fold(
+                    onSuccess = { completeTask(t.id) },
+                    onFailure = { failTask(t.id, it) },
+                )
+            },
+        )
+    }
+
+    /** Picks an interrupted engine task up where it stopped. */
+    private fun resumeEngineTask(t: DownloadTask) {
+        val file = ensureFileFor(t)
+        val resumed = t.copy(state = DownloadState.DOWNLOADING, filePath = file.absolutePath, error = null)
+            .let { it.copy(downloadedBytes = partialBytes(it)) }
+        apply(resumed)
+        transfer(resumed)
+    }
+
+    /**
+     * What is left of a picture-plus-sound task: the picture, then the sound, then the join. It works out
+     * where it is from which files exist, so it is safe to call again after any interruption.
+     */
+    private fun runTracks(id: Long) {
+        val t = find(id) ?: return
+        // Paused, cancelled or removed since the last step: leave it alone.
+        if (t.state != DownloadState.DOWNLOADING) return
+        val path = t.filePath ?: return
+        val picture = File("$path$PICTURE_SUFFIX")
+        val sound = File("$path$SOUND_SUFFIX")
+        when {
+            !picture.exists() -> fetchTrack(t, t.url, t.requestHeaders, picture, bytesBefore = 0L)
+            !sound.exists() -> {
+                val soundUrl = t.audioUrl ?: return
+                fetchTrack(t, soundUrl, t.audioRequestHeaders, sound, bytesBefore = picture.length())
+            }
+            else -> joinTracks(id, picture, sound)
+        }
+    }
+
+    /** Downloads one track into `<name>.part`, renames it once whole, then goes back for the next step. */
+    private fun fetchTrack(
+        t: DownloadTask,
+        url: String,
+        requestHeaders: Map<String, String>,
+        whole: File,
+        bytesBefore: Long,
+    ) {
+        val part = File("${whole.path}$PART_SUFFIX")
+        val headers = headersFor(url, requestHeaders, t.pageUrl)
+        downloader.start(
+            taskId = t.id,
+            url = url,
+            saveFile = part,
+            userAgent = headers.userAgent,
+            cookies = headers.cookies,
+            referer = headers.referer,
+            fromBytes = part.length(),
+            onProgress = { downloaded, _ -> progress(t.id, bytesBefore + downloaded, find(t.id)?.totalBytes) },
+            onComplete = { result ->
+                result.fold(
+                    onSuccess = {
+                        if (part.renameTo(whole)) runTracks(t.id)
+                        else failTask(t.id, IOException("Couldn't keep the downloaded file"))
+                    },
+                    onFailure = { failTask(t.id, it) },
+                )
+            },
+        )
+    }
+
+    /** Joins the two finished tracks into the saved file, tidies up, and completes the task. */
+    private fun joinTracks(id: Long, picture: File, sound: File) {
+        scope.launch {
+            val t = find(id) ?: return@launch
+            val output = File(t.filePath ?: return@launch)
+            val joining = File("${output.path}$JOINING_SUFFIX")
+            try {
+                merger.merge(picture, sound, joining)
+                output.delete()
+                if (!joining.renameTo(output)) throw CombineException("Couldn't keep the combined file")
+            } catch (e: CancellationException) {
+                joining.delete()
+                throw e
+            } catch (e: Exception) {
+                // The two tracks stay on disk, so a retry only repeats the join.
+                joining.delete()
+                failTask(id, e)
+                return@launch
+            }
+            picture.delete()
+            sound.delete()
+            val current = find(id) ?: run {
+                output.delete() // removed while it was being joined
+                return@launch
+            }
+            val length = output.length()
+            apply(current.copy(downloadedBytes = length, totalBytes = length))
+            completeTask(id)
+        }
+    }
+
+    /** The engine's headers for [url] when it gave any; otherwise this browser's own session, as for any page download. */
+    private fun headersFor(url: String, engineHeaders: Map<String, String>, pageUrl: String?): RequestHeaders =
+        if (engineHeaders.isNotEmpty()) {
+            RequestHeaders.from(engineHeaders, fallbackReferer = pageUrl)
+        } else {
+            sessionHeaders(url).let { (userAgent, cookies) -> RequestHeaders(userAgent, cookies, pageUrl) }
+        }
+
+    /** The files a picture-plus-sound task keeps next to its saved file until it is joined. */
+    private fun trackFiles(path: String): List<File> = listOf(
+        "$path$PICTURE_SUFFIX",
+        "$path$PICTURE_SUFFIX$PART_SUFFIX",
+        "$path$SOUND_SUFFIX",
+        "$path$SOUND_SUFFIX$PART_SUFFIX",
+    ).map(::File)
 
     // ------------------------------------------------------------------ //
     // State transitions
@@ -417,7 +609,7 @@ class DownloadManager(
             id = id,
             url = media.url,
             pageUrl = media.pageUrl,
-            fileName = sanitize(fileNameForMedia(media)),
+            fileName = sanitizeKeepingExtension(fileNameForMedia(media)),
             mimeType = media.mimeType,
             state = DownloadState.FAILED,
             error = DownloadError.StorageFull,
@@ -520,18 +712,20 @@ class DownloadManager(
         return ua to ck
     }
 
-    /** Bytes already on disk for a partial HTTP download. */
-    private fun partialBytes(t: DownloadTask): Long =
-        t.filePath?.let { f -> File(f).length().takeIf { it > 0 } } ?: 0L
+    /** Bytes already on disk for a partial HTTP download; for a picture-plus-sound task, across both files. */
+    private fun partialBytes(t: DownloadTask): Long {
+        val path = t.filePath ?: return 0L
+        return if (t.audioUrl != null) trackFiles(path).sumOf { it.length() } else File(path).length()
+    }
 
     private fun ensureFileFor(t: DownloadTask): File =
-        t.filePath?.let { File(it) } ?: resolveFileName(saveDir, sanitize(t.fileName))
+        t.filePath?.let { File(it) } ?: resolveFileName(saveDir, sanitizeKeepingExtension(t.fileName))
 
     /** Server suggested a better filename via Content-Disposition. */
     private fun onServerFileName(id: Long, suggested: String?) {
         if (suggested.isNullOrBlank()) return
         val current = find(id) ?: return
-        val clean = sanitize(suggested)
+        val clean = sanitizeKeepingExtension(suggested)
         if (clean.equals(current.fileName, ignoreCase = true)) return
 
         // Keep an extension if the suggestion lacks one.
@@ -611,6 +805,12 @@ class DownloadManager(
         /** Refuse (re)starts below this much free space; transfers need headroom. */
         const val MIN_FREE_BYTES_TO_START = 50L * 1024 * 1024
 
+        /** Suffixes of the files a picture-plus-sound download keeps next to its saved file until they are joined. */
+        private const val PICTURE_SUFFIX = ".video"
+        private const val SOUND_SUFFIX = ".audio"
+        private const val PART_SUFFIX = ".part"
+        private const val JOINING_SUFFIX = ".joining"
+
         private val ILLEGAL_CHARS = Regex("[\\\\/:*?\"<>|]")
         private val resumableStates = setOf(
             DownloadState.PAUSED, DownloadState.FAILED, DownloadState.CANCELLED
@@ -621,9 +821,23 @@ class DownloadManager(
         fun isStream(url: String, mimeType: String?): Boolean =
             StreamDownloader.isStreamingUrl(url) || StreamDownloader.isStreamingMime(mimeType)
 
+        private const val MAX_FILE_NAME_LENGTH = 100
+
         fun sanitize(name: String): String =
-            ILLEGAL_CHARS.replace(name.trim(), "_").take(100)
+            ILLEGAL_CHARS.replace(name.trim(), "_").take(MAX_FILE_NAME_LENGTH)
                 .ifEmpty { "media_${System.currentTimeMillis()}" }
+
+        /**
+         * Like [sanitize], but a long title is shortened instead of losing its extension, which a plain cut
+         * at 100 characters would do to "<long title> (720p).mp4".
+         */
+        fun sanitizeKeepingExtension(name: String): String {
+            val dot = name.lastIndexOf('.')
+            val extension = if (dot > 0) name.substring(dot) else ""
+            // Only a short run of letters and digits is an extension; ".... and more" is just a long title.
+            if (extension.length !in 2..6 || !extension.drop(1).all { it.isLetterOrDigit() }) return sanitize(name)
+            return sanitize(name.substring(0, dot)).take(MAX_FILE_NAME_LENGTH - extension.length) + extension
+        }
 
         fun fileNameForMedia(media: DetectedMedia): String {
             val url = media.url

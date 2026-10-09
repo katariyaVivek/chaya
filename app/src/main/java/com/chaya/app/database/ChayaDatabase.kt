@@ -10,7 +10,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [DownloadEntity::class],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -35,6 +35,15 @@ abstract class ChayaDatabase : RoomDatabase() {
             }
         }
 
+        /** Adds what a picture-plus-sound download needs: the engine's request headers and the sound file's address. */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE downloads ADD COLUMN request_headers TEXT")
+                db.execSQL("ALTER TABLE downloads ADD COLUMN audio_url TEXT")
+                db.execSQL("ALTER TABLE downloads ADD COLUMN audio_request_headers TEXT")
+            }
+        }
+
         @Volatile
         private var INSTANCE: ChayaDatabase? = null
 
@@ -46,7 +55,7 @@ abstract class ChayaDatabase : RoomDatabase() {
                     "chaya.db"
                 )
                     // Explicit migration chain — never wipe user history on upgrade.
-                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
+                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .build().also { INSTANCE = it }
             }
         }

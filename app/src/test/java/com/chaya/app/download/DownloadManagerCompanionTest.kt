@@ -33,6 +33,44 @@ class DownloadManagerCompanionTest {
         assertTrue(DownloadManager.sanitize("   ").startsWith("media_"))
     }
 
+    // ---- sanitizeKeepingExtension ---- //
+
+    @Test
+    fun `a long title is shortened instead of losing its extension`() {
+        val name = DownloadManager.sanitizeKeepingExtension("T".repeat(150) + " (720p).mp4")
+
+        assertEquals(100, name.length)
+        assertTrue(name.endsWith(".mp4"))
+    }
+
+    @Test
+    fun `a name that already fits is left alone apart from illegal characters`() {
+        assertEquals("Me at the zoo (240p).mp4", DownloadManager.sanitizeKeepingExtension("Me at the zoo (240p).mp4"))
+        assertEquals("a_b_c.mp4", DownloadManager.sanitizeKeepingExtension("a/b:c.mp4"))
+    }
+
+    @Test
+    fun `dots in the title are not mistaken for the extension`() {
+        val name = DownloadManager.sanitizeKeepingExtension("Wow... what a day (720p).mp4")
+
+        assertEquals("Wow... what a day (720p).mp4", name)
+    }
+
+    @Test
+    fun `a name with no extension is simply sanitized and cut`() {
+        assertEquals(100, DownloadManager.sanitizeKeepingExtension("a".repeat(150)).length)
+        assertEquals("Version 2.0 is out", DownloadManager.sanitizeKeepingExtension("Version 2.0 is out"))
+        assertEquals("trailing dot.", DownloadManager.sanitizeKeepingExtension("trailing dot."))
+    }
+
+    @Test
+    fun `an empty title still gets a generated name that keeps the extension`() {
+        val name = DownloadManager.sanitizeKeepingExtension("   .mp4")
+
+        assertTrue(name.endsWith(".mp4"))
+        assertTrue(name.startsWith("media_"))
+    }
+
     // ---- fileNameForMedia ---- //
 
     private fun media(url: String, mimeType: String? = null) = DetectedMedia(
