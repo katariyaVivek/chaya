@@ -12,7 +12,9 @@ import java.util.Properties
 
 android {
     namespace = "com.chaya.app"
-    compileSdk = 35
+    // quickjs-kt (the YouTube solver's JavaScript engine) only allows apps compiled against API 36. This is the
+    // API the code is compiled against; targetSdk, which changes how the app behaves on a phone, stays at 35.
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.chaya.app"
