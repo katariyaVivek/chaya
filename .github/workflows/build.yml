@@ -58,6 +58,12 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      # Chaquopy installs the app's Python packages with a build-machine Python of the same version.
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
       # Project has no checked-in wrapper jar; provide Gradle directly.
       # Cache is shared across branches (cache-read-only false) so PR runs
       # reuse main's dependency + build cache entries.
@@ -125,6 +131,12 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      # Chaquopy installs the app's Python packages with a build-machine Python of the same version.
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
@@ -171,6 +183,12 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+
+      # Chaquopy installs the app's Python packages with a build-machine Python of the same version.
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
