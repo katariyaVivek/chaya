@@ -1,6 +1,5 @@
 package com.chaya.app.ui.components
 
-import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasText
@@ -207,6 +206,3 @@ class PlatformSheetTest {
         }
     }
 }
-
-/** `assertDoesNotExist` reads oddly beside the other assertions; same meaning. */
-private fun androidx.compose.ui.test.SemanticsNodeInteraction.assertDoesNotExist() = assertDoesNotExist()

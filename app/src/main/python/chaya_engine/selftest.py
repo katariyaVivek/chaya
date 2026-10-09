@@ -25,9 +25,11 @@ def status():
 def solver_check(player='var player = { value: 1 };'):
     """Runs yt-dlp's real challenge-solver scripts in the embedded QuickJS, on a made-up [player].
 
-    A made-up player has nothing to solve, so the solver answers with an error of its own; that still proves
-    the whole bundle loads and runs on this phone, and how long that takes. Returns the answer's type
-    ("result" or "error"), the time in milliseconds, and the script's size.
+    A made-up player has nothing to solve, so the solver rejects it with an error of its own; that still proves
+    the whole bundle loads and runs on this phone, and how long that takes. The solver throws rather than
+    answers when a player is not shaped like YouTube's ("unexpected structure"), so a throw is reported as an
+    "error" answer carrying its message. Returns the answer's type ("result" or "error"), the time in
+    milliseconds, and the script's size.
     """
     from java import jclass  # Chaquopy's bridge; only importable inside the app
     import yt_dlp_ejs.yt.solver as solver
@@ -37,7 +39,10 @@ def solver_check(player='var player = { value: 1 };'):
         f'{solver.lib()}\n'
         'Object.assign(globalThis, lib);\n'
         f'{solver.core()}\n'
-        f'console.log(JSON.stringify(jsc({json.dumps(data)})));\n'
+        'let answer;\n'
+        f'try {{ answer = jsc({json.dumps(data)}); }}\n'
+        "catch (e) { answer = { type: 'error', error: String(e && e.message || e) }; }\n"
+        'console.log(JSON.stringify(answer));\n'
     )
     started = time.monotonic()
     printed = str(jclass('com.chaya.app.platform.JsSolver').run(script))
@@ -63,7 +68,9 @@ def player_benchmark():
 
     with urllib.request.urlopen('https://www.youtube.com/iframe_api', timeout=30) as response:
         iframe_api = response.read().decode('utf-8', 'replace')
-    found = re.search(r'/s/player/([0-9a-f]{8})/', iframe_api)
+    # The page writes the address with escaped slashes (https:\/\/www.youtube.com\/s\/player\/…); this is the
+    # pattern yt-dlp itself uses on it.
+    found = re.search(r'player\\?/([0-9a-fA-F]{8})\\?/', iframe_api)
     if not found:
         raise RuntimeError('No player id in the iframe API')
     player_id = found.group(1)

@@ -28,12 +28,12 @@ class ManifestHelperTracksTest {
     fun `renditions become separate entries ordered best first with their own keys`() {
         val tracks = ManifestHelper.orderedForPicker(
             listOf(
-                ManifestHelper.trackFor(video(1280, 720, 2_149_280), C.TRACK_TYPE_VIDEO, StreamKey(0, 0, 0)),
-                ManifestHelper.trackFor(video(320, 184, 246_440), C.TRACK_TYPE_VIDEO, StreamKey(0, 0, 1)),
-                ManifestHelper.trackFor(video(512, 288, 460_560), C.TRACK_TYPE_VIDEO, StreamKey(0, 0, 2)),
-                ManifestHelper.trackFor(video(848, 480, 836_280), C.TRACK_TYPE_VIDEO, StreamKey(0, 0, 3)),
-                ManifestHelper.trackFor(video(1920, 1080, 6_221_600), C.TRACK_TYPE_VIDEO, StreamKey(0, 0, 4)),
-                ManifestHelper.trackFor(Format.Builder().build(), C.TRACK_TYPE_AUDIO, StreamKey(0, 1, 0)),
+                ManifestHelper.trackFor(video(1280, 720, 2_149_280), C.TRACK_TYPE_VIDEO, listOf(StreamKey(0, 0, 0))),
+                ManifestHelper.trackFor(video(320, 184, 246_440), C.TRACK_TYPE_VIDEO, listOf(StreamKey(0, 0, 1))),
+                ManifestHelper.trackFor(video(512, 288, 460_560), C.TRACK_TYPE_VIDEO, listOf(StreamKey(0, 0, 2))),
+                ManifestHelper.trackFor(video(848, 480, 836_280), C.TRACK_TYPE_VIDEO, listOf(StreamKey(0, 0, 3))),
+                ManifestHelper.trackFor(video(1920, 1080, 6_221_600), C.TRACK_TYPE_VIDEO, listOf(StreamKey(0, 0, 4))),
+                ManifestHelper.trackFor(Format.Builder().build(), C.TRACK_TYPE_AUDIO, listOf(StreamKey(0, 1, 0))),
             )
         )
 
@@ -47,10 +47,10 @@ class ManifestHelperTracksTest {
     fun `one tap picks the best video and the first audio track only`() {
         val ordered = ManifestHelper.orderedForPicker(
             listOf(
-                ManifestHelper.trackFor(video(1280, 720, 2_149_280), C.TRACK_TYPE_VIDEO, StreamKey(0, 0, 0)),
-                ManifestHelper.trackFor(video(1920, 1080, 6_221_600), C.TRACK_TYPE_VIDEO, StreamKey(0, 0, 1)),
-                ManifestHelper.trackFor(Format.Builder().setLanguage("en").build(), C.TRACK_TYPE_AUDIO, StreamKey(0, 1, 0)),
-                ManifestHelper.trackFor(Format.Builder().setLanguage("hi").build(), C.TRACK_TYPE_AUDIO, StreamKey(0, 1, 1)),
+                ManifestHelper.trackFor(video(1280, 720, 2_149_280), C.TRACK_TYPE_VIDEO, listOf(StreamKey(0, 0, 0))),
+                ManifestHelper.trackFor(video(1920, 1080, 6_221_600), C.TRACK_TYPE_VIDEO, listOf(StreamKey(0, 0, 1))),
+                ManifestHelper.trackFor(Format.Builder().setLanguage("en").build(), C.TRACK_TYPE_AUDIO, listOf(StreamKey(0, 1, 0))),
+                ManifestHelper.trackFor(Format.Builder().setLanguage("hi").build(), C.TRACK_TYPE_AUDIO, listOf(StreamKey(0, 1, 1))),
             )
         )
 
@@ -62,8 +62,8 @@ class ManifestHelperTracksTest {
 
     @Test
     fun `one tap on audio-only or video-only streams picks what exists`() {
-        val videoOnly = listOf(ManifestHelper.trackFor(video(640, 360, 800_000), C.TRACK_TYPE_VIDEO, StreamKey(0, 0, 0)))
-        val audioOnly = listOf(ManifestHelper.trackFor(Format.Builder().build(), C.TRACK_TYPE_AUDIO, StreamKey(0, 0, 0)))
+        val videoOnly = listOf(ManifestHelper.trackFor(video(640, 360, 800_000), C.TRACK_TYPE_VIDEO, listOf(StreamKey(0, 0, 0))))
+        val audioOnly = listOf(ManifestHelper.trackFor(Format.Builder().build(), C.TRACK_TYPE_AUDIO, listOf(StreamKey(0, 0, 0))))
 
         assertEquals(1, ManifestHelper.bestSelection(videoOnly).size)
         assertEquals(1, ManifestHelper.bestSelection(audioOnly).size)
@@ -75,7 +75,7 @@ class ManifestHelperTracksTest {
         val track = ManifestHelper.trackFor(
             Format.Builder().setLanguage("en").setAverageBitrate(128_000).setChannelCount(2).build(),
             C.TRACK_TYPE_AUDIO,
-            StreamKey(0, 1, 0),
+            listOf(StreamKey(0, 1, 0)),
         )
 
         assertEquals(Locale.forLanguageTag("en").getDisplayLanguage(Locale.getDefault()), track.label)
@@ -87,10 +87,40 @@ class ManifestHelperTracksTest {
         val track = ManifestHelper.trackFor(
             Format.Builder().setLanguage(C.LANGUAGE_UNDETERMINED).build(),
             C.TRACK_TYPE_AUDIO,
-            StreamKey(0, 1, 0),
+            listOf(StreamKey(0, 1, 0)),
         )
 
         assertEquals("Audio", track.label)
         assertEquals("", track.detail)
+    }
+
+    // Stream keys as Media3 derives them for HLS: group 0 holds the variants, group 1 the audio renditions.
+    private fun videoTrack(height: Int, variant: Int) =
+        StreamTrack(C.TRACK_TYPE_VIDEO, "${height}p", listOf(StreamKey(0, 0, variant)), height = height)
+
+    @Test
+    fun `muxed audio does not add a second variant to the chosen one`() {
+        // Muxed audio has no stream of its own; on its own Media3 points it at the cheapest variant.
+        val muxedAudio = StreamTrack(C.TRACK_TYPE_AUDIO, "Audio", listOf(StreamKey(0, 0, 1)))
+
+        val keys = ManifestHelper.streamKeysFor(listOf(videoTrack(720, variant = 0), muxedAudio))
+
+        assertEquals(listOf(StreamKey(0, 0, 0)), keys)
+    }
+
+    @Test
+    fun `a separate audio rendition is downloaded with the chosen video`() {
+        val audioRendition = StreamTrack(C.TRACK_TYPE_AUDIO, "English", listOf(StreamKey(0, 1, 0)))
+
+        val keys = ManifestHelper.streamKeysFor(listOf(videoTrack(184, variant = 4), audioRendition))
+
+        assertEquals(listOf(StreamKey(0, 0, 4), StreamKey(0, 1, 0)), keys)
+    }
+
+    @Test
+    fun `audio on its own keeps the keys Media3 gave it`() {
+        val muxedAudio = StreamTrack(C.TRACK_TYPE_AUDIO, "Audio", listOf(StreamKey(0, 0, 1)))
+
+        assertEquals(listOf(StreamKey(0, 0, 1)), ManifestHelper.streamKeysFor(listOf(muxedAudio)))
     }
 }
