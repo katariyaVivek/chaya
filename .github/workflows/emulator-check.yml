@@ -30,10 +30,16 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      # Chaquopy installs the app's Python packages with a build-machine Python of the same version.
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.9'
+          gradle-version: '8.14.3'
           cache-read-only: false
 
       - name: Build debug APK

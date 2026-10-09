@@ -58,13 +58,19 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      # Chaquopy installs the app's Python packages with a build-machine Python of the same version.
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
       # Project has no checked-in wrapper jar; provide Gradle directly.
       # Cache is shared across branches (cache-read-only false) so PR runs
       # reuse main's dependency + build cache entries.
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.9'
+          gradle-version: '8.14.3'
           cache-read-only: false
 
       # One Gradle invocation for both tasks: a single daemon, one
@@ -125,10 +131,16 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      # Chaquopy installs the app's Python packages with a build-machine Python of the same version.
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.9'
+          gradle-version: '8.14.3'
           cache-read-only: false
 
       - name: Decode keystore
@@ -172,10 +184,16 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      # Chaquopy installs the app's Python packages with a build-machine Python of the same version.
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.9'
+          gradle-version: '8.14.3'
           cache-read-only: false
 
       # Without KVM the emulator falls back to software emulation (TCG): boot stalled with
