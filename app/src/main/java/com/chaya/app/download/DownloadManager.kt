@@ -750,8 +750,9 @@ class DownloadManager(
 
             override fun onStreamCompleted(taskId: Long) = completeTask(taskId)
 
-            override fun onStreamFailed(taskId: Long, reason: Int) {
-                failTask(taskId, IOException("Stream download failed (reason $reason)"))
+            override fun onStreamFailed(taskId: Long, reason: Int, cause: Exception?) {
+                // The cause, when there is one, lets a refused or dropped connection be explained as such.
+                failTask(taskId, cause ?: IOException("Stream download failed (reason $reason)"))
             }
 
             override fun onStreamPaused(taskId: Long) {
