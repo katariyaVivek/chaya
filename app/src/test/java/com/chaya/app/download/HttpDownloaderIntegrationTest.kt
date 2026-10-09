@@ -314,6 +314,37 @@ class HttpDownloaderIntegrationTest {
     }
 
     @Test
+    fun `cancel after the headers arrived still stops the transfer`() {
+        val payload = fixtureBytes(4096)
+        // Headers go out at once; the body waits, so the cancel lands between the two.
+        server.enqueue(
+            MockResponse()
+                .setBody(Buffer().write(payload))
+                .setBodyDelay(1, TimeUnit.SECONDS)
+        )
+
+        val headersIn = CountDownLatch(1)
+        val completion = CountDownLatch(1)
+        val completed = arrayOfNulls<Result<File>>(1)
+        startDownload(
+            saveFile("out.bin"),
+            onMeta = { headersIn.countDown() },
+            onComplete = {
+                completed[0] = it
+                completion.countDown()
+            },
+        )
+        assertTrue("the response headers never arrived", headersIn.await(5, TimeUnit.SECONDS))
+        downloader.cancel(taskId = 1L)
+
+        assertFalse(
+            "onComplete must never fire after cancel",
+            completion.await(3, TimeUnit.SECONDS),
+        )
+        assertNull(completed[0])
+    }
+
+    @Test
     fun `response body reads are consumed as raw bytes without auto-decompression surprises`() {
         // Accept-Encoding: identity forbids gzip so byte counts line up with
         // what the server actually sent.
