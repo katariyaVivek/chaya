@@ -485,7 +485,7 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             qualityHeight = chosenHeight,
         )
 
-        val streamKeys = tracks.flatMap { it.streamKeys }
+        val streamKeys = ManifestHelper.streamKeysFor(tracks)
         if (streamKeys.isEmpty()) {
             downloadManager.startDownload(media)
         } else {
