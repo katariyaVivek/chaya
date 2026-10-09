@@ -32,7 +32,9 @@ the next one up (no rebasing).
    been tested, but a real lookup followed by a real download has not run in one piece. A
    walkthrough scenario for it would make that repeatable.
 3. **Decide whether YouTube is practical on a phone.** `device-tests.yml` logs how long and how much
-   memory the solver needs on YouTube's current player (`ChayaDevice` in `device-numbers.txt`).
+   memory the solver needs on YouTube's current player (`ChayaDevice` in `device-numbers.txt`, a
+   run artifact). The first full run (all 17 device tests passing) has those numbers; read them
+   before deciding.
 4. **Keep yt-dlp current.** Sites change often and the bundled yt-dlp is pinned; self-update (or a
    release cadence that tracks yt-dlp) is not built yet.
 5. **More picture formats for joining.** Only H.264 is joined today. HEVC and AV1 muxing depends on
@@ -40,8 +42,9 @@ the next one up (no rebasing).
 
 ## Known rough edges
 
-- The emulator walkthrough can lose the emulator itself on a CI runner while the test video plays:
-  the app is then reported as not running and `adb` stops answering. Earlier runs stalled the same
-  way under memory pressure. If it recurs, give the emulator more memory or play a lighter video.
+- The emulator walkthrough lost the emulator itself twice (the app reported as not running, then
+  `adb` silent), both times after a stream download that pulled in an extra 720p variant (190 MB
+  for a 184p pick). Since that bug was fixed (184p now saves 21 MB) the walkthrough has passed. If
+  the emulator dies again, give it more memory or play a lighter video.
 - Gradle's parallel project execution is off: with Chaquopy it made `kspDebugKotlin` fail on a
   project lock. The app is a single module, so nothing is lost.
