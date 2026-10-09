@@ -73,17 +73,22 @@ class HttpDownloader(
 
         call.enqueue(object : okhttp3.Callback {
             override fun onFailure(call: okhttp3.Call, e: IOException) {
-                synchronized(activeCalls) { activeCalls.remove(taskId) }
+                release(taskId, call)
                 // Silent when cancelled — manager owns the state machine.
                 if (call.isCanceled()) return
                 onComplete(Result.failure(e))
             }
 
-            override fun onResponse(call: okhttp3.Call, response: Response) {
-                synchronized(activeCalls) {
-                    if (!call.isCanceled()) activeCalls.remove(taskId)
-                }
+            // The call stays registered until its body is fully read: it used to be dropped as soon as
+            // the headers arrived, so a pause, cancel or delete during the transfer found nothing to
+            // cancel and the body kept streaming into the file, then reported success.
+            override fun onResponse(call: okhttp3.Call, response: Response) = try {
+                transfer(call, response)
+            } finally {
+                release(taskId, call)
+            }
 
+            private fun transfer(call: okhttp3.Call, response: Response) {
                 response.use { resp ->
                     if (call.isCanceled()) return
 
@@ -164,6 +169,13 @@ class HttpDownloader(
         synchronized(activeCalls) {
             activeCalls.values.forEach { it.cancel() }
             activeCalls.clear()
+        }
+    }
+
+    /** Forgets [call] once it has ended, unless a resume has already registered a newer call for [taskId]. */
+    private fun release(taskId: Long, call: okhttp3.Call) {
+        synchronized(activeCalls) {
+            if (activeCalls[taskId] === call) activeCalls.remove(taskId)
         }
     }
 
