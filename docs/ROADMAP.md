@@ -9,9 +9,9 @@ planning documents live in [`history/`](history/README.md).
 with pause/resume/retry, classified errors, on-device diagnostics, signed APK on GitHub Releases.
 The PR-by-PR record is [`history/engineering-roadmap-v0.3.md`](history/engineering-roadmap-v0.3.md).
 
-## Merged, not yet released: v0.4
-
-Merged into `main` on 9 October 2026, in stack order. Tag `v0.4.0` to release it.
+**v0.4.0** (October 2026): a smarter media list (main video first, real names, ads folded away,
+one entry per quality), the redesigned UI, and links from YouTube, Instagram, TikTok and X looked
+up by yt-dlp on the phone, with picture and sound joined into one MP4. Merged as a stack:
 
 | PR | What it adds |
 |---|---|
@@ -21,6 +21,7 @@ Merged into `main` on 9 October 2026, in stack order. Tag `v0.4.0` to release it
 | [#20](https://github.com/katariyaVivek/chaya/pull/20) | Picture plus sound saved as one MP4 (`MediaMuxer`), engine-supplied headers, Room v5 |
 | [#21](https://github.com/katariyaVivek/chaya/pull/21) | On-device tests for the engine, the solver and the join |
 | [#22](https://github.com/katariyaVivek/chaya/pull/22) | Paste or share a YouTube, Instagram, TikTok or X link and pick a quality; optional use of the browser's sign-in |
+| [#23](https://github.com/katariyaVivek/chaya/pull/23) | Follow-up from review: a video-site answer is looked up again once its addresses may have expired; DASH told apart by protocol |
 
 ## Next
 
