@@ -17,6 +17,7 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -40,6 +41,7 @@ class BrowserViewModelLinksTest {
 
     private val scope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher())
     private val asked = mutableListOf<String>()
+    private var now = 0L
     private lateinit var viewModel: BrowserViewModel
 
     @Before
@@ -48,7 +50,7 @@ class BrowserViewModelLinksTest {
             asked += url
             media()
         }
-        viewModel = BrowserViewModel(RuntimeEnvironment.getApplication(), PlatformLinks(scope, finder))
+        viewModel = BrowserViewModel(RuntimeEnvironment.getApplication(), PlatformLinks(scope, finder, clock = { now }))
     }
 
     @After
@@ -234,6 +236,40 @@ class BrowserViewModelLinksTest {
         )
 
         assertEquals("application/dash+xml", streamMediaFor(found, dash).mimeType)
+    }
+
+    @Test
+    fun `an answer old enough for its addresses to have expired is looked up again, not downloaded`() {
+        viewModel.openLink(video)
+        val found = viewModel.linkState.value as LinkState.Found
+        now += 21 * 60 * 1000L
+        var reported: String? = null
+
+        viewModel.downloadLink(found.best) { reported = it }
+
+        assertNull("nothing may start from stale addresses", reported)
+        assertTrue("the sheet stays open for the new answer", viewModel.uiState.value.showLinkSheet)
+        assertEquals(2, asked.size)
+        assertTrue(viewModel.linkState.value is LinkState.Found)
+    }
+
+    @Test
+    fun `a DASH manifest whose address does not say so is still told apart by its protocol`() {
+        viewModel.openLink(video)
+        val found = viewModel.linkState.value as LinkState.Found
+        val dash = PlatformChoice(
+            "1080p", "", 1080,
+            PlatformFormatFixtures.format(id = "dash", protocol = "http_dash_segments", url = "https://cdn.example/v/abc?sig=1"),
+            null, false,
+        )
+        val hls = PlatformChoice(
+            "720p", "", 720,
+            PlatformFormatFixtures.format(id = "hls", protocol = "m3u8_native", url = "https://cdn.example/v/abc?sig=2"),
+            null, false,
+        )
+
+        assertEquals("application/dash+xml", streamMediaFor(found, dash).mimeType)
+        assertEquals("application/x-mpegURL", streamMediaFor(found, hls).mimeType)
     }
 
     @Test

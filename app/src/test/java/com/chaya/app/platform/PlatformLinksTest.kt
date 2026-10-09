@@ -118,6 +118,28 @@ class PlatformLinksTest {
     }
 
     @Test
+    fun `the video still on screen is looked up again once its answer has gone stale`() = runTest {
+        var now = 0L
+        val finder = finder { media(complete("m", 1280, 720)) }
+        val links = PlatformLinks(backgroundScope, finder, clock = { now })
+        links.look(video)
+        runCurrent()
+        assertTrue(links.freshFound() != null)
+
+        now += 21 * 60 * 1000L
+        links.look(video)
+        assertTrue("an old answer must not be kept", links.state.value is LinkState.Looking)
+        runCurrent()
+        assertEquals(2, finder.urls.size)
+
+        now += 21 * 60 * 1000L
+        assertNull("a stale answer is not handed out", links.freshFound())
+        runCurrent()
+        assertEquals(3, finder.urls.size)
+        assertTrue(links.freshFound() != null)
+    }
+
+    @Test
     fun `a failure is shown, not retried by itself, and retry asks again`() = runTest {
         val finder = finder { throw PlatformException(PlatformException.Kind.PRIVATE) }
         val links = PlatformLinks(backgroundScope, finder)
