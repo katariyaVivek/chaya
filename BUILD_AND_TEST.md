@@ -29,7 +29,7 @@ This is the **Chaya** Android app — a WebView-based browser with smart media d
 ### Prerequisites
 
 - Android Studio (Hedgehog 2023.1+ or later)
-- Android SDK 35
+- Android SDK 36
 - JDK 17
 
 ### Steps
@@ -49,7 +49,7 @@ This is the **Chaya** Android app — a WebView-based browser with smart media d
      ./gradlew assembleDebug
      ```
 
-> **Note:** the Gradle wrapper JAR is not checked in. Open the project once in Android Studio (which generates it), or run `gradle wrapper --gradle-version 8.9` if you have a local Gradle install.
+> **Note:** the Gradle wrapper JAR is not checked in. Open the project once in Android Studio (which generates it), or run `gradle wrapper --gradle-version 8.14.3` if you have a local Gradle install.
 
 4. **Install** on a connected device/emulator:
    ```
@@ -170,7 +170,7 @@ com.chaya.app
 | Android WebView | Browser engine |
 | OkHttp 4.12 | Regular file downloads |
 | Media3 1.5.1 (ExoPlayer) | HLS/DASH streaming downloads |
-| Room 2.6.1 | Download history persistence |
+| Room 2.7.2 | Download history persistence |
 | Kotlin Coroutines 1.9 | Async operations |
 | Navigation Compose 2.8 | Screen navigation |
 
