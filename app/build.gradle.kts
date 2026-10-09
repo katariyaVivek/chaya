@@ -182,3 +182,13 @@ android {
         }
     }
 }
+
+// CI logs show why a unit test failed (its message and stack), not just which line it failed on.
+tasks.withType<Test>().configureEach {
+    testLogging {
+        events("failed")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        showCauses = true
+        showStackTraces = true
+    }
+}
