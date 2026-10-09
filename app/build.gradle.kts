@@ -24,6 +24,8 @@ android {
         versionCode = 1
         versionName = "0.3.0"
 
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
         // The Python runtime ships a native build per ABI. Phones are arm64; x86_64 is for emulators
         // (and the CI walkthrough). 32-bit ABIs are left out to keep the APK from growing further.
         ndk {
@@ -151,10 +153,16 @@ dependencies {
     testImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 
-    // Compose UI tests (androidTest, emulator/CI only — see build.yml)
+    // On-device tests (androidTest): what a plain JVM cannot run — Python and yt-dlp inside the app, the
+    // QuickJS engine and the real MediaMuxer join. They run in a cloud emulator; see device-tests.yml.
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.core)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.mockwebserver)
+
+    // Compose UI tests (androidTest, emulator/CI only)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
-    androidTestImplementation(libs.androidx.test.ext.junit)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 }
 

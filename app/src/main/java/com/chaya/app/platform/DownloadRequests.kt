@@ -10,14 +10,19 @@ fun PlatformChoice.toDownloadRequest(media: PlatformMedia, pageUrl: String? = nu
     require(file.isDirectFile) { "A streaming manifest is not a plain file" }
     val title = media.title.trim().ifEmpty { "Video" }
     val extension = savedExtension()
-    val tag = if (isAudioOnly) "audio" else label
+    // "Title (720p).mp4", "Title (audio).m4a"; a video with no picture size is just "Title.mp4".
+    val tag = when {
+        isAudioOnly -> "audio"
+        quality == null -> null
+        else -> label
+    }
     return DownloadRequest(
         url = file.url,
         headers = file.headers,
         audioUrl = audioToMerge?.url,
         audioHeaders = audioToMerge?.headers.orEmpty(),
         pageUrl = pageUrl ?: media.pageUrl,
-        fileName = "$title ($tag).$extension",
+        fileName = if (tag == null) "$title.$extension" else "$title ($tag).$extension",
         mimeType = mimeTypeFor(extension, isAudioOnly),
         title = title,
         thumbnailUrl = media.thumbnailUrl,

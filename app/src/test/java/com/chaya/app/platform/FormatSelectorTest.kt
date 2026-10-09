@@ -297,13 +297,65 @@ class FormatSelectorTest {
     }
 
     @Test
-    fun `storyboards and formats without a size in pixels are ignored`() {
+    fun `storyboards are never offered`() {
         val media = media(
             PlatformFormatFixtures.format(id = "sb0", ext = "mhtml", vcodec = "none", acodec = "none", width = 48, height = 27),
-            complete("unsized", null, null),
         )
 
         assertTrue(FormatSelector.choices(media, canMerge = true).isEmpty())
+    }
+
+    @Test
+    fun `a bare video link with no picture size is offered as plain Video`() {
+        val media = media(complete("direct", null, null, size = 2_048))
+
+        val choices = FormatSelector.choices(media, canMerge = false)
+
+        assertEquals(listOf("Video"), choices.map { it.label })
+        assertNull(choices.single().quality)
+        assertFalse(choices.single().isAudioOnly)
+        assertEquals("direct", choices.single().file.id)
+        assertEquals("MP4 · ≈ 2.0 KB", choices.single().detail)
+    }
+
+    @Test
+    fun `files with no picture size are left out once sized qualities exist`() {
+        val media = media(complete("sized", 1280, 720), complete("unsized", null, null))
+
+        assertEquals(listOf("720p"), FormatSelector.choices(media, canMerge = false).map { it.label })
+    }
+
+    @Test
+    fun `of several bare files the MP4 with the higher bitrate is the one offered`() {
+        val media = media(
+            complete("web", null, null, ext = "webm", tbr = 5000.0),
+            complete("mp4-low", null, null, tbr = 500.0),
+            complete("mp4-high", null, null, tbr = 900.0),
+        )
+
+        assertEquals("mp4-high", FormatSelector.choices(media, canMerge = false).single().file.id)
+    }
+
+    @Test
+    fun `a bare audio link with no codec named is offered as audio only`() {
+        val media = media(
+            PlatformFormatFixtures.format(id = "mp3", ext = "mp3", vcodec = "none", acodec = null),
+        )
+
+        val choices = FormatSelector.choices(media, canMerge = false)
+
+        assertEquals(listOf("Audio only"), choices.map { it.label })
+        assertTrue(choices.single().isAudioOnly)
+    }
+
+    @Test
+    fun `a bare video and a bare audio file are both offered`() {
+        val media = media(
+            complete("clip", null, null),
+            PlatformFormatFixtures.format(id = "song", ext = "m4a", vcodec = "none", acodec = "mp4a.40.2"),
+        )
+
+        assertEquals(listOf("Video", "Audio only"), FormatSelector.choices(media, canMerge = false).map { it.label })
     }
 
     @Test

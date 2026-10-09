@@ -33,8 +33,9 @@ data class PlatformFormat(
     val hasVideo: Boolean get() = videoCodec != "none"
     val hasAudio: Boolean get() = audioCodec != "none"
 
+    /** No picture, and sound that is present or at least not ruled out (a bare audio link often leaves the codec out). */
     val isAudioOnly: Boolean
-        get() = !audioCodec.isNullOrEmpty() && audioCodec != "none" && (videoCodec == null || videoCodec == "none")
+        get() = audioCodec != "none" && (videoCodec == "none" || (videoCodec == null && !audioCodec.isNullOrEmpty()))
 
     /** A plain file at one address, as opposed to an HLS or DASH manifest of many pieces. */
     val isDirectFile: Boolean
