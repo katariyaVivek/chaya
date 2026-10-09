@@ -9,6 +9,7 @@ plugins {
 // Buildscript classpath import: Gradle Kotlin DSL scripts do not resolve
 // fully-qualified java.util references without it.
 import java.util.Properties
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 android {
     namespace = "com.chaya.app"
@@ -79,15 +80,18 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-
     buildFeatures {
         compose = true
         // Generates com.chaya.app.BuildConfig (DEBUG/ VERSION_NAME) used by
         // diagnostics gating (StrictMode) and crash-report app-version field.
         buildConfig = true
+    }
+}
+
+// Kotlin 2.2 and later reject the old android { kotlinOptions { } } block.
+kotlin {
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
     }
 }
 
