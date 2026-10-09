@@ -79,6 +79,42 @@ class DetectedMediaSheetTest {
     }
 
     @Test
+    fun `a stream offers a Quality button next to Download and a file does not`() {
+        val picked = mutableListOf<RankedMedia>()
+        val downloaded = mutableListOf<RankedMedia>()
+        composeRule.setContent {
+            DetectedMediaSheet(
+                model = MediaSheetModel(main, emptyList(), emptyList(), 0),
+                onDismiss = {},
+                onDownload = { downloaded += it },
+                onChooseQuality = { picked += it },
+            )
+        }
+
+        composeRule.onNodeWithText("Quality").performClick()
+        composeRule.onNodeWithText("Download").performClick()
+
+        assertEquals(listOf(main), picked)
+        assertEquals(listOf(main), downloaded)
+    }
+
+    @Test
+    fun `a plain file has no Quality button`() {
+        val file = ranked("https://cdn.example/clip.mp4", "Clip", MediaKind.VIDEO)
+        composeRule.setContent {
+            DetectedMediaSheet(
+                model = MediaSheetModel(file, emptyList(), emptyList(), 0),
+                onDismiss = {},
+                onDownload = {},
+                onChooseQuality = {},
+            )
+        }
+
+        composeRule.onNodeWithText("Download").assertIsDisplayed()
+        composeRule.onNodeWithText("Quality").assertDoesNotExist()
+    }
+
+    @Test
     fun `likely ads stay folded until the toggle is tapped`() {
         composeRule.setContent {
             DetectedMediaSheet(

@@ -34,8 +34,8 @@ HLS_DEMO = "https://hlsjs.video-dev.org/demo/"
 # Positions as fractions of the screen, used only when a node cannot be found by text.
 FALLBACK = {
     "url_bar": (0.44, 0.065),
-    "downloads_button": (0.91, 0.065),
-    "fab": (0.883, 0.858),
+    "downloads_button": (0.875, 0.945),  # fourth tab of the bottom bar
+    "fab": (0.5, 0.868),                 # the floating download pill, centred above the bar
 }
 
 PAGE = """<!doctype html>
@@ -321,7 +321,8 @@ def scenario_hls():
     tap_when("hls: open the media sheet", 20, FALLBACK["fab"], desc_contains="Detected media")
     wait_for("hls: media sheet shows", 30, text="On this page")
     snapshot("hls-sheet")
-    if not tap_when("hls: tap Download", 20, text="Download"):
+    # Download on a stream starts the best quality straight away; Quality opens the picker.
+    if not tap_when("hls: tap Quality", 20, text="Quality"):
         return
     wait_for("hls: quality picker shows", 60, text="Choose quality")
     snapshot("hls-picker")

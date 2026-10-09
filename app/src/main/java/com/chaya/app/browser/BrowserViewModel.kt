@@ -12,6 +12,7 @@ import com.chaya.app.detection.PageMeta
 import com.chaya.app.detection.sniffContentType
 import com.chaya.app.diagnostics.ChayaEvent
 import com.chaya.app.download.DownloadManager
+import com.chaya.app.download.DownloadTask
 import com.chaya.app.model.DetectionSource
 import com.chaya.app.model.DetectedMedia
 import com.chaya.app.streaming.ManifestHelper
@@ -68,6 +69,10 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
 
     private val _uiState = MutableStateFlow(BrowserUiState())
     val uiState: StateFlow<BrowserUiState> = _uiState.asStateFlow()
+
+    /** Every download, for the Downloads tab badge and the start screen's recent list. */
+    val downloads: StateFlow<List<DownloadTask>>
+        get() = downloadManager.downloads
 
     /** Issues monotonically increasing document identities outside state updates that may retry their lambda. */
     private val pageGeneration = AtomicLong(0L)
@@ -397,23 +402,57 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
                                 mimeType = media.mimeType,
                                 suggestedName = media.suggestedName,
                                 durationSeconds = durationSeconds,
+                                title = media.title,
+                                thumbnailUrl = media.thumbnailUrl,
                             )
                         )
                     }
                 },
-                onFailure = { error ->
-                    // Keep the URL so "download anyway" still works.
-                    _uiState.value = _uiState.value.copy(
-                        qualityPickerState = QualityPickerState.Error(
-                            message = error.message ?: "Failed to analyze stream",
-                            url = media.url,
-                            mimeType = media.mimeType,
-                            suggestedName = media.suggestedName,
-                        )
-                    )
-                }
+                onFailure = { error -> showStreamError(media, error) }
             )
         }
+    }
+
+    /**
+     * One tap: reads the stream's renditions and starts the best one with its audio, without the picker.
+     * [onStarted] gets the chosen quality (e.g. "1080p") once the download is queued. If the manifest
+     * can't be read, the picker opens with its "Download anyway" fallback instead.
+     */
+    fun downloadStreamBest(media: DetectedMedia, onStarted: (String?) -> Unit = {}) {
+        viewModelScope.launch {
+            val result = ManifestHelper.parse(
+                context = getApplication(),
+                url = media.url,
+                mimeType = media.mimeType,
+                userAgent = WebSettings.getDefaultUserAgent(getApplication()),
+                cookies = runCatching {
+                    CookieManager.getInstance().getCookie(media.url)
+                }.getOrNull()
+            )
+
+            result.fold(
+                onSuccess = { tracks ->
+                    val chosen = ManifestHelper.bestSelection(tracks)
+                    startStreamDownload(media, chosen)
+                    onStarted(chosen.maxOfOrNull { it.height }?.takeIf { it > 0 }?.let { "${it}p" })
+                },
+                onFailure = { error -> showStreamError(media, error) }
+            )
+        }
+    }
+
+    /** Keeps the URL so the picker's "Download anyway" still works after a failed analysis. */
+    private fun showStreamError(media: DetectedMedia, error: Throwable) {
+        _uiState.value = _uiState.value.copy(
+            qualityPickerState = QualityPickerState.Error(
+                message = error.message ?: "Failed to analyze stream",
+                url = media.url,
+                mimeType = media.mimeType,
+                suggestedName = media.suggestedName,
+                title = media.title,
+                thumbnailUrl = media.thumbnailUrl,
+            )
+        )
     }
 
     /** Download stream with user-selected tracks. */
@@ -422,14 +461,28 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
         if (state !is QualityPickerState.Ready) return
 
         _uiState.value = _uiState.value.copy(qualityPickerState = null)
-        // The chosen rendition, not the one the page happened to be playing, names the file.
+        startStreamDownload(
+            base = DetectedMedia(
+                url = state.url,
+                pageUrl = null,
+                mimeType = state.mimeType,
+                source = DetectionSource.MANIFEST,
+                suggestedName = state.suggestedName,
+                title = state.title,
+                thumbnailUrl = state.thumbnailUrl,
+            ),
+            tracks = tracks,
+        )
+    }
+
+    /** Starts [base] with exactly [tracks]; the chosen rendition, not the one the page was playing, names the file. */
+    private fun startStreamDownload(base: DetectedMedia, tracks: List<StreamTrack>) {
         val chosenHeight = tracks.maxOfOrNull { it.height }?.takeIf { it > 0 }
-        val media = DetectedMedia(
-            url = state.url,
+        val media = base.copy(
             pageUrl = _uiState.value.url,
-            mimeType = state.mimeType,
-            source = com.chaya.app.model.DetectionSource.MANIFEST,
-            suggestedName = state.suggestedName?.let { MediaNamer.fileBaseName(it, chosenHeight) },
+            source = DetectionSource.MANIFEST,
+            suggestedName = base.suggestedName?.let { MediaNamer.fileBaseName(it, chosenHeight) },
+            qualityHeight = chosenHeight,
         )
 
         val streamKeys = ManifestHelper.streamKeysFor(tracks)
@@ -452,6 +505,8 @@ class BrowserViewModel(application: Application) : AndroidViewModel(application)
             mimeType = state.mimeType,
             source = com.chaya.app.model.DetectionSource.MANIFEST,
             suggestedName = state.suggestedName,
+            title = state.title,
+            thumbnailUrl = state.thumbnailUrl,
         )
         downloadManager.startDownload(media)
     }

@@ -60,12 +60,17 @@ sealed interface QualityPickerState {
         val suggestedName: String? = null,
         /** Known playback length; turns each rendition's bitrate into a size estimate. */
         val durationSeconds: Double? = null,
+        /** Display title and poster, carried through to the downloads list. */
+        val title: String? = null,
+        val thumbnailUrl: String? = null,
     ) : QualityPickerState
     data class Error(
         val message: String,
         val url: String = "",
         val mimeType: String? = null,
         val suggestedName: String? = null,
+        val title: String? = null,
+        val thumbnailUrl: String? = null,
     ) : QualityPickerState
 }
 

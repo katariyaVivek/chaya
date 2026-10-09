@@ -88,3 +88,9 @@ Patterns: nav = fade-through (fade + slight rise/scale) · lists = staggered fad
 - **Pill chips** for quick links/actions: surfaceContainerHigh fill, no border
 - **Sheets**: drag handle, 28dp top corners, list rows with trailing icon action
 - **Empty states**: soft icon circle + one teaching line, never "nothing here"
+- **Download pill**: floats at thumb height above the bottom bar when a page has media. Poster circle, title, facts line, and one accent circle (the page's only accent action). Tapping anywhere opens the media sheet. Replaces the round download button.
+- **Address bar**: a field on the start screen (with a Paste chip) and while editing; on a page it collapses to the site name with a lock and a refresh button. Submitting closes the keyboard.
+- **Media sheet**: main card first (poster stage, title, facts, Download, plus Quality for streams), then other media, likely ads folded away, and one line about hidden stream pieces.
+- **Download card**: 16dp surface with a hairline border, 72x46 poster, title (two lines), a progress or status line, one tonal action for what the download needs next, and an overflow menu for the rest. Swipe left to delete, with Undo. Streams, which never report a size, get a moving bar instead of a stuck 0%.
+- **Filter chips**: All, Active, Done. Selected = primaryContainer, unselected = surfaceContainerHigh, no border.
+- **Start screen**: quick sites as monogram tiles (no brand logos), then the latest downloads. No sample links, no how-it-works list.
