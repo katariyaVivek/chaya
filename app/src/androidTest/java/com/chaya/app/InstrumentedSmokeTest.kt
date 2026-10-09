@@ -3,6 +3,7 @@ package com.chaya.app
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.chaya.app.detection.MediaSheetModel
 import com.chaya.app.ui.components.DetectedMediaSheet
 import org.junit.Rule
 import org.junit.Test
@@ -23,7 +24,7 @@ class InstrumentedSmokeTest {
     @Test
     fun emptyMediaSheetRendersTeachingLine() {
         composeRule.setContent {
-            DetectedMediaSheet(mediaList = emptyList(), onDismiss = {}, onDownload = {})
+            DetectedMediaSheet(model = MediaSheetModel.EMPTY, onDismiss = {}, onDownload = {})
         }
 
         composeRule.onNodeWithText("Nothing found yet. Play or scroll the page.").assertExists()
