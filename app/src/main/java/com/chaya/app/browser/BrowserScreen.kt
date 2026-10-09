@@ -65,6 +65,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Stream
 import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
@@ -90,11 +91,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -107,8 +111,10 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.chaya.app.detection.MediaBridge
 import com.chaya.app.detection.MediaInterceptor
+import com.chaya.app.detection.MediaNamer
+import com.chaya.app.detection.MediaRanker
 import com.chaya.app.model.DetectedMedia
-import com.chaya.app.streaming.StreamDownloader
+import com.chaya.app.model.MediaKind
 import com.chaya.app.ui.components.DetectedMediaSheet
 import com.chaya.app.ui.components.NotificationRationaleSheet
 import com.chaya.app.ui.components.QualitySelectorSheet
@@ -136,7 +142,7 @@ private object WebViewHolder {
     var callbacks: RetainedWebViewCallbacks? = null
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalComposeUiApi::class)
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun BrowserScreen(
@@ -148,6 +154,8 @@ fun BrowserScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
 
     // Fullscreen video state (WebChromeClient custom view)
     var customView by remember { mutableStateOf<View?>(null) }
@@ -228,7 +236,7 @@ fun BrowserScreen(
             viewModel.downloadMedia(media)
             scope.launch {
                 val msg = if (granted) {
-                    "Downloading ${media.url.substringAfterLast("/").take(32)}"
+                    "Downloading ${downloadLabel(media)}"
                 } else {
                     "Downloading (notifications off)"
                 }
@@ -257,6 +265,7 @@ fun BrowserScreen(
                 onMediaCandidate = { candidate, navigationGeneration ->
                     viewModel.verifyMediaCandidate(candidate, navigationGeneration)
                 },
+                onPageMeta = viewModel::onPageMeta,
             )
         } ?: MediaBridge(
             onMediaDetected = { media, navigationGeneration ->
@@ -265,6 +274,7 @@ fun BrowserScreen(
             onMediaCandidate = { candidate, navigationGeneration ->
                 viewModel.verifyMediaCandidate(candidate, navigationGeneration)
             },
+            onPageMeta = viewModel::onPageMeta,
         ).also { WebViewHolder.mediaBridge = it }
     }
     // Rebind detector callbacks synchronously after every composition so retained objects never route to old state.
@@ -279,6 +289,24 @@ fun BrowserScreen(
             onMediaCandidate = { candidate, navigationGeneration ->
                 viewModel.verifyMediaCandidate(candidate, navigationGeneration)
             },
+            onPageMeta = viewModel::onPageMeta,
+        )
+    }
+
+    // Ranks and names the page's media; pure and cheap, so it recomputes only when its inputs change.
+    val sheetModel = remember(
+        uiState.detectedMedia,
+        uiState.pageMeta,
+        uiState.url,
+        uiState.pageTitle,
+        uiState.hiddenSegmentCount,
+    ) {
+        MediaRanker.rank(
+            media = uiState.detectedMedia,
+            pageMeta = uiState.pageMeta,
+            pageUrl = uiState.url,
+            pageTitle = uiState.pageTitle,
+            hiddenSegmentCount = uiState.hiddenSegmentCount,
         )
     }
 
@@ -367,7 +395,7 @@ fun BrowserScreen(
             viewModel.downloadMedia(media)
             scope.launch {
                 snackbarHostState.showSnackbar(
-                    message = "Downloading ${media.url.substringAfterLast("/").take(32)}",
+                    message = "Downloading ${downloadLabel(media)}",
                     duration = SnackbarDuration.Short
                 )
             }
@@ -458,7 +486,16 @@ fun BrowserScreen(
                                     imeAction = ImeAction.Go
                                 ),
                                 keyboardActions = KeyboardActions(
-                                    onGo = { navigateToUrl(urlInput) }
+                                    onGo = {
+                                        navigateToUrl(urlInput)
+                                        keyboardController?.hide()
+                                        // Give the page the focus instead of just clearing it. After an Enter from a
+                                        // physical or Bluetooth keyboard, Android hands cleared focus straight back
+                                        // to the first text field, which reopens the keyboard over the page and the
+                                        // download button (seen in the emulator walkthrough).
+                                        val page = WebViewHolder.instance
+                                        if (page == null || !page.requestFocus()) focusManager.clearFocus()
+                                    }
                                 ),
                                 textStyle = MaterialTheme.typography.bodyMedium.copy(
                                     fontWeight = FontWeight.Medium
@@ -615,7 +652,7 @@ fun BrowserScreen(
 
                 // Floating detected-media button — spring entrance + live badge
                 AnimatedVisibility(
-                    visible = !uiState.homeVisible && uiState.detectedMedia.isNotEmpty(),
+                    visible = !uiState.homeVisible && !sheetModel.isEmpty,
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .padding(end = 20.dp, bottom = 20.dp),
@@ -635,30 +672,35 @@ fun BrowserScreen(
                         ),
                         modifier = Modifier.pressScale(0.94f)
                     ) {
-                        Box(contentAlignment = Alignment.Center) {
+                        // BadgedBox offsets the count outside the glyph so it never covers the icon.
+                        BadgedBox(
+                            badge = {
+                                if (sheetModel.visibleCount > 0) {
+                                    Badge(
+                                        containerColor = MaterialTheme.colorScheme.primary,
+                                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                                    ) {
+                                        AnimatedContent(
+                                            targetState = sheetModel.visibleCount,
+                                            transitionSpec = {
+                                                (slideInVertically(ChayaMotion.tweenShort()) { it } +
+                                                        fadeIn(ChayaMotion.tweenShort())) togetherWith
+                                                        (slideOutVertically(ChayaMotion.tweenShort()) { -it } +
+                                                        fadeOut(ChayaMotion.tweenShort()))
+                                            },
+                                            label = "badgeCount"
+                                        ) { count ->
+                                            Text("$count", style = MaterialTheme.typography.labelMedium)
+                                        }
+                                    }
+                                }
+                            }
+                        ) {
                             Icon(
                                 imageVector = Icons.Default.FileDownload,
                                 contentDescription = "Detected media",
                                 modifier = Modifier.size(26.dp)
                             )
-                            Badge(
-                                containerColor = MaterialTheme.colorScheme.primary,
-                                contentColor = MaterialTheme.colorScheme.onPrimary,
-                                modifier = Modifier.align(Alignment.TopEnd)
-                            ) {
-                                AnimatedContent(
-                                    targetState = uiState.detectedMedia.size,
-                                    transitionSpec = {
-                                        (slideInVertically(ChayaMotion.tweenShort()) { it } +
-                                                fadeIn(ChayaMotion.tweenShort())) togetherWith
-                                                (slideOutVertically(ChayaMotion.tweenShort()) { -it } +
-                                                fadeOut(ChayaMotion.tweenShort()))
-                                    },
-                                    label = "badgeCount"
-                                ) { count ->
-                                    Text("$count", style = MaterialTheme.typography.labelMedium)
-                                }
-                            }
                         }
                     }
                 }
@@ -666,16 +708,18 @@ fun BrowserScreen(
                 // Media detection bottom sheet
                 if (uiState.showMediaSheet) {
                     DetectedMediaSheet(
-                        mediaList = uiState.detectedMedia,
+                        model = sheetModel,
                         onDismiss = { viewModel.dismissMediaSheet() },
-                        onDownload = { media ->
+                        onDownload = { item ->
                             viewModel.dismissMediaSheet()
-                            if (StreamDownloader.isStreamingUrl(media.url) ||
-                                StreamDownloader.isStreamingMime(media.mimeType)
-                            ) {
-                                viewModel.analyzeStream(media)
+                            if (item.kind == MediaKind.STREAM) {
+                                // The quality picker adds the chosen rendition's height to the name.
+                                viewModel.analyzeStream(
+                                    item.media.copy(suggestedName = MediaNamer.fileBaseName(item.title, null)),
+                                    item.durationSeconds,
+                                )
                             } else {
-                                requestPermissionAndDownload(media)
+                                requestPermissionAndDownload(item.media.copy(suggestedName = item.fileBaseName))
                             }
                         }
                     )
@@ -700,7 +744,7 @@ fun BrowserScreen(
                 // system dialog; declining still starts the download.
                 rationaleMedia?.let { media ->
                     NotificationRationaleSheet(
-                        fileName = media.url.substringAfterLast("/").take(48),
+                        fileName = downloadLabel(media),
                         onAllow = { proceedFromRationale(true) },
                         onNotNow = { proceedFromRationale(false) },
                     )
@@ -1155,6 +1199,11 @@ private fun createChayaWebView(
         }
     }
 }
+
+/** Short label for snackbars and the notification rationale: the chosen title, else the URL's file name. */
+private fun downloadLabel(media: DetectedMedia): String =
+    media.suggestedName?.takeIf { it.isNotBlank() }
+        ?: media.url.substringBefore('?').substringAfterLast('/').take(32)
 
 /** Prepends the random main-document capability without interpolating page-controlled content. */
 private fun detectorScriptWithCapability(detectorJs: String, capability: String): String {

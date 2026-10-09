@@ -104,6 +104,11 @@ dependencies {
     // OkHttp
     implementation(libs.okhttp)
 
+    // Coil: poster/page thumbnails in the media sheet. Its own OkHttp client
+    // carries no WebView cookies, so thumbnails load anonymously.
+    implementation(libs.coil.compose)
+    implementation(libs.coil.network.okhttp)
+
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
 
@@ -144,5 +149,15 @@ android {
         unitTests {
             isIncludeAndroidResources = true
         }
+    }
+}
+
+// CI logs show why a unit test failed (its message and stack), not just which line it failed on.
+tasks.withType<Test>().configureEach {
+    testLogging {
+        events("failed")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+        showCauses = true
+        showStackTraces = true
     }
 }

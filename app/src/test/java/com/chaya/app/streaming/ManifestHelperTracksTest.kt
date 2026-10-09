@@ -1,0 +1,99 @@
+package com.chaya.app.streaming
+
+import androidx.media3.common.C
+import androidx.media3.common.Format
+import androidx.media3.common.StreamKey
+import org.junit.Assert.assertEquals
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import java.util.Locale
+
+/**
+ * Pins the picker's view of a manifest: one entry per rendition (an HLS
+ * master's adaptive group used to collapse into a single entry that
+ * downloaded every rendition), labeled by height and ordered best-first.
+ * Robolectric because Format normalizes language codes through TextUtils.
+ */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [35])
+class ManifestHelperTracksTest {
+
+    private fun video(width: Int, height: Int, peakBitrate: Int) =
+        Format.Builder().setWidth(width).setHeight(height).setPeakBitrate(peakBitrate).build()
+
+    /** Same renditions and order as test-streams.mux.dev/x36xhzz, the emulator reproduction. */
+    @Test
+    fun `renditions become separate entries ordered best first with their own keys`() {
+        val tracks = ManifestHelper.orderedForPicker(
+            listOf(
+                ManifestHelper.trackFor(video(1280, 720, 2_149_280), C.TRACK_TYPE_VIDEO, listOf(StreamKey(0, 0, 0))),
+                ManifestHelper.trackFor(video(320, 184, 246_440), C.TRACK_TYPE_VIDEO, listOf(StreamKey(0, 0, 1))),
+                ManifestHelper.trackFor(video(512, 288, 460_560), C.TRACK_TYPE_VIDEO, listOf(StreamKey(0, 0, 2))),
+                ManifestHelper.trackFor(video(848, 480, 836_280), C.TRACK_TYPE_VIDEO, listOf(StreamKey(0, 0, 3))),
+                ManifestHelper.trackFor(video(1920, 1080, 6_221_600), C.TRACK_TYPE_VIDEO, listOf(StreamKey(0, 0, 4))),
+                ManifestHelper.trackFor(Format.Builder().build(), C.TRACK_TYPE_AUDIO, listOf(StreamKey(0, 1, 0))),
+            )
+        )
+
+        assertEquals(listOf("1080p", "720p", "480p", "288p", "184p", "Audio"), tracks.map { it.label })
+        assertEquals("1920×1080 · 6.2 Mbps", tracks.first().detail)
+        assertEquals(listOf(StreamKey(0, 0, 4)), tracks.first().streamKeys)
+        assertEquals(1080, tracks.first().height)
+    }
+
+    @Test
+    fun `audio tracks are named by language and described by bitrate and channels`() {
+        val track = ManifestHelper.trackFor(
+            Format.Builder().setLanguage("en").setAverageBitrate(128_000).setChannelCount(2).build(),
+            C.TRACK_TYPE_AUDIO,
+            listOf(StreamKey(0, 1, 0)),
+        )
+
+        assertEquals(Locale.forLanguageTag("en").getDisplayLanguage(Locale.getDefault()), track.label)
+        assertEquals("128 kbps · 2ch", track.detail)
+    }
+
+    @Test
+    fun `undetermined language falls back to a plain audio label`() {
+        val track = ManifestHelper.trackFor(
+            Format.Builder().setLanguage(C.LANGUAGE_UNDETERMINED).build(),
+            C.TRACK_TYPE_AUDIO,
+            listOf(StreamKey(0, 1, 0)),
+        )
+
+        assertEquals("Audio", track.label)
+        assertEquals("", track.detail)
+    }
+
+    // Stream keys as Media3 derives them for HLS: group 0 holds the variants, group 1 the audio renditions.
+    private fun videoTrack(height: Int, variant: Int) =
+        StreamTrack(C.TRACK_TYPE_VIDEO, "${height}p", listOf(StreamKey(0, 0, variant)), height = height)
+
+    @Test
+    fun `muxed audio does not add a second variant to the chosen one`() {
+        // Muxed audio has no stream of its own; on its own Media3 points it at the cheapest variant.
+        val muxedAudio = StreamTrack(C.TRACK_TYPE_AUDIO, "Audio", listOf(StreamKey(0, 0, 1)))
+
+        val keys = ManifestHelper.streamKeysFor(listOf(videoTrack(720, variant = 0), muxedAudio))
+
+        assertEquals(listOf(StreamKey(0, 0, 0)), keys)
+    }
+
+    @Test
+    fun `a separate audio rendition is downloaded with the chosen video`() {
+        val audioRendition = StreamTrack(C.TRACK_TYPE_AUDIO, "English", listOf(StreamKey(0, 1, 0)))
+
+        val keys = ManifestHelper.streamKeysFor(listOf(videoTrack(184, variant = 4), audioRendition))
+
+        assertEquals(listOf(StreamKey(0, 0, 4), StreamKey(0, 1, 0)), keys)
+    }
+
+    @Test
+    fun `audio on its own keeps the keys Media3 gave it`() {
+        val muxedAudio = StreamTrack(C.TRACK_TYPE_AUDIO, "Audio", listOf(StreamKey(0, 0, 1)))
+
+        assertEquals(listOf(StreamKey(0, 0, 1)), ManifestHelper.streamKeysFor(listOf(muxedAudio)))
+    }
+}

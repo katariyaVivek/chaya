@@ -11,6 +11,7 @@ import android.provider.MediaStore
 import android.webkit.CookieManager
 import android.webkit.MimeTypeMap
 import android.webkit.WebSettings
+import androidx.annotation.VisibleForTesting
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.media3.common.StreamKey
@@ -25,10 +26,13 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.io.IOException
 import java.net.URLEncoder
@@ -61,12 +65,34 @@ class DownloadManager(
             .takeIf { it > 0 } ?: Long.MAX_VALUE
     },
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    /** Parent of all fire-and-forget persistence and transfer work; [drainBackgroundWork] joins it. */
+    private val backgroundJob = SupervisorJob()
+    private val scope = CoroutineScope(backgroundJob + Dispatchers.IO)
     private val saveDir = File(context.filesDir, "downloads").also { it.mkdirs() }
 
     /** Completed once [restore] has seeded state — startDownload waits on it. */
     private val ready = CompletableDeferred<Unit>()
     private val idCounter = AtomicLong(0)
+
+    /**
+     * Lets tests finish in-flight Room writes before closing their in-memory
+     * database. Otherwise a write still mid-transaction fails after its test
+     * ends and surfaces as an uncaught exception in whichever test runs next.
+     * Work that would never finish on its own (a fake transfer left suspended)
+     * is cancelled after a short settle period.
+     */
+    @VisibleForTesting
+    internal suspend fun drainBackgroundWork(settleMillis: Long = 500) {
+        withTimeoutOrNull(settleMillis) {
+            while (true) {
+                val active = backgroundJob.children.filter { it.isActive }.toList()
+                if (active.isEmpty()) break
+                active.joinAll()
+            }
+        }
+        backgroundJob.cancelChildren()
+        backgroundJob.children.toList().joinAll()
+    }
 
     private val _downloads = MutableStateFlow<List<DownloadTask>>(emptyList())
     val downloads: StateFlow<List<DownloadTask>> = _downloads.asStateFlow()
@@ -521,8 +547,9 @@ class DownloadManager(
 
             override fun onStreamCompleted(taskId: Long) = completeTask(taskId)
 
-            override fun onStreamFailed(taskId: Long, reason: Int) {
-                failTask(taskId, IOException("Stream download failed (reason $reason)"))
+            override fun onStreamFailed(taskId: Long, reason: Int, cause: Exception?) {
+                // The cause, when there is one, lets a refused or dropped connection be explained as such.
+                failTask(taskId, cause ?: IOException("Stream download failed (reason $reason)"))
             }
 
             override fun onStreamPaused(taskId: Long) {
@@ -595,6 +622,11 @@ class DownloadManager(
             val segments = path.split("/")
             val last = segments.lastOrNull { it.isNotBlank() }
 
+            // A title chosen in the media sheet beats any URL-derived name.
+            media.suggestedName?.trim()?.takeIf { it.isNotEmpty() }?.let { base ->
+                return "$base.${extensionForTitled(media, last)}"
+            }
+
             if (!last.isNullOrBlank() && last.contains('.')) {
                 return last
             }
@@ -607,6 +639,30 @@ class DownloadManager(
             }
             val encoded = URLEncoder.encode(url, "UTF-8").take(40)
             return "${encoded}$ext"
+        }
+
+        /** Media container extensions a URL may carry; anything else (php, m3u8, …) is ignored. */
+        private val FILE_EXTENSIONS = setOf(
+            "mp4", "m4v", "webm", "mov", "mkv", "avi", "wmv", "3gp",
+            "mp3", "m4a", "aac", "ogg", "oga", "opus", "wav", "flac", "mka",
+        )
+
+        /** Streams save as MP4; files keep their own extension, else one implied by the MIME type. */
+        private fun extensionForTitled(media: DetectedMedia, lastSegment: String?): String {
+            if (isStream(media.url, media.mimeType)) return "mp4"
+            lastSegment?.substringAfterLast('.', "")?.lowercase()
+                ?.takeIf { it in FILE_EXTENSIONS }
+                ?.let { return it }
+            val mime = media.mimeType?.substringBefore(';')?.trim()?.lowercase()
+            return when (mime) {
+                "video/webm", "audio/webm" -> "webm"
+                "audio/mp4", "audio/x-m4a" -> "m4a"
+                "audio/aac" -> "aac"
+                "audio/ogg" -> "ogg"
+                "audio/wav", "audio/x-wav" -> "wav"
+                "audio/flac" -> "flac"
+                else -> if (mime?.startsWith("audio/") == true) "mp3" else "mp4"
+            }
         }
 
         private fun resolveFileName(dir: File, fileName: String): File {

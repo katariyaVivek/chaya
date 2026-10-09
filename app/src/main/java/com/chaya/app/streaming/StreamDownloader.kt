@@ -2,6 +2,7 @@ package com.chaya.app.streaming
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import androidx.media3.common.StreamKey
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DefaultHttpDataSource
@@ -45,7 +46,8 @@ class StreamDownloader(
     interface Listener {
         fun onStreamProgress(taskId: Long, downloadedBytes: Long, totalBytes: Long?)
         fun onStreamCompleted(taskId: Long)
-        fun onStreamFailed(taskId: Long, reason: Int)
+        /** [cause] is what Media3 reported, when it reported one; it decides how the failure is explained. */
+        fun onStreamFailed(taskId: Long, reason: Int, cause: Exception?)
         fun onStreamPaused(taskId: Long)
     }
 
@@ -71,10 +73,12 @@ class StreamDownloader(
         httpFactory.createDataSource()
     }
 
+    // The sink factory needs the cache itself: handed over bare, every data source created from this
+    // factory threw a NullPointerException, so no stream download or playback could ever start.
     private val cacheDataSourceFactory = CacheDataSource.Factory()
         .setCache(cache)
         .setUpstreamDataSourceFactory(upstreamFactory)
-        .setCacheWriteDataSinkFactory(CacheDataSink.Factory().setFragmentSize(2 * 1024 * 1024))
+        .setCacheWriteDataSinkFactory(CacheDataSink.Factory().setCache(cache).setFragmentSize(2 * 1024 * 1024))
 
     val downloadManager: DownloadManager = DownloadManager(
         context,
@@ -85,6 +89,10 @@ class StreamDownloader(
     ).apply {
         maxParallelDownloads = 3
         requirements = Requirements(0)
+        // Used directly instead of through a DownloadService, Media3's manager starts out paused, so every
+        // download would sit in the queue at 0% for ever. Pausing is per download (stop reasons, below),
+        // so nothing pauses the manager as a whole.
+        resumeDownloads()
 
         addListener(object : DownloadManager.Listener {
             override fun onDownloadChanged(
@@ -98,7 +106,8 @@ class StreamDownloader(
                         if (taskId != null) listener.onStreamCompleted(taskId)
                     }
                     Download.STATE_FAILED -> {
-                        taskId?.let { listener.onStreamFailed(it, download.failureReason) }
+                        Log.w(TAG, "Stream download failed (reason ${download.failureReason}): ${download.request.uri}", finalException)
+                        taskId?.let { listener.onStreamFailed(it, download.failureReason, finalException) }
                     }
                     Download.STATE_STOPPED -> {
                         taskId?.let { listener.onStreamPaused(it) }
@@ -242,19 +251,24 @@ class StreamDownloader(
     }
 
     companion object {
+        /** Judges the path only, so signed manifests such as `master.m3u8?token=…` still route as streams. */
         fun isStreamingUrl(url: String): Boolean {
-            val lower = url.lowercase()
-            return lower.endsWith(".m3u8") || lower.endsWith(".mpd")
+            val path = url.substringBefore('#').substringBefore('?').lowercase()
+            return path.endsWith(".m3u8") || path.endsWith(".mpd")
         }
 
+        /** Case-insensitive: servers send both `application/x-mpegurl` and `application/x-mpegURL`. */
         fun isStreamingMime(mimeType: String?): Boolean {
             if (mimeType == null) return false
-            return mimeType.contains("mpegurl") || mimeType.contains("dash+xml")
+            val lower = mimeType.lowercase()
+            return lower.contains("mpegurl") || lower.contains("dash+xml")
         }
 
         /** Any non-zero value marks a download STOPPED without touching sibling downloads. */
         private const val STOP_REASON_PAUSED = 1
 
         private const val CONTENT_ID_PREFIX = "chaya_task_"
+
+        private const val TAG = "StreamDownloader"
     }
 }

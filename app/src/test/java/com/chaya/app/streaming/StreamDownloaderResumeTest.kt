@@ -55,7 +55,7 @@ class StreamDownloaderResumeTest {
             completed += taskId
         }
 
-        override fun onStreamFailed(taskId: Long, reason: Int) {
+        override fun onStreamFailed(taskId: Long, reason: Int, cause: Exception?) {
             failed += taskId
         }
 
@@ -139,13 +139,15 @@ class StreamDownloaderResumeTest {
         sd.downloadManager.currentDownloads.filter { it.request.id.startsWith("chaya_task_") }
 
     /**
-     * Instance A plays the role of the previous app process: start a real
-     * Media3 download (against the never-responding socket, so it stays
-     * active rather than failing), pause it — the STOPPED row persists in
-     * Media3's on-disk index — then "die" by releasing everything.
+     * Instance A plays the role of the previous app process: add a real Media3
+     * download, pause it — the STOPPED row persists in Media3's on-disk index —
+     * then "die" by releasing everything. The manager is held back first, so the
+     * download is only ever queued: a transfer that is really running would have to
+     * be cancelled mid-read, which waits on the connection and is not what is under test.
      */
     private fun seedPausedDownloadViaPreviousProcess(hungUrl: String) {
         val previous = StreamDownloader(context, FakeListener())
+        previous.downloadManager.pauseDownloads()
         previous.startStreamDownload(
             taskId, hungUrl, "application/x-mpegurl", userAgent = null, cookies = null
         )
@@ -169,6 +171,28 @@ class StreamDownloaderResumeTest {
         assertNull(sd.taskIdFor("chaya_12"))
         assertNull(sd.taskIdFor("completely-unrelated-id"))
         assertFalse(sd.taskIdFor("chaya_task_0") == null)
+    }
+
+    /**
+     * Media3's DownloadManager starts out paused when it is used without a DownloadService. Nothing
+     * resumed it, so every stream download sat in the queue at 0% for ever; the tests above only
+     * checked that a download appeared, which is true while it is queued, so this went unnoticed.
+     * (Whether the transfer then succeeds is for StreamDownloaderDownloadTest to say.)
+     */
+    @Test
+    fun aStartedDownloadLeavesTheQueueInsteadOfWaitingInItForEver() {
+        val sd = newDownloader()
+        assertFalse("downloads must not start paused", sd.downloadManager.downloadsPaused)
+
+        sd.startStreamDownload(
+            taskId, startHangingMediaServer(), "application/x-mpegurl", userAgent = null, cookies = null
+        )
+
+        val left = awaitUntil {
+            val state = prefixDownloads(sd).firstOrNull { it.request.id == contentId }?.state
+            state != null && state != Download.STATE_QUEUED
+        }
+        assertTrue("the download never left the queue", left)
     }
 
     @Test
