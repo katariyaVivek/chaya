@@ -94,11 +94,12 @@ class PlatformEngine(context: Context, private val sets: EngineSets? = null) : L
     private fun python(): Python {
         synchronized(startLock) {
             if (!Python.isStarted()) Python.start(AndroidPlatform(appContext))
-            if (!engineChosen && sets != null) {
+            val chooser = sets
+            if (!engineChosen && chooser != null) {
                 engineChosen = true
                 val runtime = ChaquopyRuntime(Python.getInstance())
                 // Whatever goes wrong in choosing (a full disk, say), the app's own copy still works.
-                runCatching { sets.activate(runtime) }.onFailure { runCatching { runtime.drop() } }
+                runCatching { chooser.activate(runtime) }.onFailure { runCatching { runtime.drop() } }
             }
         }
         return Python.getInstance()
