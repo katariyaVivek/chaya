@@ -29,6 +29,7 @@ Merged on `main` since v0.4.0, each through a PR that was green before merging:
 | #35 | A finished stream saved as an MP4 file (Media3 Transformer, from the cache only); Save as MP4 for old ones |
 | #36 | Tabs restored after Android closes the app, up to 50 (4 live), in a full-screen Chrome-style tab grid |
 | #37 | Bookmarks (star on the site pill), history by day with clear and a stop switch, suggestions while typing; Room v6 |
+| #38 | YouTube files fetched three 10 MB pieces at a time, with a record of whole pieces so a resume fetches only the rest |
 
 Loose ends the owner handles from a PC: delete the old merged branches (the session's git proxy
 cannot delete branches), and decide whether to push the `v0.4.0` tag. While testing a profile ZIP
@@ -235,7 +236,13 @@ to take v6, this becomes v7.
 **Privacy.** `PRIVACY_POLICY.md` lists history and bookmarks under "on your phone only", with how
 to clear them. Recording stays on by default, with a switch on the History screen to stop it.
 
-### 5. Faster YouTube: several parts at once ☐
+### 5. Faster YouTube: several parts at once ☑ (#38)
+
+As built: three pieces at once (`HttpDownloader.PIECES_AT_ONCE`), not yet timed on a phone. The owner
+should compare a long YouTube download against v0.4.0 and change the number if YouTube turns out to
+limit by address. A second 403 fails the download with the record kept, but nothing yet asks the engine
+for a fresh address by itself. Retry uses the stored one, so an expired address means looking the video
+up again. That is a follow-up.
 
 **Why.** #26 fetches YouTube files (`googlevideo.com`) in 10 MB ranges, one after another, which
 lifts the playback-speed limit. Fetching 3–4 ranges at the same time should fill the connection,

@@ -62,7 +62,7 @@ import java.util.zip.ZipOutputStream
 class DownloadManager(
     private val context: Context,
     private val dao: DownloadDao,
-    private val downloader: MediaDownloader = HttpDownloader(),
+    private val downloader: MediaDownloader = HttpDownloader(piecesAtOnce = HttpDownloader.PIECES_AT_ONCE),
     /** Null in unit tests that construct the manager directly. */
     private val eventLog: EventLog? = null,
     // Injected for tests: reports usable bytes at a path. Production reads
@@ -363,6 +363,8 @@ class DownloadManager(
             t.filePath?.let { p ->
                 runCatching { File(p).delete() }
                 (trackFiles(p) + File("$p$JOINING_SUFFIX") + File("$p$ZIPPING_SUFFIX")).forEach { runCatching { it.delete() } }
+                // The records of which pieces were whole, for the file and for each track.
+                (listOf(File(p)) + trackFiles(p)).forEach { runCatching { PieceLog.fileFor(it).delete() } }
                 if (t.isArchive) {
                     stopArchive(t)
                     runCatching { File("$p$ITEMS_SUFFIX").deleteRecursively() }
@@ -1121,7 +1123,8 @@ class DownloadManager(
     private fun partialBytes(t: DownloadTask): Long {
         val path = t.filePath ?: return 0L
         if (t.isArchive) return File("$path$ITEMS_SUFFIX").takeIf { it.isDirectory }?.let(::folderBytes) ?: 0L
-        return if (t.audioUrl != null) trackFiles(path).sumOf { it.length() } else File(path).length()
+        // A file fetched several pieces at a time has gaps until it is whole: count what its piece record says.
+        return if (t.audioUrl != null) trackFiles(path).sumOf(PieceLog::bytesOnDisk) else PieceLog.bytesOnDisk(File(path))
     }
 
     private fun ensureFileFor(t: DownloadTask): File =

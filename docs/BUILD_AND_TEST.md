@@ -75,7 +75,9 @@ is close to its copyrighted-content policy, and the diagnostics assume no Play S
 4. **Extensionless media:** on a page with nothing detected, *Scan more thoroughly* appears after a
    moment. Only after you tap it does Chaya check same-origin candidates (at most ten).
 5. **A video-site link:** paste a YouTube, Instagram, TikTok or X link with the Paste chip, or
-   share it to Chaya. The sheet finds the video and lists qualities.
+   share it to Chaya. The sheet finds the video and lists qualities. A YouTube download fetches
+   three 10 MB pieces at a time: on a fast connection it should run well above the video's own
+   bitrate. Pause it half way and resume: it carries on from where it was, not from the start.
 6. **Background:** start a download and go Home. The notification shows progress, Pause and
    Cancel.
 7. **Downloads:** filters, pause/resume/retry, swipe to delete with Undo, open a file. A finished

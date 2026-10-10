@@ -140,6 +140,14 @@ faster than APKs ship, so the app fetches newer releases itself.
   `Range` resume, forwarded cookie/User-Agent/Referer, `Content-Disposition` names and silent
   cancel. Cancel, pause and delete stop a transfer at any point; `onComplete` never fires after a
   cancel.
+- YouTube's files (`googlevideo.com`) are fetched in 10 MB pieces, three at a time
+  (`HttpDownloader.PIECES_AT_ONCE`), because one request goes at about the speed of playback. Each
+  piece is written at its place in the file, and `PieceLog` keeps `<file>.pieces` listing the whole
+  ones, written before the first byte. A resume asks only for the missing pieces; a file from
+  before, fetched one piece after another, keeps the whole pieces at its start. A piece answered
+  with anything but its range makes the rest go one at a time. A piece that fails then (a second
+  403, say) fails the download, and the record stays for the retry. Every piece's call is
+  registered, so cancel reaches them all.
 - A `DownloadRequest` from the engine carries its own headers and optionally a separate sound. Such
   a task fetches the picture, then the sound (each into `<name>.part`, renamed when whole), then
   `MediaMerger` (`Mp4Merger`, `MediaMuxer`) joins them losslessly. What is left to do is decided
