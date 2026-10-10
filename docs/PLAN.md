@@ -25,6 +25,7 @@ Merged on `main` since v0.4.0, each through a PR that was green before merging:
 | #30 | Built-in ad blocker (EasyList + EasyPrivacy, weekly list refresh, per-site switch) |
 | #31 | A finished download's notification comes once |
 | #32 | Tabs (up to 10, bottom sheet list), plus a fix so a page's first ads are blocked too |
+| #34 | yt-dlp, yt-dlp-ejs and gallery-dl fetched from PyPI daily, checked, used from the next start |
 
 Loose ends the owner handles from a PC: delete the old merged branches (the session's git proxy
 cannot delete branches), and decide whether to push the `v0.4.0` tag. While testing a profile ZIP
@@ -49,6 +50,9 @@ from those lines.
   that uses the cached Kotlin 2.1.0 plugin and points its `srcDir` at the repo's sources. Maven
   Central answers 429 now and then; retry after a pause. Keep such code free of Android imports so
   this stays possible.
+- **Python tests rewrite tracked `.pyc` files** under `__pycache__/` (some were committed long ago).
+  Run `git checkout -- '*__pycache__*'` before committing, or pytest with `-p no:cacheprovider` and
+  `PYTHONDONTWRITEBYTECODE=1`.
 - **Room is at version 5.** Every part below that adds a table or column bumps it by one, with a
   `Migration` and a migration test. Merge them in this file's order so the version numbers here
   hold.
@@ -58,7 +62,7 @@ from those lines.
 The owner's priorities: parts 1 and 2 first, then the rest. Part 6 (the downloads library) is the
 biggest UI change, so it goes last, once everything it shows exists.
 
-### 1. yt-dlp keeps itself current ☐
+### 1. yt-dlp keeps itself current ☑ (#34)
 
 **Why.** YouTube, Instagram, TikTok and X change often, and yt-dlp ships fixes within days. The
 pinned copy (`app/build.gradle.kts`: `yt-dlp==2026.8.19`, `yt-dlp-ejs==0.8.0`,
