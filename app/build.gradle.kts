@@ -149,6 +149,8 @@ dependencies {
     implementation(libs.androidx.media3.exoplayer.hls)
     implementation(libs.androidx.media3.exoplayer.dash)
     implementation(libs.androidx.media3.ui)
+    // Saves a finished stream download, which lives in Media3's cache, as an MP4 file (StreamExporter).
+    implementation(libs.androidx.media3.transformer)
 
     // LeakCanary runs only in debug builds; release APKs are unaffected.
     debugImplementation(libs.leakcanary)
@@ -173,6 +175,8 @@ dependencies {
     androidTestImplementation(libs.androidx.test.core)
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.mockwebserver)
+    // Builds a real fragmented-MP4 HLS stream on the device for the stream export test.
+    androidTestImplementation(libs.androidx.media3.muxer)
 
     // Compose UI tests (androidTest, emulator/CI only)
     androidTestImplementation(platform(libs.androidx.compose.bom))
