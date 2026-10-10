@@ -793,13 +793,18 @@ fun BrowserScreen(
                                 ).takeIf { adSite.isNotEmpty() },
                                 onAdBlock = { showAdBlockSheet = true },
                                 bookmarked = pageBookmarked,
-                                onToggleBookmark = {
-                                    val page = uiState
-                                    scope.launch {
-                                        val now = app.browsing.toggleBookmark(page.url, page.pageTitle)
-                                        showMessage(if (now) "Added to bookmarks" else "Removed from bookmarks")
+                                // Only a web page can be starred; the start screen and other pages have no star.
+                                onToggleBookmark = if (BrowsingRecord.isWebPage(uiState.url)) {
+                                    {
+                                        val page = uiState
+                                        scope.launch {
+                                            val now = app.browsing.toggleBookmark(page.url, page.pageTitle)
+                                            showMessage(if (now) "Added to bookmarks" else "Removed from bookmarks")
+                                        }
                                     }
-                                }.takeIf { BrowsingRecord.isWebPage(uiState.url) },
+                                } else {
+                                    null
+                                },
                                 suggestions = suggestions,
                                 onSuggestion = { url -> navigateToUrl(url) },
                             )
