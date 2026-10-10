@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -30,6 +31,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FolderZip
@@ -115,6 +119,12 @@ internal fun AddressBar(
     /** The ad blocker's shield for the page shown; null on pages it has nothing to say about. */
     adBlock: AdBlockBadge? = null,
     onAdBlock: () -> Unit = {},
+    /** Whether the page shown is a bookmark; the star on the site pill adds or removes it. */
+    bookmarked: Boolean = false,
+    onToggleBookmark: (() -> Unit)? = null,
+    /** Bookmarks and history matching what is typed, shown under the field while it has focus. */
+    suggestions: List<com.chaya.app.history.Suggestion> = emptyList(),
+    onSuggestion: (String) -> Unit = {},
 ) {
     var editing by remember { mutableStateOf(false) }
     var hadFocus by remember { mutableStateOf(false) }
@@ -132,10 +142,11 @@ internal fun AddressBar(
             label = "fieldFill"
         )
 
+        Column(modifier = modifier.fillMaxWidth()) {
         OutlinedTextField(
             value = input,
             onValueChange = onInputChange,
-            modifier = modifier
+            modifier = Modifier
                 .fillMaxWidth()
                 .focusRequester(focusRequester)
                 .onFocusChanged { state ->
@@ -206,6 +217,14 @@ internal fun AddressBar(
                 unfocusedBorderColor = Color.Transparent
             )
         )
+        if (focused && suggestions.isNotEmpty()) {
+            SuggestionList(suggestions) { url ->
+                onSuggestion(url)
+                keyboardController?.hide()
+                focusManager.clearFocus()
+            }
+        }
+        }
 
         LaunchedEffect(editing) {
             if (editing) {
@@ -220,6 +239,8 @@ internal fun AddressBar(
             onReload = onReload,
             adBlock = adBlock,
             onAdBlock = onAdBlock,
+            bookmarked = bookmarked,
+            onToggleBookmark = onToggleBookmark,
             modifier = modifier,
         )
     }
@@ -240,6 +261,54 @@ private fun PasteChip(onClick: () -> Unit) {
     )
 }
 
+/** Bookmarks first, then pages from history, as the person types; tapping one opens it. */
+@Composable
+private fun SuggestionList(suggestions: List<com.chaya.app.history.Suggestion>, onPick: (String) -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 6.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .padding(vertical = 4.dp)
+    ) {
+        suggestions.forEach { suggestion ->
+            val host = MediaUrlClassifier.hostOf(suggestion.url)?.removePrefix("www.") ?: suggestion.url
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onPick(suggestion.url) }
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = if (suggestion.bookmarked) Icons.Default.Star else Icons.Default.History,
+                    contentDescription = if (suggestion.bookmarked) "Bookmark" else "From history",
+                    tint = if (suggestion.bookmarked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = suggestion.title.ifBlank { host },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = host,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+    }
+}
+
 /** What the address bar's shield shows: whether ads are blocked on this page, and how many requests were. */
 internal data class AdBlockBadge(val active: Boolean, val blocked: Int)
 
@@ -251,6 +320,8 @@ private fun UrlPill(
     onReload: () -> Unit,
     adBlock: AdBlockBadge?,
     onAdBlock: () -> Unit,
+    bookmarked: Boolean = false,
+    onToggleBookmark: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val host = remember(url) { MediaUrlClassifier.hostOf(url)?.removePrefix("www.") ?: url }
@@ -281,6 +352,16 @@ private fun UrlPill(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f)
         )
+        if (onToggleBookmark != null) {
+            IconButton(onClick = onToggleBookmark) {
+                Icon(
+                    imageVector = if (bookmarked) Icons.Default.Star else Icons.Outlined.StarOutline,
+                    contentDescription = if (bookmarked) "Remove bookmark" else "Add bookmark",
+                    tint = if (bookmarked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
         if (adBlock != null) ShieldButton(adBlock, onAdBlock)
         IconButton(onClick = onReload) {
             Icon(
@@ -553,7 +634,15 @@ private fun iconFor(kind: MediaKind?): ImageVector = when (kind) {
 // Start screen
 // --------------------------------------------------------------------- //
 
-private data class QuickSite(val monogram: String, val name: String, val url: String)
+internal data class QuickSite(val monogram: String, val name: String, val url: String) {
+    companion object {
+        /** A bookmark as a start-screen tile: its site's first letter, its title (else its site). */
+        fun of(url: String, title: String): QuickSite {
+            val host = MediaUrlClassifier.hostOf(url)?.removePrefix("www.") ?: url
+            return QuickSite(host.take(1).uppercase(), title.ifBlank { host }, url)
+        }
+    }
+}
 
 private val quickSites = listOf(
     QuickSite("Y", "YouTube", "https://m.youtube.com"),
@@ -571,6 +660,10 @@ internal fun HomeContent(
     recent: List<DownloadTask>,
     onSelectUrl: (String) -> Unit,
     onOpenDownloads: () -> Unit,
+    /** Bookmarks, shown first among the quick sites. */
+    bookmarks: List<QuickSite> = emptyList(),
+    onOpenBookmarks: () -> Unit = {},
+    onOpenHistory: () -> Unit = {},
 ) {
     AnimatedVisibility(
         visible = visible,
@@ -626,11 +719,22 @@ internal fun HomeContent(
                 StaggeredAppear(index = 1) {
                     Column(modifier = Modifier.fillMaxWidth()) {
                         SectionTitle("Quick sites")
+                        // Bookmarks first, then the sites Chaya knows; one row, scrolled sideways when long.
+                        // Just the four known sites spread across the width, as before any bookmark.
+                        val sites = (bookmarks + quickSites).distinctBy { it.url }
+                        val sideways = rememberScrollState()
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .then(if (bookmarks.isEmpty()) Modifier else Modifier.horizontalScroll(sideways)),
+                            horizontalArrangement = if (bookmarks.isEmpty()) Arrangement.SpaceBetween else Arrangement.spacedBy(8.dp)
                         ) {
-                            quickSites.forEach { site -> SiteTile(site, onSelectUrl) }
+                            sites.forEach { site -> SiteTile(site, onSelectUrl) }
+                        }
+                        Spacer(Modifier.height(12.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            HomeChip(Icons.Default.Star, "Bookmarks", onOpenBookmarks)
+                            HomeChip(Icons.Default.History, "History", onOpenHistory)
                         }
                     }
                 }
@@ -659,6 +763,24 @@ internal fun HomeContent(
                 Spacer(Modifier.height(24.dp))
             }
         }
+    }
+}
+
+/** A pill on the start screen that opens another screen. */
+@Composable
+private fun HomeChip(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .pressScale()
+            .clip(RoundedCornerShape(16.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface)
     }
 }
 
@@ -701,7 +823,8 @@ private fun SiteTile(site: QuickSite, onClick: (String) -> Unit) {
             text = site.name,
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }

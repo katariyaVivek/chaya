@@ -99,6 +99,8 @@ fun DownloadsScreen(
     onNavigateBack: () -> Unit,
     onPlayStream: (Long) -> Unit,
     onNavigateToDiagnostics: () -> Unit = {},
+    onNavigateToHistory: () -> Unit = {},
+    onNavigateToBookmarks: () -> Unit = {},
     themeMode: ThemeMode = ThemeMode.SYSTEM,
     onThemeModeChange: (ThemeMode) -> Unit = {},
     viewModel: DownloadsViewModel = viewModel()
@@ -158,6 +160,20 @@ fun DownloadsScreen(
                             Icon(imageVector = Icons.Default.MoreVert, contentDescription = "More")
                         }
                         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Bookmarks") },
+                                onClick = {
+                                    menuOpen = false
+                                    onNavigateToBookmarks()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("History") },
+                                onClick = {
+                                    menuOpen = false
+                                    onNavigateToHistory()
+                                }
+                            )
                             DropdownMenuItem(
                                 text = { Text("Appearance") },
                                 onClick = {

@@ -19,6 +19,9 @@ import com.chaya.app.SharedLinks
 import com.chaya.app.browser.BrowserScreen
 import com.chaya.app.diagnostics.DiagnosticsScreen
 import com.chaya.app.downloads.DownloadsScreen
+import com.chaya.app.history.BookmarksScreen
+import com.chaya.app.history.HistoryScreen
+import com.chaya.app.history.PagesToOpen
 import com.chaya.app.ui.player.PlayerScreen
 import com.chaya.app.ui.theme.ChayaMotion
 
@@ -32,6 +35,11 @@ fun ChayaNavHost(navController: NavHostController) {
     val sharedLink by SharedLinks.pending.collectAsState()
     LaunchedEffect(sharedLink) {
         if (sharedLink != null) navController.popBackStack(Screen.Browser.route, inclusive = false)
+    }
+    // A page picked on the History or Bookmarks screen is opened by the browser too.
+    val pageToOpen by PagesToOpen.pending.collectAsState()
+    LaunchedEffect(pageToOpen) {
+        if (pageToOpen != null) navController.popBackStack(Screen.Browser.route, inclusive = false)
     }
 
     NavHost(
@@ -47,9 +55,11 @@ fun ChayaNavHost(navController: NavHostController) {
         popExitTransition = { fadeOut(exitTween()) }
     ) {
         composable(Screen.Browser.route) {
-            BrowserScreen(onNavigateToDownloads = {
-                navController.navigate(Screen.Downloads.route)
-            })
+            BrowserScreen(
+                onNavigateToDownloads = { navController.navigate(Screen.Downloads.route) },
+                onNavigateToHistory = { navController.navigate(Screen.History.route) },
+                onNavigateToBookmarks = { navController.navigate(Screen.Bookmarks.route) },
+            )
         }
         composable(Screen.Downloads.route) {
             val themeSettings = (LocalContext.current.applicationContext as ChayaApplication).themeSettings
@@ -62,6 +72,8 @@ fun ChayaNavHost(navController: NavHostController) {
                 onNavigateToDiagnostics = {
                     navController.navigate(Screen.Diagnostics.route)
                 },
+                onNavigateToHistory = { navController.navigate(Screen.History.route) },
+                onNavigateToBookmarks = { navController.navigate(Screen.Bookmarks.route) },
                 themeMode = themeMode,
                 onThemeModeChange = themeSettings::set,
             )
@@ -77,6 +89,12 @@ fun ChayaNavHost(navController: NavHostController) {
         }
         composable(Screen.Diagnostics.route) {
             DiagnosticsScreen(onNavigateBack = { navController.popBackStack() })
+        }
+        composable(Screen.History.route) {
+            HistoryScreen(onNavigateBack = { navController.popBackStack() }, onOpen = PagesToOpen::open)
+        }
+        composable(Screen.Bookmarks.route) {
+            BookmarksScreen(onNavigateBack = { navController.popBackStack() }, onOpen = PagesToOpen::open)
         }
     }
 }

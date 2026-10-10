@@ -5,7 +5,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.sqlite.db.SupportSQLiteOpenHelper
 import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
 import com.chaya.app.download.DownloadError
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -122,7 +125,7 @@ class ChayaDatabaseMigrationTest {
             val context = RuntimeEnvironment.getApplication()
             val config = SupportSQLiteOpenHelper.Configuration.builder(context)
                 .name(file.absolutePath)
-                .callback(object : SupportSQLiteOpenHelper.Callback(5) {
+                .callback(object : SupportSQLiteOpenHelper.Callback(6) {
                     override fun onCreate(db: SupportSQLiteDatabase) = Unit
                     override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
                 })
@@ -210,6 +213,65 @@ class ChayaDatabaseMigrationTest {
                 assertEquals(mapOf("User-Agent" to "UA2"), task.audioRequestHeaders)
                 assertTrue(task.hasOwnRequest)
             }
+        }
+    }
+
+    @Test
+    fun `migrate 2 to 6 keeps every download and adds empty history and bookmarks`() {
+        migratedFromV2(
+            ChayaDatabase.MIGRATION_2_3, ChayaDatabase.MIGRATION_3_4, ChayaDatabase.MIGRATION_4_5,
+            ChayaDatabase.MIGRATION_5_6,
+        ) { db ->
+            db.query("SELECT fileName FROM downloads ORDER BY id").use { cursor ->
+                assertEquals(2, cursor.count)
+                assertTrue(cursor.moveToFirst())
+                assertEquals("a.mp4", cursor.getString(0))
+            }
+            db.query("SELECT COUNT(*) FROM history").use { assertTrue(it.moveToFirst()); assertEquals(0, it.getInt(0)) }
+            db.query("SELECT COUNT(*) FROM bookmarks").use { assertTrue(it.moveToFirst()); assertEquals(0, it.getInt(0)) }
+
+            db.execSQL("INSERT INTO history (url, title, visitedAt, visits) VALUES ('https://a.example/', 'A', 5, 1)")
+            db.execSQL("INSERT INTO bookmarks (url, title, createdAt) VALUES ('https://a.example/', 'A', 5)")
+            db.query("SELECT title, visits FROM history").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("A", cursor.getString(0))
+                assertEquals(1, cursor.getInt(1))
+            }
+        }
+    }
+
+    /**
+     * Room itself opens an old v2 file through the whole chain and checks every table against what the app
+     * expects; a migration that left a table a different shape fails here, as it would on a phone.
+     */
+    @Test
+    fun `Room opens a v2 database through every migration and the new tables work`() {
+        val file = createV2Database()
+        val database = Room.databaseBuilder(RuntimeEnvironment.getApplication(), ChayaDatabase::class.java, file.absolutePath)
+            .addMigrations(
+                ChayaDatabase.MIGRATION_2_3, ChayaDatabase.MIGRATION_3_4, ChayaDatabase.MIGRATION_4_5,
+                ChayaDatabase.MIGRATION_5_6,
+            )
+            .allowMainThreadQueries()
+            .build()
+        try {
+            runBlocking {
+                assertEquals(listOf(1L, 2L), database.downloadDao().getAllOnce().map { it.id }.sorted())
+
+                database.historyDao().recordVisit("https://a.example/", "A", 10)
+                database.historyDao().recordVisit("https://a.example/", "", 20)
+                val row = database.historyDao().get("https://a.example/")!!
+                assertEquals("A", row.title)
+                assertEquals(2, row.visits)
+                assertEquals(20L, row.visitedAt)
+
+                assertFalse(database.bookmarkDao().contains("https://a.example/"))
+                database.bookmarkDao().put(BookmarkEntity("https://a.example/", "A", 30))
+                assertTrue(database.bookmarkDao().isBookmarked("https://a.example/").first())
+            }
+        } finally {
+            database.close()
+            file.parentFile?.deleteRecursively()
         }
     }
 

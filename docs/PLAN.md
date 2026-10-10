@@ -55,7 +55,7 @@ from those lines.
 - **Python tests rewrite tracked `.pyc` files** under `__pycache__/` (some were committed long ago).
   Run `git checkout -- '*__pycache__*'` before committing, or pytest with `-p no:cacheprovider` and
   `PYTHONDONTWRITEBYTECODE=1`.
-- **Room is at version 5.** Every part below that adds a table or column bumps it by one, with a
+- **Room is at version 6.** Every part below that adds a table or column bumps it by one, with a
   `Migration` and a migration test. Merge them in this file's order so the version numbers here
   hold.
 
@@ -201,7 +201,11 @@ WebView when a discarded tab is shown; capture the thumbnail on switch).
 **Privacy.** Tabs and thumbnails stay on the phone. *Close all tabs* deletes their files. Say this
 in `PRIVACY_POLICY.md`.
 
-### 4. Bookmarks and history ☐
+### 4. Bookmarks and history ☑ (#37)
+
+As built: the site's icon is not kept with history; rows show the site's first letter, as the
+start screen's tiles do. The star is on the site pill only (there is no address bar menu). The
+History and Bookmarks screens are reached from chips on the start screen and from Downloads › ⋮.
 
 **Shape.**
 - **History.** Each page that finishes loading is recorded: address, title, time and favicon.

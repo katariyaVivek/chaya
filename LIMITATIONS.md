@@ -51,6 +51,8 @@ These are deliberate scope decisions, not open bugs.
   most recently keep their page in memory; the others keep their address and history and load
   again when shown, as Chrome's do. Tabs come back after Android closes the app, but a page's own
   state (a form half filled in, how far a video had played) does not.
+- **Bookmark folders, import, export or sync.** Bookmarks are one list, kept on this phone; there is
+  no way yet to bring them in from another browser or take them out, and nothing is synced.
 - **Browser extensions.** Android's WebView, which Chaya's browser is built on, cannot run them, so
   uBlock Origin itself cannot be added; the built-in blocker uses its lists instead.
 - **What uBlock Origin does beyond its lists.** Its scriptlets and procedural filters are not

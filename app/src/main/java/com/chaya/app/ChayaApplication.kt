@@ -50,6 +50,9 @@ class ChayaApplication : Application() {
     /** Work that outlives any screen: restoring downloads, the engine's daily check. */
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    /** The browser's history and bookmarks, on the phone only. */
+    val browsing: com.chaya.app.history.BrowsingRecord by lazy { com.chaya.app.history.BrowsingRecord.from(this, database) }
+
     /** The open tabs on disk, so they come back after Android closes the app. */
     val tabStore: com.chaya.app.browser.TabStore by lazy { com.chaya.app.browser.TabStore(File(filesDir, "tabs")) }
 

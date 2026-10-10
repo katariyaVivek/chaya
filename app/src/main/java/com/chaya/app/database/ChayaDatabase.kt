@@ -9,13 +9,15 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [DownloadEntity::class],
-    version = 5,
+    entities = [DownloadEntity::class, HistoryEntity::class, BookmarkEntity::class],
+    version = 6,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
 abstract class ChayaDatabase : RoomDatabase() {
     abstract fun downloadDao(): DownloadDao
+    abstract fun historyDao(): HistoryDao
+    abstract fun bookmarkDao(): BookmarkDao
 
     companion object {
         /** Adds the 2.2 error-taxonomy columns; existing rows keep their legacy message. */
@@ -44,6 +46,20 @@ abstract class ChayaDatabase : RoomDatabase() {
             }
         }
 
+        /** Adds the browser's history and bookmarks; downloads are untouched. */
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `history` (`url` TEXT NOT NULL, `title` TEXT NOT NULL, " +
+                        "`visitedAt` INTEGER NOT NULL, `visits` INTEGER NOT NULL, PRIMARY KEY(`url`))",
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `bookmarks` (`url` TEXT NOT NULL, `title` TEXT NOT NULL, " +
+                        "`createdAt` INTEGER NOT NULL, PRIMARY KEY(`url`))",
+                )
+            }
+        }
+
         @Volatile
         private var INSTANCE: ChayaDatabase? = null
 
@@ -55,7 +71,7 @@ abstract class ChayaDatabase : RoomDatabase() {
                     "chaya.db"
                 )
                     // Explicit migration chain — never wipe user history on upgrade.
-                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                     .build().also { INSTANCE = it }
             }
         }

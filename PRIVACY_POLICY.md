@@ -29,6 +29,12 @@ Store account, no third-party SDKs.
 ## What Chaya stores, and where
 
 - Download history: **on your phone only**.
+- Browsing history (each page's address, title, when you last opened it and how often) and
+  bookmarks: **on your phone only**, in the app's database. They are used only to show the History
+  and Bookmarks screens and the suggestions under the address bar. History → ⋮ → *Clear history*
+  deletes the last hour, the last day or everything; × beside a page deletes just that page; the
+  *Save history* switch on the History screen stops pages being kept at all. × beside a bookmark,
+  or the star beside the address, removes it.
 - Ad blocker settings (whether it is on, and the sites you let show ads): **on your phone only**.
 - Open tabs (their addresses, titles, back and forward history, a small picture of each page and
   the site's icon), so they come back after Android closes the app: **on your phone only**, in
