@@ -15,6 +15,7 @@ import androidx.media3.transformer.DefaultAssetLoaderFactory
 import androidx.media3.transformer.DefaultDecoderFactory
 import androidx.media3.transformer.ExportException
 import androidx.media3.transformer.ExportResult
+import androidx.media3.transformer.InAppMuxer
 import androidx.media3.transformer.ProgressHolder
 import androidx.media3.transformer.Transformer
 import kotlinx.coroutines.Dispatchers
@@ -89,6 +90,10 @@ class Media3StreamExporter(
                             DataSourceBitmapLoader(appContext),
                         ),
                     )
+                    // Media3's own MP4 writer, written in Java: Android's MediaMuxer aborts the whole app on input
+                    // it dislikes (it did, in MPEG4Writer, on a real HLS stream in the emulator walkthrough), where
+                    // this one throws, so a bad stream fails its export and stays playable in the cache.
+                    .setMuxerFactory(InAppMuxer.Factory.Builder().build())
                     .build()
                 val progress = launch {
                     val holder = ProgressHolder()

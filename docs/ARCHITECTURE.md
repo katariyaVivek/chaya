@@ -174,7 +174,9 @@ faster than APKs ship, so the app fetches newer releases itself.
   and only once Media3's index reports the download complete: a missing piece fails the export
   instead of being fetched. Transformer copies the samples as
   they are when the MP4 container can take them, and re-encodes only otherwise
-  (`ExportResult`'s conversion process says which). The file is written beside its final name
+  (`ExportResult`'s conversion process says which). It writes with Media3's `InAppMuxer`, not
+  Android's `MediaMuxer`, which aborted the whole app (a native `SIGABRT` in `MPEG4Writer`) on
+  a real HLS stream; a bad stream now fails its export instead. The file is written beside its final name
   (`.mp4.saving`), checked (the tracks Transformer reported are there, the duration matches),
   renamed, and only then is the cached copy removed; the task then completes like any file and
   goes to Movies (Music for sound only). Free space for both copies is checked first.
