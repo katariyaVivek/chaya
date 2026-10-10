@@ -45,7 +45,7 @@ curl -o app/src/main/assets/adblock/easyprivacy.txt https://easylist.to/easylist
 | `build.yml` | every PR and push to `main` | unit tests, then the debug APK. Test-only changes skip the APK. A failing test prints its message, and the reports are uploaded. |
 | `build.yml` (manual) | *Run workflow* | also runs the instrumented tests on an emulator |
 | `build.yml` (tag `v*`) | pushing a version tag | tests, signed release APK, GitHub Release |
-| `engine.yml` | PRs touching the Python engine | pytest with the yt-dlp versions pinned in `app/build.gradle.kts` |
+| `engine.yml` | PRs touching the Python engine | pytest with the versions pinned in `app/build.gradle.kts` (`enginePackages`) |
 | `device-tests.yml` | `ui-check` label on a PR, or manual | `connectedDebugAndroidTest` in a cloud emulator |
 | `emulator-check.yml` | `ui-check` label on a PR, or manual | `walkthrough.py` drives the app; screenshots, screen text and logs are uploaded as `emulator-evidence` |
 
@@ -90,3 +90,8 @@ is close to its copyrighted-content policy, and the diagnostics assume no Play S
    closing the last opens a fresh start page.
 11. **Persistence:** finish a download, force-stop the app, reopen: it is still listed. A download
    that was running comes back paused.
+
+12. **Engine updates:** Downloads › ⋮ › Diagnostics shows the yt-dlp, yt-dlp-ejs and gallery-dl in
+   use and when PyPI was last asked. When a newer yt-dlp is out, it is fetched within a day of opening
+   the app and shows as waiting; force-stop and reopen, look a video up, and Diagnostics shows it in
+   use. Turning *Keep it up to date* off goes back to the app's copy from the next start.

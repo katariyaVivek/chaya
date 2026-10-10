@@ -35,11 +35,12 @@ up by yt-dlp on the phone, with picture and sound joined into one MP4. Merged as
 | [#30](https://github.com/katariyaVivek/chaya/pull/30) | EasyList and EasyPrivacy built in: ad and tracker requests blocked, ad boxes hidden, ad pop-ups refused; on/off and per site from the address bar's shield; lists refreshed weekly |
 | [#31](https://github.com/katariyaVivek/chaya/pull/31) | A finished download's notification comes once, not again with every later download |
 | [#32](https://github.com/katariyaVivek/chaya/pull/32) | Up to ten tabs, each with its own page and history; links that open a new window open a new tab. Also: a page's first ads are blocked too |
+| [#34](https://github.com/katariyaVivek/chaya/pull/34) | yt-dlp, its solver scripts and gallery-dl keep themselves current: newer releases fetched from PyPI about once a day, verified, compiled, checked and used from the next start, with a fallback to the last good copy; shown and switchable in Diagnostics |
 
 ## Next
 
-The working plan for the next features, in order and in detail, is [`PLAN.md`](PLAN.md): yt-dlp
-keeping itself current, streams saved as MP4, tabs restored in a tab grid, bookmarks and history,
+The working plan for the next features, in order and in detail, is [`PLAN.md`](PLAN.md): streams
+saved as MP4, tabs restored in a tab grid, bookmarks and history,
 faster YouTube, and a downloads library. The list below is the longer view.
 
 1. **Save streams as real MP4 files.** HLS/DASH downloads live in Media3's cache today, so they
@@ -52,9 +53,7 @@ faster YouTube, and a downloads library. The list below is the longer view.
    memory the solver needs on YouTube's current player (`ChayaDevice` in `device-numbers.txt`, a
    run artifact). The first full run (all 17 device tests passing) has those numbers; read them
    before deciding.
-4. **Keep yt-dlp current.** Sites change often and the bundled yt-dlp is pinned; self-update (or a
-   release cadence that tracks yt-dlp) is not built yet.
-5. **More picture formats for joining.** Only H.264 is joined today. HEVC and AV1 muxing depends on
+4. **More picture formats for joining.** Only H.264 is joined today. HEVC and AV1 muxing depends on
    the Android version and has not been verified, so those qualities are not offered.
 
 ## Known rough edges

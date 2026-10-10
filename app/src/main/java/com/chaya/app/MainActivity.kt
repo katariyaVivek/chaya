@@ -21,6 +21,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         // Not again after a rotation: the same share would open its sheet a second time.
         if (savedInstanceState == null) takeSharedLink(intent)
+        (application as ChayaApplication).checkEngineSoon()
         setContent {
             val mode by (application as ChayaApplication).themeSettings.mode.collectAsState()
             val dark = mode.isDark(isSystemInDarkTheme())

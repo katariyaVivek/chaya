@@ -27,6 +27,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,9 +50,9 @@ import kotlinx.coroutines.launch
 @Composable
 fun DiagnosticsScreen(onNavigateBack: () -> Unit) {
     val context = LocalContext.current
-    val eventLog = remember(context) {
-        (context.applicationContext as com.chaya.app.ChayaApplication).eventLog
-    }
+    val app = context.applicationContext as com.chaya.app.ChayaApplication
+    val eventLog = remember(context) { app.eventLog }
+    val engineStatus by remember(context) { app.engineSets.status }.collectAsState()
     var lines by remember { mutableStateOf(listOf<String>()) }
     var crashes by remember { mutableStateOf(listOf<CrashReport>()) }
     var insights by remember { mutableStateOf<Insights?>(null) }
@@ -141,6 +142,16 @@ fun DiagnosticsScreen(onNavigateBack: () -> Unit) {
                 }
                 Spacer(Modifier.height(16.dp))
             }
+            EngineSection(
+                status = engineStatus,
+                onUpdatesChange = { on ->
+                    app.appScope.launch {
+                        app.engineSets.setUpdatesOn(on)
+                        if (on) runCatching { app.engineUpdater.updateIfDue() }
+                    }
+                },
+            )
+            Spacer(Modifier.height(16.dp))
             Text(
                 text = "Event log — URLs are scrubbed, nothing leaves the phone unless you share it.",
                 style = MaterialTheme.typography.bodySmall,
