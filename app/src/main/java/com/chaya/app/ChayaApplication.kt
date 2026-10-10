@@ -3,6 +3,9 @@ package com.chaya.app
 import android.app.Application
 import android.os.Build
 import android.os.StrictMode
+import com.chaya.app.adblock.AdBlockSettings
+import com.chaya.app.adblock.AdBlocker
+import com.chaya.app.adblock.FilterLists
 import com.chaya.app.database.ChayaDatabase
 import com.chaya.app.diagnostics.CrashReporter
 import com.chaya.app.diagnostics.EventLog
@@ -30,6 +33,9 @@ class ChayaApplication : Application() {
 
     /** Light, dark, or the same as the phone. */
     val themeSettings: ThemeSettings by lazy { ThemeSettings.from(this) }
+
+    /** Blocks ads and trackers in the browser; reads its lists when the browser first shows. */
+    val adBlocker: AdBlocker by lazy { AdBlocker(AdBlockSettings.from(this), FilterLists.from(this)) }
 
     override fun onCreate() {
         super.onCreate()

@@ -29,6 +29,15 @@ gradle connectedDebugAndroidTest              # on a connected device or emulato
 
 What each suite covers is in [`ARCHITECTURE.md`](ARCHITECTURE.md#tests).
 
+The ad lists shipped in the app (`app/src/main/assets/adblock/`) are refreshed by hand now and then;
+installed apps fetch fresh copies weekly anyway. `BundledListsTest` then checks that the new copies
+still block common ads and still let the video sites through.
+
+```sh
+curl -o app/src/main/assets/adblock/easylist.txt https://easylist.to/easylist/easylist.txt
+curl -o app/src/main/assets/adblock/easyprivacy.txt https://easylist.to/easylist/easyprivacy.txt
+```
+
 ## CI
 
 | Workflow | When | What |
@@ -73,5 +82,8 @@ is close to its copyrighted-content policy, and the diagnostics assume no Play S
    finished stream in the in-app player.
 8. **Appearance:** Downloads › ⋮ › Appearance switches between Same as phone, Light and Dark at
    once, status bar included, and the choice survives a restart.
-9. **Persistence:** finish a download, force-stop the app, reopen: it is still listed. A download
+9. **Ad blocker:** open a news site. The shield in the address bar fills in and counts what it
+   blocked; ad boxes are gone. Tap it: turning blocking off for the site, or everywhere, reloads the
+   page with its ads, and turning it back on blocks them again.
+10. **Persistence:** finish a download, force-stop the app, reopen: it is still listed. A download
    that was running comes back paused.

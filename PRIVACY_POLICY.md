@@ -29,6 +29,7 @@ Store account, no third-party SDKs.
 ## What Chaya stores, and where
 
 - Download history: **on your phone only**.
+- Ad blocker settings (whether it is on, and the sites you let show ads): **on your phone only**.
 - Diagnostics (crash reports, an event log with addresses stripped of their query and fragment):
   **on your phone only**, in app-private files. Nothing is uploaded automatically; a report leaves
   the phone only when you tap Share.
@@ -42,7 +43,10 @@ Chaya talks only to the sites involved in what you do:
 - for a YouTube, Instagram, TikTok or X video, that site, which yt-dlp (running on your phone)
   contacts to find the video's files, and for an Instagram or X post with pictures, that site again,
   which gallery-dl (also running on your phone) contacts to list the post's pictures, both when you paste or share a link and when the page you
-  are viewing is a single video on one of those sites.
+  are viewing is a single video on one of those sites;
+- for the ad blocker, about once a week, easylist.to, to fetch fresh copies of the EasyList and
+  EasyPrivacy lists. The request carries no cookies and nothing about you or the pages you visit;
+  the lists are then used on your phone. Blocked requests never leave the phone at all.
 
 ## What Chaya never does
 

@@ -45,6 +45,32 @@ What the sheet shows:
 - `MediaNamer` gives items real names (the page title for the main video), so saved files are
   called `Title (720p).mp4`.
 
+## Ad blocking (`adblock/`)
+
+Android's WebView cannot run extensions, so Chaya blocks with uBlock Origin's base lists itself.
+
+- `adblock/engine/` is plain Kotlin with no Android in it. `FilterEngine` reads the Adblock Plus
+  format of EasyList and EasyPrivacy. Bare `||host^` rules (nine in ten) go in a set, looked up by
+  the request's host and its parents. The other rules are indexed by one whole word of their
+  pattern and tried only on addresses containing it. Exceptions, `$important`, `$third-party`
+  (by registered name: OkHttp's public suffix list), `$domain`, kinds of request and page-wide
+  exceptions (`$document`, `$elemhide`, `$generichide`) are honoured. Regular expressions,
+  scriptlets, procedural selectors and rewriting options (`csp`, `removeparam`...) are skipped,
+  never half-applied. A request whose kind cannot be told only meets rules that name no kind.
+- `CosmeticRules` turns element-hiding rules into CSS. Rules for the site, and the few rules for
+  every site that have no class or id to look up, go in the page script. The rest (about 13,000
+  `.ad-banner`-style rules) are handed out by the classes and ids the page actually has: the script
+  collects them as elements appear and asks `ChayaCosmetic` (a `@JavascriptInterface` that hands
+  out only selectors from the public lists, so it needs no capability).
+- `AdBlocker` (one per app) holds the engine and `AdBlockSettings` (on/off, allowed sites).
+  `AdBlockSession` (one per WebView) knows the page shown, answers `shouldInterceptRequest` with an
+  empty 204 for a blocked request (before `MediaInterceptor`, so an ad is never offered for
+  download), refuses ad pop-ups and counts what it blocked. Pages themselves are never blocked.
+- `FilterLists` reads the lists shipped in `assets/adblock/`, or fresher copies fetched from
+  easylist.to once a week. All lists are fetched before any is replaced, and a copy that does not
+  look like a list is thrown away. The lists are read in the background when the browser first
+  shows (about a second); pages load unblocked until then.
+
 ## Video sites (`platform/` and `src/main/python/chaya_engine`)
 
 - `PlatformMatcher` recognizes a link to a single video on a supported site.
@@ -126,7 +152,8 @@ Share. Reached from the Downloads screen's menu.
 
 - `browser/`: one WebView kept alive across navigation (`RetainedWebViewCallbacks` rebinds its
   callbacks atomically). `BrowserChrome` is the address bar, which collapses to the site name on a
-  page. The floating pill and the sheets (`ui/components/`) sit on top.
+  page, with the ad blocker's shield and count. The floating pill and the sheets (`ui/components/`)
+  sit on top.
 - `downloads/`: cards per state, All/Active/Done filters, swipe to delete with Undo.
 - `ui/theme/`: the design tokens from [`../DESIGN.md`](../DESIGN.md), and `ThemeSettings`, the
   person's choice of light, dark or the same as the phone (kept in SharedPreferences).
@@ -138,5 +165,5 @@ Share. Reached from the Downloads screen's menu.
 |---|---|---|
 | `app/src/test/java` | JVM and Robolectric tests: state machine, MockWebServer transfers, Room migrations, Media3 stream pipeline, Compose UI | every PR (`build.yml`) |
 | `app/src/test/python` | pytest for `chaya_engine`, against the pinned yt-dlp | PRs touching the engine (`engine.yml`) |
-| `app/src/androidTest` | On a device: Python/yt-dlp and QuickJS, the real `MediaMuxer` join, the whole two-file save | `ui-check` label or manual (`device-tests.yml`); also *Run workflow* on `build.yml` |
+| `app/src/androidTest` | On a device: Python/yt-dlp and QuickJS, the real `MediaMuxer` join, the whole two-file save, ad blocking in a real WebView | `ui-check` label or manual (`device-tests.yml`); also *Run workflow* on `build.yml` |
 | `.github/scripts/walkthrough.py` | Drives the debug app in an emulator and saves screenshots, screen text and logs | `ui-check` label or manual (`emulator-check.yml`) |

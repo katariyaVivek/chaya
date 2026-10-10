@@ -30,7 +30,9 @@ up by yt-dlp on the phone, with picture and sound joined into one MP4. Merged as
 | [#25](https://github.com/katariyaVivek/chaya/pull/25) | The new icon (an original and its shadow-copy) and a Light / Dark / Same as phone setting |
 | [#26](https://github.com/katariyaVivek/chaya/pull/26) | YouTube downloads fetched in 10 MB ranges, as yt-dlp does, so they are not held to playback speed |
 | [#27](https://github.com/katariyaVivek/chaya/pull/27) | Every picture and video in an Instagram or X post (gallery-dl), saved together or one at a time |
-| Account as ZIP | Everything an Instagram or X account has posted, as one ZIP; with the person's sign-in only when they choose it |
+| [#28](https://github.com/katariyaVivek/chaya/pull/28) | Everything an Instagram or X account has posted, as one ZIP; with the person's sign-in only when they choose it |
+| [#29](https://github.com/katariyaVivek/chaya/pull/29) | An account ZIP asks again for a file that fails on the way, and leaves out one that never comes instead of stopping |
+| Ad blocker | EasyList and EasyPrivacy built in: ad and tracker requests blocked, ad boxes hidden, ad pop-ups refused; on/off and per site from the address bar's shield; lists refreshed weekly |
 
 ## Next
 

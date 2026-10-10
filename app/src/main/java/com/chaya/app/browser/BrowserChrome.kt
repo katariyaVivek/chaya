@@ -40,7 +40,9 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Stream
+import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.CircularProgressIndicator
@@ -110,6 +112,9 @@ internal fun AddressBar(
     onPaste: () -> Unit,
     onReload: () -> Unit,
     modifier: Modifier = Modifier,
+    /** The ad blocker's shield for the page shown; null on pages it has nothing to say about. */
+    adBlock: AdBlockBadge? = null,
+    onAdBlock: () -> Unit = {},
 ) {
     var editing by remember { mutableStateOf(false) }
     var hadFocus by remember { mutableStateOf(false) }
@@ -209,7 +214,14 @@ internal fun AddressBar(
             }
         }
     } else {
-        UrlPill(url = url, onEdit = { editing = true }, onReload = onReload, modifier = modifier)
+        UrlPill(
+            url = url,
+            onEdit = { editing = true },
+            onReload = onReload,
+            adBlock = adBlock,
+            onAdBlock = onAdBlock,
+            modifier = modifier,
+        )
     }
 }
 
@@ -228,12 +240,17 @@ private fun PasteChip(onClick: () -> Unit) {
     )
 }
 
+/** What the address bar's shield shows: whether ads are blocked on this page, and how many requests were. */
+internal data class AdBlockBadge(val active: Boolean, val blocked: Int)
+
 /** The page's site name with a lock for https; the full address appears once it is tapped. */
 @Composable
 private fun UrlPill(
     url: String,
     onEdit: () -> Unit,
     onReload: () -> Unit,
+    adBlock: AdBlockBadge?,
+    onAdBlock: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val host = remember(url) { MediaUrlClassifier.hostOf(url)?.removePrefix("www.") ?: url }
@@ -264,11 +281,42 @@ private fun UrlPill(
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f)
         )
+        if (adBlock != null) ShieldButton(adBlock, onAdBlock)
         IconButton(onClick = onReload) {
             Icon(
                 imageVector = Icons.Default.Refresh,
                 contentDescription = "Refresh",
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+    }
+}
+
+/** The ad blocker's shield: filled while it blocks here, with how many requests it blocked on this page. */
+@Composable
+private fun ShieldButton(badge: AdBlockBadge, onClick: () -> Unit) {
+    val label = when {
+        !badge.active -> "Ad blocker off here"
+        badge.blocked == 1 -> "Ad blocker: 1 blocked"
+        else -> "Ad blocker: ${badge.blocked} blocked"
+    }
+    IconButton(onClick = onClick, modifier = Modifier.semantics { contentDescription = label }) {
+        BadgedBox(
+            badge = {
+                if (badge.active && badge.blocked > 0) {
+                    Badge(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                    ) { Text(if (badge.blocked > 99) "99+" else "${badge.blocked}") }
+                }
+            }
+        ) {
+            Icon(
+                imageVector = if (badge.active) Icons.Filled.Shield else Icons.Outlined.Shield,
+                contentDescription = null,
+                tint = if (badge.active) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(20.dp)
             )
         }

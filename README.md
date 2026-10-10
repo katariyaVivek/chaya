@@ -27,6 +27,7 @@ and allow installs from unknown apps when asked.
 | **Find** | Network sniffing and an injected page scanner (Shadow DOM, iframes, fetch/XHR) run together; extensionless media is checked only when you ask |
 | **Make sense of it** | The page's main video comes first with its title; likely ads are folded away; stream pieces are hidden; one entry per quality |
 | **Video sites** | Paste, share or browse a YouTube, Instagram, TikTok or X link: yt-dlp, running on the phone, finds the qualities; picture and sound are joined into one MP4. Instagram and X posts with pictures (gallery-dl) save every photo |
+| **Block ads** | EasyList and EasyPrivacy, the lists uBlock Origin starts with, block ad and tracker requests, hide ad boxes and refuse ad pop-ups; off for any site with one switch |
 | **Download** | Files over OkHttp with `Range` resume; HLS/DASH through Media3; a foreground service with progress, pause and cancel |
 | **Keep** | Download history in Room with explicit migrations; finished files appear in your Movies, Music, Pictures or Downloads |
 
@@ -38,6 +39,8 @@ and allow installs from unknown apps when asked.
   elsewhere.
 - Diagnostics stay on the phone (addresses scrubbed before logging); your sign-in on a video site is
   used **only when you tap to allow it**, and the temporary copy is deleted right after.
+- The ad blocker's lists are fetched weekly from easylist.to with nothing about you attached;
+  blocked requests never leave the phone.
 - No analytics, no ads, no account, no server. Details in [`PRIVACY_POLICY.md`](PRIVACY_POLICY.md).
 
 ---
@@ -74,6 +77,7 @@ broadcasts. Chaya is for media you own or have permission to download. See
 
 ```
 app/src/main/java/com/chaya/app/
+├── adblock/       ad blocker: filter engine (plain Kotlin), lists and weekly update, per-page sessions
 ├── browser/       WebView shell, address bar, view model
 ├── detection/     interceptor, JS bridge, ranking, naming, ad hosts, content-type checks
 ├── platform/      video-site links: matcher, yt-dlp engine, JS solver, format selection, sign-in
@@ -85,7 +89,12 @@ app/src/main/java/com/chaya/app/
 └── ui/            theme, sheets, player, navigation
 app/src/main/python/chaya_engine/   yt-dlp wrapper run through Chaquopy
 app/src/main/assets/detection/      the injected page scanner
+app/src/main/assets/adblock/        EasyList and EasyPrivacy as shipped
 ```
+
+The ad lists in `app/src/main/assets/adblock/` are [EasyList and EasyPrivacy](https://easylist.to/),
+by The EasyList authors, used under the
+[Creative Commons Attribution-ShareAlike 3.0](https://creativecommons.org/licenses/by-sa/3.0/) licence.
 
 ## Docs
 
