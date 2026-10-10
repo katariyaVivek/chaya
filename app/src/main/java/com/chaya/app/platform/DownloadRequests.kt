@@ -54,6 +54,7 @@ fun PostItem.toDownloadRequest(media: PlatformMedia, number: Int, count: Int, pa
     val title = media.title.trim().ifEmpty { "Post" }
     val named = if (count > 1) "$title ($number of $count)" else title
     val extension = ext.lowercase().takeIf { it.isNotEmpty() } ?: if (isVideo) "mp4" else "jpg"
+    val page = pageUrl ?: media.pageUrl
     return DownloadRequest(
         url = url,
         headers = headers,
@@ -63,5 +64,10 @@ fun PostItem.toDownloadRequest(media: PlatformMedia, number: Int, count: Int, pa
         title = named,
         // A picture is its own poster; a video in a post has none of its own, so the post's is used.
         thumbnailUrl = if (isVideo) media.thumbnailUrl else url,
+        // The post's address and title: its files share it, so the library shows them as one tile.
+        groupKey = if (count > 1) groupKeyOf(page, title) else null,
     )
 }
+
+/** What the files of one post share: its address and its title. */
+fun groupKeyOf(pageUrl: String?, title: String): String = "${pageUrl.orEmpty()}\n$title"

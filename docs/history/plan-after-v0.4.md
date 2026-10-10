@@ -1,8 +1,8 @@
-# Working plan: the next features
+# Working plan: the next features (done)
 
-A temporary plan, written at the end of one session so the next can pick it up. When a part ships,
-tick it here and add its row to [`ROADMAP.md`](ROADMAP.md). When everything here has shipped, move
-this file to `docs/history/`.
+Every part below shipped, #34 to #39, in October 2026. Kept for the reasoning behind each part; what
+was still open at the end moved to [`../ROADMAP.md`](../ROADMAP.md), and the working rules to
+[`../../CLAUDE.md`](../../CLAUDE.md).
 
 ## Resuming in a new session
 
@@ -30,6 +30,7 @@ Merged on `main` since v0.4.0, each through a PR that was green before merging:
 | #36 | Tabs restored after Android closes the app, up to 50 (4 live), in a full-screen Chrome-style tab grid |
 | #37 | Bookmarks (star on the site pill), history by day with clear and a stop switch, suggestions while typing; Room v6 |
 | #38 | YouTube files fetched three 10 MB pieces at a time, with a record of whole pieces so a resume fetches only the rest |
+| #39 | Downloads as a library: a grid, a post's pictures as one tile, a picture viewer, ZIP contents, filters, search, share and multi-select; Room v7 |
 
 Loose ends the owner handles from a PC: delete the old merged branches (the session's git proxy
 cannot delete branches), and decide whether to push the `v0.4.0` tag. While testing a profile ZIP
@@ -57,7 +58,7 @@ from those lines.
 - **Python tests rewrite tracked `.pyc` files** under `__pycache__/` (some were committed long ago).
   Run `git checkout -- '*__pycache__*'` before committing, or pytest with `-p no:cacheprovider` and
   `PYTHONDONTWRITEBYTECODE=1`.
-- **Room is at version 6.** Every part below that adds a table or column bumps it by one, with a
+- **Room is at version 7.** Every part below that adds a table or column bumps it by one, with a
   `Migration` and a migration test. Merge them in this file's order so the version numbers here
   hold.
 
@@ -267,7 +268,11 @@ disk; the file matches byte for byte; pause mid-way, then resume, re-fetches onl
 cancel stops every call; a non-206 falls back to one piece. The existing `HttpDownloaderChunksTest`
 cases still pass.
 
-### 6. Downloads as a media library ☐
+### 6. Downloads as a media library ☑ (#39)
+
+As built: choosing several is in the grid (a long press); the list keeps swipe to delete. A video in
+a post shows a frame of itself in the viewer, with a play button that opens it as before. Saving a
+ZIP's file to the phone needs Android 10 or newer.
 
 **Shape.**
 - **Layout.** The Downloads screen gets a switch between today's list and a **grid** of

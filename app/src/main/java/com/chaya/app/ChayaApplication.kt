@@ -53,6 +53,9 @@ class ChayaApplication : Application() {
     /** The browser's history and bookmarks, on the phone only. */
     val browsing: com.chaya.app.history.BrowsingRecord by lazy { com.chaya.app.history.BrowsingRecord.from(this, database) }
 
+    /** Video frames and files taken out of ZIPs for the downloads grid, kept in the cache. */
+    val libraryFiles: com.chaya.app.library.LibraryFiles by lazy { com.chaya.app.library.CachedLibraryFiles(this) }
+
     /** The open tabs on disk, so they come back after Android closes the app. */
     val tabStore: com.chaya.app.browser.TabStore by lazy { com.chaya.app.browser.TabStore(File(filesDir, "tabs")) }
 

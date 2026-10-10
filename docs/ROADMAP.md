@@ -40,11 +40,12 @@ up by yt-dlp on the phone, with picture and sound joined into one MP4. Merged as
 | [#36](https://github.com/katariyaVivek/chaya/pull/36) | Tabs come back after Android closes the app, with their history; up to 50 open, the four shown last kept in memory; a full-screen tab grid with pictures of the pages, search, swipe to close with Undo, and Close all tabs |
 | [#37](https://github.com/katariyaVivek/chaya/pull/37) | Bookmarks and history: a star on the address, a History screen by day with search, delete, Clear history and a switch to stop saving it, a Bookmarks screen, bookmarks first among the quick sites, and suggestions under the address bar while typing; all kept on the phone only |
 | [#38](https://github.com/katariyaVivek/chaya/pull/38) | YouTube downloads fetch three 10 MB pieces at a time, each written at its place in the file; a resume fetches only the pieces still missing, and a server that refuses a range gets the rest one at a time |
+| [#39](https://github.com/katariyaVivek/chaya/pull/39) | Downloads as a library: a grid of what is done (videos by a frame, a post's pictures as one tile), a full-screen picture viewer with zoom, an account's ZIP opened to its files (view, share, save one), filters by kind and site, search by title, Share on every finished file, and several chosen at once to share or delete |
 
 ## Next
 
-The working plan for the next features, in order and in detail, is [`PLAN.md`](PLAN.md): a downloads
-library. The list below is the longer view.
+The six-part plan after v0.4.0 has shipped (#34 to #39); it is in
+[`history/plan-after-v0.4.md`](history/plan-after-v0.4.md). What is left:
 
 1. **Check the video-site path end to end on a phone.** The engine, the join and the UI have each
    been tested, but a real lookup followed by a real download has not run in one piece. A
@@ -55,12 +56,22 @@ library. The list below is the longer view.
    before deciding.
 3. **More picture formats for joining.** Only H.264 is joined today. HEVC and AV1 muxing depends on
    the Android version and has not been verified, so those qualities are not offered.
+4. **Time YouTube's three pieces at once on a phone** (#38). Compare a long YouTube download with
+   v0.4.0. If YouTube limits speed by address rather than by connection, change
+   `HttpDownloader.PIECES_AT_ONCE`.
+5. **A fresh address after a 403.** A YouTube download refused twice fails and keeps what it has,
+   but Retry asks with the same, possibly expired, address. Asking the engine again first would
+   let Retry carry on by itself.
+6. **Downloads on Wi-Fi only**, as an opt-in setting, **off by default**. The owner mostly downloads
+   on mobile data, so nothing may ever wait for Wi-Fi unless the person turns this on.
+7. Ads inside YouTube's own videos need uBlock Origin's scriptlets, which the blocker does not run.
+   Revisit only if a safe, narrow way appears.
 
 ## Known rough edges
 
-- The emulator walkthrough lost the emulator itself twice (the app reported as not running, then
-  `adb` silent), both times after a stream download that pulled in an extra 720p variant (190 MB
-  for a 184p pick). Since that bug was fixed (184p now saves 21 MB) the walkthrough has passed. If
-  the emulator dies again, give it more memory or play a lighter video.
+- The emulator walkthrough sometimes loses the emulator itself: the app is reported as not running,
+  then `adb` goes silent. It happened twice after a stream download that pulled in an extra 720p
+  variant (fixed since), and again once each on #35 and #37, where one re-run passed. If it starts
+  happening on every run, give the emulator more memory or play a lighter video.
 - Gradle's parallel project execution is off: with Chaquopy it made `kspDebugKotlin` fail on a
   project lock. The app is a single module, so nothing is lost.

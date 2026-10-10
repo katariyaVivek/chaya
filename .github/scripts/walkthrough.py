@@ -422,6 +422,11 @@ def scenario_local():
     tap_when("local: open Downloads", 20, FALLBACK["downloads_button"], desc_contains="Downloads")
     monitor_download("local", 90)
     log("saved files: " + sh(f"run-as {PKG} ls -la files/downloads 2>&1").strip())
+    # The same downloads as a library grid: the finished video as a tile, its frame taken from the file.
+    if tap_when("local: show the downloads as a grid", 20, desc_contains="Show as grid"):
+        time.sleep(3)
+        snapshot("downloads-grid")
+        tap_when("local: back to the list", 20, desc_contains="Show as list")
 
 
 def scenario_tabs():

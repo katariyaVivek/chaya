@@ -22,4 +22,6 @@ data class DownloadRequest(
     val qualityHeight: Int? = null,
     /** Total size of everything to fetch, when known, so the progress bar can be honest. */
     val expectedBytes: Long? = null,
+    /** Shared by the files saved from one post: the library shows them as one tile. */
+    val groupKey: String? = null,
 )

@@ -10,7 +10,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [DownloadEntity::class, HistoryEntity::class, BookmarkEntity::class],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -60,6 +60,13 @@ abstract class ChayaDatabase : RoomDatabase() {
             }
         }
 
+        /** Adds the key that ties the files of one post together for the library; older rows stay ungrouped. */
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE downloads ADD COLUMN group_key TEXT")
+            }
+        }
+
         @Volatile
         private var INSTANCE: ChayaDatabase? = null
 
@@ -71,7 +78,7 @@ abstract class ChayaDatabase : RoomDatabase() {
                     "chaya.db"
                 )
                     // Explicit migration chain — never wipe user history on upgrade.
-                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                    .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                     .build().also { INSTANCE = it }
             }
         }

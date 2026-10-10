@@ -27,6 +27,8 @@ data class DownloadTask(
     /** A separate sound file joined to the picture at [url] when both have arrived; null for ordinary downloads. */
     val audioUrl: String? = null,
     val audioRequestHeaders: Map<String, String> = emptyMap(),
+    /** Shared by the files saved from one post, so the library shows them as one tile; null otherwise. */
+    val groupKey: String? = null,
     /** For a ZIP archive of many files, how far it has got; not stored. */
     val archive: ArchiveProgress? = null,
     /** While a finished stream is being saved as an MP4 file, how far that has got (0 to 1); not stored. */

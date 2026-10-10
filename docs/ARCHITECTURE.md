@@ -196,10 +196,12 @@ faster than APKs ship, so the app fetches newer releases itself.
 
 ## Storage (`database/`)
 
-Room, currently schema version 6. Every version change has an explicit migration; destructive
+Room, currently schema version 7. Every version change has an explicit migration; destructive
 migration is never used. Progress is kept in memory and only state changes are written.
 
-- `downloads`: one row per download.
+- `downloads`: one row per download. Since v7, `group_key` (the post's address and title) ties the
+  files saved from one post together, so the library shows them as one tile; older rows stay
+  ungrouped.
 - `history` and `bookmarks` (v6, `BrowsingEntities.kt`): one row per address. A page that finishes
   loading in any tab updates its history row (title, time, visit count) in one transaction
   (`HistoryDao.recordVisit`). `history/BrowsingRecord` wraps both: it records only http(s) pages
@@ -235,7 +237,19 @@ Share. Reached from the Downloads screen's menu.
 - `BrowserChrome` is the address bar, which collapses to the site name on a
   page, with the ad blocker's shield and count. The floating pill and the sheets (`ui/components/`)
   sit on top.
-- `downloads/`: cards per state, All/Active/Done filters, swipe to delete with Undo.
+- `downloads/`: the list (cards per state, All/Active/Done filters, swipe to delete with Undo, Share
+  in a finished file's ⋮) or the grid, switched from the top bar and remembered. `DownloadsContent`
+  is the screen without its view model, so tests drive it directly.
+- `library/`: the grid of finished downloads. `libraryItems` puts a post's files (same `groupKey`)
+  on one tile, and `LibraryFilter` narrows by kind, site and title in both the list and the grid.
+  `PictureViewer` shows pictures full screen with pinch and double-tap zoom and a pager. A post
+  swipes inside itself; a lone picture swipes among the other lone pictures. Videos still open as
+  before. A long press chooses several to share or delete. `ZipContents` lists an account's ZIP with
+  `java.util.zip` and takes out one file at a time into `cache/library/zip/<id>/`, guarding against
+  names that climb out of that folder. `CachedLibraryFiles` keeps video frames (from
+  `MediaMetadataRetriever`, a second in, 480 px wide) in `cache/library/frames/`. Both are deleted
+  with their download. `LibraryIntents` builds the share sheet and *Save to phone* (MediaStore,
+  Android 10+).
 - `ui/theme/`: the design tokens from [`../DESIGN.md`](../DESIGN.md), and `ThemeSettings`, the
   person's choice of light, dark or the same as the phone (kept in SharedPreferences).
 - `SharedLinks` holds a link shared from another app until the browser picks it up;

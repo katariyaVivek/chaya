@@ -51,6 +51,9 @@ These are deliberate scope decisions, not open bugs.
   most recently keep their page in memory; the others keep their address and history and load
   again when shown, as Chrome's do. Tabs come back after Android closes the app, but a page's own
   state (a form half filled in, how far a video had played) does not.
+- **Saving a file out of an account's ZIP on Android 8 or 9.** *Save to phone* needs Android 10 or
+  newer; on older phones a file can still be opened or shared. Videos inside a ZIP show an icon
+  rather than a frame, since a frame would mean taking the whole video out.
 - **Bookmark folders, import, export or sync.** Bookmarks are one list, kept on this phone; there is
   no way yet to bring them in from another browser or take them out, and nothing is synced.
 - **Browser extensions.** Android's WebView, which Chaya's browser is built on, cannot run them, so
