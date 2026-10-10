@@ -148,13 +148,13 @@ class DownloadManagerStreamSaveTest {
         assertTrue(kept.saveNote!!.contains("couldn't save it as MP4"))
         assertEquals(emptyList<Long>(), exporter.removed.toList())
         assertFalse("the half-written file is gone", exporter.exports.single().exists())
-        assertEquals(DownloadState.COMPLETED, dao.getAllOnce().single().state)
+        assertTrue(awaitUntil { runBlocking { dao.getAllOnce() }.single().state == DownloadState.COMPLETED })
 
         exporter.failWith = null
         manager.saveAsFile(1)
 
-        assertTrue(awaitUntil { task().filePath != null })
-        assertEquals(DownloadState.COMPLETED, task().state)
+        // The file comes first, then the completion that also copies it to Movies.
+        assertTrue(awaitUntil { task().filePath != null && task().state == DownloadState.COMPLETED })
         assertNull(task().saveNote)
         assertEquals(listOf(1L), exporter.removed.toList())
     }
@@ -166,8 +166,8 @@ class DownloadManagerStreamSaveTest {
 
         manager.saveAsFile(1)
 
-        assertTrue(awaitUntil { task().filePath != null })
-        assertEquals(DownloadState.COMPLETED, task().state)
+        // The file comes first, then the completion that also copies it to Movies.
+        assertTrue(awaitUntil { task().filePath != null && task().state == DownloadState.COMPLETED })
     }
 
     @Test
