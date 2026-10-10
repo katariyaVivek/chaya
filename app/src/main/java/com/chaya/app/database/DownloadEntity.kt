@@ -101,6 +101,7 @@ data class DownloadEntity(
                 "UNSUPPORTED_FORMAT" -> DownloadError.UnsupportedFormat
                 "COMBINE" -> DownloadError.CouldNotCombine(RuntimeException(legacyMessage ?: "combine"))
                 "CANCELLED" -> DownloadError.Cancelled
+                "LISTING" -> DownloadError.Listing(legacyMessage ?: "Couldn't list what to save", canRetry = code != 0)
                 else -> DownloadError.Unknown(RuntimeException(legacyMessage ?: "unknown"))
             }
         }
@@ -114,6 +115,8 @@ data class DownloadEntity(
             DownloadError.UnsupportedFormat -> Triple("UNSUPPORTED_FORMAT", null, error.userMessage)
             is DownloadError.CouldNotCombine -> Triple("COMBINE", null, error.userMessage)
             DownloadError.Cancelled -> Triple("CANCELLED", null, error.userMessage)
+            // The code column, otherwise unused here, keeps whether retrying could help.
+            is DownloadError.Listing -> Triple("LISTING", if (error.retryable) 1 else 0, error.userMessage)
             is DownloadError.Unknown -> Triple("UNKNOWN", null, error.userMessage)
         }
 

@@ -15,6 +15,10 @@ Store account, no third-party SDKs.
   for a post's pictures) to use, and the
   file is deleted as soon as the lookup ends, whether it worked or not. Chaya never uses your
   sign-in without that tap.
+- **Saving a whole Instagram or X account.** The account sheet asks whether to use your sign-in
+  (*Save all posts with my sign-in*) or not (*Try without signing in*). That choice is stored with the
+  download, so resuming it later never switches to your sign-in by itself. The cookies are used only
+  while the account's posts are listed, then deleted; the files themselves are fetched without them.
 - **Storage.** Downloads are saved to app-private storage; on Android 10 and newer, each finished
   download is also copied to your phone's public media folders (Movies, Music, Pictures, Downloads), where
   other apps can see it. Download history (addresses, file names, progress) is kept in

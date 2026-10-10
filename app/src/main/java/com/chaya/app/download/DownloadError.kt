@@ -48,6 +48,9 @@ sealed class DownloadError(
         retryable = true,
     )
 
+    /** An archive's contents could not be listed; [message] says why (a sign-in is needed, the account is private). */
+    data class Listing(val message: String, val canRetry: Boolean = true) : DownloadError(message, retryable = canRetry)
+
     /** User-cancelled; recorded for completeness, never shown as a failure. */
     object Cancelled : DownloadError("Cancelled", retryable = false)
 
@@ -67,6 +70,9 @@ sealed class DownloadError(
             // Before the join check: a join that ran out of room says so deep in its cause chain.
             if (isStorageFull(throwable)) return StorageFull
             if (throwable is CombineException) return CouldNotCombine(throwable)
+            if (throwable is ArchiveListingException) {
+                return Listing(throwable.message ?: "Couldn't list what to save", throwable.retryable)
+            }
             httpStatusPattern.find(throwable.message ?: "")?.let { match ->
                 return HttpStatus(match.groupValues[1].toInt())
             }

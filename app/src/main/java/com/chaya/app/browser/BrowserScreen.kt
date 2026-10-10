@@ -87,10 +87,12 @@ import com.chaya.app.download.DownloadState
 import com.chaya.app.model.DetectedMedia
 import com.chaya.app.model.MediaKind
 import com.chaya.app.platform.LinkState
+import com.chaya.app.platform.Platform
 import com.chaya.app.platform.PlatformChoice
 import com.chaya.app.ui.components.DetectedMediaSheet
 import com.chaya.app.ui.components.NotificationRationaleSheet
 import com.chaya.app.ui.components.PlatformSheet
+import com.chaya.app.ui.components.ProfileSheet
 import com.chaya.app.ui.components.QualitySelectorSheet
 import com.chaya.app.ui.theme.ChayaMotion
 import com.chaya.app.ui.theme.pressScale
@@ -648,8 +650,10 @@ fun BrowserScreen(
                 // that is one video on YouTube, Instagram, TikTok or X it shows what the engine found instead.
                 val linkPillShown = !uiState.homeVisible &&
                     (linkState is LinkState.Looking || linkState is LinkState.Answer)
+                // An Instagram or X account page offers its posts as one ZIP.
+                val profileShown = uiState.profile.takeIf { !uiState.homeVisible && !linkPillShown }
                 AnimatedVisibility(
-                    visible = linkPillShown || (!uiState.homeVisible && !sheetModel.isEmpty),
+                    visible = linkPillShown || profileShown != null || (!uiState.homeVisible && !sheetModel.isEmpty),
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .padding(horizontal = 12.dp, vertical = 12.dp),
@@ -660,6 +664,8 @@ fun BrowserScreen(
                 ) {
                     if (linkPillShown) {
                         PlatformPill(state = linkState, onClick = { viewModel.toggleLinkSheet() })
+                    } else if (profileShown != null) {
+                        ProfilePill(profile = profileShown, onClick = { viewModel.toggleProfileSheet() })
                     } else {
                         MediaPill(model = sheetModel, onClick = { viewModel.toggleMediaSheet() })
                     }
@@ -678,6 +684,23 @@ fun BrowserScreen(
                                 showMessage(if (count == 1) "Saving 1 item" else "Saving $count items")
                             }
                         },
+                    )
+                }
+
+                // An account's posts, saved as one ZIP; its sign-in is used only when chosen here.
+                val sheetProfile = uiState.profile
+                if (uiState.showProfileSheet && sheetProfile != null) {
+                    ProfileSheet(
+                        profile = sheetProfile,
+                        signedIn = remember(sheetProfile) { viewModel.isSignedIn(sheetProfile.platform) },
+                        onSave = { useSignIn ->
+                            viewModel.saveProfile(useSignIn) { name -> showMessage("Saving $name") }
+                        },
+                        onSignIn = {
+                            viewModel.dismissProfileSheet()
+                            navigateToUrl(signInPageOf(sheetProfile.platform))
+                        },
+                        onDismiss = { viewModel.dismissProfileSheet() },
                     )
                 }
 
@@ -987,4 +1010,10 @@ private fun downloadLabel(media: DetectedMedia): String =
 /** Prepends the random main-document capability without interpolating page-controlled content. */
 private fun detectorScriptWithCapability(detectorJs: String, capability: String): String {
     return "window.__chayaBridgeCapability = '$capability';\n$detectorJs"
+}
+
+/** Where to sign in to an account's site, inside Chaya's browser. */
+private fun signInPageOf(platform: Platform): String = when (platform) {
+    Platform.TWITTER -> "https://x.com/i/flow/login"
+    else -> "https://www.instagram.com/accounts/login/"
 }

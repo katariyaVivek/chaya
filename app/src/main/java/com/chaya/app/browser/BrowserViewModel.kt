@@ -17,9 +17,12 @@ import com.chaya.app.model.DetectionSource
 import com.chaya.app.model.DetectedMedia
 import com.chaya.app.platform.LinkState
 import com.chaya.app.platform.PlatformChoice
-import com.chaya.app.platform.PlatformEngine
 import com.chaya.app.platform.PlatformFormat
+import com.chaya.app.platform.Platform
 import com.chaya.app.platform.PlatformLinks
+import com.chaya.app.platform.ProfileMatch
+import com.chaya.app.platform.ProfileMatcher
+import com.chaya.app.platform.SignIn
 import com.chaya.app.platform.WebViewSignIn
 import com.chaya.app.platform.toDownloadRequest
 import com.chaya.app.streaming.ManifestHelper
@@ -71,18 +74,25 @@ data class BrowserUiState(
     val qualityPickerState: QualityPickerState? = null,
     /** Shows the sheet for the video behind a link on a supported site. */
     val showLinkSheet: Boolean = false,
+    /** The Instagram or X account the page or the pasted link is, whose posts can be saved as one ZIP. */
+    val profile: ProfileMatch? = null,
+    val showProfileSheet: Boolean = false,
 )
 
 class BrowserViewModel @JvmOverloads constructor(
     application: Application,
     links: PlatformLinks? = null,
+    signIn: SignIn? = null,
 ) : AndroidViewModel(application) {
+    /** The browser's sign-in on a site, offered (never used on its own) for saving an account's posts. */
+    private val signIn: SignIn = signIn ?: WebViewSignIn(application)
+
     /**
      * Looks up the video behind a link on YouTube, Instagram, TikTok or X, for the pill on such a page and for
      * a link that was pasted or shared.
      */
     private val links: PlatformLinks =
-        links ?: PlatformLinks(viewModelScope, PlatformEngine(application), WebViewSignIn(application))
+        links ?: PlatformLinks(viewModelScope, (application as ChayaApplication).platformEngine, WebViewSignIn(application))
 
     /** What is known about the video behind the current or pasted link. */
     val linkState: StateFlow<LinkState> get() = this.links.state
@@ -166,11 +176,22 @@ class BrowserViewModel @JvmOverloads constructor(
                     thoroughScanRequest = null,
                     qualityPickerState = null,
                     showLinkSheet = false,
+                    showProfileSheet = false,
                 )
             }
         }
-        links.look(url)
+        followAddress(url)
         return navigationGeneration
+    }
+
+    /** A page that is one video asks the engine about it; a page that is an account offers to save its posts. */
+    private fun followAddress(url: String) {
+        val isVideo = links.look(url)
+        val profile = if (isVideo) null else ProfileMatcher.match(url)
+        _uiState.update { state ->
+            if (state.profile == profile) state
+            else state.copy(profile = profile, showProfileSheet = state.showProfileSheet && profile != null)
+        }
     }
 
     /**
@@ -178,7 +199,7 @@ class BrowserViewModel @JvmOverloads constructor(
      * Only the link lookup follows this: the page state above is deliberately tied to whole documents.
      */
     fun onPageAddressChanged(url: String) {
-        links.look(url)
+        followAddress(url)
     }
 
     /** Finalizes only the matching document generation before scheduling its optional deeper media scan. */
@@ -247,6 +268,8 @@ class BrowserViewModel @JvmOverloads constructor(
                 thoroughScanRequest = null,
                 qualityPickerState = null,
                 showLinkSheet = false,
+                profile = null,
+                showProfileSheet = false,
             )
         }
     }
@@ -580,9 +603,40 @@ class BrowserViewModel @JvmOverloads constructor(
      */
     fun openLink(text: String): Boolean {
         val url = LINK_IN_TEXT.find(text)?.value?.trimEnd('.', ',', ')', ']', '>', '"', '\'') ?: text.trim()
-        if (!links.look(url)) return false
-        _uiState.update { it.copy(showLinkSheet = true) }
+        if (links.look(url)) {
+            _uiState.update { it.copy(showLinkSheet = true) }
+            return true
+        }
+        val profile = ProfileMatcher.match(url) ?: return false
+        _uiState.update { it.copy(profile = profile, showProfileSheet = true) }
         return true
+    }
+
+    // ------------------------------------------------------------------ //
+    // An Instagram or X account, saved as one ZIP
+    // ------------------------------------------------------------------ //
+
+    fun toggleProfileSheet() {
+        _uiState.update { it.copy(showProfileSheet = it.profile != null && !it.showProfileSheet) }
+    }
+
+    fun dismissProfileSheet() {
+        _uiState.update { it.copy(showProfileSheet = false) }
+    }
+
+    /** Whether the browser here is signed in to [platform], so saving with that sign-in can be offered. */
+    fun isSignedIn(platform: Platform): Boolean = signIn.isSignedIn(platform)
+
+    /**
+     * Starts saving every photo and video the current account has posted, as one ZIP. [useSignIn] is the
+     * person's choice, made on the sheet, to let the site see their sign-in. [onStarted] gets the file name.
+     */
+    fun saveProfile(useSignIn: Boolean, onStarted: (String) -> Unit = {}) {
+        val profile = _uiState.value.profile ?: return
+        val request = profile.archiveRequest(useSignIn)
+        downloadManager.startArchive(request)
+        _uiState.update { it.copy(showProfileSheet = false) }
+        onStarted(request.fileName)
     }
 
     fun toggleLinkSheet() {

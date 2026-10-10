@@ -25,11 +25,16 @@ data class DownloadTask(
     /** A separate sound file joined to the picture at [url] when both have arrived; null for ordinary downloads. */
     val audioUrl: String? = null,
     val audioRequestHeaders: Map<String, String> = emptyMap(),
+    /** For a ZIP archive of many files, how far it has got; not stored. */
+    val archive: ArchiveProgress? = null,
 ) {
     val progressFraction: Float
         get() = if (totalBytes != null && totalBytes > 0) {
             downloadedBytes.toFloat() / totalBytes
         } else 0f
+
+    /** A ZIP archive of many files (everything an account has posted), not one file. */
+    val isArchive: Boolean get() = url.startsWith(ARCHIVE_SCHEME)
 
     /** Started from engine results, so it brings its own headers instead of this browser's session. */
     val hasOwnRequest: Boolean

@@ -64,6 +64,32 @@ class DownloadManagerTest {
     // ---- startDownload ---- //
 
     @Test
+    fun `downloads started together all stay in the list`() = runBlocking {
+        // A post's pictures start at once, each on its own background thread.
+        manager.restore()
+        val count = 64
+
+        repeat(count) { n ->
+            manager.startDownload(
+                DownloadRequest(
+                    url = "https://cdn.example/$n.jpg", fileName = "Post ($n of $count).jpg",
+                    mimeType = "image/jpeg", title = "Post ($n of $count)",
+                ),
+            )
+        }
+
+        val deadline = System.currentTimeMillis() + TIMEOUT_MS
+        while (synchronized(downloader.starts) { downloader.starts.size } < count && System.currentTimeMillis() < deadline) {
+            delay(20)
+        }
+        assertEquals("every download reached the downloader", count, synchronized(downloader.starts) { downloader.starts.size })
+        val listed = manager.downloads.value
+        assertEquals("none went missing from the list", count, listed.size)
+        assertEquals(count, listed.map { it.id }.distinct().size)
+        assertEquals(count, dao.getAllOnce().size)
+    }
+
+    @Test
     fun `startDownload inserts a DOWNLOADING task and starts the downloader with matching identity`() =
         runBlocking {
             manager.restore()

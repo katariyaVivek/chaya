@@ -468,9 +468,12 @@ private fun StateArea(task: DownloadTask) {
 
 @Composable
 private fun ProgressBlock(task: DownloadTask) {
-    val totalKnown = (task.totalBytes ?: 0L) > 0L
+    // An archive counts files, not bytes: it cannot know its size until every file has arrived.
+    val archive = task.archive
+    val totalKnown = if (archive != null) !archive.listing && archive.found > 0 else (task.totalBytes ?: 0L) > 0L
+    val target = if (archive != null && archive.found > 0) archive.saved.toFloat() / archive.found else task.progressFraction
     val fraction by animateFloatAsState(
-        targetValue = task.progressFraction.coerceIn(0f, 1f),
+        targetValue = target.coerceIn(0f, 1f),
         animationSpec = ChayaMotion.tweenStandard(),
         label = "progressFraction"
     )
@@ -503,12 +506,19 @@ private fun ProgressBlock(task: DownloadTask) {
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
-                text = if (totalKnown) "${(fraction * 100).toInt()}%" else "Downloading",
+                text = when {
+                    archive != null && archive.listing -> "Finding posts"
+                    archive != null -> "${archive.saved} of ${archive.found} files"
+                    totalKnown -> "${(fraction * 100).toInt()}%"
+                    else -> "Downloading"
+                },
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary
             )
             Text(
                 text = when {
+                    archive != null && archive.listing -> if (archive.found > 0) "${archive.found} so far" else ""
+                    archive != null -> formatFileSize(task.downloadedBytes)
                     totalKnown -> "${formatFileSize(task.downloadedBytes)} of ${formatFileSize(task.totalBytes ?: 0)}"
                     task.downloadedBytes > 0 -> formatFileSize(task.downloadedBytes)
                     else -> ""
