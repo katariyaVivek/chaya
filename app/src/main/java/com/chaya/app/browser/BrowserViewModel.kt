@@ -143,45 +143,34 @@ class BrowserViewModel @JvmOverloads constructor(
     fun onPageStarted(url: String): Long {
         cancelMediaVerifications()
         val navigationGeneration = pageGeneration.incrementAndGet()
-        _uiState.update { state ->
-            if (url == "about:blank") {
-                state.copy(
-                    navigationGeneration = navigationGeneration,
-                    url = "",
-                    pageTitle = "",
-                    homeVisible = true,
-                    isLoading = false,
-                    progress = 0,
-                    detectedMedia = emptyList(),
-                    pageMeta = null,
-                    hiddenSegmentCount = 0,
-                    showMediaSheet = false,
-                    showThoroughScan = false,
-                    thoroughScanRequest = null,
-                    qualityPickerState = null,
-                    showLinkSheet = false,
-                )
-            } else {
-                state.copy(
-                    navigationGeneration = navigationGeneration,
-                    url = url,
-                    homeVisible = false,
-                    isLoading = true,
-                    progress = 0,
-                    detectedMedia = emptyList(),
-                    pageMeta = null,
-                    hiddenSegmentCount = 0,
-                    showMediaSheet = false,
-                    showThoroughScan = false,
-                    thoroughScanRequest = null,
-                    qualityPickerState = null,
-                    showLinkSheet = false,
-                    showProfileSheet = false,
-                )
-            }
-        }
+        _uiState.update { state -> state.startedPage(url, navigationGeneration) }
         followAddress(url)
         return navigationGeneration
+    }
+
+    /** A new document identity for a page loading in a tab that is not shown. */
+    fun nextNavigationGeneration(): Long = pageGeneration.incrementAndGet()
+
+    /**
+     * Shows another tab. Returns the page state of the tab being left, to keep while it is in the background,
+     * and takes [incoming]: the state kept for the tab being shown, or null for a new tab, which opens on the
+     * start screen. Sheets close and work for the page being left stops; the link and account offers follow
+     * the page now shown. [canGoBack] and [canGoForward] come from the tab's own history.
+     */
+    fun switchTab(incoming: BrowserUiState?, canGoBack: Boolean, canGoForward: Boolean): BrowserUiState {
+        cancelMediaVerifications()
+        val outgoing = _uiState.value.withSheetsClosed()
+        val shown = (incoming ?: BrowserUiState(navigationGeneration = pageGeneration.incrementAndGet()))
+            .withSheetsClosed()
+            .copy(canGoBack = canGoBack, canGoForward = canGoForward)
+        _uiState.value = shown
+        if (shown.homeVisible || shown.url.isEmpty()) {
+            links.clear()
+            _uiState.update { it.copy(profile = null) }
+        } else {
+            followAddress(shown.url)
+        }
+        return outgoing
     }
 
     /** A page that is one video asks the engine about it; a page that is an account offers to save its posts. */
@@ -209,18 +198,7 @@ class BrowserViewModel @JvmOverloads constructor(
             url != state.url ||
             navigationGeneration != state.navigationGeneration
         ) return
-        _uiState.update { activeState ->
-            if (activeState.navigationGeneration != navigationGeneration || activeState.url != url) {
-                activeState
-            } else {
-                activeState.copy(
-                    url = url,
-                    pageTitle = title,
-                    isLoading = false,
-                    progress = 100,
-                )
-            }
-        }
+        _uiState.update { activeState -> activeState.finishedPage(url, title, navigationGeneration) }
         getApplication<ChayaApplication>().eventLog.record(
             ChayaEvent.PageLoaded(url = ChayaEvent.scrubbed(url) ?: url)
         )
@@ -229,13 +207,7 @@ class BrowserViewModel @JvmOverloads constructor(
 
     /** Ignores late progress callbacks from a document that no longer owns the browser UI. */
     fun onProgressChanged(progress: Int, navigationGeneration: Long) {
-        _uiState.update { state ->
-            if (state.navigationGeneration == navigationGeneration) {
-                state.copy(progress = progress)
-            } else {
-                state
-            }
-        }
+        _uiState.update { state -> state.withProgress(progress, navigationGeneration) }
     }
 
     fun onNavigationStateChanged(canGoBack: Boolean, canGoForward: Boolean) {
@@ -714,3 +686,59 @@ private fun isDash(format: PlatformFormat): Boolean {
     val protocol = format.protocol?.lowercase(Locale.ROOT).orEmpty()
     return "dash" in protocol || ("m3u" !in protocol && ".mpd" in format.url.lowercase(Locale.ROOT))
 }
+
+/** The state for a new document at [url]; about:blank is the start screen. */
+internal fun BrowserUiState.startedPage(url: String, navigationGeneration: Long): BrowserUiState =
+    if (url == "about:blank") {
+        copy(
+            navigationGeneration = navigationGeneration,
+            url = "",
+            pageTitle = "",
+            homeVisible = true,
+            isLoading = false,
+            progress = 0,
+            detectedMedia = emptyList(),
+            pageMeta = null,
+            hiddenSegmentCount = 0,
+            showMediaSheet = false,
+            showThoroughScan = false,
+            thoroughScanRequest = null,
+            qualityPickerState = null,
+            showLinkSheet = false,
+        )
+    } else {
+        copy(
+            navigationGeneration = navigationGeneration,
+            url = url,
+            homeVisible = false,
+            isLoading = true,
+            progress = 0,
+            detectedMedia = emptyList(),
+            pageMeta = null,
+            hiddenSegmentCount = 0,
+            showMediaSheet = false,
+            showThoroughScan = false,
+            thoroughScanRequest = null,
+            qualityPickerState = null,
+            showLinkSheet = false,
+            showProfileSheet = false,
+        )
+    }
+
+/** The document [navigationGeneration] at [url] has loaded; a late report from another document changes nothing. */
+internal fun BrowserUiState.finishedPage(url: String, title: String, navigationGeneration: Long): BrowserUiState =
+    if (this.navigationGeneration != navigationGeneration || this.url != url) this
+    else copy(url = url, pageTitle = title, isLoading = false, progress = 100)
+
+/** Loading progress for the document [navigationGeneration] only. */
+internal fun BrowserUiState.withProgress(progress: Int, navigationGeneration: Long): BrowserUiState =
+    if (this.navigationGeneration == navigationGeneration) copy(progress = progress) else this
+
+/** The same page with every sheet and pending request closed, as a tab is when it is left. */
+internal fun BrowserUiState.withSheetsClosed(): BrowserUiState = copy(
+    showMediaSheet = false,
+    thoroughScanRequest = null,
+    qualityPickerState = null,
+    showLinkSheet = false,
+    showProfileSheet = false,
+)

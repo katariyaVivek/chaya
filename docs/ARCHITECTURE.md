@@ -150,8 +150,11 @@ Share. Reached from the Downloads screen's menu.
 
 ## UI (`ui/`, `browser/`, `downloads/`)
 
-- `browser/`: one WebView kept alive across navigation (`RetainedWebViewCallbacks` rebinds its
-  callbacks atomically). `BrowserChrome` is the address bar, which collapses to the site name on a
+- `browser/`: tabs, each a WebView kept alive across navigation with its own interceptor, bridge
+  and ad-block session (`BrowserTabs`, `BrowserTab`). Only the tab shown reports to the browser's
+  state (`RetainedWebViewCallbacks` rebinds callbacks atomically); a tab not shown keeps its own page
+  state as it loads (`backgroundCallbacks`), and `BrowserViewModel.switchTab` swaps that state in
+  and out. A link a page opens in a new window, on a tap, opens in a new tab. `BrowserChrome` is the address bar, which collapses to the site name on a
   page, with the ad blocker's shield and count. The floating pill and the sheets (`ui/components/`)
   sit on top.
 - `downloads/`: cards per state, All/Active/Done filters, swipe to delete with Undo.

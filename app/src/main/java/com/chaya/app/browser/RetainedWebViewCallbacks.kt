@@ -15,6 +15,8 @@ internal data class RetainedWebViewCallbackState(
     val onExitFullscreen: () -> Unit,
     /** The page's address changed, possibly without a new document (a video site moving to another video). */
     val onAddressChanged: (String) -> Unit = {},
+    /** The page asked for a link to open in a new window, on the person's tap. */
+    val onOpenInNewTab: (String) -> Unit = {},
 )
 
 /** Rebinds retained WebView callbacks so they never retain an obsolete Compose destination. */
@@ -53,6 +55,11 @@ internal class RetainedWebViewCallbacks(initialState: RetainedWebViewCallbackSta
     /** Reports the address the page now shows, to the destination currently attached to the retained WebView. */
     fun onAddressChanged(url: String) {
         state.get().onAddressChanged(url)
+    }
+
+    /** Opens [url] in a new tab, for a link the page wanted in a new window. */
+    fun onOpenInNewTab(url: String) {
+        state.get().onOpenInNewTab(url)
     }
 
     /** Delivers fullscreen entry to the screen that is currently rendering the retained WebView. */

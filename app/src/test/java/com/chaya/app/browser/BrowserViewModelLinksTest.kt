@@ -330,6 +330,76 @@ class BrowserViewModelLinksTest {
         assertTrue(viewModel.uiState.value.showLinkSheet)
     }
 
+    // ---- tabs ---- //
+
+    @Test
+    fun `a new tab opens on the start screen, and the tab left keeps its page with its sheets closed`() {
+        val generation = viewModel.onPageStarted(video)
+        viewModel.onPageFinished(video, "Never Gonna Give You Up", generation)
+        viewModel.toggleLinkSheet()
+
+        val kept = viewModel.switchTab(incoming = null, canGoBack = false, canGoForward = false)
+
+        assertEquals(video, kept.url)
+        assertEquals("Never Gonna Give You Up", kept.pageTitle)
+        assertFalse(kept.showLinkSheet)
+        val shown = viewModel.uiState.value
+        assertTrue(shown.homeVisible)
+        assertEquals("", shown.url)
+        assertEquals("the new tab forgets the other tab's link", LinkState.Idle, viewModel.linkState.value)
+    }
+
+    @Test
+    fun `going back to a tab brings back its page, its history buttons and its link`() {
+        val generation = viewModel.onPageStarted(video)
+        viewModel.onPageFinished(video, "Never Gonna Give You Up", generation)
+        val kept = viewModel.switchTab(incoming = null, canGoBack = false, canGoForward = false)
+        viewModel.onPageStarted("https://example.com/")
+        asked.clear()
+
+        viewModel.switchTab(incoming = kept, canGoBack = true, canGoForward = false)
+
+        val shown = viewModel.uiState.value
+        assertEquals(video, shown.url)
+        assertEquals("Never Gonna Give You Up", shown.pageTitle)
+        assertTrue(shown.canGoBack)
+        assertTrue("the video behind the page is offered again", viewModel.linkState.value is LinkState.Found)
+
+        // The page's own document still reports into the state it got back.
+        viewModel.onProgressChanged(70, generation)
+        assertEquals(70, viewModel.uiState.value.progress)
+    }
+
+    @Test
+    fun `an account page's offer comes back with its tab, and goes with the next one`() {
+        viewModel.onPageStarted("https://www.instagram.com/someone/")
+        val kept = viewModel.switchTab(incoming = null, canGoBack = false, canGoForward = false)
+        assertNull(viewModel.uiState.value.profile)
+
+        viewModel.switchTab(incoming = kept, canGoBack = false, canGoForward = false)
+        assertEquals("someone", viewModel.uiState.value.profile?.username)
+    }
+
+    @Test
+    fun `media a tab found is kept with it, and late reports from the tab left are ignored`() {
+        val generation = viewModel.onPageStarted("https://news.example/story")
+        viewModel.onMediaDetected(file("https://cdn.example/a.mp4"), generation)
+        val kept = viewModel.switchTab(incoming = null, canGoBack = false, canGoForward = false)
+
+        viewModel.onMediaDetected(file("https://cdn.example/late.mp4"), generation)
+        assertTrue(viewModel.uiState.value.detectedMedia.isEmpty())
+
+        viewModel.switchTab(incoming = kept, canGoBack = false, canGoForward = false)
+        assertEquals(listOf("https://cdn.example/a.mp4"), viewModel.uiState.value.detectedMedia.map { it.url })
+    }
+
+    private fun file(url: String) = com.chaya.app.model.DetectedMedia(
+        url = url,
+        pageUrl = "https://news.example/story",
+        mimeType = "video/mp4",
+        source = com.chaya.app.model.DetectionSource.NETWORK,
+    )
+
     // ---- an account, saved as one ZIP ---- //
 
     @Test

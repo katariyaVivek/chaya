@@ -14,6 +14,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.FrameLayout
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -25,6 +26,7 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,13 +37,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Tab
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -70,6 +75,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
@@ -98,30 +106,19 @@ import com.chaya.app.ui.components.NotificationRationaleSheet
 import com.chaya.app.ui.components.PlatformSheet
 import com.chaya.app.ui.components.ProfileSheet
 import com.chaya.app.ui.components.QualitySelectorSheet
+import com.chaya.app.ui.components.TabsSheet
 import com.chaya.app.ui.theme.ChayaMotion
 import com.chaya.app.ui.theme.pressScale
-import kotlinx.coroutines.launch
 import java.net.URLEncoder
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 
 /**
- * Holds the single WebView instance across navigation so the browsing session
- * (history, page, cookies) survives trips to the Downloads screen and back.
+ * Holds the open tabs across navigation so each browsing session (history, page, cookies) survives trips
+ * to the Downloads screen and back.
  */
 private object WebViewHolder {
-    /** Retains browsing history and renderer state while Compose destinations swap. */
-    var instance: WebView? = null
-
-    /** Retains the secured bridge captured by the WebViewClient across destination reattachment. */
-    var mediaBridge: MediaBridge? = null
-
-    /** Retains the request observer captured by the WebViewClient across destination reattachment. */
-    var mediaInterceptor: MediaInterceptor? = null
-
-    /** Retains dynamic UI routing for WebViewClient and WebChromeClient callbacks after reattachment. */
-    var callbacks: RetainedWebViewCallbacks? = null
-
-    /** The ad blocker's view of the retained WebView's page, which its clients captured. */
-    var adBlockSession: AdBlockSession? = null
+    val tabs = BrowserTabs()
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -240,65 +237,135 @@ fun BrowserScreen(
         }
     }
 
-    val interceptor = remember {
-        WebViewHolder.mediaInterceptor?.also {
-            it.updateOnMediaDetected { media, navigationGeneration ->
-                viewModel.onMediaDetected(media, navigationGeneration)
-            }
-        } ?: MediaInterceptor { media, navigationGeneration ->
-            viewModel.onMediaDetected(media, navigationGeneration)
-        }.also {
-            WebViewHolder.mediaInterceptor = it
-        }
-    }
-    val bridge = remember {
-        WebViewHolder.mediaBridge?.also {
-            it.updateCallbacks(
-                onMediaDetected = { media, navigationGeneration ->
-                    viewModel.onMediaDetected(media, navigationGeneration)
-                },
-                onMediaCandidate = { candidate, navigationGeneration ->
-                    viewModel.verifyMediaCandidate(candidate, navigationGeneration)
-                },
-                onPageMeta = viewModel::onPageMeta,
-            )
-        } ?: MediaBridge(
-            onMediaDetected = { media, navigationGeneration ->
-                viewModel.onMediaDetected(media, navigationGeneration)
-            },
-            onMediaCandidate = { candidate, navigationGeneration ->
-                viewModel.verifyMediaCandidate(candidate, navigationGeneration)
-            },
-            onPageMeta = viewModel::onPageMeta,
-        ).also { WebViewHolder.mediaBridge = it }
-    }
     val adBlocker = remember { (context.applicationContext as ChayaApplication).adBlocker }
     LaunchedEffect(Unit) { adBlocker.start() }
-    val adBlock = remember {
-        WebViewHolder.adBlockSession ?: adBlocker.newSession().also { WebViewHolder.adBlockSession = it }
+    val detectorJs = remember {
+        runCatching {
+            context.assets.open("detection/chaya_media_detector.js")
+                .bufferedReader().readText()
+        }.getOrDefault("")
     }
-    val adBlocked by adBlock.blocked.collectAsState()
-    val adSite by adBlock.site.collectAsState()
+
+    val tabs = WebViewHolder.tabs
+    // Read so that opening, closing or showing a tab, or a page loading in a tab not shown, recomposes.
+    @Suppress("UNUSED_VARIABLE")
+    val tabsVersion = tabs.version.collectAsState().value
+    // A link the page wanted in a new window; opened by the effect below, outside the WebView's callback.
+    var pendingNewTabUrl by remember { mutableStateOf<String?>(null) }
+
+    // Packages all destination-specific WebView callbacks so one atomic router update owns their lifetime together.
+    val callbackState = RetainedWebViewCallbackState(
+        onNavigationInvalidated = viewModel::onNavigationInvalidated,
+        onPageStarted = viewModel::onPageStarted,
+        onPageFinished = viewModel::onPageFinished,
+        onProgressChanged = viewModel::onProgressChanged,
+        onNavigationStateChanged = viewModel::onNavigationStateChanged,
+        onEnterFullscreen = ::enterFullscreen,
+        onExitFullscreen = ::exitFullscreen,
+        onAddressChanged = viewModel::onPageAddressChanged,
+        onOpenInNewTab = { pendingNewTabUrl = it },
+    )
+
+    /** Routes the tab shown to the browser's state, and every other tab to the state it keeps for itself. */
+    fun bindTabs() {
+        for (tab in tabs.all) {
+            if (tab.id == tabs.activeId) {
+                tab.interceptor.updateOnMediaDetected { media, navigationGeneration ->
+                    viewModel.onMediaDetected(media, navigationGeneration)
+                }
+                tab.bridge.updateCallbacks(
+                    onMediaDetected = { media, navigationGeneration ->
+                        viewModel.onMediaDetected(media, navigationGeneration)
+                    },
+                    onMediaCandidate = { candidate, navigationGeneration ->
+                        viewModel.verifyMediaCandidate(candidate, navigationGeneration)
+                    },
+                    onPageMeta = viewModel::onPageMeta,
+                )
+                tab.callbacks.update(callbackState)
+            } else {
+                tab.interceptor.updateOnMediaDetected { _, _ -> }
+                tab.bridge.updateCallbacks(onMediaDetected = { _, _ -> }, onMediaCandidate = { _, _ -> })
+                tab.callbacks.update(
+                    backgroundCallbacks(
+                        tab = tab,
+                        nextGeneration = viewModel::nextNavigationGeneration,
+                        onChanged = tabs::changed,
+                        onOpenInNewTab = { pendingNewTabUrl = it },
+                    ),
+                )
+            }
+        }
+    }
+
+    /** A new tab with its own WebView and page helpers, not yet shown. */
+    fun newTab(): BrowserTab {
+        val tab = BrowserTab(
+            id = tabs.nextId(),
+            interceptor = MediaInterceptor { _, _ -> },
+            bridge = MediaBridge(onMediaDetected = { _, _ -> }, onMediaCandidate = { _, _ -> }),
+            adBlock = adBlocker.newSession(),
+            callbacks = RetainedWebViewCallbacks(callbackState),
+        )
+        tab.saved = BrowserUiState()
+        tab.webView = createChayaWebView(
+            ctx = context,
+            bridge = tab.bridge,
+            interceptor = tab.interceptor,
+            adBlock = tab.adBlock,
+            detectorJs = detectorJs,
+            callbacks = tab.callbacks,
+        )
+        return tab
+    }
+
+    // The first tab, once per process: tabs outlive this screen, as the single WebView did.
+    remember {
+        if (tabs.active == null) {
+            val first = newTab()
+            first.saved = null
+            tabs.add(first)
+            tabs.activate(first.id)
+        }
+        true
+    }
+    val activeTab = tabs.active
+    // Rebind after every composition so retained objects never route to an old screen's state.
+    SideEffect { bindTabs() }
+
+    fun activeWebView(): WebView? = tabs.active?.webView
+
+    // Stops old-page callbacks and HEAD work before any explicit top-level navigation request reaches WebView.
+    fun invalidateDetectionSession() {
+        val tab = tabs.active ?: return
+        tab.bridge.invalidateNavigation()
+        tab.interceptor.invalidateNavigation()
+        tab.callbacks.onNavigationInvalidated()
+    }
+
+    /** Shows [target]: the tab left keeps its page state, and [target]'s comes back. */
+    fun showTab(target: BrowserTab) {
+        val current = tabs.active
+        if (current?.id == target.id) return
+        if (customView != null) exitFullscreen()
+        val web = target.webView
+        val kept = viewModel.switchTab(target.saved, web?.canGoBack() == true, web?.canGoForward() == true)
+        current?.saved = kept
+        target.saved = null
+        tabs.activate(target.id)
+        bindTabs()
+        urlInput = viewModel.uiState.value.url
+    }
+
+    val noCount = remember { MutableStateFlow(0) }
+    val noSite = remember { MutableStateFlow("") }
+    val adBlocked by (activeTab?.adBlock?.blocked ?: noCount).collectAsState()
+    val adSite by (activeTab?.adBlock?.site ?: noSite).collectAsState()
     val adBlockEnabled by adBlocker.settings.enabled.collectAsState()
     val adAllowedSites by adBlocker.settings.allowedSites.collectAsState()
     val adEngine by adBlocker.engine.collectAsState()
     var showAdBlockSheet by remember { mutableStateOf(false) }
-
-    // Rebind detector callbacks synchronously after every composition so retained objects never route to old state.
-    SideEffect {
-        interceptor.updateOnMediaDetected { media, navigationGeneration ->
-            viewModel.onMediaDetected(media, navigationGeneration)
-        }
-        bridge.updateCallbacks(
-            onMediaDetected = { media, navigationGeneration ->
-                viewModel.onMediaDetected(media, navigationGeneration)
-            },
-            onMediaCandidate = { candidate, navigationGeneration ->
-                viewModel.verifyMediaCandidate(candidate, navigationGeneration)
-            },
-            onPageMeta = viewModel::onPageMeta,
-        )
-    }
+    var showTabsSheet by remember { mutableStateOf(false) }
 
     // Ranks and names the page's media; pure and cheap, so it recomputes only when its inputs change.
     val sheetModel = remember(
@@ -317,42 +384,6 @@ fun BrowserScreen(
         )
     }
 
-    // Packages all destination-specific WebView callbacks so one atomic router update owns their lifetime together.
-    val callbackState = RetainedWebViewCallbackState(
-        onNavigationInvalidated = viewModel::onNavigationInvalidated,
-        onPageStarted = viewModel::onPageStarted,
-        onPageFinished = viewModel::onPageFinished,
-        onProgressChanged = viewModel::onProgressChanged,
-        onNavigationStateChanged = viewModel::onNavigationStateChanged,
-        onEnterFullscreen = ::enterFullscreen,
-        onExitFullscreen = ::exitFullscreen,
-        onAddressChanged = viewModel::onPageAddressChanged,
-    )
-    val webViewCallbacks = remember {
-        WebViewHolder.callbacks?.also {
-            it.update(callbackState)
-        } ?: RetainedWebViewCallbacks(
-            initialState = callbackState,
-        ).also { WebViewHolder.callbacks = it }
-    }
-    // Keeps every retained WebView client callback bound to the latest Compose-local fullscreen state.
-    SideEffect {
-        webViewCallbacks.update(callbackState)
-    }
-    val detectorJs = remember {
-        runCatching {
-            context.assets.open("detection/chaya_media_detector.js")
-                .bufferedReader().readText()
-        }.getOrDefault("")
-    }
-
-    // Stops old-page callbacks and HEAD work before any explicit top-level navigation request reaches WebView.
-    fun invalidateDetectionSession() {
-        bridge.invalidateNavigation()
-        interceptor.invalidateNavigation()
-        webViewCallbacks.onNavigationInvalidated()
-    }
-
     fun navigateToUrl(rawInput: String) {
         val query = rawInput.trim()
         if (query.isEmpty()) return
@@ -364,17 +395,18 @@ fun BrowserScreen(
         }
         urlInput = targetUrl
         invalidateDetectionSession()
-        WebViewHolder.instance?.loadUrl(targetUrl)
+        activeWebView()?.loadUrl(targetUrl)
     }
 
     LaunchedEffect(uiState.thoroughScanRequest) {
         val scanRequest = uiState.thoroughScanRequest ?: return@LaunchedEffect
-        val webView = WebViewHolder.instance ?: return@LaunchedEffect
+        val tab = tabs.active
+        val webView = tab?.webView ?: return@LaunchedEffect
         if (uiState.homeVisible ||
             uiState.url != scanRequest.pageUrl ||
             uiState.navigationGeneration != scanRequest.navigationGeneration ||
             webView.url != scanRequest.pageUrl ||
-            !bridge.enableThoroughScan(scanRequest.pageUrl, scanRequest.navigationGeneration)
+            !tab.bridge.enableThoroughScan(scanRequest.pageUrl, scanRequest.navigationGeneration)
         ) {
             viewModel.completeThoroughScanRequest(scanRequest)
             return@LaunchedEffect
@@ -389,7 +421,7 @@ fun BrowserScreen(
 
     BackHandler(enabled = customView == null && uiState.canGoBack) {
         invalidateDetectionSession()
-        WebViewHolder.instance?.goBack()
+        activeWebView()?.goBack()
     }
 
     fun requestPermissionAndDownload(media: DetectedMedia) {
@@ -503,6 +535,43 @@ fun BrowserScreen(
         }
     }
 
+    /** Opens a new tab, on the start screen or at [url]; past the limit, [url] opens in the tab shown instead. */
+    fun openNewTab(url: String?) {
+        if (!tabs.canOpenMore) {
+            showMessage("Close a tab to open another (up to ${tabs.maxTabs})")
+            if (url != null) navigateToUrl(url)
+            return
+        }
+        val tab = newTab()
+        tabs.add(tab)
+        showTab(tab)
+        if (url != null) navigateToUrl(url)
+    }
+
+    /** Closes [target]; closing the tab shown shows its neighbour, and closing the last opens a fresh one. */
+    fun closeTab(target: BrowserTab) {
+        val next = tabs.remove(target.id)
+        target.webView?.let { web ->
+            (web.parent as? ViewGroup)?.removeView(web)
+            web.destroy()
+        }
+        target.webView = null
+        when {
+            next != null -> showTab(next)
+            tabs.active == null -> {
+                val fresh = newTab()
+                tabs.add(fresh)
+                showTab(fresh)
+            }
+        }
+    }
+
+    LaunchedEffect(pendingNewTabUrl) {
+        val url = pendingNewTabUrl ?: return@LaunchedEffect
+        pendingNewTabUrl = null
+        openNewTab(url)
+    }
+
     // A link shared to Chaya from another app opens its sheet once the browser is on screen.
     val sharedText by SharedLinks.pending.collectAsState()
     LaunchedEffect(sharedText) {
@@ -532,7 +601,7 @@ fun BrowserScreen(
                                 onPaste = { pasteFromClipboard() },
                                 onReload = {
                                     invalidateDetectionSession()
-                                    WebViewHolder.instance?.reload()
+                                    activeWebView()?.reload()
                                 },
                                 adBlock = AdBlockBadge(
                                     active = adBlockEnabled && adSite !in adAllowedSites,
@@ -578,7 +647,7 @@ fun BrowserScreen(
                                 enabled = uiState.canGoBack
                             ) {
                                 invalidateDetectionSession()
-                                WebViewHolder.instance?.goBack()
+                                activeWebView()?.goBack()
                             }
 
                             NavAction(
@@ -587,7 +656,7 @@ fun BrowserScreen(
                                 enabled = uiState.canGoForward
                             ) {
                                 invalidateDetectionSession()
-                                WebViewHolder.instance?.goForward()
+                                activeWebView()?.goForward()
                             }
 
                             NavAction(
@@ -596,9 +665,16 @@ fun BrowserScreen(
                                 enabled = true
                             ) {
                                 invalidateDetectionSession()
-                                WebViewHolder.instance?.loadUrl("about:blank")
+                                activeWebView()?.loadUrl("about:blank")
                                 viewModel.goHome()
                             }
+
+                            NavAction(
+                                icon = Icons.Default.Tab,
+                                label = "Tabs (${tabs.size})",
+                                enabled = true,
+                                count = tabs.size,
+                            ) { showTabsSheet = true }
 
                             NavAction(
                                 icon = Icons.Default.CloudDownload,
@@ -615,23 +691,28 @@ fun BrowserScreen(
             containerColor = MaterialTheme.colorScheme.background
         ) { padding ->
             Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+                // One place on screen for the tab shown; tabs keep their WebViews while not shown.
+                val shownWebView = activeTab?.webView
                 AndroidView(
-                    factory = { ctx ->
-                        WebViewHolder.instance?.let { prev ->
-                            (prev.parent as? ViewGroup)?.removeView(prev)
-                            return@AndroidView prev
+                    factory = { ctx -> FrameLayout(ctx) },
+                    update = { host ->
+                        if (shownWebView != null &&
+                            (host.childCount != 1 || host.getChildAt(0) !== shownWebView)
+                        ) {
+                            host.removeAllViews()
+                            (shownWebView.parent as? ViewGroup)?.removeView(shownWebView)
+                            host.addView(
+                                shownWebView,
+                                FrameLayout.LayoutParams(
+                                    ViewGroup.LayoutParams.MATCH_PARENT,
+                                    ViewGroup.LayoutParams.MATCH_PARENT,
+                                ),
+                            )
                         }
-                        createChayaWebView(
-                            ctx = ctx,
-                            bridge = bridge,
-                            interceptor = interceptor,
-                            adBlock = adBlock,
-                            detectorJs = detectorJs,
-                            callbacks = webViewCallbacks,
-                        ).also { WebViewHolder.instance = it }
                     },
                     modifier = Modifier.fillMaxSize(),
-                    onRelease = { /* keep instance alive for reattachment */ }
+                    // The WebViews live on for reattachment; only this screen's container goes.
+                    onRelease = { host -> host.removeAllViews() }
                 )
 
                 HomeContent(
@@ -729,6 +810,26 @@ fun BrowserScreen(
                     )
                 }
 
+                if (showTabsSheet) {
+                    TabsSheet(
+                        tabs = tabs.all.map { tab ->
+                            TabSummary.of(tab.id, if (tab.id == tabs.activeId) uiState else tab.saved ?: BrowserUiState())
+                        },
+                        activeId = tabs.activeId,
+                        canOpenMore = tabs.canOpenMore,
+                        onSelect = { id ->
+                            showTabsSheet = false
+                            tabs.all.firstOrNull { it.id == id }?.let(::showTab)
+                        },
+                        onClose = { id -> tabs.all.firstOrNull { it.id == id }?.let(::closeTab) },
+                        onNewTab = {
+                            showTabsSheet = false
+                            openNewTab(null)
+                        },
+                        onDismiss = { showTabsSheet = false },
+                    )
+                }
+
                 if (showAdBlockSheet) {
                     AdBlockSheet(
                         site = adSite,
@@ -740,12 +841,12 @@ fun BrowserScreen(
                         onEnabledChange = { on ->
                             adBlocker.settings.setEnabled(on)
                             invalidateDetectionSession()
-                            WebViewHolder.instance?.reload()
+                            activeWebView()?.reload()
                         },
                         onBlocksOnSiteChange = { on ->
                             adBlocker.settings.setAllowed(adSite, allowed = !on)
                             invalidateDetectionSession()
-                            WebViewHolder.instance?.reload()
+                            activeWebView()?.reload()
                         },
                         onDismiss = { showAdBlockSheet = false },
                     )
@@ -832,6 +933,8 @@ private fun NavAction(
     label: String,
     enabled: Boolean,
     badge: Int = 0,
+    /** A number drawn on the icon itself, as the tab count is; 0 for none. */
+    count: Int = 0,
     onClick: () -> Unit
 ) {
     IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.pressScale(0.88f)) {
@@ -845,12 +948,26 @@ private fun NavAction(
                 }
             }
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = label,
-                tint = if (enabled) MaterialTheme.colorScheme.onSurfaceVariant
-                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
-            )
+            val tint = if (enabled) MaterialTheme.colorScheme.onSurfaceVariant
+            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
+            if (count > 0) {
+                // The tab count in a rounded square, as browsers show it.
+                Box(
+                    modifier = Modifier
+                        .size(22.dp)
+                        .border(1.75.dp, tint, RoundedCornerShape(6.dp))
+                        .semantics { contentDescription = label },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "$count",
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = tint,
+                    )
+                }
+            } else {
+                Icon(imageVector = icon, contentDescription = label, tint = tint)
+            }
         }
     }
 }
@@ -1012,7 +1129,7 @@ private fun createChayaWebView(
                 callbacks.onExitFullscreen()
             }
 
-            /** target="_blank" links open in the same WebView instead of doing nothing. */
+            /** target="_blank" links open in a new tab when tapped, else in this tab, instead of doing nothing. */
             override fun onCreateWindow(
                 view: WebView?,
                 isDialog: Boolean,
@@ -1028,6 +1145,12 @@ private fun createChayaWebView(
                         ): Boolean {
                             request?.url?.let {
                                 if (adBlock.shouldBlockPopup(it.toString())) {
+                                    wv?.destroy()
+                                    return true
+                                }
+                                // A link the person tapped that wants a new window opens in a new tab.
+                                if (isUserGesture) {
+                                    callbacks.onOpenInNewTab(it.toString())
                                     wv?.destroy()
                                     return true
                                 }

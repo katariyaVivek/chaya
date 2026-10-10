@@ -85,5 +85,8 @@ is close to its copyrighted-content policy, and the diagnostics assume no Play S
 9. **Ad blocker:** open a news site. The shield in the address bar fills in and counts what it
    blocked; ad boxes are gone. Tap it: turning blocking off for the site, or everywhere, reloads the
    page with its ads, and turning it back on blocks them again.
-10. **Persistence:** finish a download, force-stop the app, reopen: it is still listed. A download
+10. **Tabs:** the Tabs button shows how many are open. Open a new tab, browse, switch back: the
+   first tab is where it was, with its back button and its media pill. Close tabs from the list;
+   closing the last opens a fresh start page.
+11. **Persistence:** finish a download, force-stop the app, reopen: it is still listed. A download
    that was running comes back paused.
