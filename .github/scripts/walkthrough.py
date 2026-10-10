@@ -273,6 +273,12 @@ def cache_kb():
     return int(match.group(1)) if match else out.strip()[:60]
 
 
+def saved_kb():
+    out = sh(f"run-as {PKG} du -sk files/downloads 2>&1")
+    match = re.match(r"\s*(\d+)", out)
+    return int(match.group(1)) if match else out.strip()[:60]
+
+
 def monitor_download(tag, seconds):
     """Watches the Downloads screen and the on-disk stream cache until the file is saved or time runs out."""
     start = time.time()
@@ -343,10 +349,14 @@ def scenario_hls():
     tap_when("hls: open Downloads", 20, FALLBACK["downloads_button"], desc_contains="Downloads")
     monitor_download("hls", 300)
     # 184p of this stream is about 20 MB and 720p about 170 MB. A wrong stream key once pulled in the
-    # 720p variant as well (190 MB in all), and the download still "finished", so check the size too.
+    # 720p variant as well (190 MB in all), and the download still "finished", so check the size too. A
+    # finished stream is saved as an MP4 and its cache emptied, so the size to check is the MP4's.
+    saved = saved_kb()
+    record("hls: saved as an MP4 of only the chosen rendition", isinstance(saved, int) and 5_000 < saved < 60_000,
+           f"{saved // 1024 if isinstance(saved, int) else saved} MB saved; 184p is about 20 MB")
     size = cache_kb()
-    record("hls: only the chosen rendition is downloaded", isinstance(size, int) and 0 < size < 60_000,
-           f"{size // 1024 if isinstance(size, int) else size} MB in the stream cache; 184p is about 20 MB")
+    record("hls: the stream cache is emptied once it is saved", isinstance(size, int) and size < 5_000,
+           f"{size // 1024 if isinstance(size, int) else size} MB left in the stream cache")
 
 
 def make_fixture():
@@ -414,6 +424,39 @@ def scenario_local():
     log("saved files: " + sh(f"run-as {PKG} ls -la files/downloads 2>&1").strip())
 
 
+def scenario_tabs():
+    """Two tabs, the app killed outright, and both come back: Android closes apps in the background all the time."""
+    if fixture_error:
+        record("tabs: test page", False, fixture_error)
+        return
+    if not launch_fresh():
+        return
+    open_url(f"{HOST_URL}/index.html")
+    wait_for("tabs: the first page loads", 60, text_contains="Launch Event")
+    time.sleep(3)
+    tap_when("tabs: open the tab grid", 20, desc_contains="Tabs (1)")
+    wait_for("tabs: the grid shows", 20, desc_contains="More tab actions")
+    snapshot("tabs-grid-one")
+    tap_when("tabs: new tab", 20, desc_contains="New tab")
+    wait_for("tabs: the new tab is on the start screen", 30, cls="android.widget.EditText")
+    open_url(f"{HOST_URL}/media/poster.jpg")
+    time.sleep(5)
+    wait_for("tabs: two tabs open", 20, desc_contains="Tabs (2)")
+    snapshot("tabs-two")
+    # Killed outright, as Android does to an app in the background; nothing gets a chance to save on the way out.
+    sh(f"am force-stop {PKG}")
+    time.sleep(2)
+    adb("shell", "am", "start", "-W", "-n", f"{PKG}/.MainActivity", timeout=180)
+    wait_for("tabs: both tabs came back", 60, desc_contains="Tabs (2)")
+    tap_when("tabs: open the tab grid again", 20, desc_contains="Tabs (2)")
+    wait_for("tabs: the first tab's card", 20, text_contains="Launch Event")
+    wait_for("tabs: the second tab's card", 20, text_contains="poster.jpg")
+    snapshot("tabs-restored")
+    tap_when("tabs: open the first tab", 20, text_contains="Launch Event")
+    wait_for("tabs: its page is back", 60, text_contains="Launch Event")
+    snapshot("tabs-first-shown")
+
+
 def main():
     global screen_w, screen_h, fixture_error
     EVIDENCE.mkdir(parents=True, exist_ok=True)
@@ -437,7 +480,7 @@ def main():
         fixture_error = traceback.format_exc(limit=2).strip().splitlines()[-1]
         record("build the local test page", False, fixture_error)
 
-    for name, scenario in (("hls", scenario_hls), ("local", scenario_local)):
+    for name, scenario in (("hls", scenario_hls), ("local", scenario_local), ("tabs", scenario_tabs)):
         for attempt in (1, 2):
             first_result = len(results)
             try:

@@ -62,6 +62,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
@@ -75,6 +76,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -84,6 +86,8 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.chaya.app.ChayaApplication
 import com.chaya.app.SharedLinks
@@ -106,10 +110,12 @@ import com.chaya.app.ui.components.NotificationRationaleSheet
 import com.chaya.app.ui.components.PlatformSheet
 import com.chaya.app.ui.components.ProfileSheet
 import com.chaya.app.ui.components.QualitySelectorSheet
-import com.chaya.app.ui.components.TabsSheet
+import com.chaya.app.ui.components.TabGrid
 import com.chaya.app.ui.theme.ChayaMotion
 import com.chaya.app.ui.theme.pressScale
 import java.net.URLEncoder
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 
@@ -120,6 +126,12 @@ import kotlinx.coroutines.launch
 private object WebViewHolder {
     val tabs = BrowserTabs()
 }
+
+/** One lane for tab files, so a later save never lands before an earlier one. */
+private val tabDisk = Dispatchers.IO.limitedParallelism(1)
+
+/** How long the page must stay put before the tabs are saved, so a burst of changes saves once. */
+private const val TAB_SAVE_SETTLE_MILLIS = 500L
 
 @OptIn(ExperimentalLayoutApi::class)
 @SuppressLint("SetJavaScriptEnabled")
@@ -238,6 +250,13 @@ fun BrowserScreen(
     }
 
     val adBlocker = remember { (context.applicationContext as ChayaApplication).adBlocker }
+    val app = remember { context.applicationContext as ChayaApplication }
+    val tabStore = remember { app.tabStore }
+
+    /** Tab files are written off the main thread, one at a time and in order. */
+    fun onTabDisk(work: () -> Unit) {
+        app.appScope.launch(tabDisk) { runCatching(work) }
+    }
     LaunchedEffect(Unit) { adBlocker.start() }
     val detectorJs = remember {
         runCatching {
@@ -298,34 +317,79 @@ fun BrowserScreen(
         }
     }
 
-    /** A new tab with its own WebView and page helpers, not yet shown. */
-    fun newTab(): BrowserTab {
-        val tab = BrowserTab(
-            id = tabs.nextId(),
-            interceptor = MediaInterceptor { _, _ -> },
-            bridge = MediaBridge(onMediaDetected = { _, _ -> }, onMediaCandidate = { _, _ -> }),
-            adBlock = adBlocker.newSession(),
-            callbacks = RetainedWebViewCallbacks(callbackState),
-        )
-        tab.saved = BrowserUiState()
-        tab.webView = createChayaWebView(
+    /**
+     * Gives [tab] a WebView. A tab coming back from disk ([restore]) gets its back and forward history again;
+     * when that cannot be read, it opens its address only.
+     */
+    fun makeLive(tab: BrowserTab, restore: Boolean) {
+        if (tab.webView != null) return
+        val web = createChayaWebView(
             ctx = context,
             bridge = tab.bridge,
             interceptor = tab.interceptor,
             adBlock = tab.adBlock,
             detectorJs = detectorJs,
             callbacks = tab.callbacks,
+            onIcon = { icon ->
+                // The WebView owns the bitmap it hands over; a copy is written off the main thread.
+                val copy = runCatching { icon.copy(Bitmap.Config.ARGB_8888, false) }.getOrNull()
+                if (copy != null) {
+                    onTabDisk {
+                        tabStore.writeIcon(tab.id) { out -> TabPictures.writePng(copy, out) }
+                        copy.recycle()
+                        tabs.changed()
+                    }
+                }
+            },
         )
+        tab.webView = web
+        if (!restore) return
+        val bytes = tabStore.readState(tab.id)
+        if (bytes == null || !WebViewStates.restore(web, bytes)) {
+            val page = tab.saved
+            if (page != null && !page.homeVisible && page.url.isNotEmpty()) web.loadUrl(page.url)
+        }
+    }
+
+    /** A new tab with its own page helpers, not yet shown; [live] gives it its WebView now. */
+    fun newTab(id: Long = tabs.nextId(), live: Boolean = true): BrowserTab {
+        val tab = BrowserTab(
+            id = id,
+            interceptor = MediaInterceptor { _, _ -> },
+            bridge = MediaBridge(onMediaDetected = { _, _ -> }, onMediaCandidate = { _, _ -> }),
+            adBlock = adBlocker.newSession(),
+            callbacks = RetainedWebViewCallbacks(callbackState),
+        )
+        tab.saved = BrowserUiState()
+        if (live) makeLive(tab, restore = false)
         return tab
     }
 
-    // The first tab, once per process: tabs outlive this screen, as the single WebView did.
+    // The tabs, once per process: those saved when Android last closed the app, else one new one. Tabs outlive
+    // this screen, as the single WebView did. Restored tabs start discarded; only the one shown gets a WebView.
     remember {
         if (tabs.active == null) {
-            val first = newTab()
-            first.saved = null
-            tabs.add(first)
-            tabs.activate(first.id)
+            val saved = tabStore.load()
+            if (saved != null) {
+                tabs.reserveIds(saved.tabs.maxOf { it.id })
+                for (entry in saved.tabs) {
+                    val tab = newTab(id = entry.id, live = false)
+                    tab.saved = BrowserUiState(url = entry.url, pageTitle = entry.title, homeVisible = entry.url.isEmpty())
+                    tabs.add(tab)
+                    tabs.activate(tab.id) // keeps the saved order: each goes after the one before
+                }
+                val first = tabs.all.firstOrNull { it.id == saved.activeId } ?: tabs.all.first()
+                makeLive(first, restore = true)
+                viewModel.switchTab(first.saved, canGoBack = false, canGoForward = false)
+                first.saved = null
+                tabs.activate(first.id)
+                urlInput = viewModel.uiState.value.url
+            } else {
+                val first = newTab()
+                first.saved = null
+                tabs.add(first)
+                tabs.activate(first.id)
+            }
         }
         true
     }
@@ -343,11 +407,54 @@ fun BrowserScreen(
         tab.callbacks.onNavigationInvalidated()
     }
 
+    /** The tabs as they are now, for [TabStore]: the tab shown is described by the browser's own state. */
+    fun savedTabs(): TabStore.Saved = TabStore.Saved(
+        tabs = tabs.all.map { tab ->
+            val page = if (tab.id == tabs.activeId) viewModel.uiState.value else tab.saved ?: BrowserUiState()
+            TabStore.SavedTab(tab.id, if (page.homeVisible) "" else page.url, if (page.homeVisible) "" else page.pageTitle)
+        },
+        activeId = tabs.activeId,
+    )
+
+    fun persistTabs() {
+        val saved = savedTabs()
+        onTabDisk { tabStore.save(saved) }
+    }
+
+    /** Keeps [tab]'s history on disk and, unless it is on the start screen, a picture of its page. */
+    fun rememberTab(tab: BrowserTab, onStartScreen: Boolean) {
+        val web = tab.webView ?: return
+        val bytes = WebViewStates.save(web)
+        val picture = if (onStartScreen) null else TabPictures.capture(web)
+        onTabDisk {
+            bytes?.let { tabStore.writeState(tab.id, it) }
+            when {
+                onStartScreen -> tabStore.thumbnail(tab.id).delete()
+                picture != null -> {
+                    tabStore.writeThumbnail(tab.id) { out -> TabPictures.writeWebp(picture, out) }
+                    picture.recycle()
+                }
+            }
+            tabs.changed()
+        }
+    }
+
+    /** Destroys a tab's WebView to save memory; its history stays on disk for when it is shown again. */
+    fun discard(tab: BrowserTab) {
+        val web = tab.webView ?: return
+        WebViewStates.save(web)?.let { bytes -> onTabDisk { tabStore.writeState(tab.id, bytes) } }
+        (web.parent as? ViewGroup)?.removeView(web)
+        web.destroy()
+        tab.webView = null
+    }
+
     /** Shows [target]: the tab left keeps its page state, and [target]'s comes back. */
     fun showTab(target: BrowserTab) {
         val current = tabs.active
         if (current?.id == target.id) return
         if (customView != null) exitFullscreen()
+        current?.let { rememberTab(it, viewModel.uiState.value.homeVisible) }
+        makeLive(target, restore = true)
         val web = target.webView
         val kept = viewModel.switchTab(target.saved, web?.canGoBack() == true, web?.canGoForward() == true)
         current?.saved = kept
@@ -355,6 +462,8 @@ fun BrowserScreen(
         tabs.activate(target.id)
         bindTabs()
         urlInput = viewModel.uiState.value.url
+        tabs.toDiscard().forEach(::discard)
+        persistTabs()
     }
 
     val noCount = remember { MutableStateFlow(0) }
@@ -365,7 +474,7 @@ fun BrowserScreen(
     val adAllowedSites by adBlocker.settings.allowedSites.collectAsState()
     val adEngine by adBlocker.engine.collectAsState()
     var showAdBlockSheet by remember { mutableStateOf(false) }
-    var showTabsSheet by remember { mutableStateOf(false) }
+    var showTabGrid by remember { mutableStateOf(false) }
 
     // Ranks and names the page's media; pure and cheap, so it recomputes only when its inputs change.
     val sheetModel = remember(
@@ -556,6 +665,7 @@ fun BrowserScreen(
             web.destroy()
         }
         target.webView = null
+        onTabDisk { tabStore.remove(target.id) }
         when {
             next != null -> showTab(next)
             tabs.active == null -> {
@@ -563,7 +673,50 @@ fun BrowserScreen(
                 tabs.add(fresh)
                 showTab(fresh)
             }
+            else -> persistTabs()
         }
+    }
+
+    /** Closes every tab and deletes their files (history, pictures, icons), then opens a fresh one. */
+    fun closeAllTabs() {
+        if (customView != null) exitFullscreen()
+        for (tab in tabs.all) {
+            tabs.remove(tab.id)
+            tab.webView?.let { web ->
+                (web.parent as? ViewGroup)?.removeView(web)
+                web.destroy()
+            }
+            tab.webView = null
+        }
+        onTabDisk { tabStore.clear() }
+        val fresh = newTab()
+        tabs.add(fresh)
+        showTab(fresh)
+    }
+
+    // Saved when a page finishes and when the tab list changes; history and a picture also when the app goes to
+    // the background, which is when Android may close it.
+    LaunchedEffect(uiState.url, uiState.pageTitle, uiState.homeVisible, uiState.isLoading, tabsVersion) {
+        delay(TAB_SAVE_SETTLE_MILLIS)
+        if (!uiState.isLoading) tabs.active?.webView?.let { web -> WebViewStates.save(web) }?.let { bytes ->
+            val id = tabs.activeId
+            onTabDisk { tabStore.writeState(id, bytes) }
+        }
+        persistTabs()
+    }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) {
+                tabs.all.forEach { tab ->
+                    if (tab.id == tabs.activeId) rememberTab(tab, viewModel.uiState.value.homeVisible)
+                    else tab.webView?.let { web -> WebViewStates.save(web) }?.let { bytes -> onTabDisk { tabStore.writeState(tab.id, bytes) } }
+                }
+                persistTabs()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     LaunchedEffect(pendingNewTabUrl) {
@@ -674,7 +827,11 @@ fun BrowserScreen(
                                 label = "Tabs (${tabs.size})",
                                 enabled = true,
                                 count = tabs.size,
-                            ) { showTabsSheet = true }
+                            ) {
+                                // The shown tab's card pictures the page as it is now.
+                                tabs.active?.let { rememberTab(it, uiState.homeVisible) }
+                                showTabGrid = true
+                            }
 
                             NavAction(
                                 icon = Icons.Default.CloudDownload,
@@ -810,26 +967,6 @@ fun BrowserScreen(
                     )
                 }
 
-                if (showTabsSheet) {
-                    TabsSheet(
-                        tabs = tabs.all.map { tab ->
-                            TabSummary.of(tab.id, if (tab.id == tabs.activeId) uiState else tab.saved ?: BrowserUiState())
-                        },
-                        activeId = tabs.activeId,
-                        canOpenMore = tabs.canOpenMore,
-                        onSelect = { id ->
-                            showTabsSheet = false
-                            tabs.all.firstOrNull { it.id == id }?.let(::showTab)
-                        },
-                        onClose = { id -> tabs.all.firstOrNull { it.id == id }?.let(::closeTab) },
-                        onNewTab = {
-                            showTabsSheet = false
-                            openNewTab(null)
-                        },
-                        onDismiss = { showTabsSheet = false },
-                    )
-                }
-
                 if (showAdBlockSheet) {
                     AdBlockSheet(
                         site = adSite,
@@ -909,6 +1046,42 @@ fun BrowserScreen(
                     )
                 }
             }
+        }
+
+        // Every tab as a card, over the whole screen.
+        AnimatedVisibility(
+            visible = showTabGrid,
+            enter = fadeIn(ChayaMotion.tweenShort()) + scaleIn(ChayaMotion.tweenStandard(), initialScale = 1.04f),
+            exit = fadeOut(ChayaMotion.tweenShort()) + scaleOut(ChayaMotion.tweenStandard(), targetScale = 1.04f),
+        ) {
+            TabGrid(
+                tabs = tabs.all.map { tab ->
+                    val page = if (tab.id == tabs.activeId) uiState else tab.saved ?: BrowserUiState()
+                    TabSummary.of(
+                        tab.id,
+                        page,
+                        thumbnail = tabStore.thumbnail(tab.id).takeUnless { page.homeVisible },
+                        icon = tabStore.icon(tab.id).takeUnless { page.homeVisible },
+                    )
+                },
+                activeId = tabs.activeId,
+                canOpenMore = tabs.canOpenMore,
+                picturesVersion = tabsVersion,
+                onSelect = { id ->
+                    showTabGrid = false
+                    tabs.all.firstOrNull { it.id == id }?.let(::showTab)
+                },
+                onClose = { id -> tabs.all.firstOrNull { it.id == id }?.let(::closeTab) },
+                onNewTab = {
+                    showTabGrid = false
+                    openNewTab(null)
+                },
+                onCloseAll = {
+                    showTabGrid = false
+                    closeAllTabs()
+                },
+                onDismiss = { showTabGrid = false },
+            )
         }
 
         // Fullscreen video overlay — covers everything including bars.
@@ -992,6 +1165,8 @@ private fun createChayaWebView(
     adBlock: AdBlockSession,
     detectorJs: String,
     callbacks: RetainedWebViewCallbacks,
+    /** The site's icon for this tab, for its card in the tab grid. */
+    onIcon: (Bitmap) -> Unit = {},
 ): WebView {
     return WebView(ctx).apply {
         // Tracks injection eligibility so a superseded redirect cannot reintroduce an old capability on finish.
@@ -1127,6 +1302,10 @@ private fun createChayaWebView(
 
             override fun onHideCustomView() {
                 callbacks.onExitFullscreen()
+            }
+
+            override fun onReceivedIcon(view: WebView?, icon: Bitmap?) {
+                icon?.let(onIcon)
             }
 
             /** target="_blank" links open in a new tab when tapped, else in this tab, instead of doing nothing. */
