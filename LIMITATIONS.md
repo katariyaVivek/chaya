@@ -35,6 +35,8 @@ These are deliberate scope decisions, not open bugs.
   signed in, Chaya offers to use that sign-in for the lookup. Sites can limit accounts used for
   automated downloads, so this is always your call.
 - **Joining HEVC or AV1 pictures.** Only H.264 is joined for now, so those qualities are not offered.
+- **Tabs after the app is closed.** Open tabs last while Chaya runs; when Android closes the app,
+  it starts again with one tab.
 - **Browser extensions.** Android's WebView, which Chaya's browser is built on, cannot run them, so
   uBlock Origin itself cannot be added; the built-in blocker uses its lists instead.
 - **What uBlock Origin does beyond its lists.** Its scriptlets and procedural filters are not

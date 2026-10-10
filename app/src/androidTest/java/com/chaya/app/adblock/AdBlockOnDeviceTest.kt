@@ -97,7 +97,7 @@ class AdBlockOnDeviceTest {
                 addJavascriptInterface(CosmeticBridge(session), "ChayaCosmetic")
                 webViewClient = object : WebViewClient() {
                     override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
-                        session.beginPage(url)
+                        session.pageStarted(url)
                         session.cosmeticScript()?.let { view.evaluateJavascript(it, null) }
                     }
 

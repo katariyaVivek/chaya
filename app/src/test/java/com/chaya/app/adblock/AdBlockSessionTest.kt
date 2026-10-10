@@ -88,6 +88,28 @@ class AdBlockSessionTest {
     }
 
     @Test
+    fun `a page's own request begins it, so its first files are judged by it even before the WebView reports it`() {
+        session.beginPage("https://friendly.example/")
+
+        session.intercept(request("https://www.news.example/story", mainFrame = true))
+        assertNotNull(session.intercept(request("https://ads.example/a.js", mainFrame = false)))
+        assertEquals("news.example", session.site.value)
+
+        // The WebView's own report of the same page comes later and keeps the count.
+        session.pageStarted("https://www.news.example/story")
+        assertEquals(1, session.blocked.value)
+
+        // A reload asks for the page again, and counts afresh.
+        session.intercept(request("https://www.news.example/story", mainFrame = true))
+        assertEquals(0, session.blocked.value)
+
+        // A page shown without a request (the back-forward cache) begins when it is reported.
+        session.pageStarted("https://friendly.example/")
+        assertEquals("friendly.example", session.site.value)
+        assertFalse(session.shouldBlock("https://ads.example/a.js", RequestType.SCRIPT))
+    }
+
+    @Test
     fun `a page the lists exempt, or a page before any is shown, blocks nothing`() {
         assertFalse(session.shouldBlock("https://ads.example/a.js", RequestType.SCRIPT))
 
