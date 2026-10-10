@@ -6,6 +6,8 @@ Product register. Soft premium, fluid-assured-soft personality. Strategy: **Rest
 
 All colors computed from OKLCH; neutrals tinted warm (hue 80) in light, violet (hue 285) in dark. No pure black/white anywhere.
 
+Light or dark follows the phone unless the person picks one under Downloads › ⋮ › **Appearance** (Same as phone, Light, Dark). The system bars follow the app's choice.
+
 ### Light — "Porcelain"
 
 | Role | OKLCH | Hex |
@@ -80,6 +82,10 @@ Springs: critical damping (no bounce). Tweens: ease-out-expo/quart.
 | pressScale | 0.96 on press, springSmooth |
 
 Patterns: nav = fade-through (fade + slight rise/scale) · lists = staggered fade-rise entrances + animateItem reflow · progress = animated fraction · state labels = AnimatedContent crossfade/slide · FAB/badges = spring scale-in · press feedback = scale + ripple on every tappable row/card/chip.
+
+## App icon
+
+An original and its shadow-copy: a lit media tile with a play mark, its copy falling behind it like a shadow (Chaya means shadow; a download is a copy). Violet field, same in light and dark. Master artwork, meaning and the generator are in [`docs/brand/`](docs/brand/README.md); the launcher XML is generated, never edited by hand.
 
 ## Components vocabulary
 

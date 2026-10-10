@@ -111,7 +111,8 @@ Share. Reached from the Downloads screen's menu.
   callbacks atomically). `BrowserChrome` is the address bar, which collapses to the site name on a
   page. The floating pill and the sheets (`ui/components/`) sit on top.
 - `downloads/`: cards per state, All/Active/Done filters, swipe to delete with Undo.
-- `ui/theme/`: the design tokens from [`../DESIGN.md`](../DESIGN.md).
+- `ui/theme/`: the design tokens from [`../DESIGN.md`](../DESIGN.md), and `ThemeSettings`, the
+  person's choice of light, dark or the same as the phone (kept in SharedPreferences).
 - `SharedLinks` holds a link shared from another app until the browser picks it up.
 
 ## Tests

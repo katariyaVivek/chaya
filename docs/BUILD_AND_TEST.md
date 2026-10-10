@@ -71,5 +71,7 @@ is close to its copyrighted-content policy, and the diagnostics assume no Play S
    Cancel.
 7. **Downloads:** filters, pause/resume/retry, swipe to delete with Undo, open a file, and play a
    finished stream in the in-app player.
-8. **Persistence:** finish a download, force-stop the app, reopen: it is still listed. A download
+8. **Appearance:** Downloads › ⋮ › Appearance switches between Same as phone, Light and Dark at
+   once, status bar included, and the choice survives a restart.
+9. **Persistence:** finish a download, force-stop the app, reopen: it is still listed. A download
    that was running comes back paused.

@@ -87,7 +87,9 @@ import com.chaya.app.download.DownloadState
 import com.chaya.app.download.DownloadTask
 import com.chaya.app.ui.theme.ChayaMotion
 import com.chaya.app.ui.theme.LocalChayaColors
+import com.chaya.app.ui.components.AppearanceDialog
 import com.chaya.app.ui.theme.StaggeredAppear
+import com.chaya.app.ui.theme.ThemeMode
 import com.chaya.app.ui.theme.pressScale
 import kotlinx.coroutines.launch
 
@@ -97,6 +99,8 @@ fun DownloadsScreen(
     onNavigateBack: () -> Unit,
     onPlayStream: (Long) -> Unit,
     onNavigateToDiagnostics: () -> Unit = {},
+    themeMode: ThemeMode = ThemeMode.SYSTEM,
+    onThemeModeChange: (ThemeMode) -> Unit = {},
     viewModel: DownloadsViewModel = viewModel()
 ) {
     val tasks by viewModel.downloads.collectAsState()
@@ -104,6 +108,7 @@ fun DownloadsScreen(
     var filterIndex by rememberSaveable { mutableIntStateOf(0) }
     val filter = DownloadFilter.entries[filterIndex]
     var menuOpen by remember { mutableStateOf(false) }
+    var appearanceOpen by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
@@ -127,6 +132,14 @@ fun DownloadsScreen(
         }
     }
 
+    if (appearanceOpen) {
+        AppearanceDialog(
+            current = themeMode,
+            onSelect = onThemeModeChange,
+            onDismiss = { appearanceOpen = false },
+        )
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -145,6 +158,13 @@ fun DownloadsScreen(
                             Icon(imageVector = Icons.Default.MoreVert, contentDescription = "More")
                         }
                         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Appearance") },
+                                onClick = {
+                                    menuOpen = false
+                                    appearanceOpen = true
+                                }
+                            )
                             DropdownMenuItem(
                                 text = { Text("Diagnostics") },
                                 onClick = {

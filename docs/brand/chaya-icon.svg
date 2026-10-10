@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="432" height="432">
+  <!-- Master artwork for Chaya's launcher icon; the Android vectors in app/src/main/res/drawable are generated from the same measurements. -->
+  <defs>
+    <radialGradient id="bg" cx="32%" cy="25%" r="90%">
+      <stop offset="0" stop-color="#8A73D6"/><stop offset=".55" stop-color="#5E48A6"/><stop offset="1" stop-color="#2E2154"/>
+    </radialGradient>
+    <linearGradient id="lit" x1="0" y1="30" x2="0" y2="66" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#E9E3FF"/>
+    </linearGradient>
+  </defs>
+  <rect width="108" height="108" fill="url(#bg)"/>
+  <path d="M52.5,40 H65.5 A9.5,9.5 0 0 1 75,49.5 V66.5 A9.5,9.5 0 0 1 65.5,76 H52.5 A9.5,9.5 0 0 1 43,66.5 V49.5 A9.5,9.5 0 0 1 52.5,40 Z" fill="#2A1D57" stroke="#BDAEF8" stroke-width="1.6"/>
+  <path d="M42.5,30 H55.5 A9.5,9.5 0 0 1 65,39.5 V56.5 A9.5,9.5 0 0 1 55.5,66 H42.5 A9.5,9.5 0 0 1 33,56.5 V39.5 A9.5,9.5 0 0 1 42.5,30 Z" fill="url(#lit)"/>
+  <path d="M45,41 L57.5,48 L45,55 Z" fill="#5E48A6" stroke="#5E48A6" stroke-width="3" stroke-linejoin="round"/>
+</svg>

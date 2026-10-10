@@ -8,11 +8,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import com.chaya.app.ChayaApplication
 import com.chaya.app.SharedLinks
 import com.chaya.app.browser.BrowserScreen
 import com.chaya.app.diagnostics.DiagnosticsScreen
@@ -50,6 +52,8 @@ fun ChayaNavHost(navController: NavHostController) {
             })
         }
         composable(Screen.Downloads.route) {
+            val themeSettings = (LocalContext.current.applicationContext as ChayaApplication).themeSettings
+            val themeMode by themeSettings.mode.collectAsState()
             DownloadsScreen(
                 onNavigateBack = { navController.popBackStack() },
                 onPlayStream = { taskId ->
@@ -58,6 +62,8 @@ fun ChayaNavHost(navController: NavHostController) {
                 onNavigateToDiagnostics = {
                     navController.navigate(Screen.Diagnostics.route)
                 },
+                themeMode = themeMode,
+                onThemeModeChange = themeSettings::set,
             )
         }
         composable(
