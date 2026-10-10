@@ -201,15 +201,36 @@ class DownloadManagerTracksTest {
         downloader.finish(downloader.calls[0], VIDEO)
         awaitCalls(2)
         downloader.calls[1].saveFile.writeBytes(ByteArray(10))
+        // The record of whole pieces a download fetched several pieces at a time keeps beside its part.
+        PieceLog.load(downloader.calls[1].saveFile, 4, 0).begin(40)
         val path = manager.downloads.value.single().filePath!!
         File("$path.joining").writeText("unfinished")
 
         manager.deleteTask(1)
 
         assertTrue(manager.downloads.value.isEmpty())
-        listOf("", ".video", ".video.part", ".audio", ".audio.part", ".joining").forEach { suffix ->
+        listOf("", ".video", ".video.part", ".audio", ".audio.part", ".audio.part.pieces", ".joining").forEach { suffix ->
             assertFalse("left behind: $suffix", File("$path$suffix").exists())
         }
+    }
+
+    @Test
+    fun `a picture fetched several pieces at a time counts only its whole pieces when paused`() = runBlocking {
+        manager.restore()
+        manager.startDownload(request())
+        awaitCalls(1)
+        val part = downloader.calls[0].saveFile
+        // Pieces arrive out of order: the part is 100 bytes long, but only its first 40-byte piece is whole.
+        part.writeBytes(ByteArray(100))
+        PieceLog.load(part, 40, 0).apply {
+            begin(100)
+            markDone(0)
+        }
+
+        manager.pauseDownload(1)
+
+        val paused = awaitTask { it.state == DownloadState.PAUSED }
+        assertEquals(40L, paused.downloadedBytes)
     }
 
     // ---- one file with the engine's headers ---- //
