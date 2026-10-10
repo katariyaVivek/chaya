@@ -26,6 +26,7 @@ Merged on `main` since v0.4.0, each through a PR that was green before merging:
 | #31 | A finished download's notification comes once |
 | #32 | Tabs (up to 10, bottom sheet list), plus a fix so a page's first ads are blocked too |
 | #34 | yt-dlp, yt-dlp-ejs and gallery-dl fetched from PyPI daily, checked, used from the next start |
+| #35 | A finished stream saved as an MP4 file (Media3 Transformer, from the cache only); Save as MP4 for old ones |
 
 Loose ends the owner handles from a PC: delete the old merged branches (the session's git proxy
 cannot delete branches), and decide whether to push the `v0.4.0` tag. While testing a profile ZIP
@@ -108,7 +109,7 @@ section on how the engine stays current.
 - If a new yt-dlp needs a newer dependency than is bundled, refuse that version: check its
   `Requires-Dist` against what is bundled.
 
-### 2. Streams saved as real MP4 files ☐
+### 2. Streams saved as real MP4 files ☑ (#35)
 
 **Why.** HLS/DASH downloads found in pages live in Media3's cache (`streaming/StreamDownloader.kt`,
 a `SimpleCache`). They play in the app but cannot be shared, seen in the gallery or opened
