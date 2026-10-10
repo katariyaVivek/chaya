@@ -363,9 +363,9 @@ def make_fixture():
     media = FIXTURE / "media"
     (media / "vast").mkdir(parents=True, exist_ok=True)
 
-    def video(out, source, seconds, size, audio=True):
+    def video(out, source, seconds, size, audio=True, rate=10):
         cmd = ["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i",
-               f"{source}=duration={seconds}:size={size}:rate=10"]
+               f"{source}=duration={seconds}:size={size}:rate={rate}"]
         if audio:
             cmd += ["-f", "lavfi", "-i", f"sine=frequency=440:duration={seconds}"]
         cmd += ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "36", "-pix_fmt", "yuv420p"]
@@ -375,8 +375,10 @@ def make_fixture():
         subprocess.run(cmd, check=True, timeout=300)
 
     video(media / "launch-event.mp4", "testsrc", 90, "640x360")
-    video(media / "vast" / "preroll-15s.mp4", "testsrc2", 15, "320x180")
-    video(media / "hero-loop.mp4", "smptebars", 8, "640x360", audio=False)
+    # The ad and the looping background play by themselves, in every tab that shows the page, and the
+    # emulator decodes them on the host: kept tiny so they cannot starve it (it died mid-run on #37 and #39).
+    video(media / "vast" / "preroll-15s.mp4", "testsrc2", 15, "160x90", rate=2)
+    video(media / "hero-loop.mp4", "smptebars", 8, "160x90", audio=False, rate=2)
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=size=640x360:rate=1",
                     "-frames:v", "1", str(media / "poster.jpg")], check=True, timeout=60)
     (FIXTURE / "index.html").write_text(PAGE.replace("{BASE}", HOST_URL), encoding="utf-8")
