@@ -2,12 +2,15 @@ package com.chaya.app.history
 
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import com.chaya.app.database.BookmarkEntity
 import com.chaya.app.database.HistoryEntity
@@ -62,9 +65,10 @@ class HistoryScreenTest {
 
         composeRule.onNodeWithText("Today").assertExists()
         composeRule.onNodeWithText("Yesterday").assertExists()
-        // A page without a title goes by its site.
-        composeRule.onNodeWithText("recipes.example").assertExists()
         composeRule.onNodeWithText("Weather today").performClick()
+        // A page without a title goes by its site; the test window is small, so scroll down to it.
+        composeRule.onNode(hasScrollAction()).performScrollToNode(hasText("recipes.example"))
+        composeRule.onNodeWithText("recipes.example").assertExists()
 
         assertEquals(listOf("open https://weather.example/"), events)
     }
