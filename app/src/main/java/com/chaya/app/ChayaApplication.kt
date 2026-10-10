@@ -9,6 +9,7 @@ import com.chaya.app.adblock.FilterLists
 import com.chaya.app.database.ChayaDatabase
 import com.chaya.app.diagnostics.CrashReporter
 import com.chaya.app.diagnostics.EventLog
+import com.chaya.app.download.CompletionNotices
 import com.chaya.app.download.DownloadManager
 import com.chaya.app.platform.PlatformEngine
 import com.chaya.app.platform.ProfileLister
@@ -33,6 +34,9 @@ class ChayaApplication : Application() {
 
     /** Light, dark, or the same as the phone. */
     val themeSettings: ThemeSettings by lazy { ThemeSettings.from(this) }
+
+    /** Which finished downloads still need their "complete" notification; one for the whole process. */
+    val completionNotices = CompletionNotices(appStartedAt = System.currentTimeMillis())
 
     /** Blocks ads and trackers in the browser; reads its lists when the browser first shows. */
     val adBlocker: AdBlocker by lazy { AdBlocker(AdBlockSettings.from(this), FilterLists.from(this)) }
