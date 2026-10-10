@@ -5,6 +5,7 @@ import com.chaya.app.adblock.AdBlocker
 import com.chaya.app.adblock.FilterLists
 import com.chaya.app.detection.MediaBridge
 import com.chaya.app.detection.MediaInterceptor
+import android.webkit.WebView
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -136,5 +137,56 @@ class BrowserTabsTest {
         val page = BrowserUiState(url = "https://www.news.example/a", homeVisible = false)
         assertEquals("news.example", TabSummary.of(2, page).title)
         assertEquals("A story", TabSummary.of(2, page.copy(pageTitle = "A story")).title)
+    }
+
+    private fun BrowserTab.live() = apply { webView = WebView(RuntimeEnvironment.getApplication()) }
+
+    @Test
+    fun `past four live tabs, the one shown least recently is discarded, never the one shown`() {
+        val tabs = BrowserTabs()
+        val (a, b, c, d, e) = List(5) { tabs.open().live() }
+        listOf(a, b, c, d, e).forEach { tabs.activate(it.id) }
+        tabs.activate(a.id) // a is shown again: b is now the one left longest ago
+
+        assertEquals(listOf(b.id), tabs.toDiscard().map { it.id })
+
+        b.webView = null
+        assertEquals(emptyList<Long>(), tabs.toDiscard().map { it.id })
+    }
+
+    @Test
+    fun `discarded tabs do not count, and the tab shown is kept even when it is the oldest`() {
+        val tabs = BrowserTabs(maxLive = 2)
+        val (a, b, c) = List(3) { tabs.open() }
+        val d = tabs.open()
+        listOf(a, b, c, d).forEach { tabs.activate(it.id) }
+        tabs.activate(a.id)
+        listOf(a, c, d).forEach { it.live() } // b is discarded
+
+        assertEquals(listOf(c.id), tabs.toDiscard().map { it.id })
+    }
+
+    @Test
+    fun `many tabs can be open now that most are discarded`() {
+        assertEquals(50, BrowserTabs.MAX_TABS)
+        assertEquals(4, BrowserTabs.MAX_LIVE)
+    }
+
+    @Test
+    fun `a new tab never takes the id of one restored from disk`() {
+        val tabs = BrowserTabs()
+        tabs.reserveIds(41)
+        assertEquals(42L, tabs.nextId())
+        tabs.reserveIds(5)
+        assertEquals(43L, tabs.nextId())
+    }
+
+    @Test
+    fun `search matches the title or the address`() {
+        val tab = TabSummary(1, "Launch Event 2026", "https://news.example/launch")
+        assertTrue(tab.matches(""))
+        assertTrue(tab.matches("launch event"))
+        assertTrue(tab.matches(" NEWS.example "))
+        assertFalse(tab.matches("weather"))
     }
 }

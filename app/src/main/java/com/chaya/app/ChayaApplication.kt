@@ -50,6 +50,9 @@ class ChayaApplication : Application() {
     /** Work that outlives any screen: restoring downloads, the engine's daily check. */
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    /** The open tabs on disk, so they come back after Android closes the app. */
+    val tabStore: com.chaya.app.browser.TabStore by lazy { com.chaya.app.browser.TabStore(File(filesDir, "tabs")) }
+
     /** Light, dark, or the same as the phone. */
     val themeSettings: ThemeSettings by lazy { ThemeSettings.from(this) }
 

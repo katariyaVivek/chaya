@@ -47,8 +47,10 @@ These are deliberate scope decisions, not open bugs.
   (`requests`, `urllib3` and the rest) and Chaya's own code change only with a new APK, so a release
   that needs a newer library than the APK carries, or another Python, is skipped until then.
 - **Joining HEVC or AV1 pictures.** Only H.264 is joined for now, so those qualities are not offered.
-- **Tabs after the app is closed.** Open tabs last while Chaya runs; when Android closes the app,
-  it starts again with one tab.
+- **More than 50 tabs, or more than four in memory.** Up to 50 tabs can be open. Only the four shown
+  most recently keep their page in memory; the others keep their address and history and load
+  again when shown, as Chrome's do. Tabs come back after Android closes the app, but a page's own
+  state (a form half filled in, how far a video had played) does not.
 - **Browser extensions.** Android's WebView, which Chaya's browser is built on, cannot run them, so
   uBlock Origin itself cannot be added; the built-in blocker uses its lists instead.
 - **What uBlock Origin does beyond its lists.** Its scriptlets and procedural filters are not

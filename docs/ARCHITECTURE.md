@@ -204,7 +204,19 @@ Share. Reached from the Downloads screen's menu.
   and ad-block session (`BrowserTabs`, `BrowserTab`). Only the tab shown reports to the browser's
   state (`RetainedWebViewCallbacks` rebinds callbacks atomically); a tab not shown keeps its own page
   state as it loads (`backgroundCallbacks`), and `BrowserViewModel.switchTab` swaps that state in
-  and out. A link a page opens in a new window, on a tap, opens in a new tab. `BrowserChrome` is the address bar, which collapses to the site name on a
+  and out. A link a page opens in a new window, on a tap, opens in a new tab.
+- **Tabs come back.** `TabStore` keeps them in `filesDir/tabs/`: an index (order, address, title, the
+  tab shown) and per tab its WebView history (`WebView.saveState`, marshalled by `WebViewStates`),
+  a picture of the page (`TabPictures`: a third of its size, WebP at about 70%) and the site's icon.
+  It is written, one file at a time off the main thread, when a tab is left, when its page
+  finishes, and when the app goes to the background. At start every saved tab comes back
+  *discarded*, address and history only; the tab shown gets a WebView with its history restored,
+  the others get one when first shown. At most four WebViews live at once
+  (`BrowserTabs.toDiscard`): the one shown least recently is discarded, its history kept on disk,
+  so up to 50 tabs can be open.
+- `ui/components/TabGrid` is the full-screen tab switcher: a new-tab square, the tab count, ⋮ (*Close
+  all tabs*), search by title and address, and two columns of cards; swiping or × closes with Undo.
+- `BrowserChrome` is the address bar, which collapses to the site name on a
   page, with the ad blocker's shield and count. The floating pill and the sheets (`ui/components/`)
   sit on top.
 - `downloads/`: cards per state, All/Active/Done filters, swipe to delete with Undo.
