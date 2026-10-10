@@ -1,5 +1,6 @@
 package com.chaya.app.browser
 
+import com.chaya.app.download.DownloadState
 import com.chaya.app.download.DownloadTask
 import com.chaya.app.platform.LinkFinder
 import com.chaya.app.platform.LinkState
@@ -360,6 +361,9 @@ class BrowserViewModelLinksTest {
         assertEquals("someone (Instagram).zip", started)
         assertFalse(viewModel.uiState.value.showProfileSheet)
         waitForDownload { it.url == "chaya-archive:instagram:someone" && it.isArchive }
+        // There is no engine under test, so the listing fails. Waiting for that keeps this archive from still
+        // writing to the database, which every test's app shares, while the next test runs.
+        waitForDownload { it.isArchive && it.state == DownloadState.FAILED }
     }
 }
 
