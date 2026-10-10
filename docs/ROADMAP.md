@@ -34,9 +34,13 @@ up by yt-dlp on the phone, with picture and sound joined into one MP4. Merged as
 | [#29](https://github.com/katariyaVivek/chaya/pull/29) | An account ZIP asks again for a file that fails on the way, and leaves out one that never comes instead of stopping |
 | [#30](https://github.com/katariyaVivek/chaya/pull/30) | EasyList and EasyPrivacy built in: ad and tracker requests blocked, ad boxes hidden, ad pop-ups refused; on/off and per site from the address bar's shield; lists refreshed weekly |
 | [#31](https://github.com/katariyaVivek/chaya/pull/31) | A finished download's notification comes once, not again with every later download |
-| Tabs | Up to ten tabs, each with its own page and history; links that open a new window open a new tab |
+| [#32](https://github.com/katariyaVivek/chaya/pull/32) | Up to ten tabs, each with its own page and history; links that open a new window open a new tab. Also: a page's first ads are blocked too |
 
 ## Next
+
+The working plan for the next features, in order and in detail, is [`PLAN.md`](PLAN.md): yt-dlp
+keeping itself current, streams saved as MP4, tabs restored in a tab grid, bookmarks and history,
+faster YouTube, and a downloads library. The list below is the longer view.
 
 1. **Save streams as real MP4 files.** HLS/DASH downloads live in Media3's cache today, so they
    play in the app but cannot be shared or opened elsewhere. The redesigned UI (#18) is waiting
