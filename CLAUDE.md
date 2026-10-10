@@ -16,6 +16,7 @@ looked up by yt-dlp running inside the app. It is a working app with releases, n
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | How the app is put together, package by package, and where each kind of test lives |
 | [`docs/BUILD_AND_TEST.md`](docs/BUILD_AND_TEST.md) | Toolchain, commands, CI workflows, releases |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | What is released, merged, and next |
+| [`docs/PLAN.md`](docs/PLAN.md) | The working plan for the next features, and how work has gone; start here when resuming |
 | [`DESIGN.md`](DESIGN.md), [`PRODUCT.md`](PRODUCT.md) | Design tokens and product register; UI work must follow them |
 | [`LIMITATIONS.md`](LIMITATIONS.md), [`PRIVACY_POLICY.md`](PRIVACY_POLICY.md) | Scope and privacy promises; a change that affects either must update it |
 
