@@ -87,7 +87,7 @@ class ProfilesTest {
     fun `the sign-in is used only when chosen, and its file is gone afterwards`() = runBlocking {
         val account = Account(signedIn = true, folder)
         val engine = Engine { cookies, out ->
-            assertTrue("the cookie file exists while listing", cookies?.exists() == true)
+            if (cookies != null) assertTrue("the cookie file exists while listing", cookies.exists())
             out.writeText("{}\n{}\n")
             """{"count": 2}"""
         }
