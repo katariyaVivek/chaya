@@ -31,6 +31,7 @@ import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -249,8 +250,9 @@ class DownloadManager(
         if (t.state != DownloadState.DOWNLOADING) return
 
         if (t.isArchive) {
-            stopArchive(t)
+            // Paused before the listing is told to stop: a listing that ends sees the pause and does not restart.
             apply(t.copy(state = DownloadState.PAUSED, downloadedBytes = partialBytes(t)))
+            stopArchive(t)
             scope.launch { dao.update(DownloadEntity.fromTask(find(id) ?: t)) }
         } else if (isStream(t.url, t.mimeType)) {
             // Media3 will report back via onStreamPaused.
@@ -318,8 +320,14 @@ class DownloadManager(
     fun cancelDownload(id: Long) {
         val t = find(id) ?: return
         if (t.state != DownloadState.DOWNLOADING && t.state != DownloadState.QUEUED) return
+        if (t.isArchive) {
+            // As with a pause: the state first, so a listing that ends sees the cancel and does not restart.
+            apply(t.copy(state = DownloadState.CANCELLED))
+            stopArchive(t)
+            scope.launch { dao.updateState(id, DownloadState.CANCELLED) }
+            return
+        }
         downloader.cancel(id)
-        if (t.isArchive) stopArchive(t)
         if (isStream(t.url, t.mimeType)) streamDownloader?.stopStream(id)
 
         apply(t.copy(state = DownloadState.CANCELLED))
@@ -775,8 +783,9 @@ class DownloadManager(
         folder.listFiles()?.filter { it.isFile && it.name != ARCHIVE_LIST && it.name != ARCHIVE_STOP }
             ?.sumOf { it.length() } ?: 0L
 
+    /** Atomic, so a progress report racing a pause cannot write the old state back. */
     private fun updateArchive(id: Long, progress: ArchiveProgress) {
-        _downloads.value = _downloads.value.map { if (it.id == id) it.copy(archive = progress) else it }
+        _downloads.update { tasks -> tasks.map { if (it.id == id) it.copy(archive = progress) else it } }
     }
 
     /** The site answered that the file is not there (any more), rather than that something failed on the way. */
