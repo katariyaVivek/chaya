@@ -92,7 +92,10 @@ What the sheet shows:
   left is worked out from files in `<name>.items/`: the list (written whole, or not at all), then each
   file not yet fetched, then the ZIP. Pause stops the listing through a stop file and the transfer
   through the downloader; a file the site no longer has (403/404/410) is skipped and named in
-  `not-saved.txt`. The card counts files ("40 of 120 files"); those counts are not stored.
+  `not-saved.txt`. A file that fails on the way is asked for again after 3 s, 15 s and a minute; a
+  connection or server still failing after that fails the archive for a later retry, and any other
+  file still failing is skipped like a gone one, so one bad file never holds up the rest. The card
+  counts files ("40 of 120 files"); those counts are not stored.
 - `DownloadService` is the foreground service with progress and Pause/Cancel actions.
 - Finished files are copied to public storage (Movies/Music/Pictures/Downloads) through MediaStore.
 

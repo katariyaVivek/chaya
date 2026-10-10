@@ -23,6 +23,7 @@ import java.io.File
 import java.io.IOException
 import java.net.SocketTimeoutException
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.zip.ZipFile
 
 /**
@@ -65,7 +66,10 @@ class DownloadManagerArchiveTest {
     }
 
     private fun newManager(archiveLister: ArchiveLister? = lister) =
-        DownloadManager(context, dao, server, freeBytes = { Long.MAX_VALUE }, archiveLister = archiveLister)
+        DownloadManager(
+            context, dao, server, freeBytes = { Long.MAX_VALUE }, archiveLister = archiveLister,
+            archiveRetryDelaysMillis = listOf(10L, 10L, 10L),
+        )
             .also { managers += it }
 
     @Test
@@ -106,26 +110,105 @@ class DownloadManagerArchiveTest {
     }
 
     @Test
-    fun `a dropped connection fails the archive, and a retry carries on without fetching anything twice`() = runBlocking {
+    fun `a connection that stays down fails the archive after its tries, and a retry carries on without fetching anything twice`() = runBlocking {
         lister.entries = listOf("a.jpg" to "https://cdn/a", "b.jpg" to "https://cdn/b", "c.jpg" to "https://cdn/c")
-        var dropOnce = true
+        val drops = AtomicInteger(4) // the first ask and its three tries
         server.answer = { url ->
-            if (url.endsWith("/b") && dropOnce) {
-                dropOnce = false
-                Result.failure(SocketTimeoutException("timeout"))
-            } else Result.success(url.toByteArray())
+            if (url.endsWith("/b") && drops.getAndDecrement() > 0) Result.failure(SocketTimeoutException("timeout"))
+            else Result.success(url.toByteArray())
         }
         manager.restore()
 
         manager.startArchive(request)
         val failed = awaitTask { it.state == DownloadState.FAILED }
         assertTrue(failed.error is DownloadError.Network)
+        assertEquals(List(4) { "https://cdn/b" }, server.asked.filter { it.endsWith("/b") })
 
         manager.resumeDownload(failed.id)
         awaitTask { it.state == DownloadState.COMPLETED }
 
-        assertEquals(listOf("https://cdn/a", "https://cdn/b", "https://cdn/b", "https://cdn/c"), server.asked)
+        assertEquals(listOf("https://cdn/a") + List(5) { "https://cdn/b" } + "https://cdn/c", server.asked)
         assertEquals("listed once", 1, lister.sources.size)
+    }
+
+    @Test
+    fun `a file that fails on the way is asked for again, and the archive carries on by itself`() = runBlocking {
+        lister.entries = listOf("a.jpg" to "https://cdn/a", "b.jpg" to "https://cdn/b", "c.jpg" to "https://cdn/c")
+        val busy = AtomicInteger(1)
+        server.answer = { url ->
+            if (url.endsWith("/b") && busy.getAndDecrement() > 0) Result.failure(IOException("HTTP 503: Service Unavailable"))
+            else Result.success(url.toByteArray())
+        }
+        manager.restore()
+
+        manager.startArchive(request)
+        val done = awaitTask { it.state == DownloadState.COMPLETED || it.state == DownloadState.FAILED }
+
+        assertEquals(DownloadState.COMPLETED, done.state)
+        assertEquals(setOf("a.jpg", "b.jpg", "c.jpg"), contents(File(done.filePath!!)).keys)
+    }
+
+    @Test
+    fun `a file that keeps failing by itself is left out after its tries, and the rest are saved`() = runBlocking {
+        lister.entries = listOf("a.jpg" to "https://cdn/a", "b.jpg" to "https://cdn/b", "c.jpg" to "https://cdn/c")
+        server.answer = { url ->
+            if (url.endsWith("/b")) Result.failure(IOException("unexpected end of stream"))
+            else Result.success(url.toByteArray())
+        }
+        manager.restore()
+
+        manager.startArchive(request)
+        val done = awaitTask { it.state == DownloadState.COMPLETED || it.state == DownloadState.FAILED }
+
+        assertEquals(DownloadState.COMPLETED, done.state)
+        assertEquals(List(4) { "https://cdn/b" }, server.asked.filter { it.endsWith("/b") })
+        val zip = contents(File(done.filePath!!))
+        assertEquals(setOf("a.jpg", "c.jpg", "not-saved.txt"), zip.keys)
+        assertTrue(zip.getValue("not-saved.txt").contains("b.jpg"))
+    }
+
+    @Test
+    fun `a site that keeps saying too many requests stops the archive for a later retry`() = runBlocking {
+        lister.entries = listOf("a.jpg" to "https://cdn/a", "b.jpg" to "https://cdn/b")
+        server.answer = { Result.failure(IOException("HTTP 429: Too Many Requests")) }
+        manager.restore()
+
+        manager.startArchive(request)
+        val failed = awaitTask { it.state == DownloadState.FAILED }
+
+        assertEquals(DownloadError.HttpStatus(429), failed.error)
+        assertTrue(failed.error!!.retryable)
+        assertEquals("nothing is left out while the site is only busy", List(4) { "https://cdn/a" }, server.asked)
+    }
+
+    @Test
+    fun `a pause stops the wait before a file is asked for again, so a resume does not fetch twice`() = runBlocking {
+        manager = DownloadManager(
+            context, dao, server, freeBytes = { Long.MAX_VALUE }, archiveLister = lister,
+            archiveRetryDelaysMillis = listOf(300L),
+        ).also { managers += it }
+        lister.entries = listOf("a.jpg" to "https://cdn/a", "b.jpg" to "https://cdn/b")
+        val dropOnce = AtomicInteger(1)
+        server.answer = { url ->
+            when {
+                url.endsWith("/a") && dropOnce.getAndDecrement() > 0 -> Result.failure(SocketTimeoutException("timeout"))
+                url.endsWith("/b") -> {
+                    Thread.sleep(800) // still fetching when the stopped wait would have run out
+                    Result.success(url.toByteArray())
+                }
+                else -> Result.success(url.toByteArray())
+            }
+        }
+        manager.restore()
+
+        manager.startArchive(request)
+        val waiting = awaitTask { it.state == DownloadState.DOWNLOADING && server.asked.isNotEmpty() }
+        delay(100) // the failure has been handled and the wait has begun
+        manager.pauseDownload(waiting.id)
+        manager.resumeDownload(waiting.id)
+        awaitTask { it.state == DownloadState.COMPLETED }
+
+        assertEquals(listOf("https://cdn/a", "https://cdn/a", "https://cdn/b"), server.asked)
     }
 
     @Test
