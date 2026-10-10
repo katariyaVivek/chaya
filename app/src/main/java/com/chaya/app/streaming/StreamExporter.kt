@@ -6,6 +6,7 @@ import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import androidx.media3.common.util.Clock
 import androidx.media3.datasource.DataSourceBitmapLoader
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -59,8 +60,8 @@ interface StreamExporter {
 }
 
 /**
- * [StreamExporter] with Media3 Transformer. It reads the cache only, through the stream's own download request
- * (so the qualities that were downloaded are the ones read), and never the network. The samples are copied as
+ * [StreamExporter] with Media3 Transformer. It reads the cache, through the stream's own download request (so the
+ * qualities that were downloaded are the ones read), and only for a download Media3 reports complete. The samples are copied as
  * they are when the MP4 container can take them (H.264 or HEVC with AAC, nearly every HLS stream), which takes
  * seconds and loses nothing; otherwise Transformer re-encodes them, and the result says so.
  */
@@ -84,7 +85,7 @@ class Media3StreamExporter(
                             appContext,
                             DefaultDecoderFactory.Builder(appContext).build(),
                             Clock.DEFAULT,
-                            DefaultMediaSourceFactory(streams.cacheOnlyDataSourceFactory()),
+                            DefaultMediaSourceFactory(streams.exportDataSourceFactory()),
                             DataSourceBitmapLoader(appContext),
                         ),
                     )
@@ -125,8 +126,12 @@ class Media3StreamExporter(
 
                 override fun onError(composition: Composition, exportResult: ExportResult, exportException: ExportException) {
                     if (continuation.isActive) {
+                        // Every cause, so a failure on a phone explains itself in Diagnostics and in test reports.
+                        val causes = generateSequence(exportException.cause) { it.cause }.take(5)
+                            .joinToString(" ← ") { "${it.javaClass.simpleName}: ${it.message}" }
+                        Log.w(TAG, "Export failed (${exportException.errorCodeName}): $causes", exportException)
                         continuation.resumeWithException(
-                            StreamExportException("Couldn't save the stream as a file (${exportException.errorCodeName})", exportException),
+                            StreamExportException("Couldn't save the stream as a file (${exportException.errorCodeName}; $causes)", exportException),
                         )
                     }
                 }
@@ -181,5 +186,6 @@ class Media3StreamExporter(
     private companion object {
         const val PROGRESS_EVERY_MILLIS = 250L
         const val DURATION_SLACK_MILLIS = 1_000L
+        const val TAG = "StreamExporter"
     }
 }

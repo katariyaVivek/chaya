@@ -170,8 +170,9 @@ faster than APKs ship, so the app fetches newer releases itself.
 - **Streams are saved as MP4 files.** Media3 downloads a stream's pieces into its cache. When the
   last piece is in, `DownloadManager` keeps the task downloading for one more phase: *Saving as
   MP4*. `Media3StreamExporter` runs Media3 Transformer over the stream's own download request (so
-  the downloaded renditions are the ones read), through a data source that reads only the cache:
-  a missing piece fails the export instead of being fetched. Transformer copies the samples as
+  the downloaded renditions are the ones read), through the same cache-backed source playback
+  uses, and only once Media3's index reports the download complete, so a partly downloaded
+  stream is never exported. Transformer copies the samples as
   they are when the MP4 container can take them, and re-encodes only otherwise
   (`ExportResult`'s conversion process says which). The file is written beside its final name
   (`.mp4.saving`), checked (the tracks Transformer reported are there, the duration matches),
