@@ -77,7 +77,10 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.chaya.app.ChayaApplication
 import com.chaya.app.SharedLinks
+import com.chaya.app.adblock.AdBlockSession
+import com.chaya.app.adblock.CosmeticBridge
 import com.chaya.app.detection.MediaBridge
 import com.chaya.app.detection.MediaInterceptor
 import com.chaya.app.detection.MediaNamer
@@ -89,6 +92,7 @@ import com.chaya.app.model.MediaKind
 import com.chaya.app.platform.LinkState
 import com.chaya.app.platform.Platform
 import com.chaya.app.platform.PlatformChoice
+import com.chaya.app.ui.components.AdBlockSheet
 import com.chaya.app.ui.components.DetectedMediaSheet
 import com.chaya.app.ui.components.NotificationRationaleSheet
 import com.chaya.app.ui.components.PlatformSheet
@@ -115,6 +119,9 @@ private object WebViewHolder {
 
     /** Retains dynamic UI routing for WebViewClient and WebChromeClient callbacks after reattachment. */
     var callbacks: RetainedWebViewCallbacks? = null
+
+    /** The ad blocker's view of the retained WebView's page, which its clients captured. */
+    var adBlockSession: AdBlockSession? = null
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -265,6 +272,18 @@ fun BrowserScreen(
             onPageMeta = viewModel::onPageMeta,
         ).also { WebViewHolder.mediaBridge = it }
     }
+    val adBlocker = remember { (context.applicationContext as ChayaApplication).adBlocker }
+    LaunchedEffect(Unit) { adBlocker.start() }
+    val adBlock = remember {
+        WebViewHolder.adBlockSession ?: adBlocker.newSession().also { WebViewHolder.adBlockSession = it }
+    }
+    val adBlocked by adBlock.blocked.collectAsState()
+    val adSite by adBlock.site.collectAsState()
+    val adBlockEnabled by adBlocker.settings.enabled.collectAsState()
+    val adAllowedSites by adBlocker.settings.allowedSites.collectAsState()
+    val adEngine by adBlocker.engine.collectAsState()
+    var showAdBlockSheet by remember { mutableStateOf(false) }
+
     // Rebind detector callbacks synchronously after every composition so retained objects never route to old state.
     SideEffect {
         interceptor.updateOnMediaDetected { media, navigationGeneration ->
@@ -514,7 +533,12 @@ fun BrowserScreen(
                                 onReload = {
                                     invalidateDetectionSession()
                                     WebViewHolder.instance?.reload()
-                                }
+                                },
+                                adBlock = AdBlockBadge(
+                                    active = adBlockEnabled && adSite !in adAllowedSites,
+                                    blocked = adBlocked,
+                                ).takeIf { adSite.isNotEmpty() },
+                                onAdBlock = { showAdBlockSheet = true },
                             )
                         }
 
@@ -601,6 +625,7 @@ fun BrowserScreen(
                             ctx = ctx,
                             bridge = bridge,
                             interceptor = interceptor,
+                            adBlock = adBlock,
                             detectorJs = detectorJs,
                             callbacks = webViewCallbacks,
                         ).also { WebViewHolder.instance = it }
@@ -701,6 +726,28 @@ fun BrowserScreen(
                             navigateToUrl(signInPageOf(sheetProfile.platform))
                         },
                         onDismiss = { viewModel.dismissProfileSheet() },
+                    )
+                }
+
+                if (showAdBlockSheet) {
+                    AdBlockSheet(
+                        site = adSite,
+                        blocked = adBlocked,
+                        enabled = adBlockEnabled,
+                        blocksOnSite = adSite !in adAllowedSites,
+                        ruleCount = adEngine?.ruleCount,
+                        lastUpdated = adBlocker.lists.lastUpdated(),
+                        onEnabledChange = { on ->
+                            adBlocker.settings.setEnabled(on)
+                            invalidateDetectionSession()
+                            WebViewHolder.instance?.reload()
+                        },
+                        onBlocksOnSiteChange = { on ->
+                            adBlocker.settings.setAllowed(adSite, allowed = !on)
+                            invalidateDetectionSession()
+                            WebViewHolder.instance?.reload()
+                        },
+                        onDismiss = { showAdBlockSheet = false },
                     )
                 }
 
@@ -825,6 +872,7 @@ private fun createChayaWebView(
     ctx: android.content.Context,
     bridge: MediaBridge,
     interceptor: MediaInterceptor,
+    adBlock: AdBlockSession,
     detectorJs: String,
     callbacks: RetainedWebViewCallbacks,
 ): WebView {
@@ -860,6 +908,8 @@ private fun createChayaWebView(
 
         // The bridge is visible to every frame, so its callbacks validate a per-navigation capability.
         addJavascriptInterface(bridge, "ChayaBridge")
+        // Hands out only selectors from the public ad lists, so it needs no capability.
+        addJavascriptInterface(CosmeticBridge(adBlock), "ChayaCosmetic")
 
         webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
@@ -868,6 +918,7 @@ private fun createChayaWebView(
                     return
                 }
                 val navigationGeneration = callbacks.onPageStarted(pageUrl)
+                adBlock.beginPage(pageUrl)
                 if (pageUrl == "about:blank") {
                     activeDetectorSession = null
                     bridge.invalidateNavigation()
@@ -889,6 +940,7 @@ private fun createChayaWebView(
                         null,
                     )
                 }
+                adBlock.cosmeticScript()?.let { view?.evaluateJavascript(it, null) }
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
@@ -907,6 +959,8 @@ private fun createChayaWebView(
                             null,
                         )
                     }
+                    // Again after commit, as for the detector; the script runs once per document.
+                    adBlock.cosmeticScript()?.let { view?.evaluateJavascript(it, null) }
                 }
                 view?.let {
                     callbacks.onNavigationStateChanged(it.canGoBack(), it.canGoForward())
@@ -928,6 +982,8 @@ private fun createChayaWebView(
                 request: WebResourceRequest?
             ): WebResourceResponse? {
                 if (request == null) return null
+                // A blocked ad never reaches media detection, so it is never offered for download either.
+                adBlock.intercept(request)?.let { return it }
                 return interceptor.shouldInterceptRequest(request)
             }
 
@@ -971,6 +1027,10 @@ private fun createChayaWebView(
                             request: WebResourceRequest?
                         ): Boolean {
                             request?.url?.let {
+                                if (adBlock.shouldBlockPopup(it.toString())) {
+                                    wv?.destroy()
+                                    return true
+                                }
                                 invalidateDetectorNavigation()
                                 view.loadUrl(it.toString())
                                 wv?.destroy()

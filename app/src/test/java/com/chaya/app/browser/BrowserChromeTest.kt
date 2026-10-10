@@ -153,6 +153,50 @@ class BrowserChromeTest {
         composeRule.onNodeWithText("plain.example").assertIsDisplayed()
     }
 
+    @Test
+    fun `the shield shows how much was blocked on the page and opens the ad blocker`() {
+        var opened = 0
+        var badge by mutableStateOf(AdBlockBadge(active = true, blocked = 12))
+        composeRule.setContent {
+            AddressBar(
+                url = "https://news.example/",
+                homeVisible = false,
+                input = "",
+                onInputChange = {},
+                onGo = {},
+                onPaste = {},
+                onReload = {},
+                adBlock = badge,
+                onAdBlock = { opened++ },
+            )
+        }
+
+        composeRule.onNodeWithText("12").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Ad blocker: 12 blocked").performClick()
+        assertEquals(1, opened)
+        composeRule.onNodeWithText("news.example").assertIsDisplayed()
+
+        badge = AdBlockBadge(active = false, blocked = 12)
+        composeRule.onNodeWithContentDescription("Ad blocker off here").assertIsDisplayed()
+        composeRule.onNodeWithText("12").assertDoesNotExist()
+    }
+
+    @Test
+    fun `without anything to say about the page there is no shield`() {
+        composeRule.setContent {
+            AddressBar(
+                url = "https://news.example/",
+                homeVisible = false,
+                input = "",
+                onInputChange = {},
+                onGo = {},
+                onPaste = {},
+                onReload = {},
+            )
+        }
+        composeRule.onNodeWithContentDescription("Ad blocker off here").assertDoesNotExist()
+    }
+
     // ---- start screen ---- //
 
     @Test
