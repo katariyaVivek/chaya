@@ -28,6 +28,7 @@ Merged on `main` since v0.4.0, each through a PR that was green before merging:
 | #34 | yt-dlp, yt-dlp-ejs and gallery-dl fetched from PyPI daily, checked, used from the next start |
 | #35 | A finished stream saved as an MP4 file (Media3 Transformer, from the cache only); Save as MP4 for old ones |
 | #36 | Tabs restored after Android closes the app, up to 50 (4 live), in a full-screen Chrome-style tab grid |
+| #37 | Bookmarks (star on the site pill), history by day with clear and a stop switch, suggestions while typing; Room v6 |
 
 Loose ends the owner handles from a PC: delete the old merged branches (the session's git proxy
 cannot delete branches), and decide whether to push the `v0.4.0` tag. While testing a profile ZIP
@@ -55,7 +56,7 @@ from those lines.
 - **Python tests rewrite tracked `.pyc` files** under `__pycache__/` (some were committed long ago).
   Run `git checkout -- '*__pycache__*'` before committing, or pytest with `-p no:cacheprovider` and
   `PYTHONDONTWRITEBYTECODE=1`.
-- **Room is at version 5.** Every part below that adds a table or column bumps it by one, with a
+- **Room is at version 6.** Every part below that adds a table or column bumps it by one, with a
   `Migration` and a migration test. Merge them in this file's order so the version numbers here
   hold.
 
@@ -201,7 +202,11 @@ WebView when a discarded tab is shown; capture the thumbnail on switch).
 **Privacy.** Tabs and thumbnails stay on the phone. *Close all tabs* deletes their files. Say this
 in `PRIVACY_POLICY.md`.
 
-### 4. Bookmarks and history ☐
+### 4. Bookmarks and history ☑ (#37)
+
+As built: the site's icon is not kept with history; rows show the site's first letter, as the
+start screen's tiles do. The star is on the site pill only (there is no address bar menu). The
+History and Bookmarks screens are reached from chips on the start screen and from Downloads › ⋮.
 
 **Shape.**
 - **History.** Each page that finishes loading is recorded: address, title, time and favicon.

@@ -38,11 +38,12 @@ up by yt-dlp on the phone, with picture and sound joined into one MP4. Merged as
 | [#34](https://github.com/katariyaVivek/chaya/pull/34) | yt-dlp, its solver scripts and gallery-dl keep themselves current: newer releases fetched from PyPI about once a day, verified, compiled, checked and used from the next start, with a fallback to the last good copy; shown and switchable in Diagnostics |
 | [#35](https://github.com/katariyaVivek/chaya/pull/35) | A finished stream is saved as a real MP4 file (M4A for sound only), copied without re-encoding when MP4 can hold it; if that can't be done it stays in the cache, still plays, and offers Save as MP4. Older stream downloads get Save as MP4 too |
 | [#36](https://github.com/katariyaVivek/chaya/pull/36) | Tabs come back after Android closes the app, with their history; up to 50 open, the four shown last kept in memory; a full-screen tab grid with pictures of the pages, search, swipe to close with Undo, and Close all tabs |
+| [#37](https://github.com/katariyaVivek/chaya/pull/37) | Bookmarks and history: a star on the address, a History screen by day with search, delete, Clear history and a switch to stop saving it, a Bookmarks screen, bookmarks first among the quick sites, and suggestions under the address bar while typing; all kept on the phone only |
 
 ## Next
 
-The working plan for the next features, in order and in detail, is [`PLAN.md`](PLAN.md): bookmarks and
-history, faster YouTube, and a downloads library. The list below is the longer view.
+The working plan for the next features, in order and in detail, is [`PLAN.md`](PLAN.md): faster YouTube
+and a downloads library. The list below is the longer view.
 
 1. **Check the video-site path end to end on a phone.** The engine, the join and the UI have each
    been tested, but a real lookup followed by a real download has not run in one piece. A

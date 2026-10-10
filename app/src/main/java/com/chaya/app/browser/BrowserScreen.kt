@@ -117,6 +117,10 @@ import java.net.URLEncoder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.map
+import com.chaya.app.history.BrowsingRecord
+import com.chaya.app.history.PagesToOpen
+import com.chaya.app.history.Suggestion
 import kotlinx.coroutines.launch
 
 /**
@@ -133,11 +137,19 @@ private val tabDisk = Dispatchers.IO.limitedParallelism(1)
 /** How long the page must stay put before the tabs are saved, so a burst of changes saves once. */
 private const val TAB_SAVE_SETTLE_MILLIS = 500L
 
+/** How long typing must pause before the address bar looks for suggestions. */
+private const val SUGGEST_AFTER_MILLIS = 150L
+
+/** Bookmarks shown among the start screen's quick sites; the rest are on the Bookmarks screen. */
+private const val START_SCREEN_BOOKMARKS = 8
+
 @OptIn(ExperimentalLayoutApi::class)
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun BrowserScreen(
     onNavigateToDownloads: () -> Unit,
+    onNavigateToHistory: () -> Unit = {},
+    onNavigateToBookmarks: () -> Unit = {},
     viewModel: BrowserViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -252,6 +264,16 @@ fun BrowserScreen(
     val adBlocker = remember { (context.applicationContext as ChayaApplication).adBlocker }
     val app = remember { context.applicationContext as ChayaApplication }
     val tabStore = remember { app.tabStore }
+    val pageBookmarked by remember(uiState.url) { app.browsing.isBookmarked(uiState.url) }.collectAsState(initial = false)
+    val bookmarkTiles by remember {
+        app.browsing.bookmarkRows.map { rows -> rows.take(START_SCREEN_BOOKMARKS).map { QuickSite.of(it.url, it.title) } }
+    }.collectAsState(initial = emptyList())
+    var suggestions by remember { mutableStateOf(emptyList<Suggestion>()) }
+    LaunchedEffect(urlInput) {
+        // A short pause, so a fast typist does not query on every letter.
+        delay(SUGGEST_AFTER_MILLIS)
+        suggestions = if (urlInput.isBlank()) emptyList() else app.browsing.suggestions(urlInput)
+    }
 
     /** Tab files are written off the main thread, one at a time and in order. */
     fun onTabDisk(work: () -> Unit) {
@@ -330,6 +352,7 @@ fun BrowserScreen(
             adBlock = tab.adBlock,
             detectorJs = detectorJs,
             callbacks = tab.callbacks,
+            onVisited = { url, title -> app.appScope.launch { app.browsing.visited(url, title) } },
             onIcon = { icon ->
                 // The WebView owns the bitmap it hands over; a copy is written off the main thread.
                 val copy = runCatching { icon.copy(Bitmap.Config.ARGB_8888, false) }.getOrNull()
@@ -719,6 +742,14 @@ fun BrowserScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    // A page picked on the History or Bookmarks screen opens in the tab shown.
+    val pageToOpen by PagesToOpen.pending.collectAsState()
+    LaunchedEffect(pageToOpen) {
+        val url = pageToOpen ?: return@LaunchedEffect
+        PagesToOpen.consume(url)
+        navigateToUrl(url)
+    }
+
     LaunchedEffect(pendingNewTabUrl) {
         val url = pendingNewTabUrl ?: return@LaunchedEffect
         pendingNewTabUrl = null
@@ -761,6 +792,21 @@ fun BrowserScreen(
                                     blocked = adBlocked,
                                 ).takeIf { adSite.isNotEmpty() },
                                 onAdBlock = { showAdBlockSheet = true },
+                                bookmarked = pageBookmarked,
+                                // Only a web page can be starred; the start screen and other pages have no star.
+                                onToggleBookmark = if (BrowsingRecord.isWebPage(uiState.url)) {
+                                    {
+                                        val page = uiState
+                                        scope.launch {
+                                            val now = app.browsing.toggleBookmark(page.url, page.pageTitle)
+                                            showMessage(if (now) "Added to bookmarks" else "Removed from bookmarks")
+                                        }
+                                    }
+                                } else {
+                                    null
+                                },
+                                suggestions = suggestions,
+                                onSuggestion = { url -> navigateToUrl(url) },
                             )
                         }
 
@@ -878,7 +924,10 @@ fun BrowserScreen(
                     onDismissOnboardingHint = { dismissOnboardingHint() },
                     recent = recentDownloads,
                     onSelectUrl = { target -> navigateToUrl(target) },
-                    onOpenDownloads = onNavigateToDownloads
+                    onOpenDownloads = onNavigateToDownloads,
+                    bookmarks = bookmarkTiles,
+                    onOpenBookmarks = onNavigateToBookmarks,
+                    onOpenHistory = onNavigateToHistory,
                 )
 
                 // Opt-in inspection stays separate from ordinary detection to avoid background HEAD traffic.
@@ -1167,6 +1216,8 @@ private fun createChayaWebView(
     callbacks: RetainedWebViewCallbacks,
     /** The site's icon for this tab, for its card in the tab grid. */
     onIcon: (Bitmap) -> Unit = {},
+    /** A page finished loading in this tab, for history. */
+    onVisited: (url: String, title: String) -> Unit = { _, _ -> },
 ): WebView {
     return WebView(ctx).apply {
         // Tracks injection eligibility so a superseded redirect cannot reintroduce an old capability on finish.
@@ -1244,6 +1295,7 @@ private fun createChayaWebView(
                         view?.title.orEmpty(),
                         session.navigationGeneration,
                     )
+                    onVisited(pageUrl, view?.title.orEmpty())
                     // Reinject after commit because a load-start evaluation can be discarded with the old document.
                     if (detectorJs.isNotEmpty()) {
                         view?.evaluateJavascript(

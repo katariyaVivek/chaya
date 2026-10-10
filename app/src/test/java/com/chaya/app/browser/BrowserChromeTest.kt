@@ -5,14 +5,19 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
 import com.chaya.app.detection.MediaSheetModel
 import com.chaya.app.detection.RankedMedia
 import com.chaya.app.download.DownloadState
 import com.chaya.app.download.DownloadTask
+import com.chaya.app.history.Suggestion
 import com.chaya.app.model.DetectedMedia
 import com.chaya.app.model.DetectionSource
 import com.chaya.app.model.MediaKind
@@ -197,6 +202,83 @@ class BrowserChromeTest {
         composeRule.onNodeWithContentDescription("Ad blocker off here").assertDoesNotExist()
     }
 
+    @Test
+    fun `the star on the site pill adds the page to bookmarks, and shows when it is one`() {
+        var starred by mutableStateOf(false)
+        var toggles = 0
+        composeRule.setContent {
+            AddressBar(
+                url = "https://news.example/story",
+                homeVisible = false,
+                input = "https://news.example/story",
+                onInputChange = {},
+                onGo = {},
+                onPaste = {},
+                onReload = {},
+                bookmarked = starred,
+                onToggleBookmark = {
+                    toggles++
+                    starred = !starred
+                },
+            )
+        }
+
+        composeRule.onNodeWithContentDescription("Add bookmark").performClick()
+        composeRule.onNodeWithContentDescription("Remove bookmark").assertIsDisplayed()
+        composeRule.onNodeWithText("news.example").assertIsDisplayed()
+        assertEquals(1, toggles)
+    }
+
+    @Test
+    fun `without a page to star there is no star`() {
+        composeRule.setContent {
+            AddressBar(
+                url = "https://news.example/story",
+                homeVisible = false,
+                input = "",
+                onInputChange = {},
+                onGo = {},
+                onPaste = {},
+                onReload = {},
+            )
+        }
+
+        composeRule.onAllNodesWithContentDescription("Add bookmark").assertCountEquals(0)
+        composeRule.onNodeWithContentDescription("Refresh").assertIsDisplayed()
+    }
+
+    @Test
+    fun `while typing, bookmarks and history show under the field and tapping one opens it`() {
+        val picked = mutableListOf<String>()
+        composeRule.setContent {
+            var input by remember { mutableStateOf("") }
+            AddressBar(
+                url = "",
+                homeVisible = true,
+                input = input,
+                onInputChange = { input = it },
+                onGo = {},
+                onPaste = {},
+                onReload = {},
+                suggestions = if (input.isEmpty()) emptyList() else listOf(
+                    Suggestion("https://news.example/", "News front page", bookmarked = true),
+                    Suggestion("https://www.news.example/sport", "", bookmarked = false),
+                ),
+                onSuggestion = { picked += it },
+            )
+        }
+
+        composeRule.onNode(hasSetTextAction()).performClick()
+        composeRule.onNode(hasSetTextAction()).performTextInput("news")
+
+        composeRule.onNodeWithText("News front page").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Bookmark").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("From history").assertIsDisplayed()
+        composeRule.onNodeWithText("News front page").performClick()
+
+        assertEquals(listOf("https://news.example/"), picked)
+    }
+
     // ---- start screen ---- //
 
     @Test
@@ -248,5 +330,29 @@ class BrowserChromeTest {
         composeRule.onNodeWithText("Big Buck Bunny").performClick()
 
         assertEquals(1, openedDownloads)
+    }
+
+    @Test
+    fun `bookmarks come first among the quick sites, and the chips open bookmarks and history`() {
+        val opened = mutableListOf<String>()
+        composeRule.setContent {
+            HomeContent(
+                visible = true,
+                showOnboardingHint = false,
+                onDismissOnboardingHint = {},
+                recent = emptyList(),
+                onSelectUrl = { opened += it },
+                onOpenDownloads = {},
+                bookmarks = listOf(QuickSite.of("https://news.example/", "Daily News")),
+                onOpenBookmarks = { opened += "bookmarks" },
+                onOpenHistory = { opened += "history" },
+            )
+        }
+
+        composeRule.onNodeWithText("Daily News").performClick()
+        composeRule.onNodeWithText("Bookmarks").performClick()
+        composeRule.onNodeWithText("History").performClick()
+
+        assertEquals(listOf("https://news.example/", "bookmarks", "history"), opened)
     }
 }

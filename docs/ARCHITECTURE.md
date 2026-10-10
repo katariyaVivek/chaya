@@ -188,8 +188,16 @@ faster than APKs ship, so the app fetches newer releases itself.
 
 ## Storage (`database/`)
 
-Room, currently schema version 5. Every version change has an explicit migration; destructive
+Room, currently schema version 6. Every version change has an explicit migration; destructive
 migration is never used. Progress is kept in memory and only state changes are written.
+
+- `downloads`: one row per download.
+- `history` and `bookmarks` (v6, `BrowsingEntities.kt`): one row per address. A page that finishes
+  loading in any tab updates its history row (title, time, visit count) in one transaction
+  (`HistoryDao.recordVisit`). `history/BrowsingRecord` wraps both: it records only http(s) pages
+  and only while the *Save history* switch is on (SharedPreferences), stars and unstars, clears a
+  span, and builds the address bar's suggestions (bookmarks first, then history ranked by visits
+  divided by one plus the days since the last one).
 
 ## Diagnostics (`diagnostics/`)
 
@@ -222,7 +230,10 @@ Share. Reached from the Downloads screen's menu.
 - `downloads/`: cards per state, All/Active/Done filters, swipe to delete with Undo.
 - `ui/theme/`: the design tokens from [`../DESIGN.md`](../DESIGN.md), and `ThemeSettings`, the
   person's choice of light, dark or the same as the phone (kept in SharedPreferences).
-- `SharedLinks` holds a link shared from another app until the browser picks it up.
+- `SharedLinks` holds a link shared from another app until the browser picks it up;
+  `history/PagesToOpen` does the same for a page picked on the History or Bookmarks screen
+  (`history/HistoryScreen`, `history/BookmarksScreen`), which the navigation host answers by going
+  back to the browser.
 
 ## Tests
 

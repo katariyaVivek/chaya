@@ -93,10 +93,16 @@ is close to its copyrighted-content policy, and the diagnostics assume no Play S
    media pill. Search filters the cards; swipe a card sideways or tap its × to close it, and Undo
    brings it back; ⋮ › *Close all tabs* asks first. Force-stop the app and reopen it: every tab
    comes back, the one shown first, and the others load when shown.
-11. **Persistence:** finish a download, force-stop the app, reopen: it is still listed. A download
+11. **Bookmarks and history:** on a page, tap the star on the site pill: it fills and a snackbar
+   says *Added to bookmarks*; the page leads the start screen's quick sites. Type part of a page's
+   title or address: bookmarks (star) then history (clock) show under the field; tap one to open it.
+   The start screen's *History* chip lists pages under Today and Yesterday; search, × and ⋮ ›
+   *Clear history* work, and with *Save history* off a newly opened page is not added. The emulator
+   walkthrough checks the star, the start screen tile, the History list and a suggestion.
+12. **Persistence:** finish a download, force-stop the app, reopen: it is still listed. A download
    that was running comes back paused.
 
-12. **Engine updates:** Downloads › ⋮ › Diagnostics shows the yt-dlp, yt-dlp-ejs and gallery-dl in
+13. **Engine updates:** Downloads › ⋮ › Diagnostics shows the yt-dlp, yt-dlp-ejs and gallery-dl in
    use and when PyPI was last asked. When a newer yt-dlp is out, it is fetched within a day of opening
    the app and shows as waiting; force-stop and reopen, look a video up, and Diagnostics shows it in
    use. Turning *Keep it up to date* off goes back to the app's copy from the next start.
