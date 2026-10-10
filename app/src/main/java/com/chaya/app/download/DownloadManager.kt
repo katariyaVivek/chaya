@@ -26,8 +26,10 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelChildren
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -73,6 +75,8 @@ class DownloadManager(
     private val merger: MediaMerger = Mp4Merger(),
     /** Lists what goes into a ZIP archive (an account's posts); null where archives are not offered. */
     private val archiveLister: ArchiveLister? = null,
+    /** How long an archive waits before asking again for a file that failed on the way, one wait per attempt. */
+    private val archiveRetryDelaysMillis: List<Long> = ARCHIVE_RETRY_DELAYS_MILLIS,
 ) {
     /** Parent of all fire-and-forget persistence and transfer work; [drainBackgroundWork] joins it. */
     private val backgroundJob = SupervisorJob()
@@ -276,6 +280,7 @@ class DownloadManager(
 
             if (t.isArchive) {
                 if (!checkStorageForResume(t)) return@launch
+                archiveFailures.remove(id) // asked again by the person: every file gets its full set of tries
                 apply(t.copy(state = DownloadState.DOWNLOADING, error = null))
                 runArchive(id)
             } else if (isStream(t.url, t.mimeType)) {
@@ -697,22 +702,54 @@ class DownloadManager(
             onComplete = { result ->
                 result.fold(
                     onSuccess = {
+                        archiveFailures.remove(t.id)
                         if (part.renameTo(whole)) runArchive(t.id)
                         else failTask(t.id, IOException("Couldn't keep the downloaded file"))
                     },
-                    onFailure = { error ->
-                        if (isGone(error)) {
-                            // The site no longer has this one (deleted, or its address expired): note it and go on.
-                            part.delete()
-                            File(folder, entry.name + SKIPPED_SUFFIX).createNewFile()
-                            runArchive(t.id)
-                        } else {
-                            failTask(t.id, error)
-                        }
-                    },
+                    onFailure = { error -> afterArchiveFileFailed(t.id, folder, entry, error) },
                 )
             },
         )
+    }
+
+    /**
+     * One file of an archive failed. A file the site no longer has is left out at once. Anything that may pass
+     * (a dropped connection, a busy or overloaded server, an unexplained failure) is asked for again after a
+     * wait, a few times. After that, a connection or server that is still failing stops the archive so the
+     * person can retry later; a file that keeps failing by itself is left out, so one bad file never holds up
+     * the rest. Left-out files are named in the archive's note.
+     */
+    private fun afterArchiveFileFailed(id: Long, folder: File, entry: ArchiveEntry, error: Throwable) {
+        if (find(id)?.state != DownloadState.DOWNLOADING) return // paused, cancelled or removed meanwhile
+        val kind = DownloadError.from(error)
+        if (kind is DownloadError.StorageFull) {
+            archiveFailures.remove(id)
+            failTask(id, error)
+            return
+        }
+        if (!isGone(error) && kind.retryable) {
+            val failures = (archiveFailures[id]?.takeIf { it.first == entry.name }?.second ?: 0) + 1
+            val wait = archiveRetryDelaysMillis.getOrNull(failures - 1)
+            if (wait != null) {
+                archiveFailures[id] = entry.name to failures
+                archiveRetries[id] = scope.launch {
+                    delay(wait)
+                    archiveRetries.remove(id)
+                    runArchive(id)
+                }
+                return
+            }
+            val serverBusy = (kind as? DownloadError.HttpStatus)?.code?.let { it == 429 || it >= 500 } == true
+            if (kind is DownloadError.Network || serverBusy) {
+                archiveFailures.remove(id)
+                failTask(id, error)
+                return
+            }
+        }
+        archiveFailures.remove(id)
+        File(folder, entry.name + PART_SUFFIX).delete()
+        File(folder, entry.name + SKIPPED_SUFFIX).createNewFile()
+        runArchive(id)
     }
 
     /** Packs every fetched file into the ZIP, names the ones that could not be fetched, tidies up, and completes. */
@@ -739,7 +776,7 @@ class DownloadManager(
                     if (missing.isNotEmpty()) {
                         zip.putNextEntry(ZipEntry(NOT_SAVED_NOTE))
                         zip.write(
-                            ("These were no longer on the site when this archive was made:\n\n" +
+                            ("Chaya couldn't save these: the site no longer had them, or would not send them.\n\n" +
                                 missing.joinToString("\n") + "\n").toByteArray()
                         )
                         zip.closeEntry()
@@ -769,9 +806,16 @@ class DownloadManager(
 
     /** Stops whatever an archive is doing: the file being fetched, or the listing, which checks for a stop file. */
     private fun stopArchive(t: DownloadTask) {
+        archiveRetries.remove(t.id)?.cancel()
         downloader.cancel(t.id)
         archiveFolder(t)?.let { runCatching { File(it, ARCHIVE_STOP).createNewFile() } }
     }
+
+    /** Per archive: the file it is fetching and how many times that file has failed on the way. */
+    private val archiveFailures = java.util.concurrent.ConcurrentHashMap<Long, Pair<String, Int>>()
+
+    /** Per archive: a wait before asking for a failed file again, which a pause, cancel or delete stops. */
+    private val archiveRetries = java.util.concurrent.ConcurrentHashMap<Long, Job>()
 
     /** Archives whose contents are being listed right now. */
     private val listing: MutableSet<Long> = java.util.concurrent.ConcurrentHashMap.newKeySet()
@@ -1056,6 +1100,9 @@ class DownloadManager(
 
         /** Answers that mean a file is no longer there, as opposed to a failure worth retrying. */
         private val GONE_CODES = setOf(403, 404, 410)
+
+        /** An archive asks for a failed file again after 3 s, 15 s and a minute before giving up on it. */
+        private val ARCHIVE_RETRY_DELAYS_MILLIS = listOf(3_000L, 15_000L, 60_000L)
 
         private val ILLEGAL_CHARS = Regex("[\\\\/:*?\"<>|]")
         private val resumableStates = setOf(
