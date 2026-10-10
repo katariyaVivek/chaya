@@ -87,9 +87,12 @@ is close to its copyrighted-content policy, and the diagnostics assume no Play S
 9. **Ad blocker:** open a news site. The shield in the address bar fills in and counts what it
    blocked; ad boxes are gone. Tap it: turning blocking off for the site, or everywhere, reloads the
    page with its ads, and turning it back on blocks them again.
-10. **Tabs:** the Tabs button shows how many are open. Open a new tab, browse, switch back: the
-   first tab is where it was, with its back button and its media pill. Close tabs from the list;
-   closing the last opens a fresh start page.
+10. **Tabs:** the Tabs button shows how many are open and opens the tab grid: a card per tab with
+   its icon, title and a picture of the page, the tab shown filled in the accent colour. Open a new
+   tab with **+**, browse, switch back: the first tab is where it was, with its back button and its
+   media pill. Search filters the cards; swipe a card sideways or tap its × to close it, and Undo
+   brings it back; ⋮ › *Close all tabs* asks first. Force-stop the app and reopen it: every tab
+   comes back, the one shown first, and the others load when shown.
 11. **Persistence:** finish a download, force-stop the app, reopen: it is still listed. A download
    that was running comes back paused.
 

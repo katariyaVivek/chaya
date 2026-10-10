@@ -30,6 +30,10 @@ Store account, no third-party SDKs.
 
 - Download history: **on your phone only**.
 - Ad blocker settings (whether it is on, and the sites you let show ads): **on your phone only**.
+- Open tabs (their addresses, titles, back and forward history, a small picture of each page and
+  the site's icon), so they come back after Android closes the app: **on your phone only**, in
+  app-private files. Closing a tab deletes its files; *Close all tabs* in the tab grid's ⋮ menu
+  deletes them all.
 - Newer copies of yt-dlp, yt-dlp-ejs and gallery-dl fetched from PyPI, and when they were checked:
   **on your phone only**, in app-private files.
 - Diagnostics (crash reports, an event log with addresses stripped of their query and fragment):
