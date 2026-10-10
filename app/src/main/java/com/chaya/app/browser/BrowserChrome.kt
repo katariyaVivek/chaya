@@ -392,12 +392,17 @@ internal fun PlatformPill(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val found = state as? LinkState.Found
+    val found = state as? LinkState.Answer
     val match = state.match
     if (match == null || state is LinkState.Failed) return
 
     val title = found?.media?.title ?: "Finding the video…"
-    val subtitle = found?.let { "${it.best.label} · ${match.platform.displayName}" } ?: match.platform.displayName
+    val what = when (found) {
+        is LinkState.Found -> found.best.label
+        is LinkState.FoundPost -> found.items.size.let { if (it == 1) "1 item" else "$it items" }
+        null -> null
+    }
+    val subtitle = listOfNotNull(what, match.platform.displayName).joinToString(" · ")
 
     Surface(
         onClick = onClick,

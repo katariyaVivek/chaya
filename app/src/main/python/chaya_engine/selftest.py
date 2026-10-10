@@ -8,17 +8,23 @@ import time
 
 
 def status():
-    """Versions of what the engine runs on, and whether its YouTube challenge solver is registered."""
+    """Versions of what the engine runs on, whether its YouTube challenge solver is registered, and whether
+    gallery-dl (pictures in posts) recognises Instagram and X post links. Nothing here uses the network."""
+    from gallery_dl import extractor as gdl_extractor
+    from gallery_dl.version import __version__ as gallery_dl_version
     from yt_dlp.extractor.youtube.jsc._registry import _jsc_providers
     from yt_dlp.version import __version__ as yt_dlp_version
     import yt_dlp_ejs
 
     from . import jsc_provider  # noqa: F401  (importing registers the provider)
 
+    post_links = ('https://www.instagram.com/p/C0abcDEFghi/', 'https://x.com/someone/status/1234567890')
     return json.dumps({
         'yt_dlp': yt_dlp_version,
         'yt_dlp_ejs': yt_dlp_ejs.version,
         'provider_registered': 'ChayaQuickJS' in _jsc_providers.value,
+        'gallery_dl': gallery_dl_version,
+        'post_links_known': all(gdl_extractor.find(link) is not None for link in post_links),
     })
 
 

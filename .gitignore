@@ -20,3 +20,7 @@ out/
 *.hprof
 captures/
 .externalNativeBuild/
+
+# Python bytecode from running the engine tests
+__pycache__/
+*.pyc

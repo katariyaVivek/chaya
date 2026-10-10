@@ -45,3 +45,23 @@ internal fun mimeTypeFor(extension: String, audioOnly: Boolean): String = when (
     "mov" -> "video/quicktime"
     else -> if (audioOnly) "audio/mp4" else "video/mp4"
 }
+
+/**
+ * What the download manager needs to save item [number] (from 1) of a post with [count] items: the file as the
+ * site serves it, named "Title (2 of 5).jpg", or just "Title.jpg" when the post has one item.
+ */
+fun PostItem.toDownloadRequest(media: PlatformMedia, number: Int, count: Int, pageUrl: String? = null): DownloadRequest {
+    val title = media.title.trim().ifEmpty { "Post" }
+    val named = if (count > 1) "$title ($number of $count)" else title
+    val extension = ext.lowercase().takeIf { it.isNotEmpty() } ?: if (isVideo) "mp4" else "jpg"
+    return DownloadRequest(
+        url = url,
+        headers = headers,
+        pageUrl = pageUrl ?: media.pageUrl,
+        fileName = "$named.$extension",
+        mimeType = mimeType,
+        title = named,
+        // A picture is its own poster; a video in a post has none of its own, so the post's is used.
+        thumbnailUrl = if (isVideo) media.thumbnailUrl else url,
+    )
+}

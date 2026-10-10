@@ -61,6 +61,8 @@ class EngineOnDeviceTest {
         assertTrue(status.getString("yt_dlp").startsWith("20"))
         assertTrue(status.getString("yt_dlp_ejs").isNotEmpty())
         assertTrue("the solver provider is not registered", status.getBoolean("provider_registered"))
+        assertTrue(status.getString("gallery_dl").isNotEmpty())
+        assertTrue("gallery-dl does not know post links", status.getBoolean("post_links_known"))
     }
 
     @Test

@@ -11,11 +11,12 @@ Store account, no third-party SDKs.
   jar.
 - **Your sign-in on YouTube, Instagram, TikTok or X, only if you choose it.** When a video needs a
   sign-in and the browser is signed in, Chaya offers *Use my sign-in*. If you tap it, that site's
-  cookies are written to a temporary file in the app's private storage for yt-dlp to use, and the
+  cookies are written to a temporary file in the app's private storage for yt-dlp (or gallery-dl,
+  for a post's pictures) to use, and the
   file is deleted as soon as the lookup ends, whether it worked or not. Chaya never uses your
   sign-in without that tap.
 - **Storage.** Downloads are saved to app-private storage; on Android 10 and newer, each finished
-  download is also copied to your phone's public media folders (Movies, Music, Downloads), where
+  download is also copied to your phone's public media folders (Movies, Music, Pictures, Downloads), where
   other apps can see it. Download history (addresses, file names, progress) is kept in
   a database on your phone.
 - **Notifications.** Download progress, only after you grant the system permission, and only after
@@ -35,7 +36,8 @@ Chaya talks only to the sites involved in what you do:
 - the pages you open, and the media you download from them;
 - same-origin checks of a page's media types, only after you tap *Scan more thoroughly*;
 - for a YouTube, Instagram, TikTok or X video, that site, which yt-dlp (running on your phone)
-  contacts to find the video's files, both when you paste or share a link and when the page you
+  contacts to find the video's files, and for an Instagram or X post with pictures, that site again,
+  which gallery-dl (also running on your phone) contacts to list the post's pictures, both when you paste or share a link and when the page you
   are viewing is a single video on one of those sites.
 
 ## What Chaya never does

@@ -22,13 +22,27 @@ sealed interface LinkState {
 
     data class Looking(override val match: PlatformMatch) : LinkState
 
-    /** [choices] is never empty, and its first item is the best one. */
+    /** Something found behind the link that can be saved: a video in some qualities, or a post's items. */
+    sealed interface Answer : LinkState {
+        override val match: PlatformMatch
+        val media: PlatformMedia
+    }
+
+    /** A video. [choices] is never empty, and its first item is the best one. */
     data class Found(
         override val match: PlatformMatch,
-        val media: PlatformMedia,
+        override val media: PlatformMedia,
         val choices: List<PlatformChoice>,
-    ) : LinkState {
+    ) : Answer {
         val best: PlatformChoice get() = choices.first()
+    }
+
+    /** A post with pictures: [media]'s items, never empty, each saved as it is. */
+    data class FoundPost(
+        override val match: PlatformMatch,
+        override val media: PlatformMedia,
+    ) : Answer {
+        val items: List<PostItem> get() = media.items
     }
 
     /**
@@ -83,7 +97,7 @@ class PlatformLinks(
 
     private var running: Job? = null
 
-    private class Remembered(val found: LinkState.Found, val at: Long)
+    private class Remembered(val answer: LinkState.Answer, val at: Long)
 
     private val remembered = LinkedHashMap<String, Remembered>()
 
@@ -101,7 +115,7 @@ class PlatformLinks(
         val state = _state.value
         val current = state.match
         val sameVideo = current != null && current.platform == match.platform && current.id == match.id
-        if (!force && sameVideo && !(state is LinkState.Found && isStale(state))) return true
+        if (!force && sameVideo && !(state is LinkState.Answer && isStale(state))) return true
 
         val mine = ticket.incrementAndGet()
         running?.cancel()
@@ -123,12 +137,15 @@ class PlatformLinks(
      * The current answer while its addresses can still be used. An answer older than the engine's addresses
      * last is looked up again instead, and null is returned until the new one arrives.
      */
-    fun freshFound(): LinkState.Found? {
-        val found = _state.value as? LinkState.Found ?: return null
-        if (!isStale(found)) return found
-        look(found.match.url, force = true)
+    fun freshAnswer(): LinkState.Answer? {
+        val answer = _state.value as? LinkState.Answer ?: return null
+        if (!isStale(answer)) return answer
+        look(answer.match.url, force = true)
         return null
     }
+
+    /** [freshAnswer] when it is a video. */
+    fun freshFound(): LinkState.Found? = freshAnswer() as? LinkState.Found
 
     /** Asks again about the current link, for a failure the person chooses to retry. */
     fun retry(useSignIn: Boolean = false) {
@@ -149,6 +166,7 @@ class PlatformLinks(
             val media = finder.find(match.url, cookies)
             val choices = FormatSelector.choices(media, canJoin)
             when {
+                media.items.isNotEmpty() -> LinkState.FoundPost(match, media).also { remember(it) }
                 choices.isNotEmpty() -> LinkState.Found(match, media, choices).also { remember(it) }
                 media.isLive -> failed(match, PlatformException.Kind.LIVE)
                 else -> failed(match, PlatformException.Kind.NO_FORMAT)
@@ -176,20 +194,20 @@ class PlatformLinks(
 
     private fun keyOf(match: PlatformMatch) = "${match.platform}:${match.id}"
 
-    private fun remember(found: LinkState.Found) {
+    private fun remember(answer: LinkState.Answer) {
         synchronized(remembered) {
-            remembered.remove(keyOf(found.match))
-            remembered[keyOf(found.match)] = Remembered(found, clock())
+            remembered.remove(keyOf(answer.match))
+            remembered[keyOf(answer.match)] = Remembered(answer, clock())
             while (remembered.size > REMEMBERED_LIMIT) remembered.remove(remembered.keys.first())
         }
     }
 
-    private fun isStale(found: LinkState.Found): Boolean = synchronized(remembered) {
-        val entry = remembered[keyOf(found.match)]
+    private fun isStale(answer: LinkState.Answer): Boolean = synchronized(remembered) {
+        val entry = remembered[keyOf(answer.match)]
         entry == null || clock() - entry.at > REMEMBERED_FOR_MILLIS
     }
 
-    private fun recall(match: PlatformMatch): LinkState.Found? = synchronized(remembered) {
+    private fun recall(match: PlatformMatch): LinkState.Answer? = synchronized(remembered) {
         val entry = remembered[keyOf(match)]
         when {
             entry == null -> null
@@ -197,7 +215,7 @@ class PlatformLinks(
                 remembered.remove(keyOf(match))
                 null
             }
-            else -> entry.found
+            else -> entry.answer
         }
     }
 

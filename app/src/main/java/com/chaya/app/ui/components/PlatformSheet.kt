@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -40,6 +41,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -49,11 +51,13 @@ import coil3.compose.AsyncImage
 import com.chaya.app.detection.MediaNamer
 import com.chaya.app.platform.LinkState
 import com.chaya.app.platform.PlatformChoice
+import com.chaya.app.platform.PostItem
 import com.chaya.app.ui.theme.pressScale
 
 /**
  * The video behind a link on YouTube, Instagram, TikTok or X: a note while it is being found, then what was
- * found with the qualities it can be saved at, or why it cannot be saved.
+ * found with the qualities it can be saved at, or why it cannot be saved. A post with pictures shows every
+ * item in it instead; [onSavePost] gets the positions (from 0) of the items to save.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -63,6 +67,7 @@ fun PlatformSheet(
     onChoose: (PlatformChoice) -> Unit,
     onRetry: () -> Unit,
     onRetryWithSignIn: () -> Unit,
+    onSavePost: (List<Int>) -> Unit = {},
 ) {
     if (state is LinkState.Idle) return
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -76,6 +81,7 @@ fun PlatformSheet(
             LinkState.Idle -> Unit
             is LinkState.Looking -> Looking(state)
             is LinkState.Found -> Found(state, onChoose)
+            is LinkState.FoundPost -> Post(state, onSavePost)
             is LinkState.Failed -> Failed(state, onRetry, onRetryWithSignIn)
         }
     }
@@ -205,6 +211,132 @@ private fun Hero(state: LinkState.Found, best: PlatformChoice, onChoose: (Platfo
         }
     }
 }
+
+@Composable
+private fun Post(state: LinkState.FoundPost, onSave: (List<Int>) -> Unit) {
+    val postItems = state.items
+    val rows = postItems.withIndex().chunked(POST_COLUMNS)
+
+    LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
+        item(key = "post") {
+            Column(modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 12.dp)) {
+                Text(
+                    text = state.media.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = listOfNotNull(state.media.author, countOf(postItems), state.match.platform.displayName)
+                        .joinToString(" · "),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Spacer(Modifier.height(16.dp))
+                Button(
+                    onClick = { onSave(postItems.indices.toList()) },
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth().height(48.dp).pressScale(0.98f),
+                ) {
+                    Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(saveAllLabel(postItems), style = MaterialTheme.typography.labelLarge)
+                }
+                if (postItems.size > 1) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = "Or tap one to save just that.",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+        if (postItems.size > 1) {
+            items(rows, key = { row -> "row" + row.first().index }) { row ->
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 3.dp),
+                ) {
+                    row.forEach { (index, item) ->
+                        PostTile(
+                            item = item,
+                            description = "Save ${kindOf(item)} ${index + 1} of ${postItems.size}",
+                            onClick = { onSave(listOf(index)) },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    // Keep the last row's tiles the same size as the others.
+                    repeat(POST_COLUMNS - row.size) { Spacer(Modifier.weight(1f)) }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PostTile(item: PostItem, description: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    var failed by remember(item.url) { mutableStateOf(false) }
+    Box(
+        modifier = modifier
+            .aspectRatio(1f)
+            .pressScale(0.97f)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .semantics { contentDescription = description },
+        contentAlignment = Alignment.Center,
+    ) {
+        if (!item.isVideo && !failed) {
+            AsyncImage(
+                model = item.url,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                onError = { failed = true },
+                modifier = Modifier.matchParentSize().clip(RoundedCornerShape(12.dp)),
+            )
+        } else {
+            Icon(
+                imageVector = if (item.isVideo) Icons.Default.PlayArrow else Icons.Default.FileDownload,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(28.dp),
+            )
+        }
+        Surface(
+            shape = RoundedCornerShape(50),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+            modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp).size(26.dp),
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = Icons.Default.FileDownload,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+        }
+    }
+}
+
+private const val POST_COLUMNS = 3
+
+private fun kindOf(item: PostItem) = if (item.isVideo) "video" else "picture"
+
+/** "4 pictures", "3 videos", "5 items" for a mix. */
+private fun countOf(items: List<PostItem>): String {
+    val kinds = items.map { kindOf(it) }.distinct()
+    val noun = if (kinds.size == 1) kinds.single() else "item"
+    return if (items.size == 1) "1 $noun" else "${items.size} ${noun}s"
+}
+
+/** "Save picture", "Save video", or "Save all 5". */
+private fun saveAllLabel(items: List<PostItem>): String =
+    if (items.size == 1) "Save ${kindOf(items.single())}" else "Save all ${items.size}"
 
 @Composable
 private fun ChoiceRow(choice: PlatformChoice, onChoose: (PlatformChoice) -> Unit) {

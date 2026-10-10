@@ -219,4 +219,32 @@ class PlatformMediaParseTest {
             }}
         """.trimIndent()
     }
+
+    @Test
+    fun `a post's pictures and videos are read in order, with their headers`() {
+        val media = PlatformMedia.parse(
+            """{"media": {"id": "Cabc", "title": "Sunset", "uploader": "someone", "formats": [], "items": [
+              {"url": "https://cdn.example/one.jpg", "kind": "image", "ext": "jpg", "width": 1080, "height": 1350,
+               "http_headers": {}},
+              {"url": "https://cdn.example/two.mp4", "kind": "video", "ext": "mp4", "width": null, "height": null,
+               "http_headers": {"Referer": "https://www.instagram.com/"}},
+              {"kind": "image", "ext": "jpg"}
+            ]}}"""
+        )
+
+        assertEquals(listOf("https://cdn.example/one.jpg", "https://cdn.example/two.mp4"), media.items.map { it.url })
+        assertFalse(media.items[0].isVideo)
+        assertTrue(media.items[1].isVideo)
+        assertEquals(1350, media.items[0].height)
+        assertNull(media.items[1].width)
+        assertEquals(mapOf("Referer" to "https://www.instagram.com/"), media.items[1].headers)
+        assertEquals("image/jpeg", media.items[0].mimeType)
+        assertEquals("video/mp4", media.items[1].mimeType)
+        assertTrue(media.formats.isEmpty())
+    }
+
+    @Test
+    fun `a video has no items`() {
+        assertTrue(PlatformMedia.parse(FULL).items.isEmpty())
+    }
 }

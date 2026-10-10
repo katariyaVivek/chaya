@@ -357,4 +357,32 @@ class PlatformLinksTest {
                 temporaryFiles += it
             }
     }
+
+    @Test
+    fun `a post with pictures is found as a post, and coming back to it is instant`() = runTest {
+        val post = "https://www.instagram.com/p/Cabc123/"
+        val pictures = listOf(
+            PostItem("https://cdn.example/one.jpg", isVideo = false, ext = "jpg", width = 1080, height = 1080),
+            PostItem("https://cdn.example/two.jpg", isVideo = false, ext = "jpg", width = 1080, height = 1080),
+        )
+        val finder = finderByUrl { url ->
+            if (url == post) media(title = "Sunset").copy(formats = emptyList(), items = pictures)
+            else media(complete("m", 1280, 720))
+        }
+        val links = PlatformLinks(backgroundScope, finder)
+
+        links.look(post)
+        runCurrent()
+
+        val found = links.state.value as LinkState.FoundPost
+        assertEquals(pictures, found.items)
+        assertEquals(found, links.freshAnswer())
+        assertNull("a post is not a video", links.freshFound())
+
+        links.look(video)
+        runCurrent()
+        links.look(post)
+        assertTrue(links.state.value is LinkState.FoundPost)
+        assertEquals("the post came back from memory, not a new lookup", 2, finder.urls.size)
+    }
 }

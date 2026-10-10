@@ -615,6 +615,25 @@ class BrowserViewModel @JvmOverloads constructor(
         onStarted(choice.label)
     }
 
+    /**
+     * Saves the items at [indices] (from 0) of the post behind the current link, each as its own file, and
+     * closes the sheet. [onStarted] gets how many were queued. A post whose addresses may have expired is looked
+     * up again first, and the sheet stays open to show it.
+     */
+    fun downloadPost(indices: List<Int>, onStarted: (Int) -> Unit = {}) {
+        val post = links.freshAnswer() as? LinkState.FoundPost ?: return
+        val chosen = indices.distinct().filter { it in post.items.indices }
+        if (chosen.isEmpty()) return
+        _uiState.update { it.copy(showLinkSheet = false) }
+        chosen.forEach { index ->
+            val request = post.items[index].toDownloadRequest(
+                post.media, number = index + 1, count = post.items.size, pageUrl = post.match.url,
+            )
+            downloadManager.startDownload(request)
+        }
+        onStarted(chosen.size)
+    }
+
     private companion object {
         /** The first address in a piece of text, such as the sentence a share button produces. */
         val LINK_IN_TEXT = Regex("""https?://\S+""", RegexOption.IGNORE_CASE)
