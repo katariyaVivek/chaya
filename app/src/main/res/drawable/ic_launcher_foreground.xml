@@ -1,43 +1,38 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Chaya launcher foreground: a vessel (open tonal ring) cradling a falling
-  droplet-arrow — light/shadow + descent in one mark. Quiet competence, no
-  loud downloader cliché. Accent: DESIGN.md primary #6D57AF; deep #392863
-  grounds the mark. Artwork inside the central 72dp safe circle.
-  Geometry: ring center (54,54) r=24, 60° gap at top (edges (66,33.2) /
-  (42,33.2)); droplet triangle apex (54,27), base y=43; stem 13→20.
+  Chaya launcher mark: an original (a media tile with a play mark) and its shadow-copy behind it.
+  Chaya (छाया) means shadow; in the story, Chhaya is the copy made from Saranyu's shadow. A download
+  is a copy of the original, so the copy falls where a shadow would: below and to the right.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Vessel: near-full ring, long way around the bottom (large-arc + sweep) -->
+    <!-- The copy: deep shade with a lavender rim, so it reads on its own and not as a smudge. -->
     <path
-        android:fillColor="#00000000"
-        android:strokeColor="#6D57AF"
-        android:strokeWidth="7"
-        android:strokeLineCap="round"
-        android:pathData="M 66,33.2 A 24,24 0 1 1 42,33.2" />
-    <!-- Droplet-arrow falling through the gap; round joins keep it soft -->
+        android:pathData="M52.5,40 H65.5 A9.5,9.5 0 0 1 75,49.5 V66.5 A9.5,9.5 0 0 1 65.5,76 H52.5 A9.5,9.5 0 0 1 43,66.5 V49.5 A9.5,9.5 0 0 1 52.5,40 Z"
+        android:fillColor="#2A1D57"
+        android:strokeColor="#BDAEF8"
+        android:strokeWidth="1.6" />
+    <!-- The original, lit from above. -->
+    <path android:pathData="M42.5,30 H55.5 A9.5,9.5 0 0 1 65,39.5 V56.5 A9.5,9.5 0 0 1 55.5,66 H42.5 A9.5,9.5 0 0 1 33,56.5 V39.5 A9.5,9.5 0 0 1 42.5,30 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="0" android:startY="30"
+                android:endX="0" android:endY="66">
+                <item android:offset="0" android:color="#FFFFFF" />
+                <item android:offset="1" android:color="#E9E3FF" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- Play mark, its corners softened by a round-joined stroke of the same colour. -->
     <path
-        android:fillColor="#6D57AF"
-        android:strokeColor="#6D57AF"
-        android:strokeWidth="4"
-        android:strokeLineJoin="round"
-        android:pathData="M 54,27 L 62,43 L 46,43 Z" />
-    <!-- Stem: speed/light hint above the droplet -->
-    <path
-        android:fillColor="#00000000"
-        android:strokeColor="#392863"
-        android:strokeWidth="5"
-        android:strokeLineCap="round"
-        android:pathData="M 54,13 L 54,20" />
-    <!-- Ground shadow: shallow smile arc under the vessel -->
-    <path
-        android:fillColor="#00000000"
-        android:strokeColor="#392863"
-        android:strokeWidth="4"
-        android:strokeLineCap="round"
-        android:pathData="M 40,84 A 26.5,26.5 0 0 0 68,84" />
+        android:pathData="M45,41 L57.5,48 L45,55 Z"
+        android:fillColor="#5E48A6"
+        android:strokeColor="#5E48A6"
+        android:strokeWidth="3"
+        android:strokeLineJoin="round" />
 </vector>

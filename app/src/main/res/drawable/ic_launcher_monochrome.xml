@@ -1,17 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Monochrome vessel for themed icons: single silhouette, no accent color. -->
+<!--
+  Themed icon (Android 13+): the same mark in one colour. The copy is half-strength; the play mark is
+  cut out of the original (even-odd fill) because a themed icon has no second colour to draw it with.
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
     <path
-        android:fillColor="#00000000"
-        android:strokeColor="#000000"
-        android:strokeWidth="7"
-        android:strokeLineCap="round"
-        android:pathData="M 66,33.2 A 24,24 0 1 1 42,33.2" />
-    <path
+        android:pathData="M52.5,40 H65.5 A9.5,9.5 0 0 1 75,49.5 V66.5 A9.5,9.5 0 0 1 65.5,76 H52.5 A9.5,9.5 0 0 1 43,66.5 V49.5 A9.5,9.5 0 0 1 52.5,40 Z"
         android:fillColor="#000000"
-        android:pathData="M 54,27 L 62,43 L 46,43 Z" />
+        android:fillAlpha="0.45" />
+    <path
+        android:pathData="M42.5,30 H55.5 A9.5,9.5 0 0 1 65,39.5 V56.5 A9.5,9.5 0 0 1 55.5,66 H42.5 A9.5,9.5 0 0 1 33,56.5 V39.5 A9.5,9.5 0 0 1 42.5,30 Z M45,41 L57.5,48 L45,55 Z"
+        android:fillColor="#000000"
+        android:fillType="evenOdd" />
 </vector>

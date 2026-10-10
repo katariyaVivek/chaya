@@ -7,6 +7,7 @@ import com.chaya.app.database.ChayaDatabase
 import com.chaya.app.diagnostics.CrashReporter
 import com.chaya.app.diagnostics.EventLog
 import com.chaya.app.download.DownloadManager
+import com.chaya.app.ui.theme.ThemeSettings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -20,6 +21,9 @@ class ChayaApplication : Application() {
 
     /** On-device diagnostics ring buffer + rotating log (Phase 2.3). */
     val eventLog: EventLog by lazy { EventLog(this) }
+
+    /** Light, dark, or the same as the phone. */
+    val themeSettings: ThemeSettings by lazy { ThemeSettings.from(this) }
 
     override fun onCreate() {
         super.onCreate()

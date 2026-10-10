@@ -1,3 +1,5 @@
+<img src="docs/brand/chaya-icon.svg" width="96" alt="Chaya's icon: a media tile and its shadow-copy">
+
 # Chaya
 
 **A native Android browser that finds the media on a page, and saves it.**
