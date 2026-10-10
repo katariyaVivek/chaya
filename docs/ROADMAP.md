@@ -23,6 +23,13 @@ up by yt-dlp on the phone, with picture and sound joined into one MP4. Merged as
 | [#22](https://github.com/katariyaVivek/chaya/pull/22) | Paste or share a YouTube, Instagram, TikTok or X link and pick a quality; optional use of the browser's sign-in |
 | [#23](https://github.com/katariyaVivek/chaya/pull/23) | Follow-up from review: a video-site answer is looked up again once its addresses may have expired; DASH told apart by protocol |
 
+## Merged since v0.4.0
+
+| PR | What it adds |
+|---|---|
+| [#25](https://github.com/katariyaVivek/chaya/pull/25) | The new icon (an original and its shadow-copy) and a Light / Dark / Same as phone setting |
+| YouTube in pieces | YouTube downloads fetched in 10 MB ranges, as yt-dlp does, so they are not held to playback speed |
+
 ## Next
 
 1. **Save streams as real MP4 files.** HLS/DASH downloads live in Media3's cache today, so they
