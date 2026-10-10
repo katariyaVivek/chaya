@@ -39,21 +39,17 @@ up by yt-dlp on the phone, with picture and sound joined into one MP4. Merged as
 
 ## Next
 
-The working plan for the next features, in order and in detail, is [`PLAN.md`](PLAN.md): streams
-saved as MP4, tabs restored in a tab grid, bookmarks and history,
-faster YouTube, and a downloads library. The list below is the longer view.
+The working plan for the next features, in order and in detail, is [`PLAN.md`](PLAN.md): tabs
+restored in a tab grid, bookmarks and history, faster YouTube, and a downloads library. The list below is the longer view.
 
-1. **Save streams as real MP4 files.** HLS/DASH downloads live in Media3's cache today, so they
-   play in the app but cannot be shared or opened elsewhere. The redesigned UI (#18) is waiting
-   for this before it offers Share and *Save as MP4* for streams.
-2. **Check the video-site path end to end on a phone.** The engine, the join and the UI have each
+1. **Check the video-site path end to end on a phone.** The engine, the join and the UI have each
    been tested, but a real lookup followed by a real download has not run in one piece. A
    walkthrough scenario for it would make that repeatable.
-3. **Decide whether YouTube is practical on a phone.** `device-tests.yml` logs how long and how much
+2. **Decide whether YouTube is practical on a phone.** `device-tests.yml` logs how long and how much
    memory the solver needs on YouTube's current player (`ChayaDevice` in `device-numbers.txt`, a
    run artifact). The first full run (all 17 device tests passing) has those numbers; read them
    before deciding.
-4. **More picture formats for joining.** Only H.264 is joined today. HEVC and AV1 muxing depends on
+3. **More picture formats for joining.** Only H.264 is joined today. HEVC and AV1 muxing depends on
    the Android version and has not been verified, so those qualities are not offered.
 
 ## Known rough edges

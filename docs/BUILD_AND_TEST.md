@@ -78,8 +78,10 @@ is close to its copyrighted-content policy, and the diagnostics assume no Play S
    share it to Chaya. The sheet finds the video and lists qualities.
 6. **Background:** start a download and go Home. The notification shows progress, Pause and
    Cancel.
-7. **Downloads:** filters, pause/resume/retry, swipe to delete with Undo, open a file, and play a
-   finished stream in the in-app player.
+7. **Downloads:** filters, pause/resume/retry, swipe to delete with Undo, open a file. A finished
+   stream shows *Saving as MP4* with a percentage, then opens as a file and appears in the
+   gallery's Movies. A stream downloaded with an older build plays in the in-app player and has
+   *Save as MP4* in its ⋮ menu.
 8. **Appearance:** Downloads › ⋮ › Appearance switches between Same as phone, Light and Dark at
    once, status bar included, and the choice survives a restart.
 9. **Ad blocker:** open a news site. The shield in the address bar fills in and counts what it
