@@ -358,7 +358,7 @@ class DownloadManager(
                 runCatching { context.contentResolver.delete(Uri.parse(u), null, null) }
             }
         }
-        _downloads.value = _downloads.value.filterNot { it.id == id }
+        _downloads.update { list -> list.filterNot { it.id == id } }
         scope.launch { dao.delete(id) }
     }
 
@@ -874,10 +874,8 @@ class DownloadManager(
     // ---- progress ---- //
 
     private fun progress(id: Long, downloadedBytes: Long, totalBytes: Long?) {
-        _downloads.value = _downloads.value.map {
-            if (it.id == id) {
-                it.copy(downloadedBytes = downloadedBytes, totalBytes = totalBytes)
-            } else it
+        _downloads.update { list ->
+            list.map { if (it.id == id) it.copy(downloadedBytes = downloadedBytes, totalBytes = totalBytes) else it }
         }
     }
 
@@ -885,9 +883,7 @@ class DownloadManager(
         // Single choke point for terminal transitions: every state flip is
         // recorded here, not scattered across complete/fail/pause paths.
         val previous = find(task.id)?.state
-        _downloads.value = _downloads.value.map {
-            if (it.id == task.id) task else it
-        }
+        _downloads.update { list -> list.map { if (it.id == task.id) task else it } }
         if (previous != null && previous != task.state) {
             eventLog?.record(
                 ChayaEvent.DownloadStateChanged(task.id, previous.name, task.state.name)
@@ -905,8 +901,11 @@ class DownloadManager(
         }
     }
 
+    // Downloads start and finish on several threads at once, so the list is only ever changed with update {}:
+    // reading it and writing it back separately would let one change overwrite another, and a download
+    // started alongside others (a post's pictures) could go missing from the list.
     private fun append(task: DownloadTask) {
-        _downloads.value = _downloads.value + task
+        _downloads.update { it + task }
         eventLog?.record(
             ChayaEvent.DownloadStateChanged(task.id, "NONE", task.state.name)
         )
