@@ -216,7 +216,8 @@ fun DownloadsScreen(
                                         scope.launch { snackbarHostState.showSnackbar(msg) }
                                     }
                                 },
-                                onPlay = { onPlayStream(task.id) }
+                                onPlay = { onPlayStream(task.id) },
+                                onSaveAsFile = { viewModel.saveAsFile(task.id) }
                             )
                         }
                     }
@@ -320,7 +321,8 @@ private fun SwipeableDownloadCard(
     onCancel: () -> Unit,
     onDelete: () -> Unit,
     onOpen: () -> Unit,
-    onPlay: () -> Unit
+    onPlay: () -> Unit,
+    onSaveAsFile: () -> Unit
 ) {
     val currentDelete by rememberUpdatedState(onDelete)
     val inFlight = task.state == DownloadState.DOWNLOADING || task.state == DownloadState.QUEUED
@@ -342,7 +344,7 @@ private fun SwipeableDownloadCard(
         enableDismissFromEndToStart = !inFlight,
         backgroundContent = { DeleteBackdrop() }
     ) {
-        DownloadCard(task, onPause, onResume, onCancel, onDelete, onOpen, onPlay)
+        DownloadCard(task, onPause, onResume, onCancel, onDelete, onOpen, onPlay, onSaveAsFile)
     }
 }
 
@@ -373,7 +375,8 @@ private fun DownloadCard(
     onCancel: () -> Unit,
     onDelete: () -> Unit,
     onOpen: () -> Unit,
-    onPlay: () -> Unit
+    onPlay: () -> Unit,
+    onSaveAsFile: () -> Unit
 ) {
     // Streams live in Media3's cache (no single file), so they play in-app instead of opening.
     val openAction = if (task.filePath != null || task.exportedUri != null) onOpen else onPlay
@@ -412,7 +415,7 @@ private fun DownloadCard(
             }
 
             Spacer(Modifier.width(4.dp))
-            ActionsRow(task, onPause, onResume, onCancel, onDelete, onOpen, onPlay)
+            ActionsRow(task, onPause, onResume, onCancel, onDelete, onOpen, onPlay, onSaveAsFile)
         }
     }
 }
@@ -470,8 +473,17 @@ private fun StateArea(task: DownloadTask) {
 private fun ProgressBlock(task: DownloadTask) {
     // An archive counts files, not bytes: it cannot know its size until every file has arrived.
     val archive = task.archive
-    val totalKnown = if (archive != null) !archive.listing && archive.found > 0 else (task.totalBytes ?: 0L) > 0L
-    val target = if (archive != null && archive.found > 0) archive.saved.toFloat() / archive.found else task.progressFraction
+    val saving = task.savingAsFile
+    val totalKnown = when {
+        saving != null -> true
+        archive != null -> !archive.listing && archive.found > 0
+        else -> (task.totalBytes ?: 0L) > 0L
+    }
+    val target = when {
+        saving != null -> saving
+        archive != null && archive.found > 0 -> archive.saved.toFloat() / archive.found
+        else -> task.progressFraction
+    }
     val fraction by animateFloatAsState(
         targetValue = target.coerceIn(0f, 1f),
         animationSpec = ChayaMotion.tweenStandard(),
@@ -507,6 +519,7 @@ private fun ProgressBlock(task: DownloadTask) {
         ) {
             Text(
                 text = when {
+                    saving != null -> "Saving as MP4 · ${(fraction * 100).toInt()}%"
                     archive != null && archive.listing -> "Finding posts"
                     archive != null -> "${archive.saved} of ${archive.found} files"
                     totalKnown -> "${(fraction * 100).toInt()}%"
@@ -517,6 +530,7 @@ private fun ProgressBlock(task: DownloadTask) {
             )
             Text(
                 text = when {
+                    saving != null -> if (task.downloadedBytes > 0) formatFileSize(task.downloadedBytes) else ""
                     archive != null && archive.listing -> if (archive.found > 0) "${archive.found} so far" else ""
                     archive != null -> formatFileSize(task.downloadedBytes)
                     totalKnown -> "${formatFileSize(task.downloadedBytes)} of ${formatFileSize(task.totalBytes ?: 0)}"
@@ -544,7 +558,7 @@ private fun StateLine(task: DownloadTask, state: DownloadState) {
     val label = when (state) {
         DownloadState.QUEUED -> "Waiting to start"
         DownloadState.PAUSED -> "Paused · ${formatFileSize(task.downloadedBytes)}"
-        DownloadState.COMPLETED -> finishedDetails(task).let { if (it.isEmpty()) "Saved" else "Saved · $it" }
+        DownloadState.COMPLETED -> completedLine(task)
         DownloadState.FAILED -> task.error?.userMessage?.takeIf { it.isNotBlank() }?.let { "Failed · $it" }
             ?: "Failed"
         DownloadState.CANCELLED -> "Stopped · ${formatFileSize(task.downloadedBytes)}"
@@ -583,14 +597,17 @@ internal fun ActionsRow(
     onCancel: () -> Unit,
     onDelete: () -> Unit,
     onOpen: () -> Unit,
-    onPlay: () -> Unit
+    onPlay: () -> Unit,
+    onSaveAsFile: () -> Unit = {}
 ) {
     var menuOpen by remember { mutableStateOf(false) }
 
     // Cancel is the only way out of a queued download, so it is the primary action there.
-    val menuItems: List<Pair<String, () -> Unit>> = when (task.state) {
-        DownloadState.DOWNLOADING -> listOf("Cancel" to onCancel)
-        DownloadState.QUEUED -> emptyList()
+    val menuItems: List<Pair<String, () -> Unit>> = when {
+        task.state == DownloadState.DOWNLOADING -> listOf("Cancel" to onCancel)
+        task.state == DownloadState.QUEUED -> emptyList()
+        // A stream that lives only in the cache plays here; saving it makes a file other apps can open.
+        task.canSaveAsFile -> listOf("Save as MP4" to onSaveAsFile, "Delete" to onDelete)
         else -> listOf("Delete" to onDelete)
     }
 
@@ -668,4 +685,16 @@ private fun iconForMime(mimeType: String?): ImageVector = when {
     mimeType?.startsWith("video/") == true -> Icons.Default.Movie
     mimeType?.startsWith("audio/") == true -> Icons.Default.MusicNote
     else -> Icons.Default.Movie
+}
+
+/**
+ * The line under a finished download. A stream that is still only in the cache says so (it plays in Chaya), with
+ * the reason when saving it as a file did not work; a file says how it was saved when there is something to add.
+ */
+internal fun completedLine(task: DownloadTask): String {
+    if (task.canSaveAsFile) {
+        return listOfNotNull(task.saveNote ?: "Plays in Chaya", finishedDetails(task).ifEmpty { null }).joinToString(" · ")
+    }
+    val details = listOfNotNull(finishedDetails(task).ifEmpty { null }, task.saveNote).joinToString(" · ")
+    return if (details.isEmpty()) "Saved" else "Saved · $details"
 }

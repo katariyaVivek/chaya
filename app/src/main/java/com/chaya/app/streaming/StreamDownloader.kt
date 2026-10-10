@@ -206,6 +206,22 @@ class StreamDownloader(
         return cacheDataSourceFactory
     }
 
+    /**
+     * The finished download of a task, or null when it is not finished. Read from the index:
+     * [DownloadManager.getCurrentDownloads] leaves completed downloads out.
+     */
+    fun completedDownload(taskId: Long): Download? =
+        downloadManager.downloadIndex.getDownload(contentIdFor(taskId))?.takeIf { it.state == Download.STATE_COMPLETED }
+
+    /**
+     * Reads the cache and nothing else: a piece missing from it fails the read instead of being fetched, so a
+     * stream is only ever saved as a file from what was downloaded.
+     */
+    fun cacheOnlyDataSourceFactory(): DataSource.Factory =
+        CacheDataSource.Factory()
+            .setCache(cache)
+            .setCacheWriteDataSinkFactory(null)
+
     fun deleteStream(taskId: Long) {
         // Safe for any taskId: removing an id absent from Media3's index is a
         // no-op on the index, so HTTP task ids pass through harmlessly.

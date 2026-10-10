@@ -21,10 +21,13 @@ import com.chaya.app.database.DownloadEntity
 import com.chaya.app.diagnostics.ChayaEvent
 import com.chaya.app.diagnostics.EventLog
 import com.chaya.app.model.DetectedMedia
+import com.chaya.app.streaming.Media3StreamExporter
 import com.chaya.app.streaming.StreamDownloader
+import com.chaya.app.streaming.StreamExporter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -40,6 +43,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.io.IOException
 import java.net.URLEncoder
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import java.util.zip.Deflater
 import java.util.zip.ZipEntry
@@ -77,6 +81,8 @@ class DownloadManager(
     private val archiveLister: ArchiveLister? = null,
     /** How long an archive waits before asking again for a file that failed on the way, one wait per attempt. */
     private val archiveRetryDelaysMillis: List<Long> = ARCHIVE_RETRY_DELAYS_MILLIS,
+    /** Saves finished streams as MP4 files; null builds the Media3 one when first needed. Replaced in tests. */
+    private val streamExporter: StreamExporter? = null,
 ) {
     /** Parent of all fire-and-forget persistence and transfer work; [drainBackgroundWork] joins it. */
     private val backgroundJob = SupervisorJob()
@@ -252,6 +258,7 @@ class DownloadManager(
     fun pauseDownload(id: Long) {
         val t = find(id) ?: return
         if (t.state != DownloadState.DOWNLOADING) return
+        if (stopSavingAsFile(id)) return
 
         if (t.isArchive) {
             // Paused before the listing is told to stop: a listing that ends sees the pause and does not restart.
@@ -325,6 +332,7 @@ class DownloadManager(
     fun cancelDownload(id: Long) {
         val t = find(id) ?: return
         if (t.state != DownloadState.DOWNLOADING && t.state != DownloadState.QUEUED) return
+        if (stopSavingAsFile(id)) return
         if (t.isArchive) {
             // As with a pause: the state first, so a listing that ends sees the cancel and does not restart.
             apply(t.copy(state = DownloadState.CANCELLED))
@@ -348,6 +356,7 @@ class DownloadManager(
     /** Remove a task and delete its files (private copy + public MediaStore copy). */
     fun deleteTask(id: Long) {
         val t = find(id)
+        savingAsFile.remove(id)?.cancel()
         downloader.cancel(id)
         streamDownloader?.deleteStream(id)
         if (t != null) {
@@ -839,6 +848,126 @@ class DownloadManager(
     }
 
     // ------------------------------------------------------------------ //
+    // Streams saved as files
+    // ------------------------------------------------------------------ //
+
+    /** Exports running now, by task, so a pause, cancel or delete can stop them. */
+    private val savingAsFile = ConcurrentHashMap<Long, Job>()
+
+    private val exporter: StreamExporter by lazy {
+        streamExporter ?: Media3StreamExporter(context, obtainStreamDownloader())
+    }
+
+    /** Media3 has every piece of a stream: save it as a file. */
+    @VisibleForTesting
+    internal fun streamCompleted(id: Long) = startSavingAsFile(id)
+
+    /**
+     * Saves a finished stream that lives only in the cache as an MP4 file: the card's *Save as MP4*, for streams
+     * downloaded before Chaya did this itself or whose saving failed.
+     */
+    fun saveAsFile(id: Long) {
+        val t = find(id) ?: return
+        if (!t.canSaveAsFile) return
+        ensureServiceRunning()
+        startSavingAsFile(id)
+    }
+
+    private fun startSavingAsFile(id: Long) {
+        val job = scope.launch(start = CoroutineStart.LAZY) { saveStreamAsFile(id) }
+        if (savingAsFile.putIfAbsent(id, job) != null) {
+            job.cancel()
+            return
+        }
+        job.invokeOnCompletion { savingAsFile.remove(id, job) }
+        job.start()
+    }
+
+    /**
+     * Exports the cached stream to `<name>.mp4.saving`, renames it once Media3 is done and the file checks out,
+     * removes the cached copy and completes the task with the file, which then goes to Movies like any other
+     * download. Whatever goes wrong, the cached copy stays, so the stream still plays and can be saved again.
+     */
+    private suspend fun saveStreamAsFile(id: Long) {
+        val t = find(id) ?: return
+        val cached = exporter.cachedBytes(id)
+        if (cached == null) {
+            keepInCache(id, "Plays in Chaya · not all of it is downloaded, so it can't be saved as MP4")
+            return
+        }
+        // Both copies exist for a while: the cached pieces and the new file.
+        if (freeBytes(saveDir) < cached + MIN_FREE_BYTES_TO_START) {
+            keepInCache(id, "Plays in Chaya · not enough space to save it as MP4")
+            return
+        }
+        val output = resolveFileName(saveDir, sanitize(t.fileName.substringBeforeLast('.').ifBlank { "video" }) + ".mp4")
+        val partial = File("${output.path}$SAVING_SUFFIX")
+        apply(t.copy(state = DownloadState.DOWNLOADING, savingAsFile = 0f, saveNote = null, error = null))
+        val result = try {
+            exporter.export(id, partial) { fraction ->
+                _downloads.update { list -> list.map { if (it.id == id && it.savingAsFile != null) it.copy(savingAsFile = fraction) else it } }
+            }
+        } catch (e: CancellationException) {
+            partial.delete()
+            throw e
+        } catch (e: Exception) {
+            partial.delete()
+            keepInCache(id, "Plays in Chaya · couldn't save it as MP4")
+            return
+        }
+        // A sound-only stream is an M4A, not a video.
+        val target = if (result.hasVideo) output else resolveFileName(saveDir, output.nameWithoutExtension + ".m4a")
+        if (!partial.renameTo(target)) {
+            partial.delete()
+            keepInCache(id, "Plays in Chaya · couldn't keep the MP4")
+            return
+        }
+        val current = find(id) ?: run {
+            target.delete() // deleted while it was being saved
+            return
+        }
+        runCatching { exporter.removeCached(id) }
+        val length = target.length()
+        apply(
+            current.copy(
+                fileName = target.name,
+                filePath = target.absolutePath,
+                mimeType = if (result.hasVideo) "video/mp4" else "audio/mp4",
+                downloadedBytes = length,
+                totalBytes = length,
+                savingAsFile = null,
+                saveNote = if (result.reencoded) "re-encoded to fit MP4" else null,
+            ),
+        )
+        completeTask(id)
+    }
+
+    /** Leaves a finished stream in the cache, where it still plays, saying why it is not a file. */
+    private suspend fun keepInCache(id: Long, note: String) {
+        val t = find(id) ?: return
+        val kept = t.copy(
+            state = DownloadState.COMPLETED,
+            savingAsFile = null,
+            saveNote = note,
+            error = null,
+            updatedAt = System.currentTimeMillis(),
+        )
+        apply(kept)
+        dao.update(DownloadEntity.fromTask(kept))
+    }
+
+    /** Stops a stream being saved as a file, if one is; it stays in the cache, still playable. */
+    private fun stopSavingAsFile(id: Long): Boolean {
+        val job = savingAsFile.remove(id) ?: return false
+        job.cancel()
+        scope.launch {
+            job.join()
+            keepInCache(id, "Plays in Chaya · saving as MP4 was stopped")
+        }
+        return true
+    }
+
+    // ------------------------------------------------------------------ //
     // State transitions
     // ------------------------------------------------------------------ //
 
@@ -1025,7 +1154,7 @@ class DownloadManager(
                 progress(taskId, downloadedBytes, totalBytes)
             }
 
-            override fun onStreamCompleted(taskId: Long) = completeTask(taskId)
+            override fun onStreamCompleted(taskId: Long) = streamCompleted(taskId)
 
             override fun onStreamFailed(taskId: Long, reason: Int, cause: Exception?) {
                 // The cause, when there is one, lets a refused or dropped connection be explained as such.
@@ -1088,6 +1217,9 @@ class DownloadManager(
         private const val SOUND_SUFFIX = ".audio"
         private const val PART_SUFFIX = ".part"
         private const val JOINING_SUFFIX = ".joining"
+
+        /** A stream being written out as a file, until it is checked and renamed. */
+        private const val SAVING_SUFFIX = ".saving"
 
         /** An archive keeps its list and fetched files in `<saved file>.items/` until they are packed. */
         private const val ITEMS_SUFFIX = ".items"

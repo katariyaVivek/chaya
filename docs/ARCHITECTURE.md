@@ -167,8 +167,24 @@ faster than APKs ship, so the app fetches newer releases itself.
   without a `DownloadService` it starts paused.
 - `ManifestHelper` lists renditions for the quality picker: one entry per rendition, best
   preselected, sizes estimated when the duration is known.
-- **Stream downloads live in Media3's cache, not as files.** They play in the in-app player
-  (`ui/player/`), which reads the same cache. Saving them as real MP4 files is on the roadmap.
+- **Streams are saved as MP4 files.** Media3 downloads a stream's pieces into its cache. When the
+  last piece is in, `DownloadManager` keeps the task downloading for one more phase: *Saving as
+  MP4*. `Media3StreamExporter` runs Media3 Transformer over the stream's own download request (so
+  the downloaded renditions are the ones read), through a data source that reads only the cache,
+  and only once Media3's index reports the download complete: a missing piece fails the export
+  instead of being fetched. Transformer copies the samples as
+  they are when the MP4 container can take them, and re-encodes only otherwise
+  (`ExportResult`'s conversion process says which). It writes with Media3's `InAppMuxer`, not
+  Android's `MediaMuxer`, which aborted the whole app (a native `SIGABRT` in `MPEG4Writer`) on
+  a real HLS stream; a bad stream now fails its export instead. The file is written beside its final name
+  (`.mp4.saving`), checked (the tracks Transformer reported are there, the duration matches),
+  renamed, and only then is the cached copy removed; the task then completes like any file and
+  goes to Movies (Music for sound only). Free space for both copies is checked first.
+- **Whatever goes wrong, the cached copy stays.** A failed or stopped export (pause, cancel) leaves
+  the task completed in the cache, where it plays in the in-app player (`ui/player/`), with the
+  reason on its card and *Save as MP4* in its menu; streams downloaded before this have the same.
+  The saving phase is kept in memory, like an archive's counts: an app killed mid-export brings the
+  task back paused, and resuming finds every piece cached and saves it again.
 
 ## Storage (`database/`)
 

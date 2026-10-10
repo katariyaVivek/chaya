@@ -299,9 +299,14 @@ def save_logcat(tag):
     text = adb("logcat", "-d", "-v", "threadtime", timeout=180)
     (EVIDENCE / f"logcat-{tag}.txt").write_text(text, encoding="utf-8", errors="replace")
     keep = re.compile(r"chaya|DownloadManager|ExoPlayer|HlsMediaSource|HlsDownloader|StreamDownloader|"
-                      r"AndroidRuntime|FATAL|StrictMode|media3", re.I)
+                      r"StreamExporter|Transformer|AndroidRuntime|FATAL|StrictMode|media3", re.I)
     lines = [line for line in text.splitlines() if keep.search(line)]
     (EVIDENCE / f"logcat-{tag}-app.txt").write_text("\n".join(lines[-3000:]), encoding="utf-8")
+    # Why the app's process ended, in the job log itself: a native crash, the low-memory killer, or the system.
+    death = re.compile(r"Fatal signal|backtrace:|lowmemorykiller|lmkd|am_kill|Killing \d+:com\.chaya|"
+                       r"Process com\.chaya\.app .*(died|has died)|FATAL EXCEPTION|StreamExporter|Transformer", re.I)
+    for line in [line for line in text.splitlines() if death.search(line)][-40:]:
+        log(f"logcat {tag}: {line[:300]}")
     if "FATAL EXCEPTION" in text and f"Process: {PKG}" in text:
         record(f"{tag}: the app crashed", False, "see logcat")
 

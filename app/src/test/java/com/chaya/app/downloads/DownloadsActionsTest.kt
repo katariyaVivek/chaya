@@ -3,6 +3,7 @@ package com.chaya.app.downloads
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -10,6 +11,7 @@ import com.chaya.app.download.DownloadError
 import com.chaya.app.download.DownloadState
 import com.chaya.app.download.DownloadTask
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -127,5 +129,60 @@ class DownloadsActionsTest {
         }
         composeRule.onNodeWithContentDescription("Play").performClick()
         assertEquals(listOf("play"), streamFired)
+    }
+
+    /** A finished stream that lives only in Media3's cache, as streams did before they were saved as files. */
+    private fun cachedStream(saveNote: String? = null) = DownloadTask(
+        id = 2,
+        url = "https://cdn.example.com/show/master.m3u8",
+        pageUrl = null,
+        fileName = "Show.mp4",
+        mimeType = "application/x-mpegURL",
+        state = DownloadState.COMPLETED,
+        downloadedBytes = 5 * 1024 * 1024,
+        saveNote = saveNote,
+    )
+
+    @Test
+    fun `a stream kept only in the cache plays, and offers Save as MP4 from the menu`() {
+        val fired = mutableListOf<String>()
+        composeRule.setContent {
+            ActionsRow(
+                task = cachedStream(),
+                onPause = {}, onResume = {}, onCancel = {}, onDelete = { fired += "delete" }, onOpen = { fired += "open" },
+                onPlay = { fired += "play" },
+                onSaveAsFile = { fired += "save" },
+            )
+        }
+
+        composeRule.onNodeWithContentDescription("Play").performClick()
+        composeRule.onNodeWithContentDescription("More actions").performClick()
+        composeRule.onNodeWithText("Save as MP4").performClick()
+        assertEquals(listOf("play", "save"), fired)
+    }
+
+    @Test
+    fun `a stream saved as a file opens like any file and has nothing to save`() {
+        val saved = cachedStream().copy(filePath = "/tmp/Show.mp4", mimeType = "video/mp4", fileName = "Show.mp4")
+        composeRule.setContent {
+            ActionsRow(task = saved, onPause = {}, onResume = {}, onCancel = {}, onDelete = {}, onOpen = {}, onPlay = {})
+        }
+
+        composeRule.onNodeWithContentDescription("Open").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("More actions").performClick()
+        assertEquals(0, composeRule.onAllNodesWithText("Save as MP4").fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun `the line under a finished stream says where it lives and why`() {
+        assertTrue(completedLine(cachedStream()).startsWith("Plays in Chaya · "))
+        assertTrue(completedLine(cachedStream()).endsWith("cdn.example.com"))
+        assertTrue(
+            completedLine(cachedStream("Plays in Chaya · not enough space to save it as MP4"))
+                .startsWith("Plays in Chaya · not enough space to save it as MP4 · "),
+        )
+        val reencoded = cachedStream("re-encoded to fit MP4").copy(filePath = "/tmp/Show.mp4", mimeType = "video/mp4")
+        assertTrue(completedLine(reencoded).startsWith("Saved · "))
+        assertTrue(completedLine(reencoded).endsWith("re-encoded to fit MP4"))
     }
 }

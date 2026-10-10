@@ -36,24 +36,21 @@ up by yt-dlp on the phone, with picture and sound joined into one MP4. Merged as
 | [#31](https://github.com/katariyaVivek/chaya/pull/31) | A finished download's notification comes once, not again with every later download |
 | [#32](https://github.com/katariyaVivek/chaya/pull/32) | Up to ten tabs, each with its own page and history; links that open a new window open a new tab. Also: a page's first ads are blocked too |
 | [#34](https://github.com/katariyaVivek/chaya/pull/34) | yt-dlp, its solver scripts and gallery-dl keep themselves current: newer releases fetched from PyPI about once a day, verified, compiled, checked and used from the next start, with a fallback to the last good copy; shown and switchable in Diagnostics |
+| [#35](https://github.com/katariyaVivek/chaya/pull/35) | A finished stream is saved as a real MP4 file (M4A for sound only), copied without re-encoding when MP4 can hold it; if that can't be done it stays in the cache, still plays, and offers Save as MP4. Older stream downloads get Save as MP4 too |
 
 ## Next
 
-The working plan for the next features, in order and in detail, is [`PLAN.md`](PLAN.md): streams
-saved as MP4, tabs restored in a tab grid, bookmarks and history,
-faster YouTube, and a downloads library. The list below is the longer view.
+The working plan for the next features, in order and in detail, is [`PLAN.md`](PLAN.md): tabs
+restored in a tab grid, bookmarks and history, faster YouTube, and a downloads library. The list below is the longer view.
 
-1. **Save streams as real MP4 files.** HLS/DASH downloads live in Media3's cache today, so they
-   play in the app but cannot be shared or opened elsewhere. The redesigned UI (#18) is waiting
-   for this before it offers Share and *Save as MP4* for streams.
-2. **Check the video-site path end to end on a phone.** The engine, the join and the UI have each
+1. **Check the video-site path end to end on a phone.** The engine, the join and the UI have each
    been tested, but a real lookup followed by a real download has not run in one piece. A
    walkthrough scenario for it would make that repeatable.
-3. **Decide whether YouTube is practical on a phone.** `device-tests.yml` logs how long and how much
+2. **Decide whether YouTube is practical on a phone.** `device-tests.yml` logs how long and how much
    memory the solver needs on YouTube's current player (`ChayaDevice` in `device-numbers.txt`, a
    run artifact). The first full run (all 17 device tests passing) has those numbers; read them
    before deciding.
-4. **More picture formats for joining.** Only H.264 is joined today. HEVC and AV1 muxing depends on
+3. **More picture formats for joining.** Only H.264 is joined today. HEVC and AV1 muxing depends on
    the Android version and has not been verified, so those qualities are not offered.
 
 ## Known rough edges

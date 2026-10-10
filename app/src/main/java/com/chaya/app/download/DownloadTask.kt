@@ -1,5 +1,7 @@
 package com.chaya.app.download
 
+import com.chaya.app.streaming.StreamDownloader
+
 data class DownloadTask(
     val id: Long,
     val url: String,
@@ -27,6 +29,10 @@ data class DownloadTask(
     val audioRequestHeaders: Map<String, String> = emptyMap(),
     /** For a ZIP archive of many files, how far it has got; not stored. */
     val archive: ArchiveProgress? = null,
+    /** While a finished stream is being saved as an MP4 file, how far that has got (0 to 1); not stored. */
+    val savingAsFile: Float? = null,
+    /** What became of saving a stream as a file, when there is something to say (re-encoded, or why not); not stored. */
+    val saveNote: String? = null,
 ) {
     val progressFraction: Float
         get() = if (totalBytes != null && totalBytes > 0) {
@@ -35,6 +41,14 @@ data class DownloadTask(
 
     /** A ZIP archive of many files (everything an account has posted), not one file. */
     val isArchive: Boolean get() = url.startsWith(ARCHIVE_SCHEME)
+
+    /** An HLS or DASH stream, downloaded into Media3's cache rather than to a file. */
+    val isStream: Boolean
+        get() = StreamDownloader.isStreamingUrl(url) || StreamDownloader.isStreamingMime(mimeType)
+
+    /** A finished stream that still lives only in the cache: it plays in the app and can be saved as an MP4 file. */
+    val canSaveAsFile: Boolean
+        get() = state == DownloadState.COMPLETED && isStream && filePath == null && exportedUri == null && savingAsFile == null
 
     /** Started from engine results, so it brings its own headers instead of this browser's session. */
     val hasOwnRequest: Boolean

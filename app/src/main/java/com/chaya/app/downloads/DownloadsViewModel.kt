@@ -24,6 +24,7 @@ class DownloadsViewModel(application: Application) : AndroidViewModel(applicatio
     fun resume(id: Long) = manager.resumeDownload(id)
     fun cancel(id: Long) = manager.cancelDownload(id)
     fun delete(id: Long) = manager.deleteTask(id)
+    fun saveAsFile(id: Long) = manager.saveAsFile(id)
 
     /** Hides a download right away; it is only deleted once [commitDelete] runs. */
     fun hideForDelete(id: Long) {

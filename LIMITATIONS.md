@@ -5,7 +5,11 @@ These are deliberate scope decisions, not open bugs.
 ## What Chaya covers
 
 - **Media on the pages you browse:** direct audio and video files (MP4, WebM, MP3, …) and HLS/DASH
-  streams (`.m3u8`, `.mpd`), found from network traffic and from the page itself.
+  streams (`.m3u8`, `.mpd`), found from network traffic and from the page itself. A finished
+  stream is saved as an MP4 file (an M4A for sound only), copied as it is without re-encoding
+  when the MP4 container can take it, which covers nearly every stream; otherwise it is
+  re-encoded and the download says so. A stream that cannot be saved, or there is no room to
+  save, stays in Chaya's cache, where it still plays, with *Save as MP4* to try again.
 - **Extensionless endpoints** whose server reports a media `Content-Type`, after you tap *Scan more
   thoroughly* (same-origin only, at most ten checks, no redirects followed).
 - **Links to a single video on YouTube, Instagram, TikTok and X**, looked up by yt-dlp running on
@@ -50,8 +54,6 @@ These are deliberate scope decisions, not open bugs.
 - **What uBlock Origin does beyond its lists.** Its scriptlets and procedural filters are not
   applied, so ads a site serves from its own servers inside the video (YouTube's, for one) still
   play, and some pages keep an empty space where an ad was.
-- **Saving streams as standalone files.** HLS/DASH downloads play in the app; exporting them as MP4
-  is not built yet.
 
 ## Your responsibility
 
