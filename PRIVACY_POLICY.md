@@ -30,6 +30,8 @@ Store account, no third-party SDKs.
 
 - Download history: **on your phone only**.
 - Ad blocker settings (whether it is on, and the sites you let show ads): **on your phone only**.
+- Newer copies of yt-dlp, yt-dlp-ejs and gallery-dl fetched from PyPI, and when they were checked:
+  **on your phone only**, in app-private files.
 - Diagnostics (crash reports, an event log with addresses stripped of their query and fragment):
   **on your phone only**, in app-private files. Nothing is uploaded automatically; a report leaves
   the phone only when you tap Share.
@@ -47,6 +49,11 @@ Chaya talks only to the sites involved in what you do:
 - for the ad blocker, about once a week, easylist.to, to fetch fresh copies of the EasyList and
   EasyPrivacy lists. The request carries no cookies and nothing about you or the pages you visit;
   the lists are then used on your phone. Blocked requests never leave the phone at all.
+- to keep the video-site engine current, about once a day, pypi.org, to ask whether yt-dlp,
+  yt-dlp-ejs or gallery-dl have a newer release, and files.pythonhosted.org (where PyPI keeps its
+  files) to fetch one when they do. The requests carry no cookies and nothing about you, the links
+  you look up or the pages you visit. Turn this off under Downloads › ⋮ › Diagnostics › *Keep it up
+  to date*.
 
 ## What Chaya never does
 

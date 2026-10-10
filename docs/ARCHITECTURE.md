@@ -97,6 +97,40 @@ Android's WebView cannot run extensions, so Chaya blocks with uBlock Origin's ba
 - `WebViewSignIn` offers, never applies by itself, the browser's existing sign-in for a site. The
   cookies are written to a temporary file for yt-dlp and deleted right after the lookup.
 
+### How the engine stays current
+
+The app carries pinned copies of yt-dlp, yt-dlp-ejs and gallery-dl (`enginePackages` in
+`app/build.gradle.kts`, also passed to the app as `BuildConfig.ENGINE_PACKAGES`). Sites change
+faster than APKs ship, so the app fetches newer releases itself.
+
+- **Checking.** `EngineUpdater` asks PyPI's JSON API (`/pypi/<name>/json`, with `If-None-Match`, so
+  an unchanged answer is a 304) about once a day, shortly after the app is opened
+  (`ChayaApplication.checkEngineSoon`, from `MainActivity`). A
+  newer yt-dlp brings the yt-dlp-ejs its metadata names (`Requires-Dist: yt-dlp-ejs==…`), because
+  yt-dlp checks its solver scripts against that release. `PyPackaging.kt` reads versions,
+  requirements and markers: a release whose requirements the bundled libraries do not meet (asked
+  of Python through `chaya_engine.paths.installed_version`), or that needs another Python, is
+  refused and remembered.
+- **Fetching.** Only the `py3-none-any` wheel, only from files.pythonhosted.org, checked against
+  PyPI's SHA-256, opened to see that it holds the package, the version it should and no native code.
+  `chaya_engine.paths.compile_wheel` then compiles it into a zip of `.pyc` files
+  (`filesDir/engine/<name>-<version>.zip`), because a wheel's sources would be compiled again at
+  every start (about a second on a desktop, several on a phone).
+- **Choosing.** `EngineSets` keeps the sets and their state in `filesDir/engine/state.json`.
+  When Python starts (`PlatformEngine.python()`), before anything imports yt-dlp, it puts the
+  newest trusted set at the front of `sys.path` (`chaya_engine.paths.use`). Imported modules are
+  never swapped under a running engine, so a set fetched today is used from the next start.
+- **Trust.** A new set is checked on the first start that uses it: `selftest.status` must report its
+  versions, the solver registered, and gallery-dl's post links. If it does not, `paths.drop` takes
+  it off `sys.path` and forgets its modules, the set is skipped from then on, and the last good set
+  or the app's copy is used instead. A check the app died during counts as failed. A set whose
+  engine fails twice in a row (an error escaping `chaya_engine`, not a link that cannot be used) is
+  skipped from the next start. The two newest good sets are kept, so there is a fallback besides
+  the app's copy.
+- **Diagnostics** shows the versions in use, a set waiting for the next start, when PyPI was last
+  asked and what came of it, and the switch that turns updates off (the app's copy is then used
+  from the next start).
+
 ## Downloads (`download/`)
 
 - `DownloadManager` owns every task and its state machine:
@@ -168,5 +202,5 @@ Share. Reached from the Downloads screen's menu.
 |---|---|---|
 | `app/src/test/java` | JVM and Robolectric tests: state machine, MockWebServer transfers, Room migrations, Media3 stream pipeline, Compose UI | every PR (`build.yml`) |
 | `app/src/test/python` | pytest for `chaya_engine`, against the pinned yt-dlp | PRs touching the engine (`engine.yml`) |
-| `app/src/androidTest` | On a device: Python/yt-dlp and QuickJS, the real `MediaMuxer` join, the whole two-file save, ad blocking in a real WebView | `ui-check` label or manual (`device-tests.yml`); also *Run workflow* on `build.yml` |
+| `app/src/androidTest` | On a device: Python/yt-dlp and QuickJS, an engine update compiled and imported (and a broken one falling back), the real `MediaMuxer` join, the whole two-file save, ad blocking in a real WebView | `ui-check` label or manual (`device-tests.yml`); also *Run workflow* on `build.yml` |
 | `.github/scripts/walkthrough.py` | Drives the debug app in an emulator and saves screenshots, screen text and logs | `ui-check` label or manual (`emulator-check.yml`) |

@@ -52,9 +52,7 @@ faster YouTube, and a downloads library. The list below is the longer view.
    memory the solver needs on YouTube's current player (`ChayaDevice` in `device-numbers.txt`, a
    run artifact). The first full run (all 17 device tests passing) has those numbers; read them
    before deciding.
-4. **Keep yt-dlp current.** Sites change often and the bundled yt-dlp is pinned; self-update (or a
-   release cadence that tracks yt-dlp) is not built yet.
-5. **More picture formats for joining.** Only H.264 is joined today. HEVC and AV1 muxing depends on
+4. **More picture formats for joining.** Only H.264 is joined today. HEVC and AV1 muxing depends on
    the Android version and has not been verified, so those qualities are not offered.
 
 ## Known rough edges

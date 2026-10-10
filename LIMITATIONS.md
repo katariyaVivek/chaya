@@ -19,6 +19,10 @@ These are deliberate scope decisions, not open bugs.
   few recent posts at most, X no timeline), so the person can choose to use their sign-in. Listing
   goes at the site's own pace; a big account takes minutes. Files the site no longer has, or keeps
   refusing to send after a few tries, are named in a `not-saved.txt` inside the ZIP.
+- **The engine keeps itself current.** About once a day Chaya asks PyPI for newer releases of
+  yt-dlp, its YouTube solver scripts (yt-dlp-ejs) and gallery-dl, and uses them from the next start
+  once they pass a check, so a site's change is usually handled within days of yt-dlp's fix, without
+  a new APK. It can be turned off under Downloads › ⋮ › Diagnostics.
 - Pause, resume and retry, with a reason shown when something fails.
 - **Blocking ads and trackers** in the browser with EasyList and EasyPrivacy, the lists uBlock
   Origin starts with: requests to ad and tracking servers are stopped, ad boxes are hidden, and ad
@@ -34,6 +38,10 @@ These are deliberate scope decisions, not open bugs.
 - **Content behind a sign-in, unless you choose it.** When a site needs one and the browser is
   signed in, Chaya offers to use that sign-in for the lookup. Sites can limit accounts used for
   automated downloads, so this is always your call.
+- **Updating anything but those three Python packages.** Only pure-Python releases of yt-dlp,
+  yt-dlp-ejs and gallery-dl are fetched. Python itself, the libraries bundled beside them
+  (`requests`, `urllib3` and the rest) and Chaya's own code change only with a new APK, so a release
+  that needs a newer library than the APK carries, or another Python, is skipped until then.
 - **Joining HEVC or AV1 pictures.** Only H.264 is joined for now, so those qualities are not offered.
 - **Tabs after the app is closed.** Open tabs last while Chaya runs; when Android closes the app,
   it starts again with one tab.

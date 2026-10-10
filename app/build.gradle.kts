@@ -11,6 +11,18 @@ plugins {
 import java.util.Properties
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
+// The Python packages the engine is made of, pinned. Chaquopy installs them into the app (below), and the
+// app is told these versions (BuildConfig.ENGINE_PACKAGES), so it fetches only newer ones from PyPI
+// (EngineUpdater). They are pure Python, so no Android-specific builds are involved. yt-dlp and yt-dlp-ejs go
+// together: yt-dlp checks its challenge-solver scripts against the yt-dlp-ejs release it shipped with.
+// gallery-dl finds the pictures in Instagram and X posts, which yt-dlp does not see (chaya_engine/posts.py).
+// engine.yml reads the quoted pins from this list.
+val enginePackages = listOf(
+    "yt-dlp==2026.8.19",
+    "yt-dlp-ejs==0.8.0",
+    "gallery-dl==1.32.16",
+)
+
 android {
     namespace = "com.chaya.app"
     // quickjs-kt (the YouTube solver's JavaScript engine) only allows apps compiled against API 36. This is the
@@ -25,6 +37,8 @@ android {
         versionName = "0.4.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        buildConfigField("String", "ENGINE_PACKAGES", "\"${enginePackages.joinToString(",")}\"")
 
         // The Python runtime ships a native build per ABI. Phones are arm64; x86_64 is for emulators
         // (and the CI walkthrough). 32-bit ABIs are left out to keep the APK from growing further.
@@ -167,16 +181,12 @@ dependencies {
 }
 
 // Python on Android (Chaquopy) runs yt-dlp, which finds what a YouTube, Instagram, TikTok or X
-// link points to. Both packages are pure Python, so no Android-specific builds are involved, and they
-// are pinned together: yt-dlp checks its challenge-solver scripts against the yt-dlp-ejs release it shipped with.
+// link points to; the packages are pinned in enginePackages at the top of this file.
 chaquopy {
     defaultConfig {
         version = "3.13"
         pip {
-            install("yt-dlp==2026.8.19")
-            install("yt-dlp-ejs==0.8.0")
-            // Pictures in Instagram and X posts, which yt-dlp does not see (chaya_engine/posts.py).
-            install("gallery-dl==1.32.16")
+            enginePackages.forEach { install(it) }
         }
     }
 }

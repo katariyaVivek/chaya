@@ -9,7 +9,8 @@ import time
 
 def status():
     """Versions of what the engine runs on, whether its YouTube challenge solver is registered, and whether
-    gallery-dl (pictures in posts) recognises Instagram and X post links. Nothing here uses the network."""
+    gallery-dl (pictures in posts) recognises Instagram and X post links. Nothing here uses the network.
+    A set of packages fetched from PyPI is trusted only once this reports its versions (EngineSets)."""
     from gallery_dl import extractor as gdl_extractor
     from gallery_dl.version import __version__ as gallery_dl_version
     from yt_dlp.extractor.youtube.jsc._registry import _jsc_providers
@@ -17,6 +18,7 @@ def status():
     import yt_dlp_ejs
 
     from . import jsc_provider  # noqa: F401  (importing registers the provider)
+    from . import paths
 
     post_links = ('https://www.instagram.com/p/C0abcDEFghi/', 'https://x.com/someone/status/1234567890')
     return json.dumps({
@@ -25,6 +27,8 @@ def status():
         'provider_registered': 'ChayaQuickJS' in _jsc_providers.value,
         'gallery_dl': gallery_dl_version,
         'post_links_known': all(gdl_extractor.find(link) is not None for link in post_links),
+        # The updated copies in use (EngineSets), or nothing while the app's own copy is.
+        'files': paths.active(),
     })
 
 
