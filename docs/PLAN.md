@@ -28,6 +28,7 @@ Merged on `main` since v0.4.0, each through a PR that was green before merging:
 | #34 | yt-dlp, yt-dlp-ejs and gallery-dl fetched from PyPI daily, checked, used from the next start |
 | #35 | A finished stream saved as an MP4 file (Media3 Transformer, from the cache only); Save as MP4 for old ones |
 | #36 | Tabs restored after Android closes the app, up to 50 (4 live), in a full-screen Chrome-style tab grid |
+| #37 | Bookmarks (star on the site pill), history by day with clear and a stop switch, suggestions while typing; Room v6 |
 
 Loose ends the owner handles from a PC: delete the old merged branches (the session's git proxy
 cannot delete branches), and decide whether to push the `v0.4.0` tag. While testing a profile ZIP

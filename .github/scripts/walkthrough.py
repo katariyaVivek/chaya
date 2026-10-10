@@ -457,6 +457,36 @@ def scenario_tabs():
     snapshot("tabs-first-shown")
 
 
+def scenario_history():
+    """A page opened is in History, the star makes it a bookmark on the start screen, and typing suggests it."""
+    if fixture_error:
+        record("history: test page", False, fixture_error)
+        return
+    if not launch_fresh():
+        return
+    open_url(f"{HOST_URL}/index.html")
+    wait_for("history: the page loads", 60, text_contains="Launch Event")
+    time.sleep(3)
+    tap_when("history: star the page", 20, desc_contains="Add bookmark")
+    wait_for("history: the star is filled", 20, desc_contains="Remove bookmark")
+    snapshot("history-starred")
+    tap_when("history: go to the start screen", 20, desc_contains="Home")
+    wait_for("history: the bookmark leads the quick sites", 30, text_contains="Launch Event")
+    snapshot("history-start-screen")
+    tap_when("history: open History", 20, text="History")
+    wait_for("history: today's pages", 30, text="Today")
+    wait_for("history: the page is listed", 20, text_contains="Launch Event")
+    snapshot("history-screen")
+    adb("shell", "input", "keyevent", "4")  # Back to the browser
+    _, field = wait_for("history: back on the start screen", 20, cls="android.widget.EditText")
+    if field:
+        tap_node(field)
+        time.sleep(1.5)
+        type_text("Launch")
+        wait_for("history: typing suggests the bookmark", 20, desc_contains="Bookmark")
+        snapshot("history-suggestions")
+
+
 def main():
     global screen_w, screen_h, fixture_error
     EVIDENCE.mkdir(parents=True, exist_ok=True)
@@ -480,7 +510,8 @@ def main():
         fixture_error = traceback.format_exc(limit=2).strip().splitlines()[-1]
         record("build the local test page", False, fixture_error)
 
-    for name, scenario in (("hls", scenario_hls), ("local", scenario_local), ("tabs", scenario_tabs)):
+    for name, scenario in (("hls", scenario_hls), ("local", scenario_local), ("tabs", scenario_tabs),
+                           ("history", scenario_history)):
         for attempt in (1, 2):
             first_result = len(results)
             try:

@@ -97,7 +97,8 @@ is close to its copyrighted-content policy, and the diagnostics assume no Play S
    says *Added to bookmarks*; the page leads the start screen's quick sites. Type part of a page's
    title or address: bookmarks (star) then history (clock) show under the field; tap one to open it.
    The start screen's *History* chip lists pages under Today and Yesterday; search, × and ⋮ ›
-   *Clear history* work, and with *Save history* off a newly opened page is not added.
+   *Clear history* work, and with *Save history* off a newly opened page is not added. The emulator
+   walkthrough checks the star, the start screen tile, the History list and a suggestion.
 12. **Persistence:** finish a download, force-stop the app, reopen: it is still listed. A download
    that was running comes back paused.
 
