@@ -1035,7 +1035,7 @@ private fun createChayaWebView(
                     return
                 }
                 val navigationGeneration = callbacks.onPageStarted(pageUrl)
-                adBlock.beginPage(pageUrl)
+                adBlock.pageStarted(pageUrl)
                 if (pageUrl == "about:blank") {
                     activeDetectorSession = null
                     bridge.invalidateNavigation()

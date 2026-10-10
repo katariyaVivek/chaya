@@ -75,6 +75,15 @@ class AdBlockSession internal constructor(private val blocker: AdBlocker) {
     /** The site of the page shown now (example.com), which the person can let show ads. */
     val site: StateFlow<String> = _site.asStateFlow()
 
+    /**
+     * The WebView reports a page started. Usually its request already began the page in [intercept] (the
+     * page's first files can be asked for before this report arrives); a page shown without a request, from
+     * the back-forward cache or the start screen, begins here.
+     */
+    fun pageStarted(url: String) {
+        if (url != pageUrl) beginPage(url)
+    }
+
     /** A new page is loading: count afresh, and work out what the lists say about it. */
     fun beginPage(url: String) {
         pageUrl = url
@@ -113,8 +122,12 @@ class AdBlockSession internal constructor(private val blocker: AdBlocker) {
 
     /** For WebViewClient.shouldInterceptRequest: an empty answer for a blocked request, null to load it. Pages themselves are never blocked. */
     fun intercept(request: WebResourceRequest): WebResourceResponse? {
-        if (request.isForMainFrame) return null
         val url = request.url?.toString() ?: return null
+        if (request.isForMainFrame) {
+            // Before any of the page's own files: they are judged by this page, not the one before it.
+            beginPage(url)
+            return null
+        }
         return if (shouldBlock(url, RequestTypes.of(url, request.requestHeaders.orEmpty()))) blockedResponse() else null
     }
 
