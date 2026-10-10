@@ -2,4 +2,6 @@
 <paths>
     <!-- Private download dir exposed so completed files can be opened on API < 29 -->
     <files-path name="internal_downloads" path="downloads/" />
+    <!-- Files taken out of an account's ZIP, so they can be opened or shared one at a time -->
+    <cache-path name="library" path="library/" />
 </paths>

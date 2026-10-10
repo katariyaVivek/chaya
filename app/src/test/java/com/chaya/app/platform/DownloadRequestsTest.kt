@@ -1,6 +1,7 @@
 package com.chaya.app.platform
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Test
@@ -163,6 +164,22 @@ class DownloadRequestsTest {
         assertEquals(picture.headers, request.headers)
         assertEquals("a picture is its own poster", picture.url, request.thumbnailUrl)
         assertNull(request.audioUrl)
+    }
+
+    @Test
+    fun `the items of one post share a group key, so the library shows them as one tile`() {
+        val one = PostItem("https://cdn.example/1.jpg", isVideo = false, ext = "jpg", width = null, height = null)
+        val two = PostItem("https://cdn.example/2.jpg", isVideo = false, ext = "jpg", width = null, height = null)
+        val post = media(title = "Sunset", pageUrl = "https://www.instagram.com/p/abc/")
+
+        val first = one.toDownloadRequest(post, number = 1, count = 2)
+        val second = two.toDownloadRequest(post, number = 2, count = 2)
+        val other = one.toDownloadRequest(media(title = "Another", pageUrl = "https://www.instagram.com/p/xyz/"), 1, 2)
+
+        assertEquals(first.groupKey, second.groupKey)
+        assertEquals(groupKeyOf("https://www.instagram.com/p/abc/", "Sunset"), first.groupKey)
+        assertNotEquals(first.groupKey, other.groupKey)
+        assertNull("a post of one item has nothing to group", one.toDownloadRequest(post, number = 1, count = 1).groupKey)
     }
 
     @Test

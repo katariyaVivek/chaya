@@ -15,8 +15,7 @@ looked up by yt-dlp running inside the app. It is a working app with releases, n
 |---|---|
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | How the app is put together, package by package, and where each kind of test lives |
 | [`docs/BUILD_AND_TEST.md`](docs/BUILD_AND_TEST.md) | Toolchain, commands, CI workflows, releases |
-| [`docs/ROADMAP.md`](docs/ROADMAP.md) | What is released, merged, and next |
-| [`docs/PLAN.md`](docs/PLAN.md) | The working plan for the next features, and how work has gone; start here when resuming |
+| [`docs/ROADMAP.md`](docs/ROADMAP.md) | What is released, merged, and next; start here when resuming |
 | [`DESIGN.md`](DESIGN.md), [`PRODUCT.md`](PRODUCT.md) | Design tokens and product register; UI work must follow them |
 | [`LIMITATIONS.md`](LIMITATIONS.md), [`PRIVACY_POLICY.md`](PRIVACY_POLICY.md) | Scope and privacy promises; a change that affects either must update it |
 
@@ -49,6 +48,15 @@ platform 36, Gradle 8.14.3 and Python 3.13 (Chaquopy). Versions are in `gradle/l
   goes into the lowest PR that needs it and is then merged upward, one branch at a time.
 - **Commit messages** say what changed for the person using the app and why, in plain sentences,
   and name what verified it.
+- **One PR per piece of work**, merged once every check is green. Add the `ui-check` label to any PR
+  that touches the browser, downloads or anything only a device can show: it runs the instrumented
+  tests and the emulator walkthrough, which have caught real bugs (#28, #32).
+- **CI is the Android build.** In the cloud container the proxy blocks `dl.google.com`, so the
+  Android Gradle plugin cannot be fetched. Pure-Kotlin code can still be compiled and tested with a
+  scratch Kotlin/JVM Gradle project whose source set points at the repo's files; keep such code free
+  of Android imports so this stays possible.
+- **pytest rewrites tracked `.pyc` files** under `__pycache__/`; run
+  `git checkout -- '*__pycache__*'` before committing.
 
 ## Things that have bitten us
 

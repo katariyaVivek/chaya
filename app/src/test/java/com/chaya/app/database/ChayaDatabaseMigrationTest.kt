@@ -125,7 +125,7 @@ class ChayaDatabaseMigrationTest {
             val context = RuntimeEnvironment.getApplication()
             val config = SupportSQLiteOpenHelper.Configuration.builder(context)
                 .name(file.absolutePath)
-                .callback(object : SupportSQLiteOpenHelper.Callback(6) {
+                .callback(object : SupportSQLiteOpenHelper.Callback(7) {
                     override fun onCreate(db: SupportSQLiteDatabase) = Unit
                     override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
                 })
@@ -240,6 +240,26 @@ class ChayaDatabaseMigrationTest {
         }
     }
 
+    @Test
+    fun `migrate 2 to 7 keeps every download, ungrouped, and a group key can be stored`() {
+        migratedFromV2(
+            ChayaDatabase.MIGRATION_2_3, ChayaDatabase.MIGRATION_3_4, ChayaDatabase.MIGRATION_4_5,
+            ChayaDatabase.MIGRATION_5_6, ChayaDatabase.MIGRATION_6_7,
+        ) { db ->
+            db.query("SELECT fileName, group_key FROM downloads ORDER BY id").use { cursor ->
+                assertEquals(2, cursor.count)
+                assertTrue(cursor.moveToFirst())
+                assertEquals("a.mp4", cursor.getString(0))
+                assertTrue(cursor.isNull(1))
+            }
+            db.execSQL("UPDATE downloads SET group_key = 'https://x.example/post\nA post' WHERE id = 2")
+            db.query("SELECT group_key FROM downloads WHERE id = 2").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("https://x.example/post\nA post", cursor.getString(0))
+            }
+        }
+    }
+
     /**
      * Room itself opens an old v2 file through the whole chain and checks every table against what the app
      * expects; a migration that left a table a different shape fails here, as it would on a phone.
@@ -250,13 +270,15 @@ class ChayaDatabaseMigrationTest {
         val database = Room.databaseBuilder(RuntimeEnvironment.getApplication(), ChayaDatabase::class.java, file.absolutePath)
             .addMigrations(
                 ChayaDatabase.MIGRATION_2_3, ChayaDatabase.MIGRATION_3_4, ChayaDatabase.MIGRATION_4_5,
-                ChayaDatabase.MIGRATION_5_6,
+                ChayaDatabase.MIGRATION_5_6, ChayaDatabase.MIGRATION_6_7,
             )
             .allowMainThreadQueries()
             .build()
         try {
             runBlocking {
                 assertEquals(listOf(1L, 2L), database.downloadDao().getAllOnce().map { it.id }.sorted())
+                // Downloads from before posts were grouped stay ungrouped.
+                assertTrue(database.downloadDao().getAllOnce().all { it.groupKey == null })
 
                 database.historyDao().recordVisit("https://a.example/", "A", 10)
                 database.historyDao().recordVisit("https://a.example/", "", 20)

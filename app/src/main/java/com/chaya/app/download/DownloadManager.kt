@@ -200,6 +200,7 @@ class DownloadManager(
                 requestHeaders = request.headers,
                 audioUrl = request.audioUrl,
                 audioRequestHeaders = request.audioHeaders,
+                groupKey = request.groupKey,
             )
 
             val copies = if (request.audioUrl != null) 2 else 1

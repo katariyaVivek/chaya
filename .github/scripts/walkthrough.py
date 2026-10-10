@@ -363,9 +363,9 @@ def make_fixture():
     media = FIXTURE / "media"
     (media / "vast").mkdir(parents=True, exist_ok=True)
 
-    def video(out, source, seconds, size, audio=True):
+    def video(out, source, seconds, size, audio=True, rate=10):
         cmd = ["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i",
-               f"{source}=duration={seconds}:size={size}:rate=10"]
+               f"{source}=duration={seconds}:size={size}:rate={rate}"]
         if audio:
             cmd += ["-f", "lavfi", "-i", f"sine=frequency=440:duration={seconds}"]
         cmd += ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "36", "-pix_fmt", "yuv420p"]
@@ -375,8 +375,10 @@ def make_fixture():
         subprocess.run(cmd, check=True, timeout=300)
 
     video(media / "launch-event.mp4", "testsrc", 90, "640x360")
-    video(media / "vast" / "preroll-15s.mp4", "testsrc2", 15, "320x180")
-    video(media / "hero-loop.mp4", "smptebars", 8, "640x360", audio=False)
+    # The ad and the looping background play by themselves, in every tab that shows the page, and the
+    # emulator decodes them on the host: kept tiny so they cannot starve it (it died mid-run on #37 and #39).
+    video(media / "vast" / "preroll-15s.mp4", "testsrc2", 15, "160x90", rate=2)
+    video(media / "hero-loop.mp4", "smptebars", 8, "160x90", audio=False, rate=2)
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=size=640x360:rate=1",
                     "-frames:v", "1", str(media / "poster.jpg")], check=True, timeout=60)
     (FIXTURE / "index.html").write_text(PAGE.replace("{BASE}", HOST_URL), encoding="utf-8")
@@ -422,6 +424,11 @@ def scenario_local():
     tap_when("local: open Downloads", 20, FALLBACK["downloads_button"], desc_contains="Downloads")
     monitor_download("local", 90)
     log("saved files: " + sh(f"run-as {PKG} ls -la files/downloads 2>&1").strip())
+    # The same downloads as a library grid: the finished video as a tile, its frame taken from the file.
+    if tap_when("local: show the downloads as a grid", 20, desc_contains="Show as grid"):
+        time.sleep(3)
+        snapshot("downloads-grid")
+        tap_when("local: back to the list", 20, desc_contains="Show as list")
 
 
 def scenario_tabs():

@@ -29,6 +29,10 @@ Store account, no third-party SDKs.
 ## What Chaya stores, and where
 
 - Download history: **on your phone only**.
+- Frames taken from your videos for the downloads grid, and files taken out of an account's ZIP
+  to view or share: **on your phone only**, in the app's cache. They are deleted with their
+  download, and Android may clear them sooner. *Share* hands a file only to the app you pick, and
+  *Save to phone* puts a copy in your phone's own folders.
 - Browsing history (each page's address, title, when you last opened it and how often) and
   bookmarks: **on your phone only**, in the app's database. They are used only to show the History
   and Bookmarks screens and the suggestions under the address bar. History → ⋮ → *Clear history*

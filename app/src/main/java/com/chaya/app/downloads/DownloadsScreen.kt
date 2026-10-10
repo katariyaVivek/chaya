@@ -92,8 +92,32 @@ import com.chaya.app.ui.theme.StaggeredAppear
 import com.chaya.app.ui.theme.ThemeMode
 import com.chaya.app.ui.theme.pressScale
 import kotlinx.coroutines.launch
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.automirrored.filled.ViewList
+import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.produceState
+import com.chaya.app.history.SearchField
+import com.chaya.app.library.FileKind
+import com.chaya.app.library.LibraryFiles
+import com.chaya.app.library.LibraryFilter
+import com.chaya.app.library.LibraryGrid
+import com.chaya.app.library.LibraryIntents
+import com.chaya.app.library.LibraryItem
+import com.chaya.app.library.PictureViewer
+import com.chaya.app.library.SourceSite
+import com.chaya.app.library.ViewerPage
+import com.chaya.app.library.ZipItem
+import com.chaya.app.library.ZipView
+import com.chaya.app.library.kindOf
+import com.chaya.app.library.libraryItems
+import com.chaya.app.library.unfinishedCount
+import java.io.File
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DownloadsScreen(
     onNavigateBack: () -> Unit,
@@ -107,29 +131,30 @@ fun DownloadsScreen(
 ) {
     val tasks by viewModel.downloads.collectAsState()
     val hidden by viewModel.pendingDeletes.collectAsState()
-    var filterIndex by rememberSaveable { mutableIntStateOf(0) }
-    val filter = DownloadFilter.entries[filterIndex]
-    var menuOpen by remember { mutableStateOf(false) }
+    val grid by viewModel.grid.collectAsState()
     var appearanceOpen by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
     val shown = remember(tasks, hidden) { tasks.filter { it.id !in hidden } }
-    val sections = remember(shown, filter) { groupDownloads(shown, filter) }
 
-    /** Hides the download now and deletes it for real unless Undo is tapped. */
-    fun requestDelete(task: DownloadTask) {
-        viewModel.hideForDelete(task.id)
+    fun message(text: String) {
+        scope.launch { snackbarHostState.showSnackbar(text) }
+    }
+
+    /** Hides the downloads now and deletes them for real unless Undo is tapped. */
+    fun requestDelete(chosen: List<DownloadTask>) {
+        if (chosen.isEmpty()) return
+        chosen.forEach { viewModel.hideForDelete(it.id) }
         scope.launch {
             val result = snackbarHostState.showSnackbar(
-                message = "Deleted ${displayTitle(task).take(40)}",
+                message = if (chosen.size == 1) "Deleted ${displayTitle(chosen.single()).take(40)}"
+                else "Deleted ${chosen.size} downloads",
                 actionLabel = "Undo",
                 duration = SnackbarDuration.Short
             )
-            if (result == SnackbarResult.ActionPerformed) {
-                viewModel.undoDelete(task.id)
-            } else {
-                viewModel.commitDelete(task.id)
+            chosen.forEach {
+                if (result == SnackbarResult.ActionPerformed) viewModel.undoDelete(it.id) else viewModel.commitDelete(it.id)
             }
         }
     }
@@ -142,103 +167,334 @@ fun DownloadsScreen(
         )
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Downloads", style = MaterialTheme.typography.titleLarge) },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
-                        )
-                    }
-                },
-                actions = {
-                    Box {
-                        IconButton(onClick = { menuOpen = true }) {
-                            Icon(imageVector = Icons.Default.MoreVert, contentDescription = "More")
-                        }
-                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                            DropdownMenuItem(
-                                text = { Text("Bookmarks") },
-                                onClick = {
-                                    menuOpen = false
-                                    onNavigateToBookmarks()
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("History") },
-                                onClick = {
-                                    menuOpen = false
-                                    onNavigateToHistory()
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Appearance") },
-                                onClick = {
-                                    menuOpen = false
-                                    appearanceOpen = true
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Diagnostics") },
-                                onClick = {
-                                    menuOpen = false
-                                    onNavigateToDiagnostics()
-                                }
-                            )
-                        }
-                    }
-                },
-                colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                )
-            )
-        },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-        containerColor = MaterialTheme.colorScheme.background
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
-            FilterRow(selected = filter, onSelect = { filterIndex = it.ordinal })
+    DownloadsContent(
+        tasks = shown,
+        grid = grid,
+        onGridChange = viewModel::setGrid,
+        files = viewModel.files,
+        snackbarHostState = snackbarHostState,
+        actions = DownloadActions(
+            pause = viewModel::pause,
+            resume = viewModel::resume,
+            cancel = viewModel::cancel,
+            delete = ::requestDelete,
+            open = { task -> viewModel.open(task, ::message) },
+            play = onPlayStream,
+            saveAsFile = viewModel::saveAsFile,
+            share = { chosen -> viewModel.share(chosen, ::message) },
+            openFile = { file, mime -> viewModel.openFile(file, mime, ::message) },
+            shareFile = { file, mime -> viewModel.shareFile(file, mime, ::message) },
+            saveFile = { file, name, mime -> viewModel.saveFile(file, name, mime, ::message) },
+        ),
+        menu = DownloadsMenu(
+            onNavigateBack = onNavigateBack,
+            onBookmarks = onNavigateToBookmarks,
+            onHistory = onNavigateToHistory,
+            onAppearance = { appearanceOpen = true },
+            onDiagnostics = onNavigateToDiagnostics,
+        ),
+    )
+}
 
-            if (sections.isEmpty()) {
-                EmptyDownloads(
-                    filter = filter,
-                    hasAnyDownloads = shown.isNotEmpty(),
-                    modifier = Modifier.weight(1f)
-                )
-            } else {
-                LazyColumn(
-                    modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(top = 4.dp, bottom = 24.dp)
-                ) {
-                    sections.forEach { section ->
-                        item(key = "section:${section.title}") { SectionLabel(section.title) }
-                        items(section.items, key = { "task:${it.id}" }) { task ->
-                            SwipeableDownloadCard(
-                                task = task,
-                                modifier = Modifier.animateItem(),
-                                onPause = { viewModel.pause(task.id) },
-                                onResume = { viewModel.resume(task.id) },
-                                onCancel = { viewModel.cancel(task.id) },
-                                onDelete = { requestDelete(task) },
-                                onOpen = {
-                                    viewModel.open(task) { msg ->
-                                        scope.launch { snackbarHostState.showSnackbar(msg) }
+/** What the Downloads screen does with downloads, for [DownloadsContent]. */
+internal class DownloadActions(
+    val pause: (Long) -> Unit = {},
+    val resume: (Long) -> Unit = {},
+    val cancel: (Long) -> Unit = {},
+    /** Deletes these, with Undo. */
+    val delete: (List<DownloadTask>) -> Unit = {},
+    /** Opens a finished file in another app. */
+    val open: (DownloadTask) -> Unit = {},
+    /** Plays a stream that lives in the cache, in the app. */
+    val play: (Long) -> Unit = {},
+    val saveAsFile: (Long) -> Unit = {},
+    val share: (List<DownloadTask>) -> Unit = {},
+    /** A file taken out of a ZIP: opened, shared or saved to the phone's folders. */
+    val openFile: (File, String) -> Unit = { _, _ -> },
+    val shareFile: (File, String) -> Unit = { _, _ -> },
+    val saveFile: (File, String, String) -> Unit = { _, _, _ -> },
+)
+
+/** Where the top bar leads. */
+internal class DownloadsMenu(
+    val onNavigateBack: () -> Unit = {},
+    val onBookmarks: () -> Unit = {},
+    val onHistory: () -> Unit = {},
+    val onAppearance: () -> Unit = {},
+    val onDiagnostics: () -> Unit = {},
+)
+
+/** Pictures being looked at in the viewer, and which one first. */
+private class Viewing(val pages: List<ViewerPage>, val start: Int, val tasks: List<DownloadTask>)
+
+/**
+ * The Downloads screen: the list, best for what is downloading, or the grid of what is done. Kind, site and
+ * title narrow either; in the grid a long press chooses several to share or delete; pictures open in the viewer
+ * and an account's ZIP opens to show what it holds.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun DownloadsContent(
+    tasks: List<DownloadTask>,
+    grid: Boolean,
+    onGridChange: (Boolean) -> Unit,
+    files: LibraryFiles?,
+    actions: DownloadActions,
+    menu: DownloadsMenu = DownloadsMenu(),
+    snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
+) {
+    var filterIndex by rememberSaveable { mutableIntStateOf(0) }
+    val filter = DownloadFilter.entries[filterIndex]
+    var kind by rememberSaveable { mutableStateOf<FileKind?>(null) }
+    var site by rememberSaveable { mutableStateOf<SourceSite?>(null) }
+    var query by rememberSaveable { mutableStateOf("") }
+    var searching by rememberSaveable { mutableStateOf(false) }
+    var menuOpen by remember { mutableStateOf(false) }
+    var chosen by remember { mutableStateOf(emptySet<String>()) }
+    var viewing by remember { mutableStateOf<Viewing?>(null) }
+    var zipTaskId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var zipViewing by remember { mutableStateOf<Viewing?>(null) }
+    val scope = rememberCoroutineScope()
+
+    val narrowed = LibraryFilter(kind, site, query)
+    val listed = remember(tasks, narrowed) { tasks.filter(narrowed::matches) }
+    val sections = remember(listed, filter) { groupDownloads(listed, filter) }
+    val items = remember(tasks, narrowed) { libraryItems(tasks, narrowed) }
+    // Something chosen and then deleted, or filtered away, is no longer chosen.
+    val chosenItems = items.filter { it.key in chosen }
+    if (grid && chosenItems.size != chosen.size) chosen = chosenItems.map { it.key }.toSet()
+    val choosing = grid && chosen.isNotEmpty()
+
+    BackHandler(enabled = choosing) { chosen = emptySet() }
+
+    fun pagesOf(pictures: List<DownloadTask>) = pictures.map { task ->
+        val video = kindOf(task) == FileKind.VIDEO
+        ViewerPage(
+            key = "task:${task.id}",
+            title = displayTitle(task),
+            // A video in a post shows a frame of itself, else the post's poster, under its play button.
+            model = if (video) task.thumbnailUrl else task.filePath?.let(::File) ?: task.thumbnailUrl,
+            isVideo = video,
+            load = if (video && files != null) suspend { files.frameFor(task) ?: task.thumbnailUrl } else null,
+        )
+    }
+
+    fun openItem(item: LibraryItem) {
+        val task = item.cover
+        when {
+            item is LibraryItem.Post -> viewing = Viewing(pagesOf(item.tasks), 0, item.tasks)
+            kindOf(task) == FileKind.PICTURE -> {
+                // A picture on its own swipes to the other pictures on their own, in the grid's order.
+                val pictures = items.filterIsInstance<LibraryItem.Single>().map { it.task }
+                    .filter { kindOf(it) == FileKind.PICTURE }
+                viewing = Viewing(pagesOf(pictures), pictures.indexOf(task).coerceAtLeast(0), pictures)
+            }
+            kindOf(task) == FileKind.ZIP && task.filePath != null -> zipTaskId = task.id
+            task.filePath != null || task.exportedUri != null -> actions.open(task)
+            else -> actions.play(task.id)
+        }
+    }
+
+    fun openTask(task: DownloadTask) {
+        if (task.filePath != null || task.exportedUri != null) actions.open(task) else actions.play(task.id)
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            topBar = {
+                if (choosing) {
+                    val picked = chosenItems.flatMap { it.tasks }
+                    TopAppBar(
+                        title = { Text("${chosen.size} chosen", style = MaterialTheme.typography.titleLarge) },
+                        navigationIcon = {
+                            IconButton(onClick = { chosen = emptySet() }) {
+                                Icon(Icons.Default.Close, contentDescription = "Stop choosing")
+                            }
+                        },
+                        actions = {
+                            IconButton(onClick = { actions.share(picked.filter(LibraryIntents::canShare)) }) {
+                                Icon(Icons.Default.Share, contentDescription = "Share chosen")
+                            }
+                            IconButton(onClick = {
+                                actions.delete(picked)
+                                chosen = emptySet()
+                            }) {
+                                Icon(Icons.Default.Delete, contentDescription = "Delete chosen")
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+                    )
+                } else {
+                    TopAppBar(
+                        title = { Text("Downloads", style = MaterialTheme.typography.titleLarge) },
+                        navigationIcon = {
+                            IconButton(onClick = menu.onNavigateBack) {
+                                Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                            }
+                        },
+                        actions = {
+                            IconButton(onClick = {
+                                searching = !searching
+                                if (!searching) query = ""
+                            }) {
+                                Icon(Icons.Default.Search, contentDescription = if (searching) "Close search" else "Search downloads")
+                            }
+                            IconButton(onClick = { onGridChange(!grid) }) {
+                                Icon(
+                                    imageVector = if (grid) Icons.AutoMirrored.Filled.ViewList else Icons.Default.GridView,
+                                    contentDescription = if (grid) "Show as list" else "Show as grid"
+                                )
+                            }
+                            Box {
+                                IconButton(onClick = { menuOpen = true }) {
+                                    Icon(imageVector = Icons.Default.MoreVert, contentDescription = "More")
+                                }
+                                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                                    listOf(
+                                        "Bookmarks" to menu.onBookmarks,
+                                        "History" to menu.onHistory,
+                                        "Appearance" to menu.onAppearance,
+                                        "Diagnostics" to menu.onDiagnostics,
+                                    ).forEach { (label, action) ->
+                                        DropdownMenuItem(
+                                            text = { Text(label) },
+                                            onClick = {
+                                                menuOpen = false
+                                                action()
+                                            }
+                                        )
                                     }
-                                },
-                                onPlay = { onPlayStream(task.id) },
-                                onSaveAsFile = { viewModel.saveAsFile(task.id) }
-                            )
+                                }
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+                    )
+                }
+            },
+            snackbarHost = { SnackbarHost(snackbarHostState) },
+            containerColor = MaterialTheme.colorScheme.background
+        ) { padding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+            ) {
+                if (searching) SearchField(query, onChange = { query = it }, placeholder = "Search by title")
+                if (!grid) FilterRow(selected = filter, onSelect = { filterIndex = it.ordinal })
+                NarrowRow(kind = kind, site = site, onKind = { kind = it }, onSite = { site = it })
+
+                when {
+                    grid && items.isEmpty() -> EmptyDownloads(
+                        filter = DownloadFilter.DONE,
+                        hasAnyDownloads = tasks.isNotEmpty(),
+                        narrowed = !narrowed.isEmpty,
+                        modifier = Modifier.weight(1f)
+                    )
+                    grid -> LibraryGrid(
+                        items = items,
+                        selected = chosen,
+                        unfinished = unfinishedCount(tasks),
+                        files = files,
+                        onShowList = {
+                            filterIndex = DownloadFilter.ACTIVE.ordinal
+                            onGridChange(false)
+                        },
+                        onOpen = ::openItem,
+                        onToggle = { item -> chosen = if (item.key in chosen) chosen - item.key else chosen + item.key },
+                        modifier = Modifier.weight(1f)
+                    )
+                    sections.isEmpty() -> EmptyDownloads(
+                        filter = filter,
+                        hasAnyDownloads = tasks.isNotEmpty(),
+                        narrowed = !narrowed.isEmpty,
+                        modifier = Modifier.weight(1f)
+                    )
+                    else -> LazyColumn(
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(top = 4.dp, bottom = 24.dp)
+                    ) {
+                        sections.forEach { section ->
+                            item(key = "section:${section.title}") { SectionLabel(section.title) }
+                            items(section.items, key = { "task:${it.id}" }) { task ->
+                                SwipeableDownloadCard(
+                                    task = task,
+                                    modifier = Modifier.animateItem(),
+                                    onPause = { actions.pause(task.id) },
+                                    onResume = { actions.resume(task.id) },
+                                    onCancel = { actions.cancel(task.id) },
+                                    onDelete = { actions.delete(listOf(task)) },
+                                    onOpen = { actions.open(task) },
+                                    onPlay = { actions.play(task.id) },
+                                    onSaveAsFile = { actions.saveAsFile(task.id) },
+                                    onShare = { actions.share(listOf(task)) },
+                                )
+                            }
                         }
                     }
                 }
             }
+        }
+
+        val zipTask = zipTaskId?.let { id -> tasks.firstOrNull { it.id == id } }
+        if (zipTaskId != null && zipTask == null) zipTaskId = null
+        if (zipTask != null) {
+            val zipItems by produceState<List<ZipItem>?>(initialValue = null, zipTask.id) {
+                value = files?.zipItems(zipTask) ?: emptyList()
+            }
+            suspend fun fileOf(item: ZipItem) = files?.zipFile(zipTask, item)
+            fun withFile(item: ZipItem, use: (File) -> Unit) {
+                scope.launch {
+                    val file = fileOf(item)
+                    if (file != null) use(file) else snackbarHostState.showSnackbar("Couldn't take ${item.name} out of the ZIP")
+                }
+            }
+            ZipView(
+                title = displayTitle(zipTask),
+                items = zipItems,
+                fileFor = ::fileOf,
+                onClose = { zipTaskId = null },
+                onView = { item ->
+                    val pictures = zipItems.orEmpty().filter { it.kind == FileKind.PICTURE }
+                    if (item.kind == FileKind.PICTURE) {
+                        zipViewing = Viewing(
+                            pictures.map { picture ->
+                                ViewerPage(key = picture.path, title = picture.name, model = null, load = { fileOf(picture) })
+                            },
+                            pictures.indexOf(item),
+                            emptyList(),
+                        )
+                    } else {
+                        withFile(item) { actions.openFile(it, LibraryIntents.mimeOf(item.name)) }
+                    }
+                },
+                onShare = { item -> withFile(item) { actions.shareFile(it, LibraryIntents.mimeOf(item.name)) } },
+                onSave = { item -> withFile(item) { actions.saveFile(it, item.name, LibraryIntents.mimeOf(item.name)) } },
+            )
+            zipViewing?.let { shown ->
+                val pictures = zipItems.orEmpty().filter { it.kind == FileKind.PICTURE }
+                PictureViewer(
+                    pages = shown.pages,
+                    start = shown.start,
+                    onClose = { zipViewing = null },
+                    onShare = { index -> pictures.getOrNull(index)?.let { item -> withFile(item) { actions.shareFile(it, LibraryIntents.mimeOf(item.name)) } } },
+                    onPlay = {},
+                    onSave = { index ->
+                        pictures.getOrNull(index)?.let { item ->
+                            withFile(item) { actions.saveFile(it, item.name, LibraryIntents.mimeOf(item.name)) }
+                        }
+                    },
+                )
+            }
+        }
+
+        viewing?.let { shown ->
+            PictureViewer(
+                pages = shown.pages,
+                start = shown.start,
+                onClose = { viewing = null },
+                onShare = { index -> shown.tasks.getOrNull(index)?.let { actions.share(listOf(it)) } },
+                onPlay = { index -> shown.tasks.getOrNull(index)?.let(::openTask) },
+            )
         }
     }
 }
@@ -252,21 +508,56 @@ private fun FilterRow(selected: DownloadFilter, onSelect: (DownloadFilter) -> Un
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         DownloadFilter.entries.forEach { option ->
-            FilterChip(
-                selected = option == selected,
-                onClick = { onSelect(option) },
-                label = { Text(option.label) },
-                shape = RoundedCornerShape(16.dp),
-                border = null,
-                colors = FilterChipDefaults.filterChipColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            )
+            Chip(label = option.label, selected = option == selected, onClick = { onSelect(option) })
         }
     }
+}
+
+/** Kind and site, each tapped again to let go; one row, scrolled sideways. */
+@Composable
+private fun NarrowRow(
+    kind: FileKind?,
+    site: SourceSite?,
+    onKind: (FileKind?) -> Unit,
+    onSite: (SourceSite?) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        FileKind.entries.forEach { option ->
+            Chip(label = option.label, selected = option == kind, onClick = { onKind(option.takeIf { it != kind }) })
+        }
+        Box(
+            modifier = Modifier
+                .size(width = 1.dp, height = 20.dp)
+                .background(MaterialTheme.colorScheme.outlineVariant)
+        )
+        SourceSite.entries.forEach { option ->
+            Chip(label = option.label, selected = option == site, onClick = { onSite(option.takeIf { it != site }) })
+        }
+    }
+}
+
+@Composable
+private fun Chip(label: String, selected: Boolean, onClick: () -> Unit) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(label) },
+        shape = RoundedCornerShape(16.dp),
+        border = null,
+        colors = FilterChipDefaults.filterChipColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+        )
+    )
 }
 
 @Composable
@@ -283,10 +574,12 @@ private fun SectionLabel(title: String) {
 private fun EmptyDownloads(
     filter: DownloadFilter,
     hasAnyDownloads: Boolean,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    narrowed: Boolean = false,
 ) {
     val (title, body) = when {
         !hasAnyDownloads -> "Nothing saved yet" to "Open a page with a video and tap the download pill."
+        narrowed -> "Nothing matches" to "Try another kind, site or title."
         filter == DownloadFilter.ACTIVE -> "All caught up" to "Nothing is running, waiting or needs attention."
         filter == DownloadFilter.DONE -> "Nothing finished yet" to "Finished downloads show up here."
         else -> "Nothing saved yet" to "Open a page with a video and tap the download pill."
@@ -338,7 +631,8 @@ private fun SwipeableDownloadCard(
     onDelete: () -> Unit,
     onOpen: () -> Unit,
     onPlay: () -> Unit,
-    onSaveAsFile: () -> Unit
+    onSaveAsFile: () -> Unit,
+    onShare: () -> Unit = {}
 ) {
     val currentDelete by rememberUpdatedState(onDelete)
     val inFlight = task.state == DownloadState.DOWNLOADING || task.state == DownloadState.QUEUED
@@ -360,7 +654,7 @@ private fun SwipeableDownloadCard(
         enableDismissFromEndToStart = !inFlight,
         backgroundContent = { DeleteBackdrop() }
     ) {
-        DownloadCard(task, onPause, onResume, onCancel, onDelete, onOpen, onPlay, onSaveAsFile)
+        DownloadCard(task, onPause, onResume, onCancel, onDelete, onOpen, onPlay, onSaveAsFile, onShare)
     }
 }
 
@@ -392,7 +686,8 @@ private fun DownloadCard(
     onDelete: () -> Unit,
     onOpen: () -> Unit,
     onPlay: () -> Unit,
-    onSaveAsFile: () -> Unit
+    onSaveAsFile: () -> Unit,
+    onShare: () -> Unit
 ) {
     // Streams live in Media3's cache (no single file), so they play in-app instead of opening.
     val openAction = if (task.filePath != null || task.exportedUri != null) onOpen else onPlay
@@ -431,7 +726,7 @@ private fun DownloadCard(
             }
 
             Spacer(Modifier.width(4.dp))
-            ActionsRow(task, onPause, onResume, onCancel, onDelete, onOpen, onPlay, onSaveAsFile)
+            ActionsRow(task, onPause, onResume, onCancel, onDelete, onOpen, onPlay, onSaveAsFile, onShare)
         }
     }
 }
@@ -614,7 +909,8 @@ internal fun ActionsRow(
     onDelete: () -> Unit,
     onOpen: () -> Unit,
     onPlay: () -> Unit,
-    onSaveAsFile: () -> Unit = {}
+    onSaveAsFile: () -> Unit = {},
+    onShare: () -> Unit = {}
 ) {
     var menuOpen by remember { mutableStateOf(false) }
 
@@ -624,6 +920,7 @@ internal fun ActionsRow(
         task.state == DownloadState.QUEUED -> emptyList()
         // A stream that lives only in the cache plays here; saving it makes a file other apps can open.
         task.canSaveAsFile -> listOf("Save as MP4" to onSaveAsFile, "Delete" to onDelete)
+        LibraryIntents.canShare(task) -> listOf("Share" to onShare, "Delete" to onDelete)
         else -> listOf("Delete" to onDelete)
     }
 

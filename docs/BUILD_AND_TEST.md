@@ -83,7 +83,12 @@ is close to its copyrighted-content policy, and the diagnostics assume no Play S
 7. **Downloads:** filters, pause/resume/retry, swipe to delete with Undo, open a file. A finished
    stream shows *Saving as MP4* with a percentage, then opens as a file and appears in the
    gallery's Movies. A stream downloaded with an older build plays in the in-app player and has
-   *Save as MP4* in its ⋮ menu.
+   *Save as MP4* in its ⋮ menu. A finished file's ⋮ has *Share*. The grid switch in the top bar
+   shows finished downloads as tiles: a post's pictures are one tile with a count, opening the
+   viewer, where pinch zoom and swiping work. Kind and site chips and search narrow both views. A
+   long press chooses tiles to share or delete together. An account's ZIP opens to its files, and
+   a long press on one shares it or saves it to the phone. The walkthrough takes a screenshot of
+   the grid.
 8. **Appearance:** Downloads › ⋮ › Appearance switches between Same as phone, Light and Dark at
    once, status bar included, and the choice survives a restart.
 9. **Ad blocker:** open a news site. The shield in the address bar fills in and counts what it

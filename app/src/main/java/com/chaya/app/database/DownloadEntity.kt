@@ -56,6 +56,9 @@ data class DownloadEntity(
     val audioUrl: String? = null,
     @ColumnInfo(name = "audio_request_headers")
     val audioRequestHeaders: String? = null,
+    /** The post a picture or video came from, shared by its siblings, so the library shows them as one (v7+). */
+    @ColumnInfo(name = "group_key")
+    val groupKey: String? = null,
 ) {
     val progressFraction: Float
         get() = if (totalBytes != null && totalBytes > 0) {
@@ -82,6 +85,7 @@ data class DownloadEntity(
         requestHeaders = HeaderCodec.decode(requestHeaders),
         audioUrl = audioUrl,
         audioRequestHeaders = HeaderCodec.decode(audioRequestHeaders),
+        groupKey = groupKey,
     )
 
     companion object {
@@ -144,6 +148,7 @@ data class DownloadEntity(
             requestHeaders = HeaderCodec.encode(task.requestHeaders),
             audioUrl = task.audioUrl,
             audioRequestHeaders = HeaderCodec.encode(task.audioRequestHeaders),
+            groupKey = task.groupKey,
             )
         }
     }
