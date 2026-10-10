@@ -24,8 +24,6 @@ import kotlinx.coroutines.launch
 class DownloadService : Service() {
     private var observerJob: Job? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-    /** Completion notifications already shown during this service lifetime. */
-    private val notifiedCompleted = mutableSetOf<Long>()
 
     override fun onCreate() {
         super.onCreate()
@@ -65,6 +63,14 @@ class DownloadService : Service() {
                 app.downloadManager.downloads.collectLatest { tasks ->
                     val currentActive = tasks.filter { it.state.isActive }
 
+                    // As each one finishes, not only when the last one does.
+                    app.completionNotices.toAnnounce(tasks).forEach { t ->
+                        safeNotify(
+                            (DownloadNotification.COMPLETE_ID_BASE + t.id).toInt(),
+                            DownloadNotification.buildCompleteNotification(this@DownloadService, t)
+                        )
+                    }
+
                     if (currentActive.isNotEmpty()) {
                         startForeground(
                             DownloadNotification.NOTIFICATION_ID,
@@ -75,21 +81,6 @@ class DownloadService : Service() {
                         )
                     } else {
                         stopForeground(STOP_FOREGROUND_REMOVE)
-
-                        // One completion notification per finished download.
-                        tasks
-                            .filter {
-                                it.state == DownloadState.COMPLETED &&
-                                        it.id !in notifiedCompleted
-                            }
-                            .forEach { t ->
-                                notifiedCompleted += t.id
-                                safeNotify(
-                                    (DownloadNotification.COMPLETE_ID_BASE + t.id).toInt(),
-                                    DownloadNotification.buildCompleteNotification(this@DownloadService, t)
-                                )
-                            }
-
                         stopSelf()
                     }
                 }
