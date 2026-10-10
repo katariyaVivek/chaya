@@ -214,11 +214,13 @@ class StreamDownloader(
         downloadManager.downloadIndex.getDownload(contentIdFor(taskId))?.takeIf { it.state == Download.STATE_COMPLETED }
 
     /**
-     * Reads a stream from the cache, as playback does. Only a download Media3 reports complete is read this way
-     * ([completedDownload]), so its pieces are all there; a read the cache cannot answer alone (a length it did not
-     * record, say) may still ask the site. A reader with no way out of the cache failed that way in the on-device test.
+     * Reads the cache and nothing else: a piece missing from it fails the read instead of being fetched, so a
+     * stream is only ever saved as a file from what was downloaded.
      */
-    fun exportDataSourceFactory(): DataSource.Factory = cacheDataSourceFactory
+    fun cacheOnlyDataSourceFactory(): DataSource.Factory =
+        CacheDataSource.Factory()
+            .setCache(cache)
+            .setCacheWriteDataSinkFactory(null)
 
     fun deleteStream(taskId: Long) {
         // Safe for any taskId: removing an id absent from Media3's index is a

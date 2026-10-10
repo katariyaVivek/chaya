@@ -60,8 +60,8 @@ interface StreamExporter {
 }
 
 /**
- * [StreamExporter] with Media3 Transformer. It reads the cache, through the stream's own download request (so the
- * qualities that were downloaded are the ones read), and only for a download Media3 reports complete. The samples are copied as
+ * [StreamExporter] with Media3 Transformer. It reads the cache only, through the stream's own download request
+ * (so the qualities that were downloaded are the ones read), and never the network. The samples are copied as
  * they are when the MP4 container can take them (H.264 or HEVC with AAC, nearly every HLS stream), which takes
  * seconds and loses nothing; otherwise Transformer re-encodes them, and the result says so.
  */
@@ -85,7 +85,7 @@ class Media3StreamExporter(
                             appContext,
                             DefaultDecoderFactory.Builder(appContext).build(),
                             Clock.DEFAULT,
-                            DefaultMediaSourceFactory(streams.exportDataSourceFactory()),
+                            DefaultMediaSourceFactory(streams.cacheOnlyDataSourceFactory()),
                             DataSourceBitmapLoader(appContext),
                         ),
                     )

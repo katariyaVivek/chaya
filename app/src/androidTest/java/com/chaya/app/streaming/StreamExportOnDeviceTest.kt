@@ -59,8 +59,12 @@ class StreamExportOnDeviceTest {
         dir.deleteRecursively()
     }
 
-    /** The picture and sound TestMedia makes, as one fragmented MP4 split into an init segment and a media segment. */
-    private fun makeStream(): Pair<ByteArray, ByteArray> {
+    /**
+     * The picture and sound TestMedia makes, as one fragmented MP4, and where its first fragment starts: the init
+     * segment is everything before it. Media3's writer records each fragment's data offset from the start of the
+     * file, so the stream serves the file in byte ranges, as HLS does with one file, rather than cut into pieces.
+     */
+    private fun makeStream(): Pair<ByteArray, Int> {
         val picture = File(dir, "picture.mp4").also { TestMedia.pictureOnly(it) }
         val sound = File(dir, "sound.m4a").also { TestMedia.soundOnly(it) }
         val fragmented = File(dir, "stream.mp4")
@@ -89,8 +93,18 @@ class StreamExportOnDeviceTest {
         }
         sources.forEach { it.release() }
         val bytes = fragmented.readBytes()
-        val firstFragment = topLevelBoxes(bytes).first { it.second == "moof" }.first
-        return bytes.copyOfRange(0, firstFragment) to bytes.copyOfRange(firstFragment, bytes.size)
+        return bytes to topLevelBoxes(bytes).first { it.second == "moof" }.first
+    }
+
+    /** [bytes], or the part a `Range: bytes=a-b` header asks for, as a server answers it. */
+    private fun ranged(bytes: ByteArray, range: String?): MockResponse {
+        val match = range?.let { Regex("""bytes=(\d+)-(\d*)""").find(it) } ?: return MockResponse().setBody(Buffer().write(bytes))
+        val from = match.groupValues[1].toInt()
+        val to = match.groupValues[2].toIntOrNull()?.coerceAtMost(bytes.size - 1) ?: (bytes.size - 1)
+        return MockResponse()
+            .setResponseCode(206)
+            .setHeader("Content-Range", "bytes $from-$to/${bytes.size}")
+            .setBody(Buffer().write(bytes, from, to - from + 1))
     }
 
     /** (offset, type) of each top-level MP4 box. */
@@ -110,23 +124,24 @@ class StreamExportOnDeviceTest {
 
     @Test
     fun aDownloadedHlsStreamIsSavedAsAnMp4WithTheSamePictureAndSound() {
-        val (init, segment) = makeStream()
+        val (file, initLength) = makeStream()
+        val segmentLength = file.size - initLength
         val playlist = """
             #EXTM3U
             #EXT-X-VERSION:7
             #EXT-X-TARGETDURATION:3
             #EXT-X-MEDIA-SEQUENCE:0
             #EXT-X-PLAYLIST-TYPE:VOD
-            #EXT-X-MAP:URI="init.mp4"
+            #EXT-X-MAP:URI="stream.mp4",BYTERANGE="$initLength@0"
             #EXTINF:${TestMedia.AUDIO_SECONDS}.0,
-            segment0.m4s
+            #EXT-X-BYTERANGE:$segmentLength@$initLength
+            stream.mp4
             #EXT-X-ENDLIST
         """.trimIndent() + "\n"
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse = when (request.path) {
                 "/show/media.m3u8" -> MockResponse().setHeader("Content-Type", "application/vnd.apple.mpegurl").setBody(playlist)
-                "/show/init.mp4" -> MockResponse().setBody(Buffer().write(init))
-                "/show/segment0.m4s" -> MockResponse().setBody(Buffer().write(segment))
+                "/show/stream.mp4" -> ranged(file, request.getHeader("Range"))
                 else -> MockResponse().setResponseCode(404)
             }
         }
