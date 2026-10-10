@@ -14,7 +14,7 @@ import java.io.File
  * Finds out what a link to YouTube, Instagram, TikTok or X holds, by running yt-dlp (a Python program)
  * inside the app. It only looks things up: the files themselves are fetched by chaya's own downloader.
  */
-class PlatformEngine(context: Context) : LinkFinder {
+class PlatformEngine(context: Context) : LinkFinder, ProfileListing {
     private val appContext = context.applicationContext
 
     override suspend fun find(url: String, cookieFile: File?): PlatformMedia = extract(url, cookieFile)
@@ -33,8 +33,35 @@ class PlatformEngine(context: Context) : LinkFinder {
             }
         }
 
+    // An account's listing can take minutes; it has its own turn so single links are not held up behind it.
+    private val oneListing = Mutex()
+
+    /** Lists an account's posts for its ZIP archive (`chaya_engine.profiles`); returns the engine's JSON summary. */
+    override suspend fun list(profile: ProfileMatch, cookieFile: File?, out: File, stop: File): String =
+        oneListing.withLock {
+            withContext(Dispatchers.IO) {
+                try {
+                    python().getModule("chaya_engine.profiles").callAttr(
+                        "list_profile",
+                        ProfileMatch.siteOf(profile.platform),
+                        profile.username,
+                        cacheDir().absolutePath,
+                        cookieFile?.absolutePath,
+                        out.absolutePath,
+                        stop.absolutePath,
+                    ).toString()
+                } catch (e: PyException) {
+                    ENGINE_FAILED
+                } catch (e: LinkageError) {
+                    ENGINE_FAILED
+                }
+            }
+        }
+
+    private fun cacheDir() = File(appContext.cacheDir, "yt-dlp").apply { mkdirs() }
+
     private fun runEngine(url: String, cookieFile: File?): String {
-        val cacheDir = File(appContext.cacheDir, "yt-dlp").apply { mkdirs() }
+        val cacheDir = cacheDir()
         return try {
             python().getModule("chaya_engine.extract")
                 .callAttr("extract", url, cacheDir.absolutePath, cookieFile?.absolutePath)
@@ -56,5 +83,6 @@ class PlatformEngine(context: Context) : LinkFinder {
 
     private companion object {
         val startLock = Any()
+        const val ENGINE_FAILED = """{"error": {"kind": "unknown"}}"""
     }
 }

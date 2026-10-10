@@ -328,4 +328,38 @@ class BrowserViewModelLinksTest {
         assertEquals(0, queued)
         assertTrue(viewModel.uiState.value.showLinkSheet)
     }
+
+    // ---- an account, saved as one ZIP ---- //
+
+    @Test
+    fun `a pasted account link opens the account sheet, not the video sheet`() {
+        assertTrue(viewModel.openLink("https://www.instagram.com/someone/"))
+
+        assertEquals("someone", viewModel.uiState.value.profile?.username)
+        assertTrue(viewModel.uiState.value.showProfileSheet)
+        assertFalse(viewModel.uiState.value.showLinkSheet)
+        assertTrue("an account is not looked up as a video", asked.isEmpty())
+    }
+
+    @Test
+    fun `an account page offers its posts, and leaving it takes the offer away`() {
+        viewModel.onPageStarted("https://x.com/someone")
+        assertEquals("someone", viewModel.uiState.value.profile?.username)
+
+        viewModel.onPageAddressChanged("https://x.com/someone/status/1")
+        assertNull(viewModel.uiState.value.profile)
+    }
+
+    @Test
+    fun `saving an account starts its archive with the sign-in choice made on the sheet`() {
+        viewModel.openLink("https://www.instagram.com/someone/")
+        var started: String? = null
+
+        viewModel.saveProfile(useSignIn = false) { started = it }
+
+        assertEquals("someone (Instagram).zip", started)
+        assertFalse(viewModel.uiState.value.showProfileSheet)
+        waitForDownload { it.url == "chaya-archive:instagram:someone" && it.isArchive }
+    }
 }
+

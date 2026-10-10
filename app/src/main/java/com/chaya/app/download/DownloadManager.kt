@@ -38,6 +38,9 @@ import java.io.File
 import java.io.IOException
 import java.net.URLEncoder
 import java.util.concurrent.atomic.AtomicLong
+import java.util.zip.Deflater
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 /**
  * Coordinates all downloads: creates tasks, delegates HTTP transfers to the
@@ -67,6 +70,8 @@ class DownloadManager(
     },
     /** Joins a picture file and a sound file into one MP4; replaced in tests, where no real media exists. */
     private val merger: MediaMerger = Mp4Merger(),
+    /** Lists what goes into a ZIP archive (an account's posts); null where archives are not offered. */
+    private val archiveLister: ArchiveLister? = null,
 ) {
     /** Parent of all fire-and-forget persistence and transfer work; [drainBackgroundWork] joins it. */
     private val backgroundJob = SupervisorJob()
@@ -205,11 +210,49 @@ class DownloadManager(
         }
     }
 
+    /**
+     * Starts a ZIP archive of many files, such as everything an account has posted: its contents are listed,
+     * then fetched one by one, then packed. Like a two-file download, it works out what is left from the files
+     * it has, so pause, resume and a killed app all carry on where it stopped.
+     */
+    fun startArchive(request: ArchiveRequest) {
+        ensureServiceRunning()
+        scope.launch {
+            val id = nextId()
+            val saveFile = resolveFileName(saveDir, sanitizeKeepingExtension(request.fileName))
+            val task = DownloadTask(
+                id = id,
+                url = request.source,
+                pageUrl = request.pageUrl,
+                fileName = saveFile.name,
+                mimeType = ARCHIVE_MIME,
+                filePath = saveFile.absolutePath,
+                state = DownloadState.DOWNLOADING,
+                title = request.title,
+                thumbnailUrl = request.thumbnailUrl,
+                archive = ArchiveProgress(found = 0, saved = 0, listing = true),
+            )
+            if (freeBytes(saveDir) < MIN_FREE_BYTES_TO_START) {
+                val failed = task.copy(state = DownloadState.FAILED, error = DownloadError.StorageFull, archive = null)
+                append(failed)
+                dao.insert(DownloadEntity.fromTask(failed))
+                return@launch
+            }
+            append(task)
+            dao.insert(DownloadEntity.fromTask(task))
+            runArchive(id)
+        }
+    }
+
     fun pauseDownload(id: Long) {
         val t = find(id) ?: return
         if (t.state != DownloadState.DOWNLOADING) return
 
-        if (isStream(t.url, t.mimeType)) {
+        if (t.isArchive) {
+            stopArchive(t)
+            apply(t.copy(state = DownloadState.PAUSED, downloadedBytes = partialBytes(t)))
+            scope.launch { dao.update(DownloadEntity.fromTask(find(id) ?: t)) }
+        } else if (isStream(t.url, t.mimeType)) {
             // Media3 will report back via onStreamPaused.
             streamDownloader?.pauseStream(id)
         } else {
@@ -229,7 +272,11 @@ class DownloadManager(
             val t = find(id) ?: return@launch
             val (ua, ck) = sessionHeaders(t.url)
 
-            if (isStream(t.url, t.mimeType)) {
+            if (t.isArchive) {
+                if (!checkStorageForResume(t)) return@launch
+                apply(t.copy(state = DownloadState.DOWNLOADING, error = null))
+                runArchive(id)
+            } else if (isStream(t.url, t.mimeType)) {
                 apply(t.copy(state = DownloadState.DOWNLOADING, error = null))
                 obtainStreamDownloader().resumeStream(id, t.url, t.mimeType, ua, ck, t.pageUrl)
             } else if (!checkStorageForResume(t)) {
@@ -272,6 +319,7 @@ class DownloadManager(
         val t = find(id) ?: return
         if (t.state != DownloadState.DOWNLOADING && t.state != DownloadState.QUEUED) return
         downloader.cancel(id)
+        if (t.isArchive) stopArchive(t)
         if (isStream(t.url, t.mimeType)) streamDownloader?.stopStream(id)
 
         apply(t.copy(state = DownloadState.CANCELLED))
@@ -292,7 +340,11 @@ class DownloadManager(
         if (t != null) {
             t.filePath?.let { p ->
                 runCatching { File(p).delete() }
-                (trackFiles(p) + File("$p$JOINING_SUFFIX")).forEach { runCatching { it.delete() } }
+                (trackFiles(p) + File("$p$JOINING_SUFFIX") + File("$p$ZIPPING_SUFFIX")).forEach { runCatching { it.delete() } }
+                if (t.isArchive) {
+                    stopArchive(t)
+                    runCatching { File("$p$ITEMS_SUFFIX").deleteRecursively() }
+                }
             }
             t.exportedUri?.let { u ->
                 runCatching { context.contentResolver.delete(Uri.parse(u), null, null) }
@@ -562,6 +614,178 @@ class DownloadManager(
     ).map(::File)
 
     // ------------------------------------------------------------------ //
+    // ZIP archives: list, fetch each file, pack
+    // ------------------------------------------------------------------ //
+
+    /**
+     * What is left of an archive: its list, then each file not yet fetched, then the ZIP. It works out where it
+     * is from the files in its folder, so it is safe to call again after any interruption.
+     */
+    private fun runArchive(id: Long) {
+        val t = find(id) ?: return
+        if (t.state != DownloadState.DOWNLOADING) return
+        val folder = archiveFolder(t) ?: return
+        val list = File(folder, ARCHIVE_LIST)
+        if (!list.exists()) {
+            listArchive(t, folder, list)
+            return
+        }
+        val entries = ArchiveEntry.readAll(list)
+        if (entries.isEmpty()) {
+            failTask(id, ArchiveListingException("There was nothing to save", retryable = false))
+            return
+        }
+        val done = entries.count { File(folder, it.name).exists() || File(folder, it.name + SKIPPED_SUFFIX).exists() }
+        val next = entries.firstOrNull { !File(folder, it.name).exists() && !File(folder, it.name + SKIPPED_SUFFIX).exists() }
+        updateArchive(id, ArchiveProgress(found = entries.size, saved = done, listing = false))
+        if (next == null) packArchive(id, folder, entries) else fetchArchiveEntry(t, folder, next)
+    }
+
+    private fun listArchive(t: DownloadTask, folder: File, list: File) {
+        val lister = archiveLister ?: run {
+            failTask(t.id, ArchiveListingException("Saving a whole account isn't available here", retryable = false))
+            return
+        }
+        val stop = File(folder, ARCHIVE_STOP).apply { delete() }
+        // Resumed while a listing it had asked to stop is still winding down: removing the stop file above lets
+        // that listing carry on, rather than starting a second one beside it.
+        if (!listing.add(t.id)) return
+        updateArchive(t.id, ArchiveProgress(found = 0, saved = 0, listing = true))
+        scope.launch {
+            try {
+                lister.list(t.url, list, stop) { found ->
+                    updateArchive(t.id, ArchiveProgress(found = found, saved = 0, listing = true))
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (find(t.id)?.state == DownloadState.DOWNLOADING) failTask(t.id, e)
+                return@launch
+            } finally {
+                listing.remove(t.id)
+            }
+            // No list means a pause or cancel stopped the listing. If it was resumed in the meantime, list again.
+            if (list.exists() || find(t.id)?.state == DownloadState.DOWNLOADING) runArchive(t.id)
+        }
+    }
+
+    /** Fetches one file of an archive into `<name>.part`, renames it once whole, then goes back for the next. */
+    private fun fetchArchiveEntry(t: DownloadTask, folder: File, entry: ArchiveEntry) {
+        val whole = File(folder, entry.name)
+        val part = File(folder, entry.name + PART_SUFFIX)
+        // Never the browser's cookies: an archive uses the person's sign-in only for listing, and only if chosen.
+        val engine = RequestHeaders.from(entry.headers, fallbackReferer = t.pageUrl)
+        val headers = engine.copy(userAgent = engine.userAgent ?: sessionHeaders(entry.url).first)
+        val bytesBefore = folderBytes(folder) - part.length()
+        downloader.start(
+            taskId = t.id,
+            url = entry.url,
+            saveFile = part,
+            userAgent = headers.userAgent,
+            cookies = headers.cookies,
+            referer = headers.referer,
+            fromBytes = part.length(),
+            onProgress = { downloaded, _ -> progress(t.id, bytesBefore + downloaded, null) },
+            onComplete = { result ->
+                result.fold(
+                    onSuccess = {
+                        if (part.renameTo(whole)) runArchive(t.id)
+                        else failTask(t.id, IOException("Couldn't keep the downloaded file"))
+                    },
+                    onFailure = { error ->
+                        if (isGone(error)) {
+                            // The site no longer has this one (deleted, or its address expired): note it and go on.
+                            part.delete()
+                            File(folder, entry.name + SKIPPED_SUFFIX).createNewFile()
+                            runArchive(t.id)
+                        } else {
+                            failTask(t.id, error)
+                        }
+                    },
+                )
+            },
+        )
+    }
+
+    /** Packs every fetched file into the ZIP, names the ones that could not be fetched, tidies up, and completes. */
+    private fun packArchive(id: Long, folder: File, entries: List<ArchiveEntry>) {
+        scope.launch {
+            val t = find(id) ?: return@launch
+            val output = File(t.filePath ?: return@launch)
+            val packing = File("${output.path}$ZIPPING_SUFFIX")
+            try {
+                ZipOutputStream(packing.outputStream().buffered()).use { zip ->
+                    // Pictures and videos are compressed already; storing them as they are is faster and no bigger.
+                    zip.setLevel(Deflater.NO_COMPRESSION)
+                    val missing = mutableListOf<String>()
+                    for (entry in entries) {
+                        val file = File(folder, entry.name)
+                        if (!file.exists()) {
+                            missing += entry.name
+                            continue
+                        }
+                        zip.putNextEntry(ZipEntry(entry.name).apply { time = file.lastModified() })
+                        file.inputStream().use { it.copyTo(zip) }
+                        zip.closeEntry()
+                    }
+                    if (missing.isNotEmpty()) {
+                        zip.putNextEntry(ZipEntry(NOT_SAVED_NOTE))
+                        zip.write(
+                            ("These were no longer on the site when this archive was made:\n\n" +
+                                missing.joinToString("\n") + "\n").toByteArray()
+                        )
+                        zip.closeEntry()
+                    }
+                }
+                output.delete()
+                if (!packing.renameTo(output)) throw IOException("Couldn't keep the archive")
+            } catch (e: CancellationException) {
+                packing.delete()
+                throw e
+            } catch (e: Exception) {
+                // The fetched files stay, so a retry only packs them again.
+                packing.delete()
+                failTask(id, e)
+                return@launch
+            }
+            folder.deleteRecursively()
+            val current = find(id) ?: run {
+                output.delete() // removed while it was being packed
+                return@launch
+            }
+            val length = output.length()
+            apply(current.copy(downloadedBytes = length, totalBytes = length, archive = null))
+            completeTask(id)
+        }
+    }
+
+    /** Stops whatever an archive is doing: the file being fetched, or the listing, which checks for a stop file. */
+    private fun stopArchive(t: DownloadTask) {
+        downloader.cancel(t.id)
+        archiveFolder(t)?.let { runCatching { File(it, ARCHIVE_STOP).createNewFile() } }
+    }
+
+    /** Archives whose contents are being listed right now. */
+    private val listing: MutableSet<Long> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
+    private fun archiveFolder(t: DownloadTask): File? =
+        t.filePath?.let { File("$it$ITEMS_SUFFIX").apply { mkdirs() } }
+
+    private fun folderBytes(folder: File): Long =
+        folder.listFiles()?.filter { it.isFile && it.name != ARCHIVE_LIST && it.name != ARCHIVE_STOP }
+            ?.sumOf { it.length() } ?: 0L
+
+    private fun updateArchive(id: Long, progress: ArchiveProgress) {
+        _downloads.value = _downloads.value.map { if (it.id == id) it.copy(archive = progress) else it }
+    }
+
+    /** The site answered that the file is not there (any more), rather than that something failed on the way. */
+    private fun isGone(error: Throwable): Boolean {
+        val code = (DownloadError.from(error) as? DownloadError.HttpStatus)?.code ?: return false
+        return code in GONE_CODES
+    }
+
+    // ------------------------------------------------------------------ //
     // State transitions
     // ------------------------------------------------------------------ //
 
@@ -715,6 +939,7 @@ class DownloadManager(
     /** Bytes already on disk for a partial HTTP download; for a picture-plus-sound task, across both files. */
     private fun partialBytes(t: DownloadTask): Long {
         val path = t.filePath ?: return 0L
+        if (t.isArchive) return File("$path$ITEMS_SUFFIX").takeIf { it.isDirectory }?.let(::folderBytes) ?: 0L
         return if (t.audioUrl != null) trackFiles(path).sumOf { it.length() } else File(path).length()
     }
 
@@ -811,6 +1036,18 @@ class DownloadManager(
         private const val SOUND_SUFFIX = ".audio"
         private const val PART_SUFFIX = ".part"
         private const val JOINING_SUFFIX = ".joining"
+
+        /** An archive keeps its list and fetched files in `<saved file>.items/` until they are packed. */
+        private const val ITEMS_SUFFIX = ".items"
+        private const val ARCHIVE_LIST = "list.jsonl"
+        private const val ARCHIVE_STOP = "stop"
+        private const val SKIPPED_SUFFIX = ".gone"
+        private const val ZIPPING_SUFFIX = ".zipping"
+        private const val NOT_SAVED_NOTE = "not-saved.txt"
+        const val ARCHIVE_MIME = "application/zip"
+
+        /** Answers that mean a file is no longer there, as opposed to a failure worth retrying. */
+        private val GONE_CODES = setOf(403, 404, 410)
 
         private val ILLEGAL_CHARS = Regex("[\\\\/:*?\"<>|]")
         private val resumableStates = setOf(

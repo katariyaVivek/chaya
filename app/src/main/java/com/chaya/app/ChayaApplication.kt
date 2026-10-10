@@ -7,6 +7,9 @@ import com.chaya.app.database.ChayaDatabase
 import com.chaya.app.diagnostics.CrashReporter
 import com.chaya.app.diagnostics.EventLog
 import com.chaya.app.download.DownloadManager
+import com.chaya.app.platform.PlatformEngine
+import com.chaya.app.platform.ProfileLister
+import com.chaya.app.platform.WebViewSignIn
 import com.chaya.app.ui.theme.ThemeSettings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -21,6 +24,9 @@ class ChayaApplication : Application() {
 
     /** On-device diagnostics ring buffer + rotating log (Phase 2.3). */
     val eventLog: EventLog by lazy { EventLog(this) }
+
+    /** yt-dlp and gallery-dl running on the phone; one for the whole app, so lookups take turns. */
+    val platformEngine: PlatformEngine by lazy { PlatformEngine(this) }
 
     /** Light, dark, or the same as the phone. */
     val themeSettings: ThemeSettings by lazy { ThemeSettings.from(this) }
@@ -49,7 +55,10 @@ class ChayaApplication : Application() {
         }
         CrashReporter.install(this, eventLog)
         val dao = database.downloadDao()
-        downloadManager = DownloadManager(this, dao, eventLog = eventLog)
+        downloadManager = DownloadManager(
+            this, dao, eventLog = eventLog,
+            archiveLister = ProfileLister(platformEngine, WebViewSignIn(this)),
+        )
         // Restore persisted downloads from Room
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             downloadManager.restore()

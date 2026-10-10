@@ -14,6 +14,11 @@ These are deliberate scope decisions, not open bugs.
 - **Pictures in Instagram and X posts**, carousels and tweets of several photos included: every
   picture and video in the post, saved together or one at a time. A tweet with one video and some
   photos offers only the video.
+- **Everything an Instagram or X account has posted, as one ZIP** (posts only: not stories,
+  highlights or reels tabs). Without a sign-in a site shows a visitor little or nothing (Instagram a
+  few recent posts at most, X no timeline), so the person can choose to use their sign-in. Listing
+  goes at the site's own pace; a big account takes minutes. Files the site no longer has are named in
+  a `not-saved.txt` inside the ZIP.
 - Pause, resume and retry, with a reason shown when something fails.
 
 ## What Chaya does not do

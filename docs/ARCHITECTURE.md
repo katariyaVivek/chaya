@@ -55,6 +55,11 @@ What the sheet shows:
   videos: it fails on a post of photos and keeps only the videos of a carousel. It is asked only in
   those two cases, for Instagram and X, so a single video still gets yt-dlp's quality choices. The
   answer is `LinkState.FoundPost`: every item in the post, each saved as it is.
+- **A whole account as one ZIP.** `ProfileMatcher` recognises account pages (instagram.com/name,
+  x.com/name). `ProfileLister` asks `chaya_engine.profiles` (gallery-dl) to list the account's
+  posts, with the person's sign-in only when they chose it on the sheet; the choice is part of the
+  archive's address, `chaya-archive:<site>:<name>[?signin]`. One gallery-dl lookup runs at a time,
+  because its settings (including the sign-in) are global.
 - `JsSolver` runs yt-dlp's YouTube challenge-solver scripts in QuickJS (quickjs-kt), because a phone
   has no Deno or Node.
 - `FormatSelector` turns yt-dlp's format list into one choice per quality. YouTube serves picture
@@ -83,6 +88,11 @@ What the sheet shows:
 - Failures are classified by `DownloadError` (network, HTTP status, storage full, unsupported,
   could not combine, …), which decides the message and whether *Retry* is offered. A 50 MB
   free-space check runs before starting.
+- **ZIP archives** (`startArchive`) are the fourth kind of task. Like the two-file join, what is
+  left is worked out from files in `<name>.items/`: the list (written whole, or not at all), then each
+  file not yet fetched, then the ZIP. Pause stops the listing through a stop file and the transfer
+  through the downloader; a file the site no longer has (403/404/410) is skipped and named in
+  `not-saved.txt`. The card counts files ("40 of 120 files"); those counts are not stored.
 - `DownloadService` is the foreground service with progress and Pause/Cancel actions.
 - Finished files are copied to public storage (Movies/Music/Pictures/Downloads) through MediaStore.
 
