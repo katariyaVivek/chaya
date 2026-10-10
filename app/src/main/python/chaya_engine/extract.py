@@ -2,12 +2,17 @@
 
 Called from Kotlin (`PlatformEngine`) through Chaquopy. Only text crosses the language boundary: the
 result is a JSON string, either {"media": {...}} or {"error": {"kind": ..., "detail": ...}}.
+
+A post with pictures (an Instagram carousel, a tweet of photos) comes back with "items", every picture and
+video in it, found by gallery-dl (see `posts`), and no "formats".
 """
 import json
+from urllib.parse import urlparse
 
 from yt_dlp import YoutubeDL
 
 from . import jsc_provider  # noqa: F401  (importing registers the embedded JavaScript challenge solver)
+from . import posts
 
 # What the app needs to choose a quality and download it; everything else yt-dlp knows is left behind.
 _FORMAT_FIELDS = (
@@ -40,9 +45,51 @@ def extract(url, cache_dir, cookie_file=None):
     try:
         with YoutubeDL(options) as ydl:
             info = ydl.sanitize_info(ydl.extract_info(url, download=False))
-        return json.dumps({'media': _shape(info)})
     except Exception as error:  # noqa: BLE001 - every failure becomes something the app can explain
-        return json.dumps({'error': {'kind': _kind_of(error), 'detail': str(error)[:400]}})
+        # yt-dlp fails on a post of photos ("There is no video in this post"); gallery-dl can list it.
+        post = _post_or_none(url, cache_dir, cookie_file) if _may_hold_pictures(url, error) else None
+        return json.dumps({'media': post} if post else _error(error))
+
+    try:
+        # A carousel arrives as a playlist of its videos only; when it holds pictures too, the whole post is wanted.
+        if info.get('_type') == 'playlist' and _is_post_site(url):
+            post = _post_or_none(url, cache_dir, cookie_file)
+            if post:
+                return json.dumps({'media': post})
+        return json.dumps({'media': _shape(info)})
+    except Exception as error:  # noqa: BLE001
+        return json.dumps(_error(error))
+
+
+def _error(error):
+    return {'error': {'kind': _kind_of(error), 'detail': str(error)[:400]}}
+
+
+_POST_HOSTS = ('instagram.com', 'x.com', 'twitter.com')
+
+
+def _is_post_site(url):
+    host = (urlparse(url).hostname or '').lower()
+    return any(host == site or host.endswith('.' + site) for site in _POST_HOSTS)
+
+
+def _may_hold_pictures(url, error):
+    return _is_post_site(url) and _kind_of(error) in ('unavailable', 'unknown')
+
+
+def _post_or_none(url, cache_dir, cookie_file):
+    """The whole post at [url] as the app's media, or None when gallery-dl cannot list it."""
+    try:
+        found = posts.items_of(url, cache_dir, cookie_file)
+    except Exception:  # noqa: BLE001 - yt-dlp's own answer (or error) is used instead
+        return None
+    if not found or not found[1]:
+        return None
+    meta, items = found
+    media = {key: None for key in _INFO_FIELDS}
+    media.update(posts.describe(meta, items))
+    media.update({'is_live': False, 'formats': [], 'items': items})
+    return media
 
 
 def _shape(info):

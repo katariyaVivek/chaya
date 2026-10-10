@@ -647,7 +647,7 @@ fun BrowserScreen(
                 // Floating download pill: the page's main video, one tap from its download options. On a page
                 // that is one video on YouTube, Instagram, TikTok or X it shows what the engine found instead.
                 val linkPillShown = !uiState.homeVisible &&
-                    (linkState is LinkState.Looking || linkState is LinkState.Found)
+                    (linkState is LinkState.Looking || linkState is LinkState.Answer)
                 AnimatedVisibility(
                     visible = linkPillShown || (!uiState.homeVisible && !sheetModel.isEmpty),
                     modifier = Modifier
@@ -673,6 +673,11 @@ fun BrowserScreen(
                         onChoose = { choice -> requestPermissionAndDownloadLink(choice) },
                         onRetry = { viewModel.retryLink() },
                         onRetryWithSignIn = { viewModel.retryLink(useSignIn = true) },
+                        onSavePost = { indices ->
+                            viewModel.downloadPost(indices) { count ->
+                                showMessage(if (count == 1) "Saving 1 item" else "Saving $count items")
+                            }
+                        },
                     )
                 }
 

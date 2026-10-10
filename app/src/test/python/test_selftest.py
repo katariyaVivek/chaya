@@ -9,6 +9,8 @@ def test_status_reports_what_the_engine_runs_on_and_that_the_solver_is_registere
     assert status['provider_registered'] is True
     assert status['yt_dlp'].startswith('20')
     assert status['yt_dlp_ejs'].count('.') == 2
+    assert status['gallery_dl'].count('.') == 2
+    assert status['post_links_known'] is True
 
 
 def test_the_solver_check_hands_yt_dlps_real_scripts_to_kotlin(fake_java):

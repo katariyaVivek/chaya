@@ -51,6 +51,10 @@ What the sheet shows:
 - `PlatformEngine` runs **yt-dlp inside the app** through Chaquopy (Python 3.13). It only looks a
   link up and returns the title, poster and formats; Chaya's own downloader fetches the files.
   `chaya_engine.extract` wraps yt-dlp and classifies its errors.
+- **Pictures in posts** come from gallery-dl (`chaya_engine.posts`), because yt-dlp only sees
+  videos: it fails on a post of photos and keeps only the videos of a carousel. It is asked only in
+  those two cases, for Instagram and X, so a single video still gets yt-dlp's quality choices. The
+  answer is `LinkState.FoundPost`: every item in the post, each saved as it is.
 - `JsSolver` runs yt-dlp's YouTube challenge-solver scripts in QuickJS (quickjs-kt), because a phone
   has no Deno or Node.
 - `FormatSelector` turns yt-dlp's format list into one choice per quality. YouTube serves picture
@@ -80,7 +84,7 @@ What the sheet shows:
   could not combine, …), which decides the message and whether *Retry* is offered. A 50 MB
   free-space check runs before starting.
 - `DownloadService` is the foreground service with progress and Pause/Cancel actions.
-- Finished files are copied to public storage (Movies/Music/Downloads) through MediaStore.
+- Finished files are copied to public storage (Movies/Music/Pictures/Downloads) through MediaStore.
 
 ## Streams (`streaming/`)
 

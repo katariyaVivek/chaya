@@ -11,6 +11,9 @@ These are deliberate scope decisions, not open bugs.
 - **Links to a single video on YouTube, Instagram, TikTok and X**, looked up by yt-dlp running on
   the phone, with one choice per quality. Where a site serves picture and sound separately, Chaya
   downloads both and joins them into one MP4.
+- **Pictures in Instagram and X posts**, carousels and tweets of several photos included: every
+  picture and video in the post, saved together or one at a time. A tweet with one video and some
+  photos offers only the video.
 - Pause, resume and retry, with a reason shown when something fails.
 
 ## What Chaya does not do

@@ -28,7 +28,8 @@ up by yt-dlp on the phone, with picture and sound joined into one MP4. Merged as
 | PR | What it adds |
 |---|---|
 | [#25](https://github.com/katariyaVivek/chaya/pull/25) | The new icon (an original and its shadow-copy) and a Light / Dark / Same as phone setting |
-| YouTube in pieces | YouTube downloads fetched in 10 MB ranges, as yt-dlp does, so they are not held to playback speed |
+| [#26](https://github.com/katariyaVivek/chaya/pull/26) | YouTube downloads fetched in 10 MB ranges, as yt-dlp does, so they are not held to playback speed |
+| Pictures in posts | Every picture and video in an Instagram or X post (gallery-dl), saved together or one at a time |
 
 ## Next
 

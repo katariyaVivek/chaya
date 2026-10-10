@@ -175,6 +175,8 @@ chaquopy {
         pip {
             install("yt-dlp==2026.8.19")
             install("yt-dlp-ejs==0.8.0")
+            // Pictures in Instagram and X posts, which yt-dlp does not see (chaya_engine/posts.py).
+            install("gallery-dl==1.32.16")
         }
     }
 }

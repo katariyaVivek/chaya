@@ -7,6 +7,7 @@ import com.chaya.app.platform.PlatformChoice
 import com.chaya.app.platform.PlatformFormatFixtures
 import com.chaya.app.platform.PlatformLinks
 import com.chaya.app.platform.PlatformMedia
+import com.chaya.app.platform.PostItem
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
@@ -42,13 +43,14 @@ class BrowserViewModelLinksTest {
     private val scope = CoroutineScope(SupervisorJob() + UnconfinedTestDispatcher())
     private val asked = mutableListOf<String>()
     private var now = 0L
+    private var answer: () -> PlatformMedia = { media() }
     private lateinit var viewModel: BrowserViewModel
 
     @Before
     fun setUp() {
         val finder = LinkFinder { url, _ ->
             asked += url
-            media()
+            answer()
         }
         viewModel = BrowserViewModel(RuntimeEnvironment.getApplication(), PlatformLinks(scope, finder, clock = { now }))
     }
@@ -289,5 +291,41 @@ class BrowserViewModelLinksTest {
             delay(25)
         }
         throw AssertionError("No matching download appeared: ${viewModel.downloads.value}")
+    }
+
+    @Test
+    fun `saving a post's items queues each as its own named file and closes the sheet`() {
+        answer = {
+            media().copy(
+                title = "Sunset at the lake",
+                formats = emptyList(),
+                items = listOf(
+                    PostItem("https://cdn.example/one.jpg", isVideo = false, ext = "jpg", width = 1, height = 1),
+                    PostItem("https://cdn.example/two.mp4", isVideo = true, ext = "mp4", width = 1, height = 1),
+                    PostItem("https://cdn.example/three.jpg", isVideo = false, ext = "jpg", width = 1, height = 1),
+                ),
+            )
+        }
+        viewModel.openLink("https://www.instagram.com/p/Cabc123/")
+        assertTrue(viewModel.linkState.value is LinkState.FoundPost)
+        var queued = 0
+
+        viewModel.downloadPost(listOf(0, 2, 2, 9)) { queued = it }
+
+        assertEquals("duplicates and positions outside the post are ignored", 2, queued)
+        assertFalse(viewModel.uiState.value.showLinkSheet)
+        waitForDownload { it.fileName == "Sunset at the lake (1 of 3).jpg" }
+        waitForDownload { it.fileName == "Sunset at the lake (3 of 3).jpg" && it.url == "https://cdn.example/three.jpg" }
+    }
+
+    @Test
+    fun `a post is not saved from a video's answer`() {
+        viewModel.openLink(video)
+        var queued = 0
+
+        viewModel.downloadPost(listOf(0)) { queued = it }
+
+        assertEquals(0, queued)
+        assertTrue(viewModel.uiState.value.showLinkSheet)
     }
 }

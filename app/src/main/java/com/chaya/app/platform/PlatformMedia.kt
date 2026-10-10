@@ -68,7 +68,34 @@ data class PlatformFormat(
         }
 }
 
-/** Everything the app needs to know about a link: what it is and what it can be saved as. */
+/** One picture or video in a post: an Instagram carousel, or a tweet with several photos. */
+data class PostItem(
+    val url: String,
+    val isVideo: Boolean,
+    /** "jpg", "webp", "mp4"... as the site serves it. */
+    val ext: String,
+    val width: Int?,
+    val height: Int?,
+    /** Headers the file's server expects, applied when downloading. */
+    val headers: Map<String, String> = emptyMap(),
+) {
+    val mimeType: String
+        get() = when (ext.lowercase(Locale.ROOT)) {
+            "jpg", "jpeg" -> "image/jpeg"
+            "png" -> "image/png"
+            "webp" -> "image/webp"
+            "gif" -> "image/gif"
+            "heic" -> "image/heic"
+            "mov" -> "video/quicktime"
+            "webm" -> "video/webm"
+            else -> if (isVideo) "video/mp4" else "image/jpeg"
+        }
+}
+
+/**
+ * Everything the app needs to know about a link: what it is and what it can be saved as. A post with pictures
+ * has [items], every picture and video in it, and no [formats].
+ */
 data class PlatformMedia(
     val id: String?,
     val title: String,
@@ -79,6 +106,7 @@ data class PlatformMedia(
     val extractor: String?,
     val isLive: Boolean,
     val formats: List<PlatformFormat>,
+    val items: List<PostItem> = emptyList(),
 ) {
     companion object {
         /**
@@ -116,14 +144,32 @@ data class PlatformMedia(
                 extractor = media.str("extractor_key"),
                 isLive = media.optBoolean("is_live", false),
                 formats = formats,
+                items = media.optJSONArray("items")?.let { array ->
+                    (0 until array.length()).mapNotNull { index -> array.optJSONObject(index)?.let { parseItem(it) } }
+                }.orEmpty(),
             )
         }
 
-        private fun parseFormat(f: JSONObject): PlatformFormat? {
-            val url = f.str("url") ?: return null
-            val headers = f.optJSONObject("http_headers")?.let { h ->
+        private fun parseItem(item: JSONObject): PostItem? {
+            val url = item.str("url") ?: return null
+            return PostItem(
+                url = url,
+                isVideo = item.str("kind") == "video",
+                ext = item.str("ext") ?: "jpg",
+                width = item.int("width"),
+                height = item.int("height"),
+                headers = headersOf(item),
+            )
+        }
+
+        private fun headersOf(json: JSONObject): Map<String, String> =
+            json.optJSONObject("http_headers")?.let { h ->
                 h.keys().asSequence().mapNotNull { key -> h.str(key)?.let { key to it } }.toMap()
             }.orEmpty()
+
+        private fun parseFormat(f: JSONObject): PlatformFormat? {
+            val url = f.str("url") ?: return null
+            val headers = headersOf(f)
             return PlatformFormat(
                 id = f.str("format_id") ?: url.hashCode().toString(),
                 url = url,

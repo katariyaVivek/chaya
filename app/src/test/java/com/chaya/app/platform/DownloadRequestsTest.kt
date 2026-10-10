@@ -148,4 +148,31 @@ class DownloadRequestsTest {
         isLive = false,
         formats = emptyList(),
     )
+
+    @Test
+    fun `an item of a post is named by its place in the post and keeps its own type`() {
+        val picture = PostItem("https://cdn.example/two.webp", isVideo = false, ext = "webp", width = 1080, height = 1080,
+            headers = mapOf("Referer" to "https://www.instagram.com/"))
+
+        val request = picture.toDownloadRequest(media(title = "Sunset at the lake"), number = 2, count = 5)
+
+        assertEquals("Sunset at the lake (2 of 5).webp", request.fileName)
+        assertEquals("Sunset at the lake (2 of 5)", request.title)
+        assertEquals("image/webp", request.mimeType)
+        assertEquals(picture.url, request.url)
+        assertEquals(picture.headers, request.headers)
+        assertEquals("a picture is its own poster", picture.url, request.thumbnailUrl)
+        assertNull(request.audioUrl)
+    }
+
+    @Test
+    fun `a post of one item is saved under the post's name alone`() {
+        val video = PostItem("https://cdn.example/clip.mp4", isVideo = true, ext = "mp4", width = null, height = null)
+
+        val request = video.toDownloadRequest(media(title = "Clip"), number = 1, count = 1)
+
+        assertEquals("Clip.mp4", request.fileName)
+        assertEquals("video/mp4", request.mimeType)
+        assertEquals("a video uses the post's poster", "https://i.ytimg.com/vi/jNQXAC9IVRw/hqdefault.jpg", request.thumbnailUrl)
+    }
 }

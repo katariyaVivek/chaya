@@ -4,6 +4,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
@@ -13,6 +14,7 @@ import com.chaya.app.platform.PlatformException
 import com.chaya.app.platform.PlatformFormatFixtures
 import com.chaya.app.platform.PlatformMatcher
 import com.chaya.app.platform.PlatformMedia
+import com.chaya.app.platform.PostItem
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -69,6 +71,7 @@ class PlatformSheetTest {
         onChoose: (PlatformChoice) -> Unit = {},
         onRetry: () -> Unit = {},
         onRetryWithSignIn: () -> Unit = {},
+        onSavePost: (List<Int>) -> Unit = {},
     ) {
         composeRule.setContent {
             PlatformSheet(
@@ -77,6 +80,7 @@ class PlatformSheetTest {
                 onChoose = onChoose,
                 onRetry = onRetry,
                 onRetryWithSignIn = onRetryWithSignIn,
+                onSavePost = onSavePost,
             )
         }
     }
@@ -204,5 +208,52 @@ class PlatformSheetTest {
         PlatformException.Kind.entries.forEach { kind ->
             assertTrue("$kind", PlatformException(kind).message.orEmpty().isNotBlank())
         }
+    }
+
+    // ---- a post with pictures ---- //
+
+    private val postMatch = PlatformMatcher.match("https://www.instagram.com/p/Cabc123/")!!
+
+    private fun post(vararg items: PostItem) = LinkState.FoundPost(
+        match = postMatch,
+        media = PlatformMedia(
+            id = "Cabc123", title = "Sunset at the lake", author = "someone", durationSeconds = null,
+            thumbnailUrl = null, pageUrl = postMatch.url, extractor = "Instagram", isLive = false,
+            formats = emptyList(), items = items.toList(),
+        ),
+    )
+
+    private fun picture(n: Int) = PostItem("https://cdn.example/$n.jpg", isVideo = false, ext = "jpg", width = 1, height = 1)
+
+    @Test
+    fun `a post shows its caption, what it holds, and saves everything from the main button`() {
+        val saved = mutableListOf<List<Int>>()
+        show(post(picture(1), picture(2), picture(3)), onSavePost = { saved += it })
+
+        composeRule.onNodeWithText("Sunset at the lake").assertIsDisplayed()
+        composeRule.onNodeWithText("someone · 3 pictures · Instagram").assertIsDisplayed()
+        composeRule.onNodeWithText("Save all 3").performClick()
+
+        assertEquals(listOf(listOf(0, 1, 2)), saved)
+    }
+
+    @Test
+    fun `tapping one item saves just that one`() {
+        val saved = mutableListOf<List<Int>>()
+        val clip = PostItem("https://cdn.example/clip.mp4", isVideo = true, ext = "mp4", width = 1, height = 1)
+        show(post(picture(1), clip), onSavePost = { saved += it })
+
+        composeRule.onNodeWithText("someone · 2 items · Instagram").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Save video 2 of 2").performClick()
+
+        assertEquals(listOf(listOf(1)), saved)
+    }
+
+    @Test
+    fun `a post of one picture has one button and no grid`() {
+        show(post(picture(1)))
+
+        composeRule.onNodeWithText("Save picture").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Save picture 1 of 1").assertDoesNotExist()
     }
 }

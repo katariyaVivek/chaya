@@ -26,9 +26,9 @@ and allow installs from unknown apps when asked.
 | **Browse** | A full browser: address bar, back/forward, fullscreen video, a session that survives leaving the page |
 | **Find** | Network sniffing and an injected page scanner (Shadow DOM, iframes, fetch/XHR) run together; extensionless media is checked only when you ask |
 | **Make sense of it** | The page's main video comes first with its title; likely ads are folded away; stream pieces are hidden; one entry per quality |
-| **Video sites** | Paste, share or browse a YouTube, Instagram, TikTok or X link: yt-dlp, running on the phone, finds the qualities; picture and sound are joined into one MP4 |
+| **Video sites** | Paste, share or browse a YouTube, Instagram, TikTok or X link: yt-dlp, running on the phone, finds the qualities; picture and sound are joined into one MP4. Instagram and X posts with pictures (gallery-dl) save every photo |
 | **Download** | Files over OkHttp with `Range` resume; HLS/DASH through Media3; a foreground service with progress, pause and cancel |
-| **Keep** | Download history in Room with explicit migrations; finished files appear in your Movies, Music or Downloads |
+| **Keep** | Download history in Room with explicit migrations; finished files appear in your Movies, Music, Pictures or Downloads |
 
 ### Privacy by construction
 
