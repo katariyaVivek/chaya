@@ -279,7 +279,8 @@ started before it stay ungrouped.
 
 ## Smaller items noted along the way
 
-- Downloads on Wi-Fi only (a setting; the queue waits for unmetered networks).
+- Downloads on Wi-Fi only: an opt-in setting, **off by default**. The owner mostly downloads on
+  mobile data, so nothing may ever wait for Wi-Fi unless the person turns this on. Not planned yet.
 - Ads inside YouTube's own videos need uBlock Origin's scriptlets, which the blocker does not run.
   Revisit only if a safe, narrow way appears.
 - `ROADMAP.md`'s other "Next" items still stand:
