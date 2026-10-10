@@ -1,5 +1,6 @@
 package com.chaya.app.download
 
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -23,7 +24,9 @@ class HttpDownloader(
         .writeTimeout(60, TimeUnit.SECONDS)
         .followRedirects(true)
         .followSslRedirects(true)
-        .build()
+        .build(),
+    /** How many bytes to ask for per request, or null for the whole file in one request. */
+    private val chunkBytesFor: (url: String) -> Long? = ::youTubeChunkBytes,
 ) : MediaDownloader {
     private val activeCalls = mutableMapOf<Long, okhttp3.Call>()
 
@@ -60,11 +63,15 @@ class HttpDownloader(
         if (!referer.isNullOrBlank()) {
             requestBuilder.header("Referer", referer)
         }
-        if (fromBytes > 0) {
-            requestBuilder.header("Range", "bytes=$fromBytes-")
+        val chunkBytes = chunkBytesFor(url)
+        when {
+            chunkBytes != null -> requestBuilder.header("Range", rangeFrom(fromBytes, chunkBytes, total = null))
+            fromBytes > 0 -> requestBuilder.header("Range", "bytes=$fromBytes-")
         }
 
         val call = client.newCall(requestBuilder.build())
+        // The call fetching right now: a download fetched in pieces moves on to a new call for each one.
+        var current = call
 
         synchronized(activeCalls) {
             activeCalls[taskId]?.cancel()
@@ -85,7 +92,7 @@ class HttpDownloader(
             override fun onResponse(call: okhttp3.Call, response: Response) = try {
                 transfer(call, response)
             } finally {
-                release(taskId, call)
+                release(taskId, current)
             }
 
             private fun transfer(call: okhttp3.Call, response: Response) {
@@ -100,6 +107,8 @@ class HttpDownloader(
                     // Server ignored our Range header and returned the whole body —
                     // restart from zero instead of corrupting the partial file.
                     val resumed = resp.code == 206 && fromBytes > 0
+                    // Fetching in pieces only makes sense once the server has shown it honours ranges.
+                    val pieceBytes = chunkBytes.takeIf { resp.code == 206 }
 
                     val body = resp.body ?: run {
                         onComplete(Result.failure(IOException("Empty response body")))
@@ -122,17 +131,35 @@ class HttpDownloader(
                     val append = resumed
                     var downloaded = if (resumed) fromBytes else 0L
 
-                    val source = body.source()
                     val buffer = ByteArray(64 * 1024)
                     var lastReportBytes = downloaded
                     var lastReportTime = System.currentTimeMillis()
+                    var piece = resp
+                    var source = body.source()
 
                     try {
                         FileOutputStream(saveFile, append).use { stream ->
                             while (true) {
-                                if (call.isCanceled()) return  // silent cancel
+                                if (current.isCanceled()) return  // silent cancel
                                 val read = source.read(buffer)
-                                if (read == -1) break
+                                if (read == -1) {
+                                    val total = totalBytes
+                                    if (pieceBytes == null || total == null || downloaded >= total) break
+                                    // This piece is done; ask for the next one on a call cancel can reach.
+                                    if (piece !== resp) piece.close()
+                                    val next = client.newCall(
+                                        requestBuilder.header("Range", rangeFrom(downloaded, pieceBytes, total)).build()
+                                    )
+                                    if (!replace(taskId, current, next)) return  // cancelled between pieces
+                                    current = next
+                                    piece = next.execute()
+                                    if (current.isCanceled()) return
+                                    if (piece.code != 206) {
+                                        throw IOException("HTTP ${piece.code}: ${piece.message} for bytes $downloaded-")
+                                    }
+                                    source = (piece.body ?: throw IOException("Empty response body")).source()
+                                    continue
+                                }
                                 stream.write(buffer, 0, read)
                                 downloaded += read
 
@@ -149,9 +176,11 @@ class HttpDownloader(
                         onProgress(downloaded, totalBytes)
                         onComplete(Result.success(saveFile))
                     } catch (e: Exception) {
-                        if (!call.isCanceled()) {
+                        if (!current.isCanceled()) {
                             onComplete(Result.failure(e))
                         }
+                    } finally {
+                        if (piece !== resp) piece.close()
                     }
                 }
             }
@@ -172,6 +201,17 @@ class HttpDownloader(
         }
     }
 
+    /**
+     * Registers [next] in place of [previous] for [taskId], so cancel stops the piece being fetched now.
+     * False when [previous] is no longer registered: the download was cancelled, or a resume replaced it.
+     */
+    private fun replace(taskId: Long, previous: okhttp3.Call, next: okhttp3.Call): Boolean =
+        synchronized(activeCalls) {
+            if (activeCalls[taskId] !== previous || previous.isCanceled()) return false
+            activeCalls[taskId] = next
+            true
+        }
+
     /** Forgets [call] once it has ended, unless a resume has already registered a newer call for [taskId]. */
     private fun release(taskId: Long, call: okhttp3.Call) {
         synchronized(activeCalls) {
@@ -180,6 +220,24 @@ class HttpDownloader(
     }
 
     companion object {
+        /** yt-dlp's piece size for YouTube, which serves one long request at about the speed of playback. */
+        const val YOUTUBE_CHUNK_BYTES = 10L * 1024 * 1024
+
+        /**
+         * YouTube's files ([url] on googlevideo.com) are fetched in pieces, as yt-dlp does; anything else in
+         * one request. Decided from the address, so a download resumed after the app was closed keeps it.
+         */
+        fun youTubeChunkBytes(url: String): Long? {
+            val host = url.toHttpUrlOrNull()?.host ?: return null
+            return YOUTUBE_CHUNK_BYTES.takeIf { host == "googlevideo.com" || host.endsWith(".googlevideo.com") }
+        }
+
+        /** The Range header for the piece starting at [from]: [size] bytes, or what is left of [total]. */
+        internal fun rangeFrom(from: Long, size: Long, total: Long?): String {
+            val end = from + size - 1
+            return "bytes=$from-${if (total != null) minOf(end, total - 1) else end}"
+        }
+
         /** Extract filename from `Content-Disposition`; supports RFC 5987 `filename*`. */
         fun parseContentDisposition(header: String?): String? {
             if (header.isNullOrBlank()) return null
