@@ -49,6 +49,13 @@ up by yt-dlp on the phone, with picture and sound joined into one MP4. Merged as
 The six-part plan after v0.4.0 has shipped (#34 to #39); it is in
 [`history/plan-after-v0.4.md`](history/plan-after-v0.4.md). What is left:
 
+0. **First: the app still closes on 7movies.ac.** On a Slow Horses episode page, tapping the season
+   button (a drop-down) closes the whole app, every time. #40 handled a renderer crash, which was
+   the likeliest cause, but the owner reports it still happens with main's APK after #41, and now
+   has a crash report from Downloads › ⋮ › Diagnostics. Start the next session by asking for that
+   report and fixing what it names, with a test that fails without the fix. Then check that the
+   episode playing in the site's embedded player is found (#41), which the owner could not reach
+   yet because of the crash.
 1. **Check the video-site path end to end on a phone.** The engine, the join and the UI have each
    been tested, but a real lookup followed by a real download has not run in one piece. A
    walkthrough scenario for it would make that repeatable.
