@@ -32,6 +32,15 @@ Two layers run in parallel and merge by normalized URL:
   capability issued per navigation and given only to the top-level document, so cross-origin
   iframes cannot call native code. Detection state is scoped to a navigation generation, so a
   late callback from an old page cannot touch the new one.
+- **Frames from other servers:** `assets/detection/chaya_frame_agent.js` runs at the start of every
+  embedded frame's document (`WebViewCompat.addDocumentStartJavaScript`, origin rule `*`), never in
+  the page itself. It reports video/audio elements and its player's fetch/XHR answers that are media
+  by extension, by `Content-Type`, or by a body starting with `#EXTM3U` or `<MPD`. It reports them to
+  the page's detector by `postMessage`, and resends them when the detector asks. The detector relays
+  them to `MediaBridge.onFrameMedia` with its capability. The bridge accepts an address only if
+  `MediaInterceptor.wasRequested` saw the browser ask for it on this page. The frame's address
+  becomes `DetectedMedia.refererUrl`, then the download task's page, so its requests name the player
+  as their referrer.
 - **Opt-in check:** `ContentTypeSniffer` verifies extensionless endpoints (`/media/abc123`) only after
   the person taps *Scan more thoroughly*. It sends at most ten same-origin `HEAD` requests and
   never follows a redirect, so session cookies cannot leak to another origin.

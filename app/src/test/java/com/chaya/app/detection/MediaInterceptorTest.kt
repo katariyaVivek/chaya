@@ -64,4 +64,24 @@ class MediaInterceptorTest {
         assertTrue(firstDestination.isEmpty())
         assertEquals(listOf("https://cdn.example/assets/first.mp3"), reattachedDestination.map { it.url })
     }
+
+    /** A frame's report of media is believed only for an address the browser asked for on this page. */
+    @Test
+    fun `requests are remembered per page, for checking what frames report`() {
+        val interceptor = MediaInterceptor { _, _ -> }
+        interceptor.beginNavigation("https://site.example/watch", 1L)
+
+        interceptor.shouldInterceptRequest(request("https://player.example/stream/abc?token=1#t=5"))
+
+        assertTrue(interceptor.wasRequested("https://player.example/stream/abc?token=1"))
+        assertTrue(interceptor.wasRequested("https://player.example/stream/abc?token=1#other"))
+        assertEquals(false, interceptor.wasRequested("https://player.example/stream/other"))
+
+        interceptor.beginNavigation("https://site.example/next", 2L)
+        assertEquals(false, interceptor.wasRequested("https://player.example/stream/abc?token=1"))
+
+        interceptor.invalidateNavigation()
+        interceptor.shouldInterceptRequest(request("https://player.example/late"))
+        assertEquals("nothing is remembered without a page", false, interceptor.wasRequested("https://player.example/late"))
+    }
 }

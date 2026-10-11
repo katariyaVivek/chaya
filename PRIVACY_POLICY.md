@@ -19,6 +19,12 @@ Store account, no third-party SDKs.
   (*Save all posts with my sign-in*) or not (*Try without signing in*). That choice is stored with the
   download, so resuming it later never switches to your sign-in by itself. The cookies are used only
   while the account's posts are listed, then deleted; the files themselves are fetched without them.
+- **Players embedded from other servers.** Many pages play their video in a frame from another
+  server. A small script of Chaya's runs inside such frames. It only looks at what the frame's own
+  player has already loaded, and tells the page's media list about video and audio. It sends nothing
+  anywhere and makes no request of its own. It cannot reach the app; the page's detector passes its
+  findings on, and Chaya keeps only addresses the browser really loaded. A file from such a player
+  is downloaded naming the player's page as the referrer, as the player's own requests do.
 - **Storage.** Downloads are saved to app-private storage; on Android 10 and newer, each finished
   download is also copied to your phone's public media folders (Movies, Music, Pictures, Downloads), where
   other apps can see it. Download history (addresses, file names, progress) is kept in

@@ -227,4 +227,45 @@ class MediaBridgeTest {
         assertEquals(DetectionSource.XHR_FETCH, detected.single().first.source)
         assertEquals(generation, detected.single().second)
     }
+
+    /** A player embedded from another server reports through the page's detector, checked against real requests. */
+    @Test
+    fun `frame media is taken only with the capability and only for an address the browser requested`() {
+        val detected = mutableListOf<Pair<DetectedMedia, Long>>()
+        val requested = mutableSetOf("https://player.example/stream/abc?t=1")
+        val bridge = MediaBridge(
+            onMediaDetected = { media, generation -> detected += media to generation },
+            wasRequested = { it in requested },
+        )
+        val capability = bridge.beginNavigation("https://site.example/watch", 7L)
+
+        bridge.onFrameMedia("wrong", "https://player.example/stream/abc?t=1", "xhr", "hls", "", "https://player.example/e/1")
+        bridge.onFrameMedia(capability, "https://elsewhere.example/made-up.m3u8", "xhr", "hls", "", "https://player.example/e/1")
+        assertTrue("no capability, or an address never loaded, gives nothing", detected.isEmpty())
+
+        bridge.onFrameMedia(capability, "https://player.example/stream/abc?t=1#x", "xhr", "hls", "text/plain", "https://player.example/e/1")
+
+        val (media, generation) = detected.single()
+        assertEquals("https://player.example/stream/abc?t=1", media.url)
+        assertEquals("the page itself stays the page", "https://site.example/watch", media.pageUrl)
+        assertEquals("the player's page is the referrer", "https://player.example/e/1", media.refererUrl)
+        assertEquals("application/vnd.apple.mpegurl", media.mimeType)
+        assertEquals(DetectionSource.XHR_FETCH, media.source)
+        assertEquals(7L, generation)
+    }
+
+    @Test
+    fun `a frame's file keeps its type, and a frame address that is not the web is dropped`() {
+        val detected = mutableListOf<DetectedMedia>()
+        val bridge = MediaBridge(onMediaDetected = { media, _ -> detected += media }, wasRequested = { true })
+        val capability = bridge.beginNavigation("https://site.example/watch", 1L)
+
+        bridge.onFrameMedia(capability, "https://cdn.example/v/123", "video", "file", "video/webm; codecs=vp9", "javascript:alert(1)")
+        bridge.onFrameMedia(capability, "https://cdn.example/m/9", "fetch", "dash", "", "https://player.example/")
+
+        assertEquals("video/webm", detected[0].mimeType)
+        assertEquals(DetectionSource.DOM, detected[0].source)
+        assertEquals(null, detected[0].refererUrl)
+        assertEquals("application/dash+xml", detected[1].mimeType)
+    }
 }

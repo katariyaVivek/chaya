@@ -31,6 +31,11 @@ data class DetectedMedia(
     val thumbnailUrl: String? = null,
     /** Chosen video height in pixels (e.g. 720), shown as "720p" in the downloads list. */
     val qualityHeight: Int? = null,
+    /**
+     * The embedded player's page when the media was found inside a frame from another server: its requests,
+     * the download's included, name that page as their referrer, as the player's own did.
+     */
+    val refererUrl: String? = null,
 ) {
     /** Normalized URL for deduplication — strip fragment, sort query params. */
     val normalizedUrl: String

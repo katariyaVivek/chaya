@@ -81,6 +81,8 @@ class MediaBridge(
     onMediaDetected: (DetectedMedia, Long) -> Unit,
     onMediaCandidate: (DetectedMedia, Long) -> Unit = { _, _ -> },
     onPageMeta: (PageMeta, Long) -> Unit = { _, _ -> },
+    /** Whether the browser requested an address for the current page, in any frame ([MediaInterceptor.wasRequested]). */
+    private val wasRequested: (String) -> Boolean = { false },
 ) {
     /** Produces unpredictable tokens so iframe guesses cannot invoke native code. */
     private val secureRandom = SecureRandom()
@@ -172,6 +174,42 @@ class MediaBridge(
                 pageUrl = session.pageUrl,
                 mimeType = null,
                 source = DetectionSource.XHR_FETCH,
+            ),
+            session.navigationGeneration,
+        )
+    }
+
+    /**
+     * Media a player embedded from another server found, relayed by the page's detector (which holds the
+     * capability) from `chaya_frame_agent.js` in the frame. Believed only for an address the browser requested for
+     * this page; [frameUrl], the player's page, becomes the download's referrer.
+     */
+    @JavascriptInterface
+    fun onFrameMedia(
+        capability: String?,
+        rawUrl: String?,
+        tagName: String?,
+        kind: String?,
+        contentType: String?,
+        frameUrl: String?,
+    ) {
+        val session = activeSessionFor(capability) ?: return
+        val url = rawUrl?.trim()?.substringBefore('#')?.takeIf(::isHttpUrl) ?: return
+        if (!wasRequested(url)) return
+        val type = contentType?.substringBefore(';')?.trim()?.lowercase(Locale.ROOT)
+        val mime = when (kind) {
+            "hls" -> "application/vnd.apple.mpegurl"
+            "dash" -> "application/dash+xml"
+            else -> type?.takeIf { it.startsWith("video/") || it.startsWith("audio/") } ?: mimeTypeForTag(tagName)
+        }
+        if (activeSession.get() !== session) return
+        callbacks.get().onMediaDetected(
+            DetectedMedia(
+                url = url,
+                pageUrl = session.pageUrl,
+                mimeType = mime,
+                source = detectionSourceFor(tagName),
+                refererUrl = frameUrl?.trim()?.substringBefore('#')?.takeIf(::isHttpUrl),
             ),
             session.navigationGeneration,
         )

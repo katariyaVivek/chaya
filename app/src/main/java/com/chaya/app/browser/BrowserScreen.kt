@@ -14,6 +14,8 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
 import android.webkit.RenderProcessGoneDetail
 import android.os.SystemClock
 import android.widget.FrameLayout
@@ -135,6 +137,9 @@ private object WebViewHolder {
 
 /** One lane for tab files, so a later save never lands before an earlier one. */
 private val tabDisk = Dispatchers.IO.limitedParallelism(1)
+
+/** The script that runs inside embedded frames ([createChayaWebView]'s frameAgentJs). */
+internal const val FRAME_AGENT_ASSET = "detection/chaya_frame_agent.js"
 
 /** How long the page must stay put before the tabs are saved, so a burst of changes saves once. */
 private const val TAB_SAVE_SETTLE_MILLIS = 500L
@@ -288,6 +293,9 @@ fun BrowserScreen(
                 .bufferedReader().readText()
         }.getOrDefault("")
     }
+    val frameAgentJs = remember {
+        runCatching { context.assets.open(FRAME_AGENT_ASSET).bufferedReader().readText() }.getOrDefault("")
+    }
 
     val tabs = WebViewHolder.tabs
     // Read so that opening, closing or showing a tab, or a page loading in a tab not shown, recomposes.
@@ -356,6 +364,7 @@ fun BrowserScreen(
             interceptor = tab.interceptor,
             adBlock = tab.adBlock,
             detectorJs = detectorJs,
+            frameAgentJs = frameAgentJs,
             callbacks = tab.callbacks,
             onVisited = { url, title -> app.appScope.launch { app.browsing.visited(url, title) } },
             onRendererGone = {
@@ -401,10 +410,15 @@ fun BrowserScreen(
 
     /** A new tab with its own page helpers, not yet shown; [live] gives it its WebView now. */
     fun newTab(id: Long = tabs.nextId(), live: Boolean = true): BrowserTab {
+        val interceptor = MediaInterceptor { _, _ -> }
         val tab = BrowserTab(
             id = id,
-            interceptor = MediaInterceptor { _, _ -> },
-            bridge = MediaBridge(onMediaDetected = { _, _ -> }, onMediaCandidate = { _, _ -> }),
+            interceptor = interceptor,
+            bridge = MediaBridge(
+                onMediaDetected = { _, _ -> },
+                onMediaCandidate = { _, _ -> },
+                wasRequested = interceptor::wasRequested,
+            ),
             adBlock = adBlocker.newSession(),
             callbacks = RetainedWebViewCallbacks(callbackState),
         )
@@ -1251,6 +1265,8 @@ internal fun createChayaWebView(
     adBlock: AdBlockSession,
     detectorJs: String,
     callbacks: RetainedWebViewCallbacks,
+    /** Runs at the start of every embedded frame's document (not the page's own), where WebView allows it. */
+    frameAgentJs: String = "",
     /** The site's icon for this tab, for its card in the tab grid. */
     onIcon: (Bitmap) -> Unit = {},
     /** A page finished loading in this tab, for history. */
@@ -1290,6 +1306,11 @@ internal fun createChayaWebView(
 
         // The bridge is visible to every frame, so its callbacks validate a per-navigation capability.
         addJavascriptInterface(bridge, "ChayaBridge")
+        // Players embedded from another server are out of the page detector's reach; a small agent runs inside
+        // them instead and tells the page's detector what they loaded.
+        if (frameAgentJs.isNotEmpty() && WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+            runCatching { WebViewCompat.addDocumentStartJavaScript(this, frameAgentJs, setOf("*")) }
+        }
         // Hands out only selectors from the public ad lists, so it needs no capability.
         addJavascriptInterface(CosmeticBridge(adBlock), "ChayaCosmetic")
 

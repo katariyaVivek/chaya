@@ -435,7 +435,7 @@ class DownloadManager(
         val task = DownloadTask(
             id = id,
             url = media.url,
-            pageUrl = media.pageUrl,
+            pageUrl = media.requestPage,
             fileName = saveFile.name,
             mimeType = media.mimeType,
             filePath = saveFile.absolutePath,
@@ -454,7 +454,7 @@ class DownloadManager(
             saveFile = saveFile,
             userAgent = ua,
             cookies = ck,
-            referer = media.pageUrl,
+            referer = media.requestPage,
             fromBytes = fromBytes,
             onMeta = { suggested -> onServerFileName(id, suggested) },
             onProgress = { d, total -> progress(id, d, total) },
@@ -477,7 +477,7 @@ class DownloadManager(
         val task = DownloadTask(
             id = id,
             url = media.url,
-            pageUrl = media.pageUrl,
+            pageUrl = media.requestPage,
             fileName = sanitizeKeepingExtension(fileNameForMedia(media)),
             mimeType = media.mimeType,
             filePath = null,
@@ -1017,7 +1017,7 @@ class DownloadManager(
         val task = DownloadTask(
             id = id,
             url = media.url,
-            pageUrl = media.pageUrl,
+            pageUrl = media.requestPage,
             fileName = sanitizeKeepingExtension(fileNameForMedia(media)),
             mimeType = media.mimeType,
             state = DownloadState.FAILED,
@@ -1331,3 +1331,9 @@ class DownloadManager(
         }
     }
 }
+
+/**
+ * The page a download's requests name as their referrer, kept as the task's page: the embedded player's page for
+ * media found inside a frame, else the page itself.
+ */
+private val DetectedMedia.requestPage: String? get() = refererUrl ?: pageUrl
