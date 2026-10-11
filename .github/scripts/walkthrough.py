@@ -58,7 +58,7 @@ PAGE = """<!doctype html>
 <div id="ad-slot" class="preroll-container">
   <video src="/media/vast/preroll-15s.mp4" muted autoplay playsinline></video>
 </div>
-<video src="/media/launch-event.mp4" poster="/media/poster.jpg" controls autoplay playsinline preload="auto"></video>
+<video src="/media/launch-event.mp4" poster="/media/poster.jpg" controls playsinline preload="auto"></video>
 <video src="/media/hero-loop.mp4" muted autoplay loop playsinline style="height:80px;object-fit:cover"></video>
 <p>Test page for the Chaya media sheet.</p>
 </body></html>
@@ -376,7 +376,8 @@ def make_fixture():
 
     video(media / "launch-event.mp4", "testsrc", 90, "640x360")
     # The ad and the looping background play by themselves, in every tab that shows the page, and the
-    # emulator decodes them on the host: kept tiny so they cannot starve it (it died mid-run on #37 and #39).
+    # emulator decodes them on the host: kept tiny so they cannot starve it (it died mid-run on #37, #39 and
+    # #40). The main video waits for a tap for the same reason; its size and length come from its metadata.
     video(media / "vast" / "preroll-15s.mp4", "testsrc2", 15, "160x90", rate=2)
     video(media / "hero-loop.mp4", "smptebars", 8, "160x90", audio=False, rate=2)
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=size=640x360:rate=1",

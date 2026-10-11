@@ -73,7 +73,8 @@ The six-part plan after v0.4.0 has shipped (#34 to #39); it is in
   then `adb` goes silent. It happened twice after a stream download that pulled in an extra 720p
   variant (fixed since), once each on #35 and #37, and twice running on #39. Each time it was
   loading the local test page, whose ad and looping background play by themselves in every tab that
-  shows it, decoded on the host. Since #39 those two clips are 160×90 at 2 frames a second. If it
-  still happens, give the emulator more memory next.
+  shows it, decoded on the host. Since #39 those two clips are 160×90 at 2 frames a second. After it
+  happened once more on #40, the main clip stopped autoplaying too (#41). If it still happens, give
+  the emulator more memory next.
 - Gradle's parallel project execution is off: with Chaquopy it made `kspDebugKotlin` fail on a
   project lock. The app is a single module, so nothing is lost.
