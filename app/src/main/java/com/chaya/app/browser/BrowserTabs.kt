@@ -33,6 +33,20 @@ internal class BrowserTab(
 
     /** When the tab was last shown, as an order rather than a time; the smallest is discarded first. */
     var lastShown: Long = 0
+
+    /** When this tab's page last lost its renderer ([android.os.SystemClock.elapsedRealtime]); 0 if never. */
+    var rendererGoneAt: Long = 0
+}
+
+/**
+ * A page whose renderer stopped (it crashed, or Android took its memory back) is opened again once; if it stops
+ * again within [RETRY_WINDOW_MILLIS], it waits for the person to tap reload instead of crashing in a loop.
+ */
+internal object RendererLoss {
+    const val RETRY_WINDOW_MILLIS = 10_000L
+
+    fun shouldReload(lastGoneAt: Long, now: Long): Boolean =
+        lastGoneAt == 0L || now - lastGoneAt >= RETRY_WINDOW_MILLIS
 }
 
 /** What the tab grid shows for one tab. */

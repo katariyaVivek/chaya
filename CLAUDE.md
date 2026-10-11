@@ -64,6 +64,8 @@ platform 36, Gradle 8.14.3 and Python 3.13 (Chaquopy). Versions are in `gradle/l
   up in `downloadIndex`. Used without a `DownloadService`, the manager also starts paused.
 - `HttpDownloader` must keep a call registered until its body is read, or pause/cancel during the
   transfer do nothing.
+- Every WebView must handle `onRenderProcessGone`, including the throwaway one a page's popup gets.
+  Otherwise one renderer crash ends the whole app, with no Java crash report.
 - Kotlin's inlined functions report line numbers beyond the end of the file in stack traces;
   find the real call site, not the reported line.
 - Gradle parallel project execution stays off (Chaquopy + KSP fail on a project lock).

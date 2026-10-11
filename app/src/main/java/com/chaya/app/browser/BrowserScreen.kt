@@ -14,6 +14,8 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.webkit.RenderProcessGoneDetail
+import android.os.SystemClock
 import android.widget.FrameLayout
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -339,6 +341,9 @@ fun BrowserScreen(
         }
     }
 
+    /** Said once when a page's renderer stopped, so a page that vanished and came back is not a mystery. */
+    var rendererNotice by remember { mutableStateOf<String?>(null) }
+
     /**
      * Gives [tab] a WebView. A tab coming back from disk ([restore]) gets its back and forward history again;
      * when that cannot be read, it opens its address only.
@@ -353,6 +358,26 @@ fun BrowserScreen(
             detectorJs = detectorJs,
             callbacks = tab.callbacks,
             onVisited = { url, title -> app.appScope.launch { app.browsing.visited(url, title) } },
+            onRendererGone = {
+                // The page's renderer stopped. This tab's WebView is unusable; the others' get their own call.
+                tab.webView?.let { dead ->
+                    (dead.parent as? ViewGroup)?.removeView(dead)
+                    destroyLater(dead)
+                }
+                tab.webView = null
+                if (tab.id == tabs.activeId) {
+                    // The tab shown gets a new WebView at once and its page again, unless that keeps happening.
+                    val now = SystemClock.elapsedRealtime()
+                    val reload = RendererLoss.shouldReload(tab.rendererGoneAt, now)
+                    tab.rendererGoneAt = now
+                    makeLive(tab, restore = false)
+                    val page = viewModel.uiState.value
+                    if (reload && !page.homeVisible && page.url.isNotEmpty()) tab.webView?.loadUrl(page.url)
+                    rendererNotice = if (reload) "The page stopped working and was opened again"
+                    else "The page keeps stopping. Tap reload to try again"
+                }
+                tabs.changed()
+            },
             onIcon = { icon ->
                 // The WebView owns the bitmap it hands over; a copy is written off the main thread.
                 val copy = runCatching { icon.copy(Bitmap.Config.ARGB_8888, false) }.getOrNull()
@@ -667,6 +692,18 @@ fun BrowserScreen(
         }
     }
 
+    LaunchedEffect(rendererNotice) {
+        rendererNotice?.let(::showMessage)
+        rendererNotice = null
+    }
+
+    /** Reloads the page shown; a new WebView left blank after its page kept stopping opens the page instead. */
+    fun reloadPage() {
+        val web = activeWebView() ?: return
+        val page = viewModel.uiState.value
+        if (web.url.isNullOrEmpty() && !page.homeVisible && page.url.isNotEmpty()) web.loadUrl(page.url) else web.reload()
+    }
+
     /** Opens a new tab, on the start screen or at [url]; past the limit, [url] opens in the tab shown instead. */
     fun openNewTab(url: String?) {
         if (!tabs.canOpenMore) {
@@ -785,7 +822,7 @@ fun BrowserScreen(
                                 onPaste = { pasteFromClipboard() },
                                 onReload = {
                                     invalidateDetectionSession()
-                                    activeWebView()?.reload()
+                                    reloadPage()
                                 },
                                 adBlock = AdBlockBadge(
                                     active = adBlockEnabled && adSite !in adAllowedSites,
@@ -1027,12 +1064,12 @@ fun BrowserScreen(
                         onEnabledChange = { on ->
                             adBlocker.settings.setEnabled(on)
                             invalidateDetectionSession()
-                            activeWebView()?.reload()
+                            reloadPage()
                         },
                         onBlocksOnSiteChange = { on ->
                             adBlocker.settings.setAllowed(adSite, allowed = !on)
                             invalidateDetectionSession()
-                            activeWebView()?.reload()
+                            reloadPage()
                         },
                         onDismiss = { showAdBlockSheet = false },
                     )
@@ -1207,7 +1244,7 @@ private data class DetectorNavigationSession(
 
 /** Creates a WebView whose clients always dispatch through the mutable retained callback router. */
 @SuppressLint("SetJavaScriptEnabled")
-private fun createChayaWebView(
+internal fun createChayaWebView(
     ctx: android.content.Context,
     bridge: MediaBridge,
     interceptor: MediaInterceptor,
@@ -1218,6 +1255,8 @@ private fun createChayaWebView(
     onIcon: (Bitmap) -> Unit = {},
     /** A page finished loading in this tab, for history. */
     onVisited: (url: String, title: String) -> Unit = { _, _ -> },
+    /** The page's renderer stopped; this WebView can no longer be used and must be replaced. */
+    onRendererGone: () -> Unit = {},
 ): WebView {
     return WebView(ctx).apply {
         // Tracks injection eligibility so a superseded redirect cannot reintroduce an old capability on finish.
@@ -1339,6 +1378,14 @@ private fun createChayaWebView(
                 url?.let { callbacks.onAddressChanged(it) }
                 super.doUpdateVisitedHistory(view, url, isReload)
             }
+
+            // Android ends the whole app when a page's renderer stops (a crash, or its memory taken back) unless
+            // every WebView handles it, so the person lost everything to one bad page. Now only the page goes.
+            override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
+                invalidateDetectorNavigation()
+                onRendererGone()
+                return true
+            }
         }
 
         webChromeClient = object : WebChromeClient() {
@@ -1376,19 +1423,25 @@ private fun createChayaWebView(
                         ): Boolean {
                             request?.url?.let {
                                 if (adBlock.shouldBlockPopup(it.toString())) {
-                                    wv?.destroy()
+                                    destroyLater(wv)
                                     return true
                                 }
                                 // A link the person tapped that wants a new window opens in a new tab.
                                 if (isUserGesture) {
                                     callbacks.onOpenInNewTab(it.toString())
-                                    wv?.destroy()
+                                    destroyLater(wv)
                                     return true
                                 }
                                 invalidateDetectorNavigation()
                                 view.loadUrl(it.toString())
-                                wv?.destroy()
+                                destroyLater(wv)
                             }
+                            return true
+                        }
+
+                        // The window a page opens shares the renderer: it must survive its loss too, or the app goes.
+                        override fun onRenderProcessGone(wv: WebView?, detail: RenderProcessGoneDetail?): Boolean {
+                            destroyLater(wv)
                             return true
                         }
                     }
@@ -1430,4 +1483,13 @@ private fun detectorScriptWithCapability(detectorJs: String, capability: String)
 private fun signInPageOf(platform: Platform): String = when (platform) {
     Platform.TWITTER -> "https://x.com/i/flow/login"
     else -> "https://www.instagram.com/accounts/login/"
+}
+
+/**
+ * Destroys a WebView once the callback running on it has returned: destroying it from inside its own callback
+ * pulls it out from under WebView's code.
+ */
+private fun destroyLater(webView: WebView?) {
+    webView ?: return
+    android.os.Handler(android.os.Looper.getMainLooper()).post { webView.destroy() }
 }
