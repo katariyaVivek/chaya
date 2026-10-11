@@ -41,6 +41,8 @@ up by yt-dlp on the phone, with picture and sound joined into one MP4. Merged as
 | [#37](https://github.com/katariyaVivek/chaya/pull/37) | Bookmarks and history: a star on the address, a History screen by day with search, delete, Clear history and a switch to stop saving it, a Bookmarks screen, bookmarks first among the quick sites, and suggestions under the address bar while typing; all kept on the phone only |
 | [#38](https://github.com/katariyaVivek/chaya/pull/38) | YouTube downloads fetch three 10 MB pieces at a time, each written at its place in the file; a resume fetches only the pieces still missing, and a server that refuses a range gets the rest one at a time |
 | [#39](https://github.com/katariyaVivek/chaya/pull/39) | Downloads as a library: a grid of what is done (videos by a frame, a post's pictures as one tile), a full-screen picture viewer with zoom, an account's ZIP opened to its files (view, share, save one), filters by kind and site, search by title, Share on every finished file, and several chosen at once to share or delete |
+| [#40](https://github.com/katariyaVivek/chaya/pull/40) | A page whose renderer crashes no longer takes the whole app down: the page is opened again (once), other tabs load again when shown, and a page's popup window survives it too |
+| [#41](https://github.com/katariyaVivek/chaya/pull/41) | Video in players embedded from another server is found: a small script inside the frame reports what its player loaded (even a stream whose address and type say nothing), the page's detector passes it on, and only addresses the browser really loaded are kept |
 
 ## Next
 
