@@ -232,6 +232,11 @@ Share. Reached from the Downloads screen's menu.
   the others get one when first shown. At most four WebViews live at once
   (`BrowserTabs.toDiscard`): the one shown least recently is discarded, its history kept on disk,
   so up to 50 tabs can be open.
+- **A page's renderer can stop** (it crashes, or Android takes its memory back). Every WebView,
+  including a popup's, handles `onRenderProcessGone`, so only that page goes. The tab shown gets a
+  new WebView and its page again, unless it stopped within the last ten seconds
+  (`RendererLoss`); then it waits for Reload. Other live tabs become discarded and load again when
+  shown.
 - `ui/components/TabGrid` is the full-screen tab switcher: a new-tab square, the tab count, ⋮ (*Close
   all tabs*), search by title and address, and two columns of cards; swiping or × closes with Undo.
 - `BrowserChrome` is the address bar, which collapses to the site name on a
