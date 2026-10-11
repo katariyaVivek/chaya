@@ -39,6 +39,10 @@ These are deliberate scope decisions, not open bugs.
 - **Players fed only through `MediaSource`** on other sites, where no file or manifest ever
   crosses the network. Supporting them would need a custom media pipeline or Chromium-level hooks.
 - **Live broadcasts**, and videos with nothing saveable; Chaya says so instead of trying.
+- **Players embedded from another server, on an old WebView.** Video in such a frame is found by a
+  script that runs inside it, which needs Android System WebView with document-start scripts (any
+  recent version). A frame's player that gets its stream some other way than its own requests (a
+  service worker, say) is not seen.
 - **Content behind a sign-in, unless you choose it.** When a site needs one and the browser is
   signed in, Chaya offers to use that sign-in for the lookup. Sites can limit accounts used for
   automated downloads, so this is always your call.

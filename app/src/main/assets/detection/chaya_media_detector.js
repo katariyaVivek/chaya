@@ -325,6 +325,34 @@
     });
   }
 
+  // A player embedded from another server reports through chaya_frame_agent.js. Only this document holds the
+  // capability, and the app takes a frame's address only if the browser itself requested it.
+  window.addEventListener('message', function (event) {
+    var d = event.data;
+    if (!d || d.chayaFrameMedia !== 1 || event.source === window) return;
+    var capability = window.__chayaBridgeCapability;
+    var bridge = window.ChayaBridge;
+    if (!capability || !bridge || !bridge.onFrameMedia) return;
+    if (typeof d.url !== 'string' || d.url.length > 4096 || !isHttp(d.url)) return;
+    var frame = (typeof d.frame === 'string' && d.frame.length <= 4096 && isHttp(d.frame)) ? d.frame : '';
+    // the frame's word for where it is must agree with where the browser says the message came from
+    try { if (frame && new URL(frame).origin !== event.origin) frame = ''; } catch (e) { frame = ''; }
+    try {
+      bridge.onFrameMedia(capability, d.url, String(d.tag || '').slice(0, 20), String(d.kind || '').slice(0, 10),
+        String(d.type || '').slice(0, 100), frame);
+    } catch (e) {}
+  });
+
+  // Frames may have found their media before this detector was listening: ask them to tell it again, now and
+  // once the page has loaded.
+  function askFrames() {
+    for (var f = 0; f < window.frames.length; f++) {
+      try { window.frames[f].postMessage({ chayaFrameAsk: 1 }, '*'); } catch (e) {}
+    }
+  }
+  askFrames();
+  window.addEventListener('load', askFrames);
+
   deepScan();
   observeMutations();
   if (document.readyState === 'loading') {

@@ -113,6 +113,20 @@ class DownloadManagerTest {
             assertEquals(DownloadState.DOWNLOADING, awaitDbState(1, DownloadState.DOWNLOADING).state)
         }
 
+    @Test
+    fun `media found inside a frame from another server is fetched with the player's page as referrer`() =
+        runBlocking {
+            manager.restore()
+            val framed = media().copy(refererUrl = "https://player.example/e/1")
+
+            manager.startDownload(framed)
+
+            assertTrue(awaitUntil { downloader.starts.size == 1 })
+            assertEquals("https://player.example/e/1", downloader.starts.single().referer)
+            // Kept as the task's page, so a resume after the app was closed asks the same way.
+            assertEquals("https://player.example/e/1", manager.downloads.value.single().pageUrl)
+        }
+
     // ---- pauseDownload ---- //
 
     @Test

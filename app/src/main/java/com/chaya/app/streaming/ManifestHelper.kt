@@ -28,7 +28,9 @@ object ManifestHelper {
         url: String,
         mimeType: String?,
         userAgent: String?,
-        cookies: String? = null
+        cookies: String? = null,
+        /** The embedded player's page for a stream found inside a frame; its server may expect it. */
+        referer: String? = null,
     ): Result<List<StreamTrack>> = withContext(Dispatchers.Main) {
         suspendCancellableCoroutine { continuation ->
             try {
@@ -39,9 +41,11 @@ object ManifestHelper {
                 if (userAgent != null) {
                     dataSourceFactory.setUserAgent(userAgent)
                 }
-                if (!cookies.isNullOrBlank()) {
-                    dataSourceFactory.setDefaultRequestProperties(mapOf("Cookie" to cookies))
+                val headers = buildMap {
+                    if (!cookies.isNullOrBlank()) put("Cookie", cookies)
+                    if (!referer.isNullOrBlank()) put("Referer", referer)
                 }
+                if (headers.isNotEmpty()) dataSourceFactory.setDefaultRequestProperties(headers)
 
                 val mediaItem = if (mimeType != null) {
                     MediaItem.Builder().setUri(url).setMimeType(mimeType).build()

@@ -48,17 +48,28 @@ class MediaInterceptor(
     /** Cache of navigation-scoped normalized URLs already reported from concurrent callbacks. */
     private val reportedUrls = ConcurrentHashMap.newKeySet<String>()
 
+    /**
+     * Every address this page's frames asked for, so a frame's report of media is believed only for something the
+     * browser really loaded. Bounded; past the limit, later addresses are not remembered.
+     */
+    private val requestedUrls = ConcurrentHashMap.newKeySet<String>()
+
     /** Starts attribution for one document before its subresource callbacks can update UI state. */
     fun beginNavigation(pageUrl: String, navigationGeneration: Long) {
         activeSession.set(MediaInterceptorSession(pageUrl, navigationGeneration))
         reportedUrls.clear()
+        requestedUrls.clear()
     }
 
     /** Drops attribution for a document when a known full-document navigation begins. */
     fun invalidateNavigation() {
         activeSession.set(null)
         reportedUrls.clear()
+        requestedUrls.clear()
     }
+
+    /** Whether a frame of the current page requested [url] (fragment ignored). */
+    fun wasRequested(url: String): Boolean = url.substringBefore('#') in requestedUrls
 
     /** Rebinds the observer when BrowserScreen reattaches its intentionally retained WebView. */
     fun updateOnMediaDetected(callback: (DetectedMedia, Long) -> Unit) {
@@ -77,6 +88,7 @@ class MediaInterceptor(
         if (!url.startsWith("http://") && !url.startsWith("https://")) return null
 
         val normalized = url.substringBefore("#")
+        if (requestedUrls.size < MAX_REMEMBERED_REQUESTS) requestedUrls.add(normalized)
         val dedupeKey = session.navigationGeneration.toString() + "\u0000" + normalized
         detect(request, session.pageUrl)?.let { detected ->
             if (reportedUrls.add(dedupeKey) && activeSession.get() === session) {
@@ -146,3 +158,6 @@ class MediaInterceptor(
         else -> "application/octet-stream"
     }
 }
+
+/** Addresses remembered per page for checking frames' reports; a busy page makes a few hundred. */
+private const val MAX_REMEMBERED_REQUESTS = 5000

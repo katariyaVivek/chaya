@@ -417,7 +417,8 @@ class BrowserViewModel @JvmOverloads constructor(
                 userAgent = WebSettings.getDefaultUserAgent(getApplication()),
                 cookies = runCatching {
                     CookieManager.getInstance().getCookie(media.url)
-                }.getOrNull()
+                }.getOrNull(),
+                referer = media.refererUrl,
             )
 
             result.fold(
@@ -459,7 +460,8 @@ class BrowserViewModel @JvmOverloads constructor(
                 userAgent = WebSettings.getDefaultUserAgent(getApplication()),
                 cookies = runCatching {
                     CookieManager.getInstance().getCookie(media.url)
-                }.getOrNull()
+                }.getOrNull(),
+                referer = media.refererUrl,
             )
 
             result.fold(

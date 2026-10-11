@@ -112,6 +112,8 @@ kotlin {
 dependencies {
     // Core
     implementation(libs.androidx.core.ktx)
+    // Document-start scripts in every frame, for media in players embedded from another server.
+    implementation(libs.androidx.webkit)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
