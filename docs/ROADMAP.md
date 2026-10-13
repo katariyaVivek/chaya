@@ -82,6 +82,9 @@ The six-part plan after v0.4.0 has shipped (#34 to #39); it is in
   loading the local test page, whose ad and looping background play by themselves in every tab that
   shows it, decoded on the host. Since #39 those two clips are 160×90 at 2 frames a second. After it
   happened once more on #40, the main clip stopped autoplaying too, and since #41 the emulator has
-  6 GB instead of 4. If it still happens, split the walkthrough across two emulator runs.
+  6 GB instead of 4. It happened twice more on #43, once at the very first screen, so it is likely the
+  runner's memory: since #43 the build's Gradle and Kotlin daemons are stopped before the emulator
+  starts, and a failed run prints any out-of-memory kill. If it still happens, split the walkthrough
+  across two emulator runs.
 - Gradle's parallel project execution is off: with Chaquopy it made `kspDebugKotlin` fail on a
   project lock. The app is a single module, so nothing is lost.
