@@ -300,8 +300,13 @@ class BrowserViewModel @JvmOverloads constructor(
 
     /** Keeps the active document's latest page and player hints; reports from a retired document are dropped. */
     fun onPageMeta(meta: PageMeta, navigationGeneration: Long) {
+        val previous = _uiState.value.pageMeta?.heading
         _uiState.update { state ->
             if (navigationGeneration != state.navigationGeneration) state else state.copy(pageMeta = meta)
+        }
+        // The name the page gave its media, in Diagnostics: a wrong one on some site is seen there, not guessed at.
+        if (meta.heading != null && meta.heading != previous && navigationGeneration == _uiState.value.navigationGeneration) {
+            getApplication<ChayaApplication>().eventLog.record(ChayaEvent.CaughtException("page-name", meta.heading))
         }
     }
 

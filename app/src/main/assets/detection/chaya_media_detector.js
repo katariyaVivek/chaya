@@ -175,26 +175,34 @@
   }
 
   // What the page is headed with ("The Incomer"), for a page whose title is the site's slogan: its one shown h1,
-  // or else the biggest title-like text near the top of the screen, as a show's page sets its name above the player.
+  // or else the biggest text near the top of the screen, which is how a show's page names it above the player
+  // whatever its markup (many sites style a plain div rather than use a heading).
   function mainHeading() {
     var shown = [];
     var h1s = document.querySelectorAll('h1');
     for (var i = 0; i < h1s.length; i++) if (isShown(h1s[i])) shown.push(h1s[i]);
     if (shown.length === 1) return clip(shown[0].textContent || '', 200);
+    if (!document.body || !document.createTreeWalker) return '';
 
     var top = (window.innerHeight || 800) * 0.4;
-    var best = null, bestSize = 0;
-    var candidates = document.querySelectorAll('h1, h2, h3, [class*="title" i]');
-    for (var c = 0; c < candidates.length && c < 300; c++) {
-      var el = candidates[c];
+    var best = '', bestSize = 0, looked = 0, node;
+    var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    while ((node = walker.nextNode()) && looked < 3000) {
+      looked++;
+      if (!node.nodeValue || node.nodeValue.trim().length < 2) continue;
+      var el = node.parentElement;
+      if (!el || el.closest('script, style, noscript, button, select, option, label, input, textarea')) continue;
       var text = clip(el.textContent || '', 200);
-      if (text.length < 2 || text.length > 120 || !isShown(el)) continue;
+      if (text.length < 2 || text.length > 120) continue;
       var box = el.getBoundingClientRect();
-      if (box.top < 0 || box.top > top) continue;
-      var size = parseFloat(window.getComputedStyle(el).fontSize) || 0;
+      if (box.width === 0 || box.height === 0 || box.top < 0 || box.top > top) continue;
+      var style = window.getComputedStyle(el);
+      if (style.visibility === 'hidden' || style.display === 'none') continue;
+      var size = parseFloat(style.fontSize) || 0;
       if (size > bestSize) { best = text; bestSize = size; }
     }
-    return best || '';
+    // Ordinary body text is not a name.
+    return bestSize >= 18 ? best : '';
   }
 
   function isShown(el) {
