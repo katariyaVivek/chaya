@@ -100,6 +100,13 @@ class PlatformSheetTest {
     }
 
     @Test
+    fun `while an Instagram post is found the sheet says post, since it may hold only pictures`() {
+        show(LinkState.Looking(PlatformMatcher.match("https://www.instagram.com/p/DAbc123/")!!))
+
+        composeRule.onNodeWithText("Finding the post…").assertIsDisplayed()
+    }
+
+    @Test
     fun `with no link there is nothing to show`() {
         show(LinkState.Idle)
 

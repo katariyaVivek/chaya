@@ -174,12 +174,33 @@
     return null;
   }
 
-  // The page's one main heading ("The Mentalist"), for a page whose title is the site's slogan; none when the page
-  // has several, since then no one of them names it.
+  // What the page is headed with ("The Incomer"), for a page whose title is the site's slogan: its one shown h1,
+  // or else the biggest title-like text near the top of the screen, as a show's page sets its name above the player.
   function mainHeading() {
-    var headings = document.querySelectorAll('h1');
-    if (headings.length !== 1) return '';
-    return clip(headings[0].textContent || '', 200);
+    var shown = [];
+    var h1s = document.querySelectorAll('h1');
+    for (var i = 0; i < h1s.length; i++) if (isShown(h1s[i])) shown.push(h1s[i]);
+    if (shown.length === 1) return clip(shown[0].textContent || '', 200);
+
+    var top = (window.innerHeight || 800) * 0.4;
+    var best = null, bestSize = 0;
+    var candidates = document.querySelectorAll('h1, h2, h3, [class*="title" i]');
+    for (var c = 0; c < candidates.length && c < 300; c++) {
+      var el = candidates[c];
+      var text = clip(el.textContent || '', 200);
+      if (text.length < 2 || text.length > 120 || !isShown(el)) continue;
+      var box = el.getBoundingClientRect();
+      if (box.top < 0 || box.top > top) continue;
+      var size = parseFloat(window.getComputedStyle(el).fontSize) || 0;
+      if (size > bestSize) { best = text; bestSize = size; }
+    }
+    return best || '';
+  }
+
+  function isShown(el) {
+    if (!el.getClientRects || !el.getClientRects().length) return false;
+    var style = window.getComputedStyle(el);
+    return style.visibility !== 'hidden' && style.display !== 'none' && (el.textContent || '').trim() !== '';
   }
 
   function metaContent(selector) {

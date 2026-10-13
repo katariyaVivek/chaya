@@ -72,4 +72,12 @@ class PlatformMatcherTest {
         assertNull(PlatformMatcher.match("https://notyoutube.com/watch?v=abc"))
         assertNull(PlatformMatcher.match("https://youtube.com.evil.example/watch?v=abc"))
     }
+
+    @Test
+    fun `a post may hold only pictures, so its lookup is for the post`() {
+        assertEquals("post", PlatformMatcher.match("https://www.instagram.com/p/DAbc123/")!!.lookingFor)
+        assertEquals("post", PlatformMatcher.match("https://x.com/someone/status/123")!!.lookingFor)
+        assertEquals("video", PlatformMatcher.match("https://www.instagram.com/reel/DAbc123/")!!.lookingFor)
+        assertEquals("video", PlatformMatcher.match("https://www.youtube.com/watch?v=dQw4w9WgXcQ")!!.lookingFor)
+    }
 }
