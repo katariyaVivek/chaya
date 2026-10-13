@@ -86,4 +86,35 @@ class MediaNamerTest {
         )
         assertEquals("Big Buck Bunny", title)
     }
+
+    private fun showPage(title: String?, heading: String?, ogTitle: String? = null) = PageMeta(
+        title = title, ogTitle = ogTitle, siteName = null, heading = heading, ogImage = null,
+        videoUrls = emptyList(), ldName = null, ldThumbnail = null, ldDurationSeconds = null, players = emptyList(),
+    )
+
+    private fun streamTitle(meta: PageMeta) = MediaNamer.primaryTitle(
+        url = "https://player.example/hls/master",
+        player = null,
+        pageMeta = meta,
+        matchesPageVideo = false,
+        fallbackPageTitle = meta.title,
+        pageUrl = "https://7movies.ac/tv/5920/watch",
+    )
+
+    @Test
+    fun `a page titled with the site's slogan is named by its heading`() {
+        assertEquals(
+            "The Mentalist",
+            streamTitle(showPage(title = "Watch Movies & TV Shows Online in HD", heading = "The Mentalist")),
+        )
+    }
+
+    @Test
+    fun `a title that names the heading wins, and a logo heading is ignored`() {
+        assertEquals(
+            "Big Buck Bunny (2008)",
+            streamTitle(showPage(title = "Big Buck Bunny (2008) - 7movies", heading = "Big Buck Bunny")),
+        )
+        assertEquals("Pilot", streamTitle(showPage(title = "Pilot | 7movies", heading = "7movies")))
+    }
 }

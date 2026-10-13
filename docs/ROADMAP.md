@@ -44,16 +44,18 @@ up by yt-dlp on the phone, with picture and sound joined into one MP4. Merged as
 | [#40](https://github.com/katariyaVivek/chaya/pull/40) | A page whose renderer crashes no longer takes the whole app down: the page is opened again (once), other tabs load again when shown, and a page's popup window survives it too |
 | [#41](https://github.com/katariyaVivek/chaya/pull/41) | Video in players embedded from another server is found: a small script inside the frame reports what its player loaded (even a stream whose address and type say nothing), the page's detector passes it on, and only addresses the browser really loaded are kept |
 | [#43](https://github.com/katariyaVivek/chaya/pull/43) | A page's drop-down (7movies' season list) no longer closes debug builds: LeakCanary is installed without the watcher that threw on WebView's dialogs. Swipe sideways along the bottom bar to switch to the tab beside this one |
+| [#44](https://github.com/katariyaVivek/chaya/pull/44) | A player in a frame no longer lists its stream's pieces as videos, one more with every piece played, nor its playlist of seek thumbnails; a page titled with the site's slogan names its video after the page's heading |
 
 ## Next
 
 The six-part plan after v0.4.0 has shipped (#34 to #39); it is in
 [`history/plan-after-v0.4.md`](history/plan-after-v0.4.md). What is left:
 
-0. **First: check 7movies.ac on main's APK after #43.** The crash on the season drop-down was
-   LeakCanary (debug builds only) failing on WebView's `<select>` dialog, fixed in #43. Then check
-   that the episode playing in the site's embedded player is found (#41), which the owner could not
-   reach before because of the crash.
+0. **First: check 7movies.ac with #44.** After #43 the page no longer crashes, but its sheet listed a
+   "tiles" stream and a new "Video N" for every piece the player fetched, under the site's slogan
+   instead of the show's name. #44 leaves out pieces and seek-thumbnail playlists and names the
+   stream after the page's heading. Check on the phone that the sheet shows one stream named after
+   the show, and that downloading it works.
 1. **Check the video-site path end to end on a phone.** The engine, the join and the UI have each
    been tested, but a real lookup followed by a real download has not run in one piece. A
    walkthrough scenario for it would make that repeatable.

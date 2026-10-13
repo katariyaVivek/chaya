@@ -49,12 +49,33 @@ object MediaNamer {
             if (matchesPageVideo) pageMeta?.ldName else null,
             if (matchesPageVideo) pageMeta?.ogTitle?.let { cleanPageTitle(it, site, host) } else null,
             player?.title,
+            headingOverGenericTitle(pageMeta, fallbackPageTitle, site, host),
             pageMeta?.ogTitle?.let { cleanPageTitle(it, site, host) },
             (pageMeta?.title ?: fallbackPageTitle)?.let { cleanPageTitle(it, site, host) },
             humanFileName(url),
         ).firstOrNull { it.isNotBlank() }
             ?: host?.let { "Video from ${it.removePrefix("www.")}" }
             ?: "Video"
+    }
+
+    /**
+     * The page's main heading when its titles never mention it: a site whose every page is titled with its slogan
+     * ("Watch Movies & TV Shows Online in HD") still heads the page with the show ("The Mentalist"). When a title
+     * does mention the heading, the title says it better and this gives null.
+     */
+    private fun headingOverGenericTitle(pageMeta: PageMeta?, fallbackPageTitle: String?, site: String?, host: String?): String? {
+        val meta = pageMeta ?: return null
+        val heading = meta.heading?.takeIf { it.length >= 2 } ?: return null
+        val key = comparable(heading)
+        if (key.isEmpty() || siteNameOf(heading, site, host)) return null
+        val titles = listOfNotNull(meta.ogTitle, meta.title ?: fallbackPageTitle)
+        return heading.takeUnless { titles.any { comparable(it).contains(key) } }
+    }
+
+    /** Whether [text] is only the site's own name, as a logo in an `h1` often is. */
+    private fun siteNameOf(text: String, site: String?, host: String?): Boolean {
+        val siteKeys = listOfNotNull(site?.let(::comparable), host?.let(::brandOf)).filter { it.length >= 3 }
+        return siteKeys.isNotEmpty() && isSiteName(text, siteKeys)
     }
 
     /** Title for a secondary item: its caption, a readable filename, or "Video 2". */
