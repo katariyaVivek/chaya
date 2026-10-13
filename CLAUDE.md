@@ -62,6 +62,9 @@ platform 36, Gradle 8.14.3 and Python 3.13 (Chaquopy). Versions are in `gradle/l
 
 - Media3's `DownloadManager.currentDownloads` leaves out completed and failed downloads; look those
   up in `downloadIndex`. Used without a `DownloadService`, the manager also starts paused.
+- Media3 recognises HLS only by the exact type `application/x-mpegURL`; given
+  `application/vnd.apple.mpegurl` it treats the address as one plain file. Pass every stream type
+  through `StreamMime.forMedia3` before it reaches Media3.
 - `HttpDownloader` must keep a call registered until its body is read, or pause/cancel during the
   transfer do nothing.
 - Every WebView must handle `onRenderProcessGone`, including the throwaway one a page's popup gets.

@@ -24,6 +24,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
 import com.chaya.app.ChayaApplication
+import com.chaya.app.streaming.StreamMime
 import com.chaya.app.ui.theme.LocalChayaColors
 
 /**
@@ -62,7 +63,7 @@ fun PlayerScreen(
         player.setMediaItem(
             MediaItem.Builder()
                 .setUri(playback.uri)
-                .apply { playback.mimeType?.let { setMimeType(it) } }
+                .apply { StreamMime.forMedia3(playback.mimeType)?.let { setMimeType(it) } }
                 .build()
         )
         player.prepare()

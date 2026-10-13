@@ -46,20 +46,18 @@ up by yt-dlp on the phone, with picture and sound joined into one MP4. Merged as
 | [#43](https://github.com/katariyaVivek/chaya/pull/43) | A page's drop-down (7movies' season list) no longer closes debug builds: LeakCanary is installed without the watcher that threw on WebView's dialogs. Swipe sideways along the bottom bar to switch to the tab beside this one |
 | [#44](https://github.com/katariyaVivek/chaya/pull/44) | A player in a frame no longer lists its stream's pieces as videos, one more with every piece played, nor its playlist of seek thumbnails; a page titled with the site's slogan names its video after the page's heading. Also: a public Instagram post of pictures is saved without a sign-in (it showed "unavailable") |
 | [#45](https://github.com/katariyaVivek/chaya/pull/45) | A page's name is found when its heading is not a lone h1 (the biggest title near the top); a lookup of an Instagram post or a tweet says "Finding the post…", since it may hold only pictures; stream requests carry the player's Origin, and why a stream could not be saved as MP4 is in Diagnostics; Quality on a stream with no qualities to read says so instead of downloading another copy |
+| [#46](https://github.com/katariyaVivek/chaya/pull/46) | A stream found by its `.m3u8` address downloads, plays and lists its qualities: Media3 is handed the type spelling it recognises (it took `application/vnd.apple.mpegurl` for a plain file and saved the playlist) |
 
 ## Next
 
 The six-part plan after v0.4.0 has shipped (#34 to #39); it is in
 [`history/plan-after-v0.4.md`](history/plan-after-v0.4.md). What is left:
 
-0. **First: 7movies.ac.** Since #44 the sheet shows one stream, but still named after the site's
-   slogan (its title heading is not a lone h1), and the owner reports the episode still does not
-   download (an earlier try saved 729 B). #45 looks for the heading as the biggest title near the
-   top of the page. The download "finished" with 721.8 KB that could not be saved as MP4: a short
-   decoy or error stream, most likely. #45 sends the player's Origin with stream requests and writes
-   why a save failed to Diagnostics (tag `stream-save`), and what the server answered for the
-   first six requests of each stream download (`stream-fetch`: type and length, or the HTTP
-   status). The 721.8 KB copy played as 0:00, so it held no video. Read both if it still fails.
+0. **First: check streams on the phone with #46.** Diagnostics from #45 found why 7movies' episode
+   "downloaded" as 729 B: detection types every `.m3u8` as `application/vnd.apple.mpegurl`, and
+   Media3 reads HLS only from `application/x-mpegURL`, so it saved the playlist as a plain file
+   (and found no qualities in it). #46 hands Media3 its own spelling. Still open there: the page's
+   name (its title is neither a lone h1 nor a title-classed element near the top).
 1. **Check the video-site path end to end on a phone.** The engine, the join and the UI have each
    been tested, but a real lookup followed by a real download has not run in one piece. A
    walkthrough scenario for it would make that repeatable.
