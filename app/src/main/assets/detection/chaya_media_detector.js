@@ -187,7 +187,7 @@
     var top = (window.innerHeight || 800) * 0.4;
     var best = '', bestSize = 0, looked = 0, node;
     var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-    while ((node = walker.nextNode()) && looked < 3000) {
+    while ((node = walker.nextNode()) && looked < 1500) {
       looked++;
       if (!node.nodeValue || node.nodeValue.trim().length < 2) continue;
       var el = node.parentElement;
@@ -203,6 +203,16 @@
     }
     // Ordinary body text is not a name.
     return bestSize >= 18 ? best : '';
+  }
+
+  // The search measures text on the page, so a page that changes all the time (a playing video's clock) has it
+  // run at most every few seconds, not with every report.
+  var headingCache = { at: 0, url: '', value: '' };
+  function cachedMainHeading() {
+    var now = Date.now();
+    if (headingCache.url === location.href && now - headingCache.at < 3000) return headingCache.value;
+    headingCache = { at: now, url: location.href, value: mainHeading() };
+    return headingCache.value;
   }
 
   function isShown(el) {
@@ -249,7 +259,7 @@
       title: clip(document.title, 300),
       ogTitle: clip(metaContent('meta[property="og:title"]'), 300),
       siteName: clip(metaContent('meta[property="og:site_name"]'), 120),
-      heading: mainHeading(),
+      heading: cachedMainHeading(),
       ogImage: httpUrlOrNull(metaContent('meta[property="og:image"]')),
       videoUrls: videoUrls.slice(0, 8),
       ldName: ld ? clip(firstString(ld.name), 300) : '',
