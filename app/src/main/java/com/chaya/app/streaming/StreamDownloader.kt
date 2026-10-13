@@ -265,7 +265,8 @@ class StreamDownloader(
         for (d in downloadManager.currentDownloads) {
             if (d.state != Download.STATE_DOWNLOADING) continue
             val taskId = taskIdFor(d.request.id) ?: continue
-            val total = d.contentLength.takeIf { it > 0 }
+            // A stream's size is unknown until it is all fetched; the share of pieces done gives an estimate.
+            val total = StreamProgress.totalBytes(d.contentLength, d.bytesDownloaded, d.percentDownloaded)
             listener.onStreamProgress(taskId, d.bytesDownloaded, total)
         }
     }
