@@ -22,6 +22,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.io.File
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
 /**
@@ -41,7 +42,9 @@ import java.util.concurrent.atomic.AtomicReference
  */
 class StreamDownloader(
     context: Context,
-    private val listener: Listener
+    private val listener: Listener,
+    /** Told what the server answered for the first requests of each stream (see [ReportingDataSource]). */
+    private val onFetch: (String) -> Unit = {},
 ) {
     interface Listener {
         fun onStreamProgress(taskId: Long, downloadedBytes: Long, totalBytes: Long?)
@@ -65,12 +68,16 @@ class StreamDownloader(
         .setConnectTimeoutMs(30_000)
         .setReadTimeoutMs(60_000)
 
+    /** How many more requests of the stream started last are reported to [onFetch]. */
+    private val requestsToReport = AtomicInteger(0)
+
     /** Wraps the HTTP factory so each data source picks up the latest headers. */
     private val upstreamFactory = DataSource.Factory {
         currentHeaders.get().takeIf { it.isNotEmpty() }?.let { headers ->
             httpFactory.setDefaultRequestProperties(headers)
         }
-        httpFactory.createDataSource()
+        val source = httpFactory.createDataSource()
+        if (requestsToReport.getAndDecrement() > 0) ReportingDataSource(source, onFetch) else source
     }
 
     // The sink factory needs the cache itself: handed over bare, every data source created from this
@@ -249,12 +256,9 @@ class StreamDownloader(
             ?.toLongOrNull()
 
     private fun applyHeaders(ua: String?, cookies: String?, referer: String?) {
-        val map = buildMap {
-            ua?.let { put("User-Agent", it) }
-            cookies?.let { put("Cookie", it) }
-            referer?.takeIf { it.isNotBlank() }?.let { put("Referer", it) }
-        }
-        currentHeaders.set(map)
+        currentHeaders.set(StreamHeaders.of(ua, cookies, referer))
+        // The playlists and the first pieces: enough to see whether the server sends video or something else.
+        requestsToReport.set(REPORTED_REQUESTS)
     }
 
     private fun tickProgress() {
@@ -267,6 +271,8 @@ class StreamDownloader(
     }
 
     companion object {
+        private const val REPORTED_REQUESTS = 6
+
         /** Judges the path only, so signed manifests such as `master.m3u8?token=…` still route as streams. */
         fun isStreamingUrl(url: String): Boolean {
             val path = url.substringBefore('#').substringBefore('?').lowercase()

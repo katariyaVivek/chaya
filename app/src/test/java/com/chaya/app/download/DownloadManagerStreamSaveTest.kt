@@ -5,6 +5,8 @@ import androidx.room.Room
 import com.chaya.app.database.ChayaDatabase
 import com.chaya.app.database.DownloadDao
 import com.chaya.app.database.DownloadEntity
+import com.chaya.app.diagnostics.ChayaEvent
+import com.chaya.app.diagnostics.EventLog
 import com.chaya.app.streaming.StreamExport
 import com.chaya.app.streaming.StreamExportException
 import com.chaya.app.streaming.StreamExporter
@@ -41,6 +43,7 @@ class DownloadManagerStreamSaveTest {
     private lateinit var exporter: FakeExporter
     private var freeSpace = Long.MAX_VALUE
     private lateinit var manager: DownloadManager
+    private lateinit var eventLog: EventLog
 
     /** Writes a few bytes as "the MP4", or fails, or waits, as a test asks. */
     private class FakeExporter : StreamExporter {
@@ -74,7 +77,8 @@ class DownloadManagerStreamSaveTest {
         db = Room.inMemoryDatabaseBuilder(context, ChayaDatabase::class.java).allowMainThreadQueries().build()
         dao = db.downloadDao()
         exporter = FakeExporter()
-        manager = DownloadManager(context, dao, freeBytes = { freeSpace }, streamExporter = exporter)
+        eventLog = EventLog(context)
+        manager = DownloadManager(context, dao, eventLog = eventLog, freeBytes = { freeSpace }, streamExporter = exporter)
         File(context.filesDir, "downloads").listFiles()?.forEach { it.deleteRecursively() }
     }
 
@@ -157,6 +161,21 @@ class DownloadManagerStreamSaveTest {
         assertTrue(awaitUntil { task().filePath != null && task().state == DownloadState.COMPLETED })
         assertNull(task().saveNote)
         assertEquals(listOf(1L), exporter.removed.toList())
+    }
+
+    @Test
+    fun `why a stream could not be saved is in Diagnostics, without the address's token`() = runBlocking {
+        stream()
+        exporter.failWith = StreamExportException("no video in https://cdn.example/s/seg.ts?token=secret")
+
+        manager.streamCompleted(1)
+
+        assertTrue(awaitUntil { task().state == DownloadState.COMPLETED })
+        // The log records in the background.
+        assertTrue(awaitUntil { runBlocking { eventLog.snapshot() }.any { it is ChayaEvent.CaughtException } })
+        val logged = eventLog.snapshot().filterIsInstance<ChayaEvent.CaughtException>().single { it.tag == "stream-save" }
+        assertTrue(logged.message!!, logged.message!!.contains("no video in https://cdn.example/s/seg.ts"))
+        assertFalse(logged.message!!, logged.message!!.contains("secret"))
     }
 
     @Test

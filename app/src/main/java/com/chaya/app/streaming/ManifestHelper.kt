@@ -41,10 +41,8 @@ object ManifestHelper {
                 if (userAgent != null) {
                     dataSourceFactory.setUserAgent(userAgent)
                 }
-                val headers = buildMap {
-                    if (!cookies.isNullOrBlank()) put("Cookie", cookies)
-                    if (!referer.isNullOrBlank()) put("Referer", referer)
-                }
+                // The user agent is set above; the rest as the page's player sends them.
+                val headers = StreamHeaders.of(userAgent = null, cookies = cookies, referer = referer)
                 if (headers.isNotEmpty()) dataSourceFactory.setDefaultRequestProperties(headers)
 
                 val mediaItem = if (mimeType != null) {

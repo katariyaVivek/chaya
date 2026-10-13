@@ -12,7 +12,18 @@ enum class Platform(val displayName: String) {
 }
 
 /** [url] is the link as given; [id] identifies the video within [platform]. */
-data class PlatformMatch(val platform: Platform, val id: String, val url: String)
+data class PlatformMatch(val platform: Platform, val id: String, val url: String) {
+    /**
+     * What the lookup is finding, for "Finding the video…": an Instagram post or a tweet may hold only pictures,
+     * so for those it is the post; a reel, a YouTube or a TikTok link is a video.
+     */
+    val lookingFor: String
+        get() = when {
+            platform == Platform.TWITTER -> "post"
+            platform == Platform.INSTAGRAM && id.substringBefore('/') == "p" -> "post"
+            else -> "video"
+        }
+}
 
 /**
  * Recognizes links to a single video on a supported site. Ported from sancika's matcher, so the two

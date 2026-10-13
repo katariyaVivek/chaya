@@ -528,7 +528,7 @@ internal fun PlatformPill(
     val match = state.match
     if (match == null || state is LinkState.Failed) return
 
-    val title = found?.media?.title ?: "Finding the video…"
+    val title = found?.media?.title ?: "Finding the ${match.lookingFor}…"
     val what = when (found) {
         is LinkState.Found -> found.best.label
         is LinkState.FoundPost -> found.items.size.let { if (it == 1) "1 item" else "$it items" }

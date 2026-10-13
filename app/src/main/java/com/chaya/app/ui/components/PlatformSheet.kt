@@ -94,7 +94,7 @@ private fun Looking(state: LinkState.Looking) {
             CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.5.dp)
             Spacer(Modifier.width(16.dp))
             Text(
-                text = "Finding the video…",
+                text = "Finding the ${state.match.lookingFor}…",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface,
             )

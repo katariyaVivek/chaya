@@ -61,4 +61,12 @@ class ChayaEventTest {
         assertEquals("https://cdn.example.com/a.mp4", event.url)
         assertTrue(!event.url.contains("sig="))
     }
+
+    @Test
+    fun `addresses inside a message lose their tokens`() {
+        assertEquals(
+            "fetch of https://cdn.example/s/seg.ts failed; see https://x.example/a",
+            ChayaEvent.scrubbedText("fetch of https://cdn.example/s/seg.ts?token=secret failed; see https://x.example/a#f"),
+        )
+    }
 }

@@ -36,6 +36,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.io.IOException
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
@@ -410,23 +411,14 @@ class BrowserViewModel @JvmOverloads constructor(
         )
 
         viewModelScope.launch {
-            val result = ManifestHelper.parse(
-                context = getApplication(),
-                url = media.url,
-                mimeType = media.mimeType,
-                userAgent = WebSettings.getDefaultUserAgent(getApplication()),
-                cookies = runCatching {
-                    CookieManager.getInstance().getCookie(media.url)
-                }.getOrNull(),
-                referer = media.refererUrl,
-            )
+            val result = readQualities(media)
 
             result.fold(
                 onSuccess = { tracks ->
                     if (tracks.isEmpty()) {
-                        // No selectable tracks — download everything
-                        dismissQualityPicker()
-                        downloadManager.startDownload(media)
+                        // Asking for the qualities never downloads by itself: each tap used to add another copy
+                        // of a stream that had none to read. "Download anyway" stays the person's choice.
+                        showStreamError(media, IOException("No qualities could be read from this stream."))
                     } else {
                         _uiState.value = _uiState.value.copy(
                             qualityPickerState = QualityPickerState.Ready(
@@ -473,6 +465,18 @@ class BrowserViewModel @JvmOverloads constructor(
                 onFailure = { error -> showStreamError(media, error) }
             )
         }
+    }
+
+    /** Reads a stream's qualities from its manifest; replaced in tests. */
+    internal var readQualities: suspend (DetectedMedia) -> Result<List<StreamTrack>> = { media ->
+        ManifestHelper.parse(
+            context = getApplication(),
+            url = media.url,
+            mimeType = media.mimeType,
+            userAgent = WebSettings.getDefaultUserAgent(getApplication()),
+            cookies = runCatching { CookieManager.getInstance().getCookie(media.url) }.getOrNull(),
+            referer = media.refererUrl,
+        )
     }
 
     /** Keeps the URL so the picker's "Download anyway" still works after a failed analysis. */

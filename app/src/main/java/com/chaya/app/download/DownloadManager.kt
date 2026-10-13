@@ -915,6 +915,16 @@ class DownloadManager(
             throw e
         } catch (e: Exception) {
             partial.delete()
+            // Why, in Diagnostics: a stream that a server answered with a decoy or an error reads as a failed save.
+            eventLog?.record(
+                ChayaEvent.CaughtException(
+                    tag = "stream-save",
+                    message = ChayaEvent.scrubbedText(
+                        "task $id, $cached bytes downloaded: ${e::class.simpleName}: ${e.message}" +
+                            (e.cause?.let { " (cause ${it::class.simpleName}: ${it.message})" } ?: ""),
+                    ).take(600),
+                ),
+            )
             keepInCache(id, "Plays in Chaya · couldn't save it as MP4")
             return
         }
@@ -1153,7 +1163,9 @@ class DownloadManager(
     }
 
     private fun obtainStreamDownloader(): StreamDownloader =
-        streamDownloader ?: StreamDownloader(context, object : StreamDownloader.Listener {
+        streamDownloader ?: StreamDownloader(context, onFetch = { answer ->
+            eventLog?.record(ChayaEvent.CaughtException("stream-fetch", ChayaEvent.scrubbedText(answer).take(300)))
+        }, listener = object : StreamDownloader.Listener {
             override fun onStreamProgress(taskId: Long, downloadedBytes: Long, totalBytes: Long?) {
                 progress(taskId, downloadedBytes, totalBytes)
             }
