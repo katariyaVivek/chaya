@@ -34,7 +34,7 @@ class TabSwipeTest {
 
     private fun showBar() {
         composeRule.setContent {
-            Box(Modifier.size(360.dp, 56.dp).testTag("bar").swipeBetweenTabs { steps += it; true }) {
+            Box(Modifier.size(360.dp, 56.dp).testTag("bar").swipeBetweenTabs { steps += it }) {
                 TextButton(onClick = { taps++ }) { Text("Back") }
             }
         }

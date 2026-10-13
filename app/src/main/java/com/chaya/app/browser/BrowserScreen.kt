@@ -888,7 +888,7 @@ fun BrowserScreen(
                                 .fillMaxWidth()
                                 .navigationBarsPadding()
                                 // Swipe sideways along the bar for the tab beside this one.
-                                .swipeBetweenTabs { step -> tabs.beside(step)?.let { showTab(it) } != null }
+                                .swipeBetweenTabs { step -> tabs.beside(step)?.let { showTab(it) } }
                                 .padding(horizontal = 12.dp, vertical = 4.dp),
                             horizontalArrangement = Arrangement.SpaceEvenly,
                             verticalAlignment = Alignment.CenterVertically
