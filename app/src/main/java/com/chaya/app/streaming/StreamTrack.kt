@@ -14,4 +14,6 @@ data class StreamTrack(
     val bitrate: Int = 0,
     /** Secondary facts, e.g. "1920×1080 · 6.2 Mbps". */
     val detail: String = "",
+    /** The whole stream's length as its playlist states it, when it does; the same on every track of a stream. */
+    val streamDurationSeconds: Double? = null,
 )

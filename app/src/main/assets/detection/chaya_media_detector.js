@@ -207,10 +207,19 @@
 
   // The search measures text on the page, so a page that changes all the time (a playing video's clock) has it
   // run at most every few seconds, not with every report.
+  // A kept result books one fresh look for when it runs out: a page that draws its name late and then goes quiet
+  // would otherwise keep the look taken before the name was there.
   var headingCache = { at: 0, url: '', value: '' };
+  var headingRecheck = null;
   function cachedMainHeading() {
     var now = Date.now();
-    if (headingCache.url === location.href && now - headingCache.at < 3000) return headingCache.value;
+    var age = now - headingCache.at;
+    if (headingCache.url === location.href && age < 3000) {
+      if (!headingRecheck) {
+        headingRecheck = setTimeout(function () { headingRecheck = null; schedulePageMeta(); }, 3000 - age + 50);
+      }
+      return headingCache.value;
+    }
     headingCache = { at: now, url: location.href, value: mainHeading() };
     return headingCache.value;
   }
