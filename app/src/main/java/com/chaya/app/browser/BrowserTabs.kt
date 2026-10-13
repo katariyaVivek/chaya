@@ -147,6 +147,16 @@ internal class BrowserTabs(val maxTabs: Int = MAX_TABS, val maxLive: Int = MAX_L
         return tabs.getOrNull(at) ?: tabs.getOrNull(at - 1)
     }
 
+    /**
+     * The tab [step] places from the one shown in the list (-1 the one before, 1 the one after); null at either
+     * end, which a swipe does not wrap past.
+     */
+    fun beside(step: Int): BrowserTab? {
+        val at = tabs.indexOfFirst { it.id == activeId }
+        if (at < 0) return null
+        return tabs.getOrNull(at + step)
+    }
+
     fun changed() {
         _version.update { it + 1 }
     }
