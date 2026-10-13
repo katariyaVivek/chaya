@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- LeakCanary is installed by LeakWatching instead, without the watcher that crashes on WebView's dialogs. -->
+    <bool name="leak_canary_watcher_auto_install">false</bool>
+</resources>

@@ -55,6 +55,15 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
+      # The build's Gradle and Kotlin daemons stay alive and hold up to 3 GB each next to a 6 GB emulator; the
+      # emulator kept vanishing mid-run (adb's port refused, no app crash), the way a process taken by the
+      # out-of-memory killer does. Stopped here so the emulator has the runner's memory.
+      - name: Stop the build's daemons
+        run: |
+          gradle --stop
+          pkill -f KotlinCompileDaemon || true
+          free -m
+
       - name: Walk through the app in an emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -71,6 +80,12 @@ jobs:
           cores: 3
           disable-animations: true
           script: python3 .github/scripts/walkthrough.py
+
+      - name: Look for the out-of-memory killer
+        if: failure()
+        run: |
+          free -m
+          sudo dmesg | grep -iE 'out of memory|oom-kill|killed process' || echo "no out-of-memory kill recorded"
 
       - name: Upload evidence
         if: always()

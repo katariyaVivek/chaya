@@ -56,6 +56,22 @@ class BrowserTabsTest {
     }
 
     @Test
+    fun `a swipe finds the tab beside the one shown, and stops at either end`() {
+        val tabs = BrowserTabs()
+        val first = tabs.open().also { tabs.activate(it.id) }
+        val second = tabs.open().also { tabs.activate(it.id) }
+        val third = tabs.open()
+        tabs.activate(second.id)
+
+        assertEquals(third.id, tabs.beside(1)?.id)
+        assertEquals(first.id, tabs.beside(-1)?.id)
+        tabs.activate(third.id)
+        assertNull(tabs.beside(1))
+        tabs.activate(first.id)
+        assertNull(tabs.beside(-1))
+    }
+
+    @Test
     fun `closing the tab shown hands over to the next one, else the one before`() {
         val tabs = BrowserTabs()
         val (a, b, c) = List(3) { tabs.open() }

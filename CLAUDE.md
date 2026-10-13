@@ -66,6 +66,9 @@ platform 36, Gradle 8.14.3 and Python 3.13 (Chaquopy). Versions are in `gradle/l
   transfer do nothing.
 - Every WebView must handle `onRenderProcessGone`, including the throwaway one a page's popup gets.
   Otherwise one renderer crash ends the whole app, with no Java crash report.
+- LeakCanary's root view watcher reads its own resources through every dialog, and WebView's dialogs (a
+  `<select>` list, a date picker) carry WebView's resources, so debug builds closed on any drop-down. Debug
+  builds install LeakCanary without it (`app/src/debug/.../LeakWatching.kt`).
 - Kotlin's inlined functions report line numbers beyond the end of the file in stack traces;
   find the real call site, not the reported line.
 - Gradle parallel project execution stays off (Chaquopy + KSP fail on a project lock).

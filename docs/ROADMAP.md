@@ -43,19 +43,17 @@ up by yt-dlp on the phone, with picture and sound joined into one MP4. Merged as
 | [#39](https://github.com/katariyaVivek/chaya/pull/39) | Downloads as a library: a grid of what is done (videos by a frame, a post's pictures as one tile), a full-screen picture viewer with zoom, an account's ZIP opened to its files (view, share, save one), filters by kind and site, search by title, Share on every finished file, and several chosen at once to share or delete |
 | [#40](https://github.com/katariyaVivek/chaya/pull/40) | A page whose renderer crashes no longer takes the whole app down: the page is opened again (once), other tabs load again when shown, and a page's popup window survives it too |
 | [#41](https://github.com/katariyaVivek/chaya/pull/41) | Video in players embedded from another server is found: a small script inside the frame reports what its player loaded (even a stream whose address and type say nothing), the page's detector passes it on, and only addresses the browser really loaded are kept |
+| [#43](https://github.com/katariyaVivek/chaya/pull/43) | A page's drop-down (7movies' season list) no longer closes debug builds: LeakCanary is installed without the watcher that threw on WebView's dialogs. Swipe sideways along the bottom bar to switch to the tab beside this one |
 
 ## Next
 
 The six-part plan after v0.4.0 has shipped (#34 to #39); it is in
 [`history/plan-after-v0.4.md`](history/plan-after-v0.4.md). What is left:
 
-0. **First: the app still closes on 7movies.ac.** On a Slow Horses episode page, tapping the season
-   button (a drop-down) closes the whole app, every time. #40 handled a renderer crash, which was
-   the likeliest cause, but the owner reports it still happens with main's APK after #41, and now
-   has a crash report from Downloads › ⋮ › Diagnostics. Start the next session by asking for that
-   report and fixing what it names, with a test that fails without the fix. Then check that the
-   episode playing in the site's embedded player is found (#41), which the owner could not reach
-   yet because of the crash.
+0. **First: check 7movies.ac on main's APK after #43.** The crash on the season drop-down was
+   LeakCanary (debug builds only) failing on WebView's `<select>` dialog, fixed in #43. Then check
+   that the episode playing in the site's embedded player is found (#41), which the owner could not
+   reach before because of the crash.
 1. **Check the video-site path end to end on a phone.** The engine, the join and the UI have each
    been tested, but a real lookup followed by a real download has not run in one piece. A
    walkthrough scenario for it would make that repeatable.
@@ -84,6 +82,9 @@ The six-part plan after v0.4.0 has shipped (#34 to #39); it is in
   loading the local test page, whose ad and looping background play by themselves in every tab that
   shows it, decoded on the host. Since #39 those two clips are 160×90 at 2 frames a second. After it
   happened once more on #40, the main clip stopped autoplaying too, and since #41 the emulator has
-  6 GB instead of 4. If it still happens, split the walkthrough across two emulator runs.
+  6 GB instead of 4. It happened twice more on #43, once at the very first screen, so it is likely the
+  runner's memory: since #43 the build's Gradle and Kotlin daemons are stopped before the emulator
+  starts, and a failed run prints any out-of-memory kill. If it still happens, split the walkthrough
+  across two emulator runs.
 - Gradle's parallel project execution is off: with Chaquopy it made `kspDebugKotlin` fail on a
   project lock. The app is a single module, so nothing is lost.
