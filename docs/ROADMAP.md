@@ -57,7 +57,9 @@ The six-part plan after v0.4.0 has shipped (#34 to #39); it is in
    download (an earlier try saved 729 B). #45 looks for the heading as the biggest title near the
    top of the page. The download "finished" with 721.8 KB that could not be saved as MP4: a short
    decoy or error stream, most likely. #45 sends the player's Origin with stream requests and writes
-   why a save failed to Diagnostics (tag `stream-save`); read that next if it still fails.
+   why a save failed to Diagnostics (tag `stream-save`), and what the server answered for the
+   first six requests of each stream download (`stream-fetch`: type and length, or the HTTP
+   status). The 721.8 KB copy played as 0:00, so it held no video. Read both if it still fails.
 1. **Check the video-site path end to end on a phone.** The engine, the join and the UI have each
    been tested, but a real lookup followed by a real download has not run in one piece. A
    walkthrough scenario for it would make that repeatable.

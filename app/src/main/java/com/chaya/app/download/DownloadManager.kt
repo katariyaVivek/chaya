@@ -1163,7 +1163,9 @@ class DownloadManager(
     }
 
     private fun obtainStreamDownloader(): StreamDownloader =
-        streamDownloader ?: StreamDownloader(context, object : StreamDownloader.Listener {
+        streamDownloader ?: StreamDownloader(context, onFetch = { answer ->
+            eventLog?.record(ChayaEvent.CaughtException("stream-fetch", ChayaEvent.scrubbedText(answer).take(300)))
+        }, listener = object : StreamDownloader.Listener {
             override fun onStreamProgress(taskId: Long, downloadedBytes: Long, totalBytes: Long?) {
                 progress(taskId, downloadedBytes, totalBytes)
             }
