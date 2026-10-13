@@ -44,7 +44,7 @@ up by yt-dlp on the phone, with picture and sound joined into one MP4. Merged as
 | [#40](https://github.com/katariyaVivek/chaya/pull/40) | A page whose renderer crashes no longer takes the whole app down: the page is opened again (once), other tabs load again when shown, and a page's popup window survives it too |
 | [#41](https://github.com/katariyaVivek/chaya/pull/41) | Video in players embedded from another server is found: a small script inside the frame reports what its player loaded (even a stream whose address and type say nothing), the page's detector passes it on, and only addresses the browser really loaded are kept |
 | [#43](https://github.com/katariyaVivek/chaya/pull/43) | A page's drop-down (7movies' season list) no longer closes debug builds: LeakCanary is installed without the watcher that threw on WebView's dialogs. Swipe sideways along the bottom bar to switch to the tab beside this one |
-| [#44](https://github.com/katariyaVivek/chaya/pull/44) | A player in a frame no longer lists its stream's pieces as videos, one more with every piece played, nor its playlist of seek thumbnails; a page titled with the site's slogan names its video after the page's heading |
+| [#44](https://github.com/katariyaVivek/chaya/pull/44) | A player in a frame no longer lists its stream's pieces as videos, one more with every piece played, nor its playlist of seek thumbnails; a page titled with the site's slogan names its video after the page's heading. Also: a public Instagram post of pictures is saved without a sign-in (it showed "unavailable") |
 
 ## Next
 

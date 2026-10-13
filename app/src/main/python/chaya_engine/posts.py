@@ -5,6 +5,7 @@ videos of a carousel. When a post has pictures, gallery-dl lists all of it, in t
 """
 import os
 import threading
+from urllib.parse import urlparse
 
 from gallery_dl import config as gdl_config
 from gallery_dl import extractor as gdl_extractor
@@ -42,6 +43,61 @@ def items_of(url, cache_dir, cookie_file=None, find=None):
                 meta = meta or message[2]
                 items.append(_item(file_url, message[2]))
         return (meta or {}), items
+
+
+def instagram_post(product):
+    """(meta, items) for an Instagram post as yt-dlp read it without a sign-in, pictures included.
+
+    [product] is the post's media record (Instagram's own JSON, which yt-dlp reads and then keeps only the videos
+    of). A carousel lists its pieces in "carousel_media"; a single picture or video is the record itself. [meta] has
+    the keys `describe` reads.
+    """
+    if not isinstance(product, dict):
+        return {}, []
+    pieces = [piece for piece in product.get('carousel_media') or [] if isinstance(piece, dict)] or [product]
+    items = [item for item in (_instagram_item(piece) for piece in pieces) if item]
+    user = product.get('user') if isinstance(product.get('user'), dict) else {}
+    caption = product.get('caption') if isinstance(product.get('caption'), dict) else {}
+    code = product.get('code')
+    meta = {
+        'category': 'instagram',
+        'description': caption.get('text') or '',
+        'username': user.get('username'),
+        'post_shortcode': code,
+        'post_url': f'https://www.instagram.com/p/{code}/' if code else None,
+    }
+    return meta, items
+
+
+def _instagram_item(piece):
+    videos = [v for v in piece.get('video_versions') or [] if isinstance(v, dict) and v.get('url')]
+    if videos:
+        best, kind, ext = _largest(videos), 'video', 'mp4'
+    else:
+        images = (piece.get('image_versions2') or {}).get('candidates') or []
+        images = [i for i in images if isinstance(i, dict) and i.get('url')]
+        if not images:
+            return None
+        best, kind = _largest(images), 'image'
+        ext = _extension_of(best['url']) or 'jpg'
+    return {
+        'url': best['url'],
+        'kind': kind,
+        'ext': ext,
+        'width': best.get('width') or None,
+        'height': best.get('height') or None,
+        'http_headers': {'Referer': 'https://www.instagram.com/'},
+    }
+
+
+def _largest(versions):
+    return max(versions, key=lambda v: (v.get('width') or 0) * (v.get('height') or 0))
+
+
+def _extension_of(url):
+    name = urlparse(url).path.rsplit('/', 1)[-1]
+    ext = name.rsplit('.', 1)[-1].lower() if '.' in name else ''
+    return ext if ext in ('jpg', 'jpeg', 'png', 'webp', 'heic') else None
 
 
 def plain_address(file_url, info):

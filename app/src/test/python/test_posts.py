@@ -122,6 +122,9 @@ class FailingYoutubeDL:
     def __exit__(self, *exc):
         return False
 
+    def add_info_extractor(self, ie):
+        pass
+
     def extract_info(self, url, download):
         raise Exception(self.message)
 
@@ -190,5 +193,58 @@ def test_a_carousel_yt_dlp_saw_as_videos_is_listed_whole(tmp_path, monkeypatch):
 
     assert [item['kind'] for item in media['items']] == ['image', 'video', 'image']
 
+
+# endregion
+
+
+# region an Instagram post as yt-dlp read it without a sign-in
+
+def _image(url, width, height):
+    return {'url': url, 'width': width, 'height': height}
+
+
+INSTAGRAM_CAROUSEL = {
+    'code': 'DAbc123',
+    'caption': {'text': 'Sunset at the pier\nsecond line'},
+    'user': {'username': 'pier_photos'},
+    'carousel_media': [
+        {'image_versions2': {'candidates': [
+            _image('https://scontent.cdninstagram.com/v/t51/1_n.jpg?stp=dst-jpg_s320x320', 320, 400),
+            _image('https://scontent.cdninstagram.com/v/t51/1_n.jpg?stp=dst-jpg_e35', 1080, 1350),
+        ]}},
+        {'video_versions': [
+            {'url': 'https://scontent.cdninstagram.com/o1/v/t16/clip_480.mp4', 'width': 480, 'height': 600},
+            {'url': 'https://scontent.cdninstagram.com/o1/v/t16/clip_720.mp4', 'width': 720, 'height': 900},
+        ], 'image_versions2': {'candidates': [_image('https://scontent.cdninstagram.com/cover.jpg', 720, 900)]}},
+        {'image_versions2': {'candidates': [_image('https://scontent.cdninstagram.com/v/t51/3_n.webp', 1080, 1080)]}},
+    ],
+}
+
+
+def test_an_instagram_carousel_gives_every_picture_and_video_in_order_at_full_size():
+    meta, items = posts.instagram_post(INSTAGRAM_CAROUSEL)
+
+    assert [(i['kind'], i['ext'], i['width']) for i in items] == [('image', 'jpg', 1080), ('video', 'mp4', 720),
+                                                                 ('image', 'webp', 1080)]
+    assert items[0]['url'].endswith('dst-jpg_e35')
+    assert items[1]['url'].endswith('clip_720.mp4')
+    described = posts.describe(meta, items)
+    assert described['title'] == 'Sunset at the pier'
+    assert described['uploader'] == 'pier_photos'
+    assert described['id'] == 'DAbc123'
+    assert described['webpage_url'] == 'https://www.instagram.com/p/DAbc123/'
+    assert described['thumbnail'] == items[0]['url']
+    assert described['extractor_key'] == 'Instagram'
+
+
+def test_a_single_instagram_picture_is_one_item():
+    _, items = posts.instagram_post({'code': 'X', 'image_versions2': {'candidates': [
+        _image('https://scontent.cdninstagram.com/a.jpg', 640, 640)]}})
+
+    assert [(i['kind'], i['url']) for i in items] == [('image', 'https://scontent.cdninstagram.com/a.jpg')]
+
+
+def test_something_that_is_not_a_post_gives_nothing():
+    assert posts.instagram_post(None) == ({}, [])
 
 # endregion

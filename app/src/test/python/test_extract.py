@@ -189,3 +189,69 @@ def test_a_very_long_failure_message_is_cut(monkeypatch):
 
 
 # endregion
+
+
+# region an Instagram post of pictures, read without a sign-in
+
+PHOTO_POST = {
+    'code': 'DPhoto1',
+    'caption': {'text': 'Two pictures'},
+    'user': {'username': 'someone'},
+    'carousel_media': [
+        {'image_versions2': {'candidates': [{'url': 'https://scontent.cdninstagram.com/1.jpg', 'width': 1080, 'height': 1080}]}},
+        {'image_versions2': {'candidates': [{'url': 'https://scontent.cdninstagram.com/2.jpg', 'width': 1080, 'height': 1080}]}},
+    ],
+}
+
+
+class _InstagramYoutubeDL(_FakeYoutubeDL):
+    """Runs the extractor the engine hands over the way yt-dlp does: it reads the post, then gives up on it
+    as yt-dlp does on a post without a video."""
+    post = None
+    added = None
+
+    def add_info_extractor(self, ie):
+        type(self).added = ie
+
+    def extract_info(self, url, download):
+        type(self).added._extract_product(type(self).post, video_id='DPhoto1', get_comments=False)
+        if type(self).result is None:
+            raise Exception('ERROR: [Instagram] DPhoto1: There is no video in this post')
+        return type(self).result
+
+
+def test_an_instagram_post_of_pictures_comes_back_whole_without_a_sign_in(monkeypatch):
+    _InstagramYoutubeDL.post = PHOTO_POST
+    _InstagramYoutubeDL.result = None
+    monkeypatch.setattr(engine, 'YoutubeDL', _InstagramYoutubeDL)
+    monkeypatch.setattr(engine.posts, 'items_of', lambda *a, **k: pytest.fail('gallery-dl needs a sign-in here'))
+
+    media = json.loads(engine.extract('https://www.instagram.com/p/DPhoto1/', '/cache'))['media']
+
+    assert [i['url'] for i in media['items']] == ['https://scontent.cdninstagram.com/1.jpg',
+                                                 'https://scontent.cdninstagram.com/2.jpg']
+    assert media['title'] == 'Two pictures'
+    assert media['formats'] == []
+
+
+def test_an_instagram_post_of_videos_only_keeps_the_quality_choice(monkeypatch):
+    _InstagramYoutubeDL.post = {'code': 'V', 'video_versions': [{'url': 'https://scontent.cdninstagram.com/v.mp4'}]}
+    _InstagramYoutubeDL.result = {'id': 'V', 'title': 'Reel', 'formats': [{'format_id': 'a', 'url': 'https://x/a.mp4'}]}
+    monkeypatch.setattr(engine, 'YoutubeDL', _InstagramYoutubeDL)
+
+    media = json.loads(engine.extract('https://www.instagram.com/reel/V/', '/cache'))['media']
+
+    assert 'items' not in media
+    assert media['formats'][0]['format_id'] == 'a'
+
+
+def test_the_keeping_extractor_takes_the_place_of_yt_dlps_own():
+    from yt_dlp import YoutubeDL
+
+    keeping = engine._KeepingInstagramIE()
+    with YoutubeDL({'quiet': True}) as ydl:
+        ydl.add_info_extractor(keeping)
+        assert ydl.get_info_extractor('Instagram') is keeping
+    assert keeping.suitable('https://www.instagram.com/p/DPhoto1/')
+
+# endregion

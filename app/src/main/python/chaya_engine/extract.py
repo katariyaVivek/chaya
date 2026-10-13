@@ -10,6 +10,7 @@ import json
 from urllib.parse import urlparse
 
 from yt_dlp import YoutubeDL
+from yt_dlp.extractor.instagram import InstagramIE
 
 from . import jsc_provider  # noqa: F401  (importing registers the embedded JavaScript challenge solver)
 from . import posts
@@ -41,16 +42,26 @@ def extract(url, cache_dir, cookie_file=None):
     }
     if cookie_file:
         options['cookiefile'] = cookie_file
+    instagram = _KeepingInstagramIE() if _is_instagram(url) else None
 
     try:
         with YoutubeDL(options) as ydl:
+            if instagram:
+                ydl.add_info_extractor(instagram)
             info = ydl.sanitize_info(ydl.extract_info(url, download=False))
     except Exception as error:  # noqa: BLE001 - every failure becomes something the app can explain
-        # yt-dlp fails on a post of photos ("There is no video in this post"); gallery-dl can list it.
-        post = _post_or_none(url, cache_dir, cookie_file) if _may_hold_pictures(url, error) else None
+        # yt-dlp fails on a post of photos ("There is no video in this post"), though it read the post: the
+        # pictures are in what it kept. Elsewhere (X), gallery-dl can list it.
+        post = _instagram_post_or_none(instagram)
+        if not post and _may_hold_pictures(url, error):
+            post = _post_or_none(url, cache_dir, cookie_file)
         return json.dumps({'media': post} if post else _error(error))
 
     try:
+        # A post with pictures in it is offered whole, pictures and videos in its order.
+        post = _instagram_post_or_none(instagram)
+        if post:
+            return json.dumps({'media': post})
         # A carousel arrives as a playlist of its videos only; when it holds pictures too, the whole post is wanted.
         if info.get('_type') == 'playlist' and _is_post_site(url):
             post = _post_or_none(url, cache_dir, cookie_file)
@@ -66,6 +77,41 @@ def _error(error):
 
 
 _POST_HOSTS = ('instagram.com', 'x.com', 'twitter.com')
+
+
+class _KeepingInstagramIE(InstagramIE):
+    """yt-dlp's Instagram extractor, keeping the post it read. yt-dlp reads a public post whole without a sign-in
+    (gallery-dl cannot) but keeps only its videos; [post] keeps the rest for `posts.instagram_post`."""
+
+    post = None
+
+    @classmethod
+    def ie_key(cls):
+        # Stands in for yt-dlp's own, under its name.
+        return 'Instagram'
+
+    def _extract_product(self, product_info, *args, **kwargs):
+        self.post = product_info[0] if isinstance(product_info, list) and product_info else product_info
+        return super()._extract_product(product_info, *args, **kwargs)
+
+
+def _instagram_post_or_none(instagram):
+    """The Instagram post yt-dlp read, as the app's media with every item, when it holds a picture; else None,
+    and a post of videos only goes through yt-dlp's formats and the quality choice."""
+    if instagram is None or instagram.post is None:
+        return None
+    meta, items = posts.instagram_post(instagram.post)
+    if not any(item['kind'] == 'image' for item in items):
+        return None
+    media = {key: None for key in _INFO_FIELDS}
+    media.update(posts.describe(meta, items))
+    media.update({'is_live': False, 'formats': [], 'items': items})
+    return media
+
+
+def _is_instagram(url):
+    host = (urlparse(url).hostname or '').lower()
+    return host == 'instagram.com' or host.endswith('.instagram.com')
 
 
 def _is_post_site(url):

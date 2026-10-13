@@ -86,10 +86,13 @@ Android's WebView cannot run extensions, so Chaya blocks with uBlock Origin's ba
 - `PlatformEngine` runs **yt-dlp inside the app** through Chaquopy (Python 3.13). It only looks a
   link up and returns the title, poster and formats; Chaya's own downloader fetches the files.
   `chaya_engine.extract` wraps yt-dlp and classifies its errors.
-- **Pictures in posts** come from gallery-dl (`chaya_engine.posts`), because yt-dlp only sees
-  videos: it fails on a post of photos and keeps only the videos of a carousel. It is asked only in
-  those two cases, for Instagram and X, so a single video still gets yt-dlp's quality choices. The
-  answer is `LinkState.FoundPost`: every item in the post, each saved as it is.
+- **Pictures in posts.** yt-dlp only sees videos: it fails on a post of photos and keeps only the
+  videos of a carousel. On Instagram it still reads the whole post without a sign-in, so the engine
+  runs it with `_KeepingInstagramIE`, which keeps that post, and `posts.instagram_post` turns its
+  pictures and videos into items. gallery-dl (`chaya_engine.posts`) lists the rest: X posts, and an
+  Instagram post yt-dlp could not read (gallery-dl needs a sign-in there). Both are asked only when
+  a post holds pictures, so a single video still gets yt-dlp's quality choices. The answer is
+  `LinkState.FoundPost`: every item in the post, each saved as it is.
 - **A whole account as one ZIP.** `ProfileMatcher` recognises account pages (instagram.com/name,
   x.com/name). `ProfileLister` asks `chaya_engine.profiles` (gallery-dl) to list the account's
   posts, with the person's sign-in only when they chose it on the sheet; the choice is part of the
