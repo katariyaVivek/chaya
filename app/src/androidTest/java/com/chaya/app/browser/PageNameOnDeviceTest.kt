@@ -31,21 +31,27 @@ class PageNameOnDeviceTest {
 
     @Before
     fun setUp() {
-        server.enqueue(
-            MockResponse().setHeader("Content-Type", "text/html").setBody(
-                "<html><head><title>Watch Movies &amp; TV Shows Online in HD</title>" +
-                    "<meta name=\"viewport\" content=\"width=device-width\"></head>" +
-                    "<body style=\"margin:0;background:#000;color:#fff;font-family:sans-serif\">" +
-                    "<div style=\"display:flex;gap:12px;padding:16px\"><button style=\"font-size:20px\">&larr;</button>" +
-                    "<div><div style=\"font-size:30px;font-weight:700\">The Mentalist</div>" +
-                    "<div style=\"font-size:14px\">S1 &middot; E1 &mdash; Pilot</div></div>" +
-                    "<span style=\"font-size:14px\">Ads</span></div>" +
-                    "<div style=\"height:240px;background:#333\"></div>" +
-                    "<p style=\"font-size:13px\">Having issues? Switch server.</p>" +
-                    "<h2 style=\"font-size:48px;margin-top:1200px\">Episodes</h2></body></html>"
-            )
-        )
         server.start()
+    }
+
+    private fun showPage(drawLater: Boolean): String {
+        val header = "<div style=\"display:flex;gap:12px;padding:16px\"><button style=\"font-size:20px\">&larr;</button>" +
+            "<div><div style=\"font-size:30px;font-weight:700\">The Mentalist</div>" +
+            "<div style=\"font-size:14px\">S1 &middot; E1 &mdash; Pilot</div></div>" +
+            "<span style=\"font-size:14px\">Ads</span></div>"
+        // An app that draws the page a moment after loading, then goes quiet.
+        val body = if (drawLater) {
+            "<div id=\"app\"></div><script>setTimeout(function () { document.getElementById('app').innerHTML = '" +
+                header.replace("'", "\\'") + "'; }, 900);</script>"
+        } else {
+            header
+        }
+        return "<html><head><title>Watch Movies &amp; TV Shows Online in HD</title>" +
+            "<meta name=\"viewport\" content=\"width=device-width\"></head>" +
+            "<body style=\"margin:0;background:#000;color:#fff;font-family:sans-serif\">" + body +
+            "<div style=\"height:240px;background:#333\"></div>" +
+            "<p style=\"font-size:13px\">Having issues? Switch server.</p>" +
+            "<h2 style=\"font-size:48px;margin-top:1200px\">Episodes</h2></body></html>"
     }
 
     @After
@@ -54,7 +60,14 @@ class PageNameOnDeviceTest {
     }
 
     @Test
-    fun aNameSetInAStyledDivAboveThePlayerIsReported() {
+    fun aNameSetInAStyledDivAboveThePlayerIsReported() = assertNameReported(drawLater = false)
+
+    /** #47 kept the first look, taken before the name was drawn, and a page that then went quiet kept no name. */
+    @Test
+    fun aNameDrawnAfterThePageLoadsIsReported() = assertNameReported(drawLater = true)
+
+    private fun assertNameReported(drawLater: Boolean) {
+        server.enqueue(MockResponse().setHeader("Content-Type", "text/html").setBody(showPage(drawLater)))
         val context = instrumentation.targetContext
         val app = context.applicationContext as ChayaApplication
         val detectorJs = context.assets.open("detection/chaya_media_detector.js").bufferedReader().readText()
