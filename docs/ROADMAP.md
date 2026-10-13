@@ -45,7 +45,7 @@ up by yt-dlp on the phone, with picture and sound joined into one MP4. Merged as
 | [#41](https://github.com/katariyaVivek/chaya/pull/41) | Video in players embedded from another server is found: a small script inside the frame reports what its player loaded (even a stream whose address and type say nothing), the page's detector passes it on, and only addresses the browser really loaded are kept |
 | [#43](https://github.com/katariyaVivek/chaya/pull/43) | A page's drop-down (7movies' season list) no longer closes debug builds: LeakCanary is installed without the watcher that threw on WebView's dialogs. Swipe sideways along the bottom bar to switch to the tab beside this one |
 | [#44](https://github.com/katariyaVivek/chaya/pull/44) | A player in a frame no longer lists its stream's pieces as videos, one more with every piece played, nor its playlist of seek thumbnails; a page titled with the site's slogan names its video after the page's heading. Also: a public Instagram post of pictures is saved without a sign-in (it showed "unavailable") |
-| [#45](https://github.com/katariyaVivek/chaya/pull/45) | A page's name is found when its heading is not a lone h1 (the biggest title near the top); a lookup of an Instagram post or a tweet says "Finding the post…", since it may hold only pictures |
+| [#45](https://github.com/katariyaVivek/chaya/pull/45) | A page's name is found when its heading is not a lone h1 (the biggest title near the top); a lookup of an Instagram post or a tweet says "Finding the post…", since it may hold only pictures; stream requests carry the player's Origin, and why a stream could not be saved as MP4 is in Diagnostics |
 
 ## Next
 
@@ -55,7 +55,9 @@ The six-part plan after v0.4.0 has shipped (#34 to #39); it is in
 0. **First: 7movies.ac.** Since #44 the sheet shows one stream, but still named after the site's
    slogan (its title heading is not a lone h1), and the owner reports the episode still does not
    download (an earlier try saved 729 B). #45 looks for the heading as the biggest title near the
-   top of the page. Next: find out what the download does (fails, or saves a few bytes) and fix it.
+   top of the page. The download "finished" with 721.8 KB that could not be saved as MP4: a short
+   decoy or error stream, most likely. #45 sends the player's Origin with stream requests and writes
+   why a save failed to Diagnostics (tag `stream-save`); read that next if it still fails.
 1. **Check the video-site path end to end on a phone.** The engine, the join and the UI have each
    been tested, but a real lookup followed by a real download has not run in one piece. A
    walkthrough scenario for it would make that repeatable.

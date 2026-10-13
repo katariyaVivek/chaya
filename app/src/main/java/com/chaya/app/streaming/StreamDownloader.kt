@@ -249,12 +249,7 @@ class StreamDownloader(
             ?.toLongOrNull()
 
     private fun applyHeaders(ua: String?, cookies: String?, referer: String?) {
-        val map = buildMap {
-            ua?.let { put("User-Agent", it) }
-            cookies?.let { put("Cookie", it) }
-            referer?.takeIf { it.isNotBlank() }?.let { put("Referer", it) }
-        }
-        currentHeaders.set(map)
+        currentHeaders.set(StreamHeaders.of(ua, cookies, referer))
     }
 
     private fun tickProgress() {

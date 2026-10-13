@@ -48,6 +48,12 @@ sealed class ChayaEvent {
     ) : ChayaEvent()
 
     companion object {
+        private val urlInText = Regex("https?://[^\\s'\"<>]+")
+
+        /** [text] with every address in it cut to scheme, host and path, as [scrubbed] does for one address. */
+        fun scrubbedText(text: String): String =
+            urlInText.replace(text) { it.value.substringBefore('?').substringBefore('#') }
+
         /** Strips query + fragment; keeps scheme/host/path for debugging. */
         fun scrubbed(rawUrl: String?): String? {
             if (rawUrl.isNullOrBlank()) return null
