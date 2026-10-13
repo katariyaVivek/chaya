@@ -48,16 +48,17 @@ up by yt-dlp on the phone, with picture and sound joined into one MP4. Merged as
 | [#45](https://github.com/katariyaVivek/chaya/pull/45) | A page's name is found when its heading is not a lone h1 (the biggest title near the top); a lookup of an Instagram post or a tweet says "Finding the post…", since it may hold only pictures; stream requests carry the player's Origin, and why a stream could not be saved as MP4 is in Diagnostics; Quality on a stream with no qualities to read says so instead of downloading another copy |
 | [#46](https://github.com/katariyaVivek/chaya/pull/46) | A stream found by its `.m3u8` address downloads, plays and lists its qualities: Media3 is handed the type spelling it recognises (it took `application/vnd.apple.mpegurl` for a plain file and saved the playlist) |
 | [#47](https://github.com/katariyaVivek/chaya/pull/47) | A page whose name is styled text rather than a heading still names its media (the biggest text near the top), and a stream download shows an estimated total size and a real progress bar |
+| [#48](https://github.com/katariyaVivek/chaya/pull/48) | A page that draws its name after loading is named (#47 kept the first, empty look), and the quality sheet estimates each quality's size from the stream's own length when the page's player is embedded from another server |
 
 ## Next
 
 The six-part plan after v0.4.0 has shipped (#34 to #39); it is in
 [`history/plan-after-v0.4.md`](history/plan-after-v0.4.md). What is left:
 
-0. **First: check #47 on the phone.** Since #46 the 7movies episode downloads as a stream. #47
-   names a page's media after the biggest text near the top of the screen when the page title is a
-   slogan (7movies styles a plain div, not a heading), logs that name in Diagnostics (`page-name`),
-   and shows an estimated total for stream downloads from the share of pieces done.
+0. **First: check #48 on the phone.** #47's name search kept its first look for 3 seconds, so a page
+   that drew its name late and then went quiet (7movies) kept no name; #48 looks again when the kept
+   result runs out. #48 also reads a stream's length from its playlist, so the quality sheet
+   estimates sizes for players embedded from another server.
 1. **Check the video-site path end to end on a phone.** The engine, the join and the UI have each
    been tested, but a real lookup followed by a real download has not run in one piece. A
    walkthrough scenario for it would make that repeatable.

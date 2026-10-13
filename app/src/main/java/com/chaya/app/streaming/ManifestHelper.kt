@@ -7,6 +7,8 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.StreamKey
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.dash.manifest.DashManifest
+import androidx.media3.exoplayer.hls.HlsManifest
 import androidx.media3.exoplayer.offline.DownloadHelper
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import kotlinx.coroutines.Dispatchers
@@ -62,7 +64,9 @@ object ManifestHelper {
 
                 helper.prepare(object : DownloadHelper.Callback {
                     override fun onPrepared(helper: DownloadHelper) {
+                        val duration = durationSeconds(helper.manifest)
                         val tracks = extractTracks(helper, DownloadHelper.getDefaultTrackSelectorParameters(context))
+                            .map { it.copy(streamDurationSeconds = duration) }
                         helper.release()
                         if (continuation.isActive) {
                             continuation.resume(Result.success(tracks))
@@ -83,6 +87,20 @@ object ManifestHelper {
             }
         }
     }
+
+    /**
+     * The stream's length from its own manifest: an HLS media playlist's pieces added up (only once it is marked
+     * complete, as a live one keeps growing), or a DASH manifest's stated duration. A player embedded from another
+     * server keeps its length to itself, so this is how the picker estimates sizes for such streams.
+     */
+    internal fun durationSeconds(manifest: Any?): Double? = when (manifest) {
+        is HlsManifest -> manifest.mediaPlaylist.takeIf { it.hasEndTag }?.let { secondsOf(it.durationUs) }
+        is DashManifest -> manifest.durationMs.takeIf { it != C.TIME_UNSET && it > 0 }?.let { it / 1000.0 }
+        else -> null
+    }
+
+    internal fun secondsOf(durationUs: Long): Double? =
+        durationUs.takeIf { it != C.TIME_UNSET && it > 0 }?.let { it / 1_000_000.0 }
 
     /**
      * One entry per rendition. An HLS master or DASH adaptation set puts every

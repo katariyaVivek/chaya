@@ -431,7 +431,9 @@ class BrowserViewModel @JvmOverloads constructor(
                                 url = media.url,
                                 mimeType = media.mimeType,
                                 suggestedName = media.suggestedName,
-                                durationSeconds = durationSeconds,
+                                // The page's player knows the length; a player from another server does not,
+                                // and then the stream's own playlist does.
+                                durationSeconds = durationSeconds ?: tracks.firstNotNullOfOrNull { it.streamDurationSeconds },
                                 title = media.title,
                                 thumbnailUrl = media.thumbnailUrl,
                             )

@@ -101,4 +101,10 @@ class ManifestHelperStreamKeysTest {
         assertEquals(listOf(StreamKey(0, 0, 0)), video.single { it.label == "720p" }.streamKeys)
         assertEquals(listOf(StreamKey(0, 0, 1)), video.single { it.label == "184p" }.streamKeys)
     }
+
+    @Test
+    fun theStreamsLengthComesFromItsPlaylistForSizeEstimates() {
+        // Each media playlist above is one 2-second piece, marked complete.
+        assertTrue(parse().all { it.streamDurationSeconds == 2.0 })
+    }
 }
