@@ -20,6 +20,9 @@ private const val NAVIGATION_CAPABILITY_BYTES = 32
 /** Bounds native verification work even when a page repeatedly reports unique endpoints. */
 private const val MAX_THOROUGH_SCAN_CANDIDATES = 10
 
+/** Answer types that are always one piece of a stream (MPEG-TS, ISO segments), never a file to save. */
+private val STREAM_PIECE_TYPES = setOf("video/mp2t", "audio/mp2t", "video/iso.segment", "audio/iso.segment")
+
 /** Rebinds media destinations safely when the retained WebView returns to its browser screen. */
 private data class MediaBridgeCallbacks(
     val onMediaDetected: (DetectedMedia, Long) -> Unit,
@@ -197,6 +200,8 @@ class MediaBridge(
         val url = rawUrl?.trim()?.substringBefore('#')?.takeIf(::isHttpUrl) ?: return
         if (!wasRequested(url)) return
         val type = contentType?.substringBefore(';')?.trim()?.lowercase(Locale.ROOT)
+        // A piece of a stream, whatever its address looks like; the frame agent leaves these out too.
+        if (type in STREAM_PIECE_TYPES) return
         val mime = when (kind) {
             "hls" -> "application/vnd.apple.mpegurl"
             "dash" -> "application/dash+xml"
