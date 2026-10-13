@@ -90,6 +90,7 @@ class ChayaApplication : Application() {
                     .build()
             )
         }
+        LeakWatching.install(this)
         CrashReporter.install(this, eventLog)
         val dao = database.downloadDao()
         downloadManager = DownloadManager(
