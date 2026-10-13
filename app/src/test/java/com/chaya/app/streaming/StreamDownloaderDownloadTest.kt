@@ -141,6 +141,23 @@ class StreamDownloaderDownloadTest {
     }
 
     @Test
+    fun aStreamTypedAsDetectionTypesItIsDownloadedAsAStream() {
+        serve { hlsStream(it) }
+        val sd = newDownloader()
+
+        // Detection types every .m3u8 address this way; Media3 took that for a plain file and saved the playlist.
+        sd.startStreamDownload(
+            taskId, server.url("/master.m3u8").toString(), "application/vnd.apple.mpegurl", userAgent = null, cookies = null,
+        )
+
+        assertTrue("the download never completed; failures: ${listener.failed}", awaitUntil { taskId in listener.completed })
+        assertEquals(
+            setOf("/master.m3u8", "/low/index.m3u8", "/low/seg0.ts", "/low/seg1.ts"),
+            requested.toSet(),
+        )
+    }
+
+    @Test
     fun theHeadersWeSetReachTheServer() {
         val seen = CopyOnWriteArrayList<Pair<String?, String?>>()
         server.dispatcher = object : Dispatcher() {

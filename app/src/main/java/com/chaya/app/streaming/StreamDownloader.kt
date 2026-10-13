@@ -159,7 +159,7 @@ class StreamDownloader(
             return
         }
         val builder = DownloadRequest.Builder(contentId, Uri.parse(url))
-        mimeType?.let { builder.setMimeType(it) }
+        StreamMime.forMedia3(mimeType)?.let { builder.setMimeType(it) }
         if (!streamKeys.isNullOrEmpty()) builder.setStreamKeys(streamKeys)
         downloadManager.addDownload(builder.build())
     }

@@ -46,7 +46,7 @@ object ManifestHelper {
                 if (headers.isNotEmpty()) dataSourceFactory.setDefaultRequestProperties(headers)
 
                 val mediaItem = if (mimeType != null) {
-                    MediaItem.Builder().setUri(url).setMimeType(mimeType).build()
+                    MediaItem.Builder().setUri(url).setMimeType(StreamMime.forMedia3(mimeType)).build()
                 } else {
                     MediaItem.fromUri(url)
                 }
