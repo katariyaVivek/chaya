@@ -29,7 +29,6 @@ class BrowserViewModelQualityTest {
     fun `a stream with no qualities to read says so instead of downloading`() {
         val viewModel = BrowserViewModel(RuntimeEnvironment.getApplication())
         viewModel.readQualities = { Result.success(emptyList()) }
-        val before = viewModel.downloads.value.size
 
         viewModel.analyzeStream(stream)
         shadowOf(Looper.getMainLooper()).idle()
@@ -37,6 +36,7 @@ class BrowserViewModelQualityTest {
         val state = viewModel.uiState.value.qualityPickerState
         assertTrue("got $state", state is QualityPickerState.Error)
         assertEquals("Download anyway still knows the stream", stream.url, (state as QualityPickerState.Error).url)
-        assertEquals("nothing was downloaded", before, viewModel.downloads.value.size)
+        // Downloads restored from the app's database may appear meanwhile; none of them is this stream.
+        assertTrue("nothing was downloaded", viewModel.downloads.value.none { it.url == stream.url })
     }
 }
