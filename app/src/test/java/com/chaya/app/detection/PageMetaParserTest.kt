@@ -22,7 +22,7 @@ class PageMetaParserTest {
     fun `well-formed reports parse into page and player hints`() {
         val meta = PageMetaParser.parse(
             """
-            {"title":"Launch  event\n- Site","ogTitle":"Launch event","siteName":"Site",
+            {"title":"Launch  event\n- Site","ogTitle":"Launch event","siteName":"Site","heading":" Launch\n event ",
              "ogImage":"https://img.example/poster.jpg",
              "videoUrls":["https://cdn.example/v/main.mp4","javascript:alert(1)"],
              "ldName":"Launch event","ldDuration":"PT1M42S",
@@ -34,6 +34,7 @@ class PageMetaParserTest {
         )!!
 
         assertEquals("Launch event - Site", meta.title)
+        assertEquals("Launch event", meta.heading)
         assertEquals(listOf("https://cdn.example/v/main.mp4"), meta.videoUrls)
         assertEquals(102.0, meta.ldDurationSeconds!!, 0.001)
         val player = meta.players.single()

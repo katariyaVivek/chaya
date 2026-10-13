@@ -23,6 +23,12 @@ object MediaUrlClassifier {
     /** Initialization pieces such as `init.mp4`, `init-stream0.m4s`, `video_init.mp4`. */
     private val initSegmentPattern = Regex("(^|[-_.])init([-_.]|$)", RegexOption.IGNORE_CASE)
 
+    /** Names of playlists of the pictures a player shows while seeking (`tiles.m3u8`, `storyboard.mpd`). */
+    private val thumbnailTrackPattern = Regex(
+        "(^|[-_.])(tiles?|thumbs?|thumbnails?|sprites?|storyboards?|trickplay)([-_.]|$)",
+        RegexOption.IGNORE_CASE,
+    )
+
     /** Query parameters players use to fetch byte ranges of one file. */
     private val rangeParams = setOf("bytestart", "byteend", "range", "bytes")
 
@@ -42,8 +48,10 @@ object MediaUrlClassifier {
         if (isSegment(url)) return MediaKind.SEGMENT
         val ext = extensionOf(url)
         val mime = mimeType?.substringBefore(';')?.trim()?.lowercase(Locale.ROOT)
+        val isManifest = ext in streamExtensions || mime in manifestMimeTypes
         return when {
-            ext in streamExtensions || mime in manifestMimeTypes -> MediaKind.STREAM
+            isManifest && isThumbnailTrack(url) -> MediaKind.SEGMENT
+            isManifest -> MediaKind.STREAM
             ext in audioExtensions || mime?.startsWith("audio/") == true -> MediaKind.AUDIO
             else -> MediaKind.VIDEO
         }
@@ -56,6 +64,10 @@ object MediaUrlClassifier {
         if (name.substringAfterLast('.', "").lowercase(Locale.ROOT) in segmentExtensions) return true
         return segmentNamePattern.containsMatchIn(name) || initSegmentPattern.containsMatchIn(name)
     }
+
+    /** True for a stream manifest named as a player's seek thumbnails, such as `tiles.m3u8`. */
+    fun isThumbnailTrack(url: String): Boolean =
+        thumbnailTrackPattern.containsMatchIn(fileNameOf(url).substringBeforeLast('.'))
 
     /**
      * Drops the fragment and byte-range query parameters so every range request

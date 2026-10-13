@@ -174,6 +174,14 @@
     return null;
   }
 
+  // The page's one main heading ("The Mentalist"), for a page whose title is the site's slogan; none when the page
+  // has several, since then no one of them names it.
+  function mainHeading() {
+    var headings = document.querySelectorAll('h1');
+    if (headings.length !== 1) return '';
+    return clip(headings[0].textContent || '', 200);
+  }
+
   function metaContent(selector) {
     var node = document.querySelector(selector);
     return node ? (node.getAttribute('content') || '') : '';
@@ -212,6 +220,7 @@
       title: clip(document.title, 300),
       ogTitle: clip(metaContent('meta[property="og:title"]'), 300),
       siteName: clip(metaContent('meta[property="og:site_name"]'), 120),
+      heading: mainHeading(),
       ogImage: httpUrlOrNull(metaContent('meta[property="og:image"]')),
       videoUrls: videoUrls.slice(0, 8),
       ldName: ld ? clip(firstString(ld.name), 300) : '',

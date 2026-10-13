@@ -38,6 +38,8 @@ data class PageMeta(
     val title: String?,
     val ogTitle: String?,
     val siteName: String?,
+    /** The page's one `h1`, when it has exactly one. */
+    val heading: String? = null,
     val ogImage: String?,
     /** Declared main-video URLs: og:video*, twitter:player:stream, JSON-LD contentUrl. */
     val videoUrls: List<String>,
@@ -74,6 +76,7 @@ object PageMetaParser {
             title = root.text("title"),
             ogTitle = root.text("ogTitle"),
             siteName = root.text("siteName"),
+            heading = root.text("heading"),
             ogImage = root.url("ogImage"),
             videoUrls = root.optJSONArray("videoUrls").urls(MAX_VIDEO_URLS),
             ldName = root.text("ldName"),

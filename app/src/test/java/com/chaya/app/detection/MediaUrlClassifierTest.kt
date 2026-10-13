@@ -50,6 +50,17 @@ class MediaUrlClassifierTest {
     }
 
     @Test
+    fun `a playlist of seek thumbnails is not a stream to download`() {
+        assertEquals(MediaKind.SEGMENT, MediaUrlClassifier.kindOf("https://cdn.example/v/9/tiles.m3u8", null))
+        assertEquals(MediaKind.SEGMENT, MediaUrlClassifier.kindOf("https://cdn.example/v/9/thumbnails_160.m3u8", null))
+        assertEquals(MediaKind.SEGMENT, MediaUrlClassifier.kindOf("https://cdn.example/v/9/storyboard.mpd", null))
+        assertEquals(MediaKind.STREAM, MediaUrlClassifier.kindOf("https://cdn.example/v/9/master.m3u8", null))
+        assertEquals("only manifests", MediaKind.VIDEO, MediaUrlClassifier.kindOf("https://cdn.example/Tiles.mp4", null))
+        assertEquals("a word inside another is not one", MediaKind.STREAM,
+            MediaUrlClassifier.kindOf("https://cdn.example/stilettos.m3u8", null))
+    }
+
+    @Test
     fun `kinds come from the path first and the MIME type second`() {
         assertEquals(MediaKind.STREAM, MediaUrlClassifier.kindOf("https://cdn.example/master.m3u8?token=1", null))
         assertEquals(MediaKind.STREAM, MediaUrlClassifier.kindOf("https://cdn.example/manifest.mpd", null))

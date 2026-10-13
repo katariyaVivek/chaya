@@ -268,4 +268,16 @@ class MediaBridgeTest {
         assertEquals(null, detected[0].refererUrl)
         assertEquals("application/dash+xml", detected[1].mimeType)
     }
+
+    @Test
+    fun `a stream's pieces from a frame are not offered, whatever their address`() {
+        val detected = mutableListOf<DetectedMedia>()
+        val bridge = MediaBridge(onMediaDetected = { media, _ -> detected += media }, wasRequested = { true })
+        val capability = bridge.beginNavigation("https://site.example/watch", 1L)
+
+        bridge.onFrameMedia(capability, "https://cdn.example/a/x7Gq", "xhr", "file", "video/MP2T", "https://player.example/")
+        bridge.onFrameMedia(capability, "https://cdn.example/a/k2Lp", "xhr", "file", "video/iso.segment", "https://player.example/")
+
+        assertTrue(detected.isEmpty())
+    }
 }

@@ -16,8 +16,8 @@ These are deliberate scope decisions, not open bugs.
   the phone, with one choice per quality. Where a site serves picture and sound separately, Chaya
   downloads both and joins them into one MP4.
 - **Pictures in Instagram and X posts**, carousels and tweets of several photos included: every
-  picture and video in the post, saved together or one at a time. A tweet with one video and some
-  photos offers only the video.
+  picture and video in the post, saved together or one at a time. A public Instagram post needs no
+  sign-in. A tweet with one video and some photos offers only the video.
 - **Everything an Instagram or X account has posted, as one ZIP** (posts only: not stories,
   highlights or reels tabs). Without a sign-in a site shows a visitor little or nothing (Instagram a
   few recent posts at most, X no timeline), so the person can choose to use their sign-in. Listing

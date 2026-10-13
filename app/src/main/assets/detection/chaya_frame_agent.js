@@ -13,6 +13,9 @@
   var reportCount = 0;
   // Bodies read to recognize a manifest: only small text responses, and only their first characters.
   var MAX_BODY_BYTES = 2 * 1024 * 1024;
+  // Once this frame's player has loaded a stream manifest, the video and audio it fetches are that stream's pieces
+  // (hls.js and the like fetch every piece themselves), whatever their addresses and types say.
+  var sawManifest = false;
 
   function absolute(u) {
     try { return new URL(u, location.href).href; } catch (e) { return null; }
@@ -51,6 +54,26 @@
     return null;
   }
 
+  // Answers that are always a piece of a stream: MPEG-TS and the ISO segment types.
+  function isPieceType(contentType) {
+    var type = String(contentType || '').split(';')[0].trim().toLowerCase();
+    return type === 'video/mp2t' || type === 'audio/mp2t' || type === 'video/iso.segment' ||
+      type === 'audio/iso.segment';
+  }
+
+  // A playlist of pictures (the thumbnails a player shows while seeking), not something to watch.
+  function isImagePlaylist(text) {
+    var body = String(text || '');
+    if (/#EXT-X-IMAGES-ONLY|#EXT-X-TILES/i.test(body)) return true;
+    var uris = body.split(/\r?\n/).map(function (line) { return line.trim(); })
+      .filter(function (line) { return line && line.charAt(0) !== '#'; });
+    if (!uris.length) return false;
+    for (var i = 0; i < uris.length; i++) {
+      if (!/\.(jpe?g|png|webp|gif|avif)([?#]|$)/i.test(uris[i])) return false;
+    }
+    return true;
+  }
+
   function kindOfBody(text) {
     var head = String(text || '').slice(0, 512).replace(/^﻿/, '').trim();
     if (head.indexOf('#EXTM3U') === 0) return 'hls';
@@ -68,7 +91,9 @@
 
   function report(rawUrl, tag, kind, type) {
     var url = absolute(rawUrl);
-    if (!isHttp(url) || !kind || isSegment(url)) return;
+    if (!isHttp(url) || !kind || isSegment(url) || isPieceType(type)) return;
+    if (kind === 'hls' || kind === 'dash') sawManifest = true;
+    else if (sawManifest && (tag === 'fetch' || tag === 'xhr')) return;
     url = url.split('#')[0];
     if (reported[url] || reportCount >= MAX_REPORTS) return;
     reported[url] = true;
@@ -135,25 +160,38 @@
     document.addEventListener(type, scheduleScan, true);
   });
 
+  // Reports an HLS playlist once its text is known, unless it lists only pictures; one that cannot be read is
+  // reported as it is.
+  function reportPlaylist(url, tag, type, textPromise) {
+    sawManifest = true;
+    textPromise.then(function (text) {
+      if (!isImagePlaylist(text)) report(url, tag, 'hls', type);
+    }, function () { report(url, tag, 'hls', type); });
+  }
+
   if (window.fetch) {
     var originalFetch = window.fetch;
     window.fetch = function (input, init) {
       var requestUrl = null;
       try { requestUrl = absolute((input && input.url) ? input.url : String(input)); } catch (e) {}
       var byName = requestUrl && extensionKind(requestUrl);
-      if (byName) report(requestUrl, 'fetch', byName, '');
+      // An HLS playlist waits for its answer: one of pictures is left out.
+      if (byName && byName !== 'hls') report(requestUrl, 'fetch', byName, '');
       var result = originalFetch.apply(this, arguments);
-      if (!byName && result && result.then) {
+      if ((!byName || byName === 'hls') && result && result.then) {
         result.then(function (response) {
           try {
             var url = response.url || requestUrl;
             var type = response.headers && response.headers.get('Content-Type');
-            var byType = kindOfType(type);
-            if (byType) {
+            var byType = byName || kindOfType(type);
+            if (byType === 'hls') {
+              reportPlaylist(url, 'fetch', type, response.clone().text());
+            } else if (byType) {
               report(url, 'fetch', byType, type);
             } else if (response.ok && bodyWorthReading(type, response.headers.get('Content-Length'))) {
               response.clone().text().then(function (text) {
                 var byBody = kindOfBody(text);
+                if (byBody === 'hls' && isImagePlaylist(text)) return;
                 if (byBody) report(url, 'fetch', byBody, '');
               }, function () {});
             }
@@ -174,20 +212,23 @@
     XMLHttpRequest.prototype.send = function () {
       var xhr = this;
       var byName = xhr.__chayaFrameUrl && extensionKind(xhr.__chayaFrameUrl);
-      if (byName) {
+      if (byName && byName !== 'hls') {
         report(xhr.__chayaFrameUrl, 'xhr', byName, '');
       } else {
+        if (byName === 'hls') sawManifest = true;
         var onLoadEnd = function () {
           xhr.removeEventListener('loadend', onLoadEnd);
           try {
             if (xhr.status < 200 || xhr.status >= 300) return;
             var url = xhr.responseURL || xhr.__chayaFrameUrl;
             var type = xhr.getResponseHeader('Content-Type');
-            var kind = kindOfType(type);
-            if (!kind && (xhr.responseType === '' || xhr.responseType === 'text')) {
+            var readable = xhr.responseType === '' || xhr.responseType === 'text';
+            var kind = byName || kindOfType(type);
+            if (!kind && readable) {
               kind = kindOfBody(xhr.responseText);
               type = '';
             }
+            if (kind === 'hls' && readable && isImagePlaylist(xhr.responseText)) return;
             if (kind) report(url, 'xhr', kind, type);
           } catch (e) {}
         };
