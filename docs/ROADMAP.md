@@ -78,6 +78,9 @@ The six-part plan after v0.4.0 has shipped (#34 to #39); it is in
    on mobile data, so nothing may ever wait for Wi-Fi unless the person turns this on.
 7. Ads inside YouTube's own videos need uBlock Origin's scriptlets, which the blocker does not run.
    Revisit only if a safe, narrow way appears.
+8. **Search videos by name across platforms** (YouTube, Bilibili, Dailymotion, the Internet Archive,
+   PeerTube), with ranked results, single downloads and whole playlists as a ZIP or folder. A plan,
+   not started: [`plans/video-search.md`](plans/video-search.md).
 
 ## Known rough edges
 
