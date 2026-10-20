@@ -248,3 +248,240 @@ def test_something_that_is_not_a_post_gives_nothing():
     assert posts.instagram_post(None) == ({}, [])
 
 # endregion
+
+
+# region a Pinterest pin
+
+
+class FakePinExtractor(FakeExtractor):
+    """gallery-dl's Pinterest extractor as far as the engine touches it: it turns each video of the pin into one
+    file with `_extract_video`, as the real one does."""
+
+    def __init__(self, files, meta=None, videos=()):
+        super().__init__('pinterest', files, meta)
+        self._videos = videos
+
+    def _extract_video(self, video):
+        return video['video_list']['V_HLSV4']
+
+    def __iter__(self):
+        yield Message.Directory, '', dict(self._meta)
+        for url, extra in self._files:
+            yield Message.Url, url, {**self._meta, **extra}
+        for video in self._videos:
+            chosen = self._extract_video(video)
+            url, ext = chosen['url'], chosen['url'].rsplit('.', 1)[1]
+            if ext == 'm3u8':
+                # gallery-dl hands a stream to yt-dlp
+                url, ext = 'ytdl:' + url, 'mp4'
+            yield Message.Url, url, {**self._meta, 'extension': ext, 'width': chosen.get('width'),
+                                     'height': chosen.get('height')}
+
+
+PIN = {'category': 'pinterest', 'id': '1084663891475263837', 'title': '', 'grid_title': 'Kitchen gadgets',
+       'description': 'A longer description', 'pinner': {'username': 'saver'},
+       'native_creator': {'username': 'maker'}}
+
+STORY_VIDEO = {'video_list': {
+    'V_HLSV4': {'url': 'https://v1.pinimg.com/videos/hls/ab.m3u8', 'width': 720, 'height': 1280},
+    'V_EXP4': {'url': 'https://v1.pinimg.com/videos/expMp4/ab_t4.mp4', 'width': 540, 'height': 960},
+    'V_EXP7': {'url': 'https://v1.pinimg.com/videos/expMp4/ab_t7.mp4', 'width': 1080, 'height': 1920},
+}}
+
+
+def test_a_story_pin_gives_its_pictures_and_videos_but_not_its_text_or_music(tmp_path):
+    story = FakePinExtractor([
+        ('https://i.pinimg.com/originals/aa/bb/cc/page1.jpg', {'extension': 'jpg', 'width': 1000, 'height': 1500}),
+        ('text:Step two: stir', {'extension': 'txt'}),
+        ('https://v1.pinimg.com/audio/song.m4a', {'extension': 'm4a'}),
+        ('https://i.pinimg.com/originals/aa/bb/cc/page3.gif', {'extension': 'gif'}),
+    ], meta=PIN, videos=[STORY_VIDEO])
+
+    _, items = posts.items_of('https://www.pinterest.com/pin/1084663891475263837/', str(tmp_path),
+                              find=lambda url: story)
+
+    assert [(item['kind'], item['ext']) for item in items] == [('image', 'jpg'), ('image', 'gif'), ('video', 'mp4')]
+
+
+def test_a_pin_video_is_its_largest_plain_mp4_not_the_stream(tmp_path):
+    pin = FakePinExtractor([], meta=PIN, videos=[STORY_VIDEO])
+
+    _, items = posts.items_of('https://www.pinterest.com/pin/1/', str(tmp_path), find=lambda url: pin)
+
+    assert [item['url'] for item in items] == ['https://v1.pinimg.com/videos/expMp4/ab_t7.mp4']
+    assert items[0]['width'] == 1080
+
+
+def test_a_pin_video_without_an_mp4_keeps_gallery_dls_choice(tmp_path):
+    hls_only = {'video_list': {'V_HLSV4': {'url': 'https://v1.pinimg.com/videos/hls/ab.m3u8'}}}
+    pin = FakePinExtractor([], meta=PIN, videos=[hls_only])
+
+    chosen = pin._extract_video(hls_only)
+    posts.items_of('https://www.pinterest.com/pin/1/', str(tmp_path), find=lambda url: pin)
+
+    assert pin._extract_video(hls_only) == chosen
+
+
+def test_a_pin_is_described_by_its_title_and_maker(tmp_path):
+    pin = FakePinExtractor([('https://i.pinimg.com/originals/a.jpg', {'extension': 'jpg'})], meta=PIN)
+    meta, items = posts.items_of('https://www.pinterest.com/pin/1084663891475263837/', str(tmp_path),
+                                 find=lambda url: pin)
+
+    described = posts.describe(meta, items)
+
+    assert described['title'] == 'Kitchen gadgets'
+    assert described['uploader'] == 'maker'
+    assert described['id'] == '1084663891475263837'
+    assert described['webpage_url'] == 'https://www.pinterest.com/pin/1084663891475263837/'
+    assert described['extractor_key'] == 'Pinterest'
+    assert described['thumbnail'] == 'https://i.pinimg.com/originals/a.jpg'
+
+
+def test_a_pin_without_a_title_is_named_by_its_description():
+    assert posts.describe({**PIN, 'grid_title': ''}, [])['title'] == 'A longer description'
+
+
+class FakeShortLink:
+    """gallery-dl's pin.it extractor: it only names the address the short link leads to."""
+    category = 'pinterest'
+
+    def __init__(self, target):
+        self.target = target
+
+    def __iter__(self):
+        yield Message.Queue, self.target, {}
+
+
+def test_a_pin_it_short_link_is_followed_to_its_pin(tmp_path):
+    pin = FakePinExtractor([('https://i.pinimg.com/originals/a.jpg', {'extension': 'jpg'})], meta=PIN)
+    found = {'https://pin.it/abc': FakeShortLink('https://www.pinterest.com/pin/1084663891475263837/'),
+             'https://www.pinterest.com/pin/1084663891475263837/': pin}
+
+    _, items = posts.items_of('https://pin.it/abc', str(tmp_path), find=found.get)
+
+    assert [item['url'] for item in items] == ['https://i.pinimg.com/originals/a.jpg']
+
+
+def test_a_short_link_to_a_whole_board_is_not_a_post(tmp_path):
+    asked = []
+    links = {'https://pin.it/board': FakeShortLink('https://www.pinterest.com/someone/recipes/')}
+
+    def find(url):
+        asked.append(url)
+        return links.get(url)
+
+    assert posts.items_of('https://pin.it/board', str(tmp_path), find=find) == ({}, [])
+    assert asked == ['https://pin.it/board']
+
+
+def test_gallery_dls_own_pinterest_extractor_lists_a_story_pin_the_way_the_engine_expects(tmp_path):
+    """The real extractor at the pinned version, with only its request to Pinterest stood in for."""
+    from gallery_dl import extractor as gdl_extractor
+
+    def image(name):
+        return {'type': 'story_pin_image_block', 'image_signature': name,
+                'image': {'images': {'originals': {'url': f'https://i.pinimg.com/originals/{name}.jpg',
+                                                   'width': 1000, 'height': 1500}}}}
+
+    story_pin = {**PIN, 'story_pin_data': {'id': 's', 'pages': [
+        {'id': 'p1', 'blocks': [image('one')]},
+        {'id': 'p2', 'blocks': [{'type': 'story_pin_video_block', 'video': {'id': 'v', **STORY_VIDEO}}]},
+        {'id': 'p3', 'blocks': [{'type': 'story_pin_paragraph_block', 'text': 'Step three', 'id': 't'}]},
+        {'id': 'p4', 'blocks': [image('four'), {'type': 'story_pin_music_block',
+                                                'audio': {'id': 'm', 'audio_url': 'https://v1.pinimg.com/a.m4a'}}]},
+    ]}}
+
+    def find(url):
+        found = gdl_extractor.find(url)
+        found.initialize()
+        found.api.pin = lambda pin_id: story_pin
+        return found
+
+    _, items = posts.items_of('https://www.pinterest.com/pin/1084663891475263837/', str(tmp_path), find=find)
+
+    assert [item['url'].rsplit('/', 1)[1] for item in items] == ['one.jpg', 'ab_t7.mp4', 'four.jpg']
+    assert [item['kind'] for item in items] == ['image', 'video', 'image']
+
+
+@pytest.mark.parametrize('url', [
+    'https://www.pinterest.com/pin/1/', 'https://pinterest.co.uk/pin/1/', 'https://de.pinterest.com/pin/1/',
+    'https://www.pinterest.com.au/pin/1/', 'https://pin.it/abc',
+])
+def test_pinterest_addresses_are_recognised(url):
+    assert engine._is_pinterest(url)
+    assert engine._is_post_site(url)
+
+
+@pytest.mark.parametrize('url', ['https://notpinterest.com/pin/1/', 'https://pinterest.com.evil.example/pin/1/',
+                                 'https://pin.it.example/abc'])
+def test_lookalikes_are_not_pinterest(url):
+    assert not engine._is_pinterest(url)
+
+
+def test_a_pin_of_a_picture_that_yt_dlp_refuses_comes_back_as_items(tmp_path, monkeypatch, ytdlp_fails):
+    ytdlp_fails.message = ('ERROR: [Pinterest] 1: No video formats found!; please report this issue on '
+                           'https://github.com/yt-dlp/yt-dlp/issues?q= , filling out the appropriate issue template. '
+                           'Confirm you are on the latest version using  yt-dlp -U')
+    pin = FakePinExtractor([('https://i.pinimg.com/originals/a.jpg', {'extension': 'jpg'})], meta=PIN)
+    monkeypatch.setattr(posts.gdl_extractor, 'find', lambda url: pin)
+
+    media = json.loads(engine.extract('https://www.pinterest.com/pin/1/', str(tmp_path)))['media']
+
+    assert [item['url'] for item in media['items']] == ['https://i.pinimg.com/originals/a.jpg']
+    assert media['title'] == 'Kitchen gadgets'
+
+
+def test_a_short_link_yt_dlp_does_not_know_goes_to_gallery_dl(tmp_path, monkeypatch, ytdlp_fails):
+    ytdlp_fails.message = 'Unsupported URL: https://pin.it/abc'
+    pin = FakePinExtractor([('https://i.pinimg.com/originals/a.jpg', {'extension': 'jpg'})], meta=PIN)
+    monkeypatch.setattr(posts.gdl_extractor, 'find', lambda url: pin)
+
+    media = json.loads(engine.extract('https://pin.it/abc', str(tmp_path)))['media']
+
+    assert len(media['items']) == 1
+
+
+def _found_by_yt_dlp(monkeypatch, info):
+    class Found(FailingYoutubeDL):
+        def extract_info(self, url, download):
+            return info
+
+    monkeypatch.setattr(engine, 'YoutubeDL', Found)
+
+
+PIN_VIDEO = {'id': '1', 'title': 'Origami', 'extractor_key': 'Pinterest',
+             'formats': [{'format_id': 'V_720P', 'url': 'https://v1.pinimg.com/videos/mc/720p/a.mp4'}]}
+
+
+def test_a_video_pin_keeps_the_quality_choice(tmp_path, monkeypatch):
+    _found_by_yt_dlp(monkeypatch, PIN_VIDEO)
+    monkeypatch.setattr(posts.gdl_extractor, 'find', lambda url: FakePinExtractor([], meta=PIN, videos=[STORY_VIDEO]))
+
+    media = json.loads(engine.extract('https://www.pinterest.com/pin/1/', str(tmp_path)))['media']
+
+    assert 'items' not in media
+    assert media['formats'][0]['format_id'] == 'V_720P'
+
+
+def test_a_story_pin_yt_dlp_saw_as_one_video_is_listed_whole(tmp_path, monkeypatch):
+    _found_by_yt_dlp(monkeypatch, PIN_VIDEO)
+    story = FakePinExtractor([('https://i.pinimg.com/originals/page1.jpg', {'extension': 'jpg'})], meta=PIN,
+                             videos=[STORY_VIDEO])
+    monkeypatch.setattr(posts.gdl_extractor, 'find', lambda url: story)
+
+    media = json.loads(engine.extract('https://www.pinterest.com/pin/1/', str(tmp_path)))['media']
+
+    assert [item['kind'] for item in media['items']] == ['image', 'video']
+
+
+def test_a_pin_showing_a_video_from_elsewhere_is_that_video(tmp_path, monkeypatch):
+    _found_by_yt_dlp(monkeypatch, {**PIN_VIDEO, 'extractor_key': 'Vimeo'})
+    asked = []
+    monkeypatch.setattr(posts.gdl_extractor, 'find', lambda url: asked.append(url))
+
+    media = json.loads(engine.extract('https://www.pinterest.com/pin/1/', str(tmp_path)))['media']
+
+    assert media['extractor_key'] == 'Vimeo'
+    assert asked == []
+
+# endregion

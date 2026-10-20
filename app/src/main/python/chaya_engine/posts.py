@@ -1,4 +1,4 @@
-"""Every picture and video in an Instagram or X post, found with gallery-dl.
+"""Every picture and video in an Instagram or X post or a Pinterest pin, found with gallery-dl.
 
 yt-dlp only sees videos: it fails on a post of photos ("There is no video in this post") and keeps only the
 videos of a carousel. When a post has pictures, gallery-dl lists all of it, in the post's order.
@@ -17,9 +17,11 @@ from gallery_dl.extractor.message import Message
 LOCK = threading.Lock()
 
 # gallery-dl's names for the sites whose posts can hold pictures.
-POST_SITES = ('instagram', 'twitter')
+POST_SITES = ('instagram', 'twitter', 'pinterest')
 
 _VIDEO_EXTENSIONS = ('mp4', 'mov', 'm4v', 'webm')
+# A Pinterest story pin can carry background music; the pictures and videos are what is saved.
+_AUDIO_EXTENSIONS = ('mp3', 'm4a', 'aac', 'ogg', 'opus', 'wav')
 
 
 def items_of(url, cache_dir, cookie_file=None, find=None):
@@ -30,19 +32,48 @@ def items_of(url, cache_dir, cookie_file=None, find=None):
     """
     with LOCK:
         _configure(cache_dir, cookie_file)
-        extractor = (find or gdl_extractor.find)(url)
-        if extractor is None or extractor.category not in POST_SITES:
-            return None
+        return _list(url, find or gdl_extractor.find, hops=1)
 
-        meta, items = None, []
-        for message in extractor:
-            if message[0] != Message.Url:
-                continue
-            file_url = plain_address(message[1], message[2])
-            if file_url:
-                meta = meta or message[2]
-                items.append(_item(file_url, message[2]))
-        return (meta or {}), items
+
+def _list(url, find, hops):
+    extractor = find(url)
+    if extractor is None or extractor.category not in POST_SITES:
+        return None
+    if extractor.category == 'pinterest':
+        _prefer_plain_videos(extractor)
+
+    meta, items = None, []
+    for message in extractor:
+        if message[0] == Message.Queue and hops and not items and _is_pin(message[1]):
+            # A pin.it short link stands for the pin it leads to. One that leads to a whole board is not a post.
+            return _list(message[1], find, hops - 1)
+        if message[0] != Message.Url:
+            continue
+        file_url = plain_address(message[1], message[2])
+        item = _item(file_url, message[2]) if file_url else None
+        if item:
+            meta = meta or message[2]
+            items.append(item)
+    return (meta or {}), items
+
+
+def _is_pin(url):
+    return '/pin/' in urlparse(url).path
+
+
+def _prefer_plain_videos(extractor):
+    """gallery-dl takes a Pinterest video's HLS stream, which it would hand to yt-dlp to join, and offers a plain MP4
+    only when the pin has a 720p one, which story pins rarely do. The pin's largest MP4 is taken instead."""
+    choose = getattr(extractor, '_extract_video', None)
+    if choose is None:
+        return
+
+    def largest_mp4(video):
+        files = [f for f in (video.get('video_list') or {}).values()
+                 if isinstance(f, dict) and urlparse(f.get('url') or '').path.endswith('.mp4')]
+        return dict(_largest(files)) if files else choose(video)
+
+    extractor._extract_video = largest_mp4
 
 
 def instagram_post(product):
@@ -110,18 +141,27 @@ def plain_address(file_url, info):
 def describe(meta, items):
     """The fields the app shows for a post: a title from its caption, its author, and a poster."""
     author = _author(meta)
+    post_id = str(meta.get('post_shortcode') or meta.get('tweet_id') or meta.get('post_id') or _pin_id(meta) or '')
     return {
-        'id': str(meta.get('post_shortcode') or meta.get('tweet_id') or meta.get('post_id') or '') or None,
+        'id': post_id or None,
         'title': _caption(meta) or (f'Post by {author}' if author else 'Post'),
         'uploader': author,
         'thumbnail': next((item['url'] for item in items if item['kind'] == 'image'), None),
-        'webpage_url': meta.get('post_url'),
-        'extractor_key': {'instagram': 'Instagram', 'twitter': 'Twitter'}.get(meta.get('category')),
+        'webpage_url': meta.get('post_url') or (f'https://www.pinterest.com/pin/{post_id}/' if _pin_id(meta) else None),
+        'extractor_key': {'instagram': 'Instagram', 'twitter': 'Twitter', 'pinterest': 'Pinterest'}.get(
+            meta.get('category')),
     }
 
 
+def _pin_id(meta):
+    return meta.get('id') if meta.get('category') == 'pinterest' else None
+
+
 def _item(url, info):
+    """The app's item for one file, or None for what is not a picture or video (a story pin's text or music)."""
     ext = (info.get('extension') or 'jpg').lower()
+    if not url.startswith(('https://', 'http://')) or ext in _AUDIO_EXTENSIONS:
+        return None
     return {
         'url': url,
         'kind': 'video' if ext in _VIDEO_EXTENSIONS else 'image',
@@ -133,15 +173,19 @@ def _item(url, info):
 
 
 def _caption(meta):
-    # On X a file's "description" is the picture's alt text, so the tweet's own text comes first.
-    text = (meta.get('content') or meta.get('description') or '').strip()
+    # On X a file's "description" is the picture's alt text, so the tweet's own text comes first. A pin has a title
+    # of its own, often empty, and then a description.
+    pin_title = (meta.get('title') or meta.get('grid_title')) if meta.get('category') == 'pinterest' else None
+    text = (pin_title or meta.get('content') or meta.get('description') or '').strip()
     first = text.splitlines()[0].strip() if text else ''
     return (first[:79].rstrip() + '…') if len(first) > 80 else (first or None)
 
 
 def _author(meta):
     author = meta.get('author') if isinstance(meta.get('author'), dict) else {}
-    return meta.get('username') or author.get('name') or None
+    # A pin is credited to whoever made it, else to whoever saved it.
+    pinner = next((meta[key] for key in ('native_creator', 'pinner') if isinstance(meta.get(key), dict)), {})
+    return meta.get('username') or author.get('name') or pinner.get('username') or None
 
 
 def _configure(cache_dir, cookie_file):
