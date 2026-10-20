@@ -15,7 +15,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 // app is told these versions (BuildConfig.ENGINE_PACKAGES), so it fetches only newer ones from PyPI
 // (EngineUpdater). They are pure Python, so no Android-specific builds are involved. yt-dlp and yt-dlp-ejs go
 // together: yt-dlp checks its challenge-solver scripts against the yt-dlp-ejs release it shipped with.
-// gallery-dl finds the pictures in Instagram and X posts, which yt-dlp does not see (chaya_engine/posts.py).
+// gallery-dl finds the pictures in Instagram and X posts and Pinterest pins, which yt-dlp does not see (chaya_engine/posts.py).
 // engine.yml reads the quoted pins from this list.
 val enginePackages = listOf(
     "yt-dlp==2026.8.19",
@@ -187,8 +187,8 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.test.manifest)
 }
 
-// Python on Android (Chaquopy) runs yt-dlp, which finds what a YouTube, Instagram, TikTok or X
-// link points to; the packages are pinned in enginePackages at the top of this file.
+// Python on Android (Chaquopy) runs yt-dlp, which finds what a YouTube, Instagram, TikTok, X or
+// Pinterest link points to; the packages are pinned in enginePackages at the top of this file.
 chaquopy {
     defaultConfig {
         version = "3.13"

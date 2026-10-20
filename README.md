@@ -5,7 +5,7 @@
 **A native Android browser that finds the media on a page, and saves it.**
 
 Open a page → Chaya finds the video → tap → saved, under the video's real name. It handles direct
-files, HLS/DASH streams with a quality picker, and links from YouTube, Instagram, TikTok and X, with
+files, HLS/DASH streams with a quality picker, and links from YouTube, Instagram, TikTok, X and Pinterest, with
 pause, resume and retry throughout.
 
 > Chaya (Sanskrit): light and shadow, speed. The interface follows: **fluid, assured, soft**: calm
@@ -26,7 +26,7 @@ and allow installs from unknown apps when asked.
 | **Browse** | A full browser: tabs, address bar, back/forward, fullscreen video, a session that survives leaving the page |
 | **Find** | Network sniffing and an injected page scanner (Shadow DOM, iframes, fetch/XHR) run together; extensionless media is checked only when you ask |
 | **Make sense of it** | The page's main video comes first with its title; likely ads are folded away; stream pieces are hidden; one entry per quality |
-| **Video sites** | Paste, share or browse a YouTube, Instagram, TikTok or X link: yt-dlp, running on the phone, finds the qualities; picture and sound are joined into one MP4. Instagram and X posts with pictures (gallery-dl) save every photo |
+| **Video sites** | Paste, share or browse a YouTube, Instagram, TikTok, X or Pinterest link: yt-dlp, running on the phone, finds the qualities; picture and sound are joined into one MP4. Instagram and X posts with pictures and Pinterest pins (gallery-dl) save every photo, GIF and video |
 | **Block ads** | EasyList and EasyPrivacy, the lists uBlock Origin starts with, block ad and tracker requests, hide ad boxes and refuse ad pop-ups; off for any site with one switch |
 | **Download** | Files over OkHttp with `Range` resume; HLS/DASH through Media3; a foreground service with progress, pause and cancel |
 | **Keep** | Download history in Room with explicit migrations; finished files appear in your Movies, Music, Pictures or Downloads |

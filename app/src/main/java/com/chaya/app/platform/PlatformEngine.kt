@@ -11,7 +11,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
- * Finds out what a link to YouTube, Instagram, TikTok or X holds, by running yt-dlp (a Python program)
+ * Finds out what a link to YouTube, Instagram, TikTok, X or Pinterest holds, by running yt-dlp (a Python program)
  * inside the app. It only looks things up: the files themselves are fetched by chaya's own downloader.
  *
  * [sets] chooses between the copy of yt-dlp in the app and newer ones [EngineUpdater] fetched; the choice is

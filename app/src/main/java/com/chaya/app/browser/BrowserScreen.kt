@@ -691,7 +691,7 @@ fun BrowserScreen(
             text.isEmpty() -> scope.launch {
                 snackbarHostState.showSnackbar("Your clipboard is empty", duration = SnackbarDuration.Short)
             }
-            // A link to one video on YouTube, Instagram, TikTok or X opens its download sheet straight away.
+            // A link to one video on YouTube, Instagram, TikTok, X or Pinterest opens its download sheet straight away.
             viewModel.openLink(text) -> Unit
             text.startsWith("http://") || text.startsWith("https://") -> navigateToUrl(text)
             else -> urlInput = text
@@ -813,7 +813,7 @@ fun BrowserScreen(
         val text = sharedText ?: return@LaunchedEffect
         SharedLinks.consume(text)
         if (!viewModel.openLink(text)) {
-            showMessage("Chaya can save videos from YouTube, Instagram, TikTok and X links.")
+            showMessage("Chaya can save videos from YouTube, Instagram, TikTok, X and Pinterest links.")
         }
     }
 
@@ -1012,7 +1012,7 @@ fun BrowserScreen(
                 }
 
                 // Floating download pill: the page's main video, one tap from its download options. On a page
-                // that is one video on YouTube, Instagram, TikTok or X it shows what the engine found instead.
+                // that is one video on YouTube, Instagram, TikTok, X or Pinterest it shows what the engine found instead.
                 val linkPillShown = !uiState.homeVisible &&
                     (linkState is LinkState.Looking || linkState is LinkState.Answer)
                 // An Instagram or X account page offers its posts as one ZIP.

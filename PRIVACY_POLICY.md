@@ -62,9 +62,9 @@ Chaya talks only to the sites involved in what you do:
 
 - the pages you open, and the media you download from them;
 - same-origin checks of a page's media types, only after you tap *Scan more thoroughly*;
-- for a YouTube, Instagram, TikTok or X video, that site, which yt-dlp (running on your phone)
+- for a YouTube, Instagram, TikTok, X or Pinterest video, that site, which yt-dlp (running on your phone)
   contacts to find the video's files (for an Instagram post, its pictures too), and for an X post with
-  pictures, or an Instagram post yt-dlp could not read, that site again, which gallery-dl (also running
+  pictures, a Pinterest pin, or an Instagram post yt-dlp could not read, that site again, which gallery-dl (also running
   on your phone) contacts to list the post's pictures, both when you paste or share a link and when the page you
   are viewing is a single video on one of those sites;
 - for the ad blocker, about once a week, easylist.to, to fetch fresh copies of the EasyList and

@@ -19,6 +19,7 @@ enum class SourceSite(val label: String) {
     INSTAGRAM("Instagram"),
     TIKTOK("TikTok"),
     X("X"),
+    PINTEREST("Pinterest"),
     OTHER("Other"),
 }
 
@@ -49,6 +50,9 @@ fun kindOf(task: DownloadTask): FileKind? = when {
     else -> kindOf(task.mimeType, task.fileName)
 }
 
+/** pinterest.com and its country sites: pinterest.co.uk, de.pinterest.com... */
+private val PINTEREST_HOST = Regex("""(?:[a-z0-9-]+\.)*pinterest\.(?:com|[a-z]{2}|co\.[a-z]{2}|com\.[a-z]{2})""")
+
 /** The site a download came from, by the page's address (or the file's, without one). */
 fun siteOf(task: DownloadTask): SourceSite {
     val host = sourceHost(task)?.lowercase() ?: return SourceSite.OTHER
@@ -58,6 +62,7 @@ fun siteOf(task: DownloadTask): SourceSite {
         on("instagram.com") || on("cdninstagram.com") -> SourceSite.INSTAGRAM
         on("tiktok.com") -> SourceSite.TIKTOK
         on("x.com") || on("twitter.com") || on("twimg.com") -> SourceSite.X
+        on("pin.it") || on("pinimg.com") || PINTEREST_HOST.matches(host) -> SourceSite.PINTEREST
         else -> SourceSite.OTHER
     }
 }

@@ -9,17 +9,19 @@ enum class Platform(val displayName: String) {
     INSTAGRAM("Instagram"),
     TIKTOK("TikTok"),
     TWITTER("X"),
+    PINTEREST("Pinterest"),
 }
 
 /** [url] is the link as given; [id] identifies the video within [platform]. */
 data class PlatformMatch(val platform: Platform, val id: String, val url: String) {
     /**
      * What the lookup is finding, for "Finding the video…": an Instagram post or a tweet may hold only pictures,
-     * so for those it is the post; a reel, a YouTube or a TikTok link is a video.
+     * so for those it is the post, and a Pinterest pin is a pin; a reel, a YouTube or a TikTok link is a video.
      */
     val lookingFor: String
         get() = when {
             platform == Platform.TWITTER -> "post"
+            platform == Platform.PINTEREST -> "pin"
             platform == Platform.INSTAGRAM && id.substringBefore('/') == "p" -> "post"
             else -> "video"
         }
@@ -35,6 +37,9 @@ object PlatformMatcher {
     private val instagramHosts = setOf("instagram.com", "www.instagram.com", "m.instagram.com")
     private val twitterHosts = setOf("twitter.com", "www.twitter.com", "mobile.twitter.com", "x.com", "www.x.com", "t.co")
 
+    /** pinterest.com, its country sites (pinterest.co.uk, de.pinterest.com...), and pin.it short links. */
+    private val pinterestHost = Regex("""(?:[a-z0-9-]+\.)*pinterest\.(?:com|[a-z]{2}|co\.[a-z]{2}|com\.[a-z]{2})|pin\.it""")
+
     fun match(input: String): PlatformMatch? {
         val url = input.trim()
         val uri = runCatching { URI(url) }.getOrNull() ?: return null
@@ -47,6 +52,7 @@ object PlatformMatcher {
             host in tiktokHosts -> matchTikTok(uri, host, url)
             host in instagramHosts -> matchInstagram(uri, url)
             host in twitterHosts -> matchTwitter(uri, host, url)
+            pinterestHost.matches(host) -> matchPinterest(uri, host, url)
             else -> null
         }
     }
@@ -94,6 +100,18 @@ object PlatformMatcher {
         val statusIndex = parts.indexOf("status")
         if (statusIndex >= 0 && parts.getOrNull(statusIndex + 1) != null) {
             return PlatformMatch(Platform.TWITTER, parts[statusIndex + 1], url)
+        }
+        return null
+    }
+
+    private fun matchPinterest(uri: URI, host: String, url: String): PlatformMatch? {
+        val parts = segments(uri)
+        if (host == "pin.it") {
+            return parts.firstOrNull()?.let { PlatformMatch(Platform.PINTEREST, it, url) }
+        }
+        // "/pin/123/", or "/pin/some-title--123/" as newer links have it.
+        if (parts.size >= 2 && parts[0] == "pin") {
+            return PlatformMatch(Platform.PINTEREST, parts[1].substringAfterLast("--"), url)
         }
         return null
     }

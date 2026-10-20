@@ -14,7 +14,7 @@ Compose, with a small Python engine for video sites. Library versions live in
 
 1. **A page you browse.** Media flowing through the WebView is detected, ranked and named, and shown
    in one sheet with the page's main video first.
-2. **A link to a supported site** (YouTube, Instagram, TikTok, X), from the page you are on, the Paste
+2. **A link to a supported site** (YouTube, Instagram, TikTok, X, Pinterest), from the page you are on, the Paste
    chip, or Share. The on-device engine looks it up and offers one choice per quality.
 3. Either way, the choice becomes a download task owned by `DownloadManager`.
 

@@ -42,6 +42,17 @@ class PlatformMatcherTest {
     }
 
     @Test
+    fun `pins match on every Pinterest site and as short links`() {
+        assertMatches("https://www.pinterest.com/pin/664281013778109217/", Platform.PINTEREST, "664281013778109217")
+        assertMatches("https://pinterest.com/pin/1084663891475263837", Platform.PINTEREST, "1084663891475263837")
+        assertMatches("https://www.pinterest.co.uk/pin/123/sent/?invite_code=abc", Platform.PINTEREST, "123")
+        assertMatches("https://de.pinterest.com/pin/456/", Platform.PINTEREST, "456")
+        assertMatches("https://www.pinterest.com.au/pin/789/", Platform.PINTEREST, "789")
+        assertMatches("https://pinterest.com/pin/blue-lagoon-nails-video--2885187256207927", Platform.PINTEREST, "2885187256207927")
+        assertMatches("https://pin.it/4aBcDeF", Platform.PINTEREST, "4aBcDeF")
+    }
+
+    @Test
     fun `hosts are matched ignoring case and surrounding spaces`() {
         assertMatches("  HTTPS://WWW.YOUTUBE.COM/watch?v=Case1  ", Platform.YOUTUBE, "Case1")
     }
@@ -61,6 +72,9 @@ class PlatformMatcherTest {
         assertNull(PlatformMatcher.match("https://www.instagram.com/someone/"))
         assertNull(PlatformMatcher.match("https://www.tiktok.com/@creator"))
         assertNull(PlatformMatcher.match("https://x.com/home"))
+        assertNull(PlatformMatcher.match("https://www.pinterest.com/"))
+        assertNull(PlatformMatcher.match("https://www.pinterest.com/someone/recipes/"))
+        assertNull(PlatformMatcher.match("https://www.pinterest.com/search/pins/?q=cats"))
     }
 
     @Test
@@ -71,6 +85,8 @@ class PlatformMatcherTest {
         assertNull(PlatformMatcher.match("ftp://youtube.com/watch?v=abc"))
         assertNull(PlatformMatcher.match("https://notyoutube.com/watch?v=abc"))
         assertNull(PlatformMatcher.match("https://youtube.com.evil.example/watch?v=abc"))
+        assertNull(PlatformMatcher.match("https://notpinterest.com/pin/123/"))
+        assertNull(PlatformMatcher.match("https://pinterest.com.evil.example/pin/123/"))
     }
 
     @Test
@@ -79,5 +95,6 @@ class PlatformMatcherTest {
         assertEquals("post", PlatformMatcher.match("https://x.com/someone/status/123")!!.lookingFor)
         assertEquals("video", PlatformMatcher.match("https://www.instagram.com/reel/DAbc123/")!!.lookingFor)
         assertEquals("video", PlatformMatcher.match("https://www.youtube.com/watch?v=dQw4w9WgXcQ")!!.lookingFor)
+        assertEquals("pin", PlatformMatcher.match("https://www.pinterest.com/pin/123/")!!.lookingFor)
     }
 }

@@ -75,6 +75,9 @@ class LibraryModelTest {
         assertEquals(SourceSite.YOUTUBE, siteOf(task(11, "Short", page = "https://m.youtube.com/shorts/x")))
         assertEquals(SourceSite.X, siteOf(task(12, "Old", page = "https://twitter.com/a/status/1")))
         assertEquals(SourceSite.OTHER, siteOf(task(13, "Lookalike", page = "https://notyoutube.com/x")))
+        assertEquals(SourceSite.PINTEREST, siteOf(task(14, "Pin", page = "https://www.pinterest.co.uk/pin/1/")))
+        assertEquals(SourceSite.PINTEREST, siteOf(task(15, "Pin", page = "https://pin.it/abc")))
+        assertEquals(SourceSite.OTHER, siteOf(task(16, "Lookalike", page = "https://notpinterest.com/pin/1/")))
     }
 
     @Test

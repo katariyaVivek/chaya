@@ -74,7 +74,7 @@ is close to its copyrighted-content policy, and the diagnostics assume no Play S
    *Download* starts at the best quality; *Quality* lists one entry per rendition.
 4. **Extensionless media:** on a page with nothing detected, *Scan more thoroughly* appears after a
    moment. Only after you tap it does Chaya check same-origin candidates (at most ten).
-5. **A video-site link:** paste a YouTube, Instagram, TikTok or X link with the Paste chip, or
+5. **A video-site link:** paste a YouTube, Instagram, TikTok, X or Pinterest link with the Paste chip, or
    share it to Chaya. The sheet finds the video and lists qualities. A YouTube download fetches
    three 10 MB pieces at a time: on a fast connection it should run well above the video's own
    bitrate. Pause it half way and resume: it carries on from where it was, not from the start.

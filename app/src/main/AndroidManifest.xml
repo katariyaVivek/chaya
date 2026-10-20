@@ -29,7 +29,7 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- "Share > Chaya" from the YouTube, Instagram, TikTok or X apps hands over a link as text. -->
+            <!-- "Share > Chaya" from the YouTube, Instagram, TikTok, X or Pinterest apps hands over a link as text. -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
