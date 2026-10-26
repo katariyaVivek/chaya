@@ -144,7 +144,7 @@ function showFound(card, link, found) {
     const row = document.createElement('div');
     row.className = 'choice';
     row.append(span('choice__label', counted), span('choice__detail', 'each saved as it is'));
-    row.append(downloadButton(link.url, 'post', 'Save all', state));
+    row.append(downloadButton(() => tauri.core.invoke('download', { url: link.url, choice: 'post' }), 'Save all', state));
     parts.push(row);
   } else {
     const list = document.createElement('ul');
@@ -153,7 +153,9 @@ function showFound(card, link, found) {
       const row = document.createElement('li');
       row.className = 'choice';
       row.append(span('choice__label', choice.label), span('choice__detail num', choice.detail));
-      row.append(downloadButton(link.url, choice.label, 'Download', state));
+      row.append(
+        downloadButton(() => tauri.core.invoke('download', { url: link.url, choice: choice.label }), 'Download', state),
+      );
       list.append(row);
     }
     parts.push(list);
@@ -218,10 +220,11 @@ const buttons = new Set();
 let following = false;
 
 /**
- * A Download button for `choice` of the link at `url`. It starts the download, pauses and resumes it, and
- * follows it as it runs: the pill becomes a ring with the percentage, then a check.
+ * A Download button: `start` starts what it saves (resolving to the downloads it started), and the button pauses
+ * and resumes them and follows them as they run: the pill becomes a ring with the percentage, then a check. A
+ * failure to start is written into `state`.
  */
-function downloadButton(url, choice, label, state) {
+function downloadButton(start, label, state) {
   const el = dlTemplate.content.firstElementChild.cloneNode(true);
   const entry = { ids: [], button: null };
   entry.button = new DownloadButton(el, {
@@ -231,7 +234,7 @@ function downloadButton(url, choice, label, state) {
       if (event === 'start') {
         state.querySelector('.card__error')?.remove();
         try {
-          const started = await tauri.core.invoke('download', { url, choice });
+          const started = await start();
           entry.ids = started.map((t) => t.id);
           // Events about these downloads may have come before this answer, and are newer than it.
           started.filter((t) => !tasks.has(t.id)).forEach(taskChanged);
@@ -463,6 +466,7 @@ function setBrowsing(on) {
   if (!on) {
     showDownloads(false);
     hideNotice();
+    forgetFound();
     setLoading(false);
     pageUrl = '';
   }
@@ -561,6 +565,7 @@ tauri?.event.listen('page', ({ payload }) => {
     case 'loading':
       setLoading(true);
       pageAt(payload.url);
+      forgetFound();
       break;
     case 'loaded':
       setLoading(false);
@@ -574,6 +579,77 @@ tauri?.event.listen('page', ({ payload }) => {
       break;
   }
 });
+
+// ── What the page holds ─────────────────────────────────────────────────────────────────────
+//
+// While a page is shown, the window asks every so often what its players have loaded. The main video gets a line
+// of its own, with its Download button; the rest open under it.
+
+const foundBox = document.getElementById('found');
+const foundTemplate = document.getElementById('found-template');
+/** The list on show, by address, so a new answer only adds what is new and keeps each button as it is. */
+let shownFound = new Map();
+let asking = false;
+
+const FOUND_ICON = { video: 'i-video', audio: 'i-audio', stream: 'i-video', dash: 'i-video' };
+const FOUND_NOUN = { video: 'Video', audio: 'Audio', stream: 'Stream', dash: 'Stream' };
+
+function forgetFound() {
+  shownFound = new Map();
+  foundBox.querySelector('.found__list').replaceChildren();
+  foundBox.hidden = true;
+}
+
+async function askPage() {
+  if (!browsing || asking || document.body.classList.contains('showing-downloads')) return;
+  asking = true;
+  try {
+    showPageMedia(await tauri.core.invoke('page_media'));
+  } catch {
+    // No page, or it did not answer this time.
+  } finally {
+    asking = false;
+  }
+}
+
+function showPageMedia(list) {
+  if (!browsing) return;
+  const listEl = foundBox.querySelector('.found__list');
+  for (const item of list) {
+    if (shownFound.has(item.url)) continue;
+    const el = foundTemplate.content.firstElementChild.cloneNode(true);
+    el.querySelector('use').setAttribute('href', `#${FOUND_ICON[item.kind]}`);
+    el.querySelector('.found__name').textContent = item.name;
+    const facts = [item.ad ? 'Ad' : null, FOUND_NOUN[item.kind], item.host].filter(Boolean);
+    el.querySelector('.found__meta').textContent = facts.join(' · ');
+    const state = el.querySelector('.found__state');
+    if (item.savable) {
+      el.querySelector('.found__action').append(
+        downloadButton(() => tauri.core.invoke('save_found', { url: item.url }), 'Download', state),
+      );
+    } else {
+      state.append(paragraph(item.kind === 'dash' ? "Chaya can't save this kind of stream from a page yet." : "Saving streams needs Chaya's ffmpeg.", 'found__why'));
+    }
+    shownFound.set(item.url, el);
+  }
+  // The page's order: the main video first, ads last.
+  const order = list.map((item) => shownFound.get(item.url));
+  order.forEach((el, i) => el.classList.toggle('found__item--main', i === 0 && list[0].main));
+  listEl.replaceChildren(...order);
+  const others = order.length - 1;
+  const more = foundBox.querySelector('.found__more');
+  more.hidden = others < 1;
+  more.textContent = foundBox.classList.contains('found--open') ? 'Show less' : `${others} more on this page`;
+  foundBox.hidden = order.length === 0;
+}
+
+foundBox.querySelector('.found__more').addEventListener('click', () => {
+  foundBox.classList.toggle('found--open');
+  const others = shownFound.size - 1;
+  foundBox.querySelector('.found__more').textContent = foundBox.classList.contains('found--open') ? 'Show less' : `${others} more on this page`;
+});
+
+setInterval(askPage, 1500);
 
 // ── Reading the address bar ─────────────────────────────────────────────────────────────────
 

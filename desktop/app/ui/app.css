@@ -266,3 +266,38 @@ body.browsing .urlbar__icon { display: none; }
   cursor: pointer;
 }
 .notice__action:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+/* What the page holds: the main video on a line of its own, the rest under it when asked for */
+.found { display: grid; gap: var(--space-half); }
+.found__list { display: grid; gap: var(--space-half); max-height: 40vh; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
+.found:not(.found--open) .found__item:not(:first-child) { display: none; }
+.found__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-2);
+  border-radius: var(--radius-md);
+  background: var(--wash);
+  animation: var(--anim-enter) var(--dur-enter) var(--ease-out) both;
+}
+.found__item--main { background: var(--surface); box-shadow: var(--shadow); }
+.found__icon { flex: none; display: grid; place-items: center; color: var(--muted); }
+.found__icon svg { width: 20px; height: 20px; }
+.found__body { display: grid; flex: 1; min-width: 0; }
+.found__name { margin: 0; overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.found__meta { margin: 0; overflow: hidden; color: var(--muted); font-size: var(--text-sm); line-height: var(--leading-sm); text-overflow: ellipsis; white-space: nowrap; }
+.found__state:empty { display: none; }
+.found__why, .found__state .card__error { margin: 0; color: var(--muted); font-size: var(--text-sm); line-height: var(--leading-sm); }
+.found__action { flex: none; }
+.found__action:empty { display: none; }
+.found__more {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: 500 var(--text-sm) / var(--leading-sm) var(--font-ui);
+  cursor: pointer;
+}
+.found__more:hover { color: var(--text); }
+body.showing-downloads .found { display: none !important; }

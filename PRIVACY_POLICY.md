@@ -83,6 +83,9 @@ differences:
 
 - **Pages you open** in its built-in browser load as in any browser (Microsoft Edge WebView2), and keep
   their cookies in Chaya's own WebView2 folder on your PC. A page cannot reach the app.
+- **Finding media on a page.** A small script of Chaya's runs in the pages you open, frames included. It
+  only looks at what the page's players already loaded, makes no request of its own and sends nothing
+  anywhere; Chaya reads its list to show you what can be saved.
 - **Downloads never carry a page's cookies.** A video, sound or picture a page downloads is fetched by
   Chaya with the page as referrer only, so content behind a login may not download yet.
 - **Links to YouTube, Instagram, TikTok and X** are looked up with yt-dlp on your PC, without any
