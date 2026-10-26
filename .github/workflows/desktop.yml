@@ -1,18 +1,23 @@
 name: Desktop app
 
 # Chaya for Windows (desktop/): the core crate's tests on Linux, then the Tauri app built on Windows
-# into an NSIS installer, kept as a run artifact. Titles in this installer use Geist: Cabinet Grotesk's
-# licence keeps its file out of the repository (desktop/design/fonts/README.md).
+# into an NSIS installer, kept as a run artifact. On Windows the engine the installer carries (a Python,
+# yt-dlp, gallery-dl, chaya_engine and QuickJS: desktop/engine/prepare.py) is put together first and checked
+# without the network. Titles in this installer use Geist: Cabinet Grotesk's licence keeps its file out of
+# the repository (desktop/design/fonts/README.md).
 
 on:
   pull_request:
     paths:
       - 'desktop/**'
+      - 'app/src/main/python/**'
+      - 'app/build.gradle.kts'
       - '.github/workflows/desktop.yml'
   push:
     branches: [ main, master ]
     paths:
       - 'desktop/**'
+      - 'app/src/main/python/**'
   workflow_dispatch:
 
 concurrency:
@@ -36,6 +41,17 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: desktop
+
+      # The engine runner's tests start stand-in engines with this Python.
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Packaging tests
+        run: |
+          python -m pip install --quiet pytest
+          python -m pytest -q -p no:cacheprovider desktop/engine
 
       - name: Format
         working-directory: desktop
@@ -73,9 +89,17 @@ jobs:
         with:
           workspaces: desktop
 
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
       - name: Install the Tauri CLI
         working-directory: desktop/app
         run: npm ci
+
+      - name: Put the engine together
+        run: python desktop/engine/prepare.py
 
       - name: Lint
         working-directory: desktop
@@ -83,9 +107,13 @@ jobs:
           node app/scripts/assemble-ui.mjs
           cargo clippy --workspace --all-targets -- -D warnings
 
+      # CHAYA_ENGINE_DIR also runs the prepared engine's own check (core/tests/bundled_engine.rs): its Python
+      # starts, the packages are the pinned ones, and yt-dlp accepts the bundled QuickJS.
       - name: Test
         working-directory: desktop
-        run: cargo test --workspace
+        env:
+          CHAYA_ENGINE_DIR: ${{ github.workspace }}\desktop\app\src-tauri\engine
+        run: cargo test --workspace -- --nocapture
 
       - name: Build the installer
         working-directory: desktop/app

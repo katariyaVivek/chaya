@@ -162,6 +162,24 @@ def test_the_browsers_cookies_are_handed_over_when_given(monkeypatch):
     assert _FakeYoutubeDL.options['cookiefile'] == '/cookies.txt'
 
 
+def test_without_a_javascript_program_yt_dlp_keeps_its_defaults(monkeypatch):
+    _FakeYoutubeDL.result = {'id': 'x', 'title': 'T'}
+    monkeypatch.setattr(engine, 'YoutubeDL', _FakeYoutubeDL)
+
+    engine.extract('https://youtu.be/x', '/cache')
+
+    assert 'js_runtimes' not in _FakeYoutubeDL.options
+
+
+def test_the_desktops_quickjs_program_is_handed_to_yt_dlp(monkeypatch):
+    _FakeYoutubeDL.result = {'id': 'x', 'title': 'T'}
+    monkeypatch.setattr(engine, 'YoutubeDL', _FakeYoutubeDL)
+
+    engine.extract('https://youtu.be/x', '/cache', js_runtime='C:/Chaya/engine/qjs.exe')
+
+    assert _FakeYoutubeDL.options['js_runtimes'] == {'quickjs': {'path': 'C:/Chaya/engine/qjs.exe'}}
+
+
 def test_a_failure_comes_back_as_an_error_with_its_kind(monkeypatch):
     class Failing(_FakeYoutubeDL):
         def extract_info(self, url, download):

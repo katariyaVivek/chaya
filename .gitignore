@@ -33,3 +33,4 @@ desktop/target/
 desktop/app/dist/
 desktop/app/node_modules/
 desktop/app/src-tauri/gen/
+desktop/app/src-tauri/engine/

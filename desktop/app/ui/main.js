@@ -64,17 +64,11 @@ document.addEventListener('click', (e) => {
 const address = document.getElementById('address');
 const result = document.getElementById('result');
 const template = document.getElementById('result-template');
+const lookupTemplate = document.getElementById('lookup-template');
 
-/** What the window says about each kind of link. This build recognises links; it does not fetch them yet. */
+/** What the window says about a link that is not looked up. */
 function describe(link) {
   switch (link.kind) {
-    case 'media':
-      return {
-        icon: link.lookingFor === 'post' ? 'i-post' : 'i-video',
-        title: `${link.site} ${link.lookingFor}`,
-        url: link.url,
-        note: 'Chaya knows this link. Looking it up and downloading it come in the next build.',
-      };
     case 'account':
       return {
         icon: 'i-account',
@@ -108,6 +102,11 @@ function hostOf(url) {
 }
 
 function show(link) {
+  if (link.kind === 'media') {
+    lookUp(link);
+    return;
+  }
+  forget();
   const { icon, title, url, note } = describe(link);
   const card = template.content.firstElementChild.cloneNode(true);
   card.querySelector('use').setAttribute('href', `#${icon}`);
@@ -117,11 +116,115 @@ function show(link) {
   result.replaceChildren(card);
 }
 
+// ── Looking a link up ──────────────────────────────────────────────────────────────────────
+
+/** Bumped whenever the link on show changes, so a late answer for a link already left is dropped. */
+let looking = 0;
+
+function forget() {
+  looking++;
+  result.replaceChildren();
+}
+
+/** Failures worth another try as they are; the others need something about the link to change. */
+const RETRYABLE = new Set(['network', 'engine', 'unknown', 'bot_check']);
+
+async function lookUp(link) {
+  const ask = ++looking;
+  const card = lookupTemplate.content.firstElementChild.cloneNode(true);
+  card.querySelector('.card__title').textContent = `${link.site} ${link.lookingFor}`;
+  card.querySelector('.card__meta').textContent = link.url;
+  card.querySelector('.card__state').replaceChildren(finding(`Finding the ${link.lookingFor}…`));
+  result.replaceChildren(card);
+
+  let answer;
+  try {
+    answer = await tauri.core.invoke('look_up', { url: link.url });
+  } catch (error) {
+    console.error('look_up failed', error);
+    answer = { kind: 'failed', reason: 'engine', message: "The video finder couldn't start. Try again in a moment." };
+  }
+  if (ask !== looking) return;
+  if (answer.kind === 'found') showFound(card, answer);
+  else showFailed(card, link, answer);
+}
+
+function showFound(card, found) {
+  card.querySelector('.card__title').textContent = found.title;
+  card.querySelector('.card__meta').textContent = [found.author, found.duration].filter(Boolean).join(' · ');
+  const poster = card.querySelector('.poster img');
+  if (found.thumbnail?.startsWith('https://')) {
+    poster.addEventListener('error', () => poster.removeAttribute('src'), { once: true });
+    poster.src = found.thumbnail;
+  }
+
+  const state = card.querySelector('.card__state');
+  const parts = [];
+  if (found.post) {
+    const { pictures, videos } = found.post;
+    const counted = [count(pictures, 'picture'), count(videos, 'video')].filter(Boolean).join(' and ');
+    parts.push(paragraph(`${counted}, each saved as it is.`));
+  } else {
+    const list = document.createElement('ul');
+    list.className = 'choices stagger';
+    for (const choice of found.choices) {
+      const row = document.createElement('li');
+      row.className = 'choice';
+      row.append(span('choice__label', choice.label), span('choice__detail num', choice.detail));
+      list.append(row);
+    }
+    parts.push(list);
+  }
+  parts.push(paragraph('Downloading comes in the next build.', 'card__note'));
+  state.replaceChildren(...parts);
+}
+
+function showFailed(card, link, failed) {
+  card.querySelector('.card__meta').textContent = failed.message;
+  const state = card.querySelector('.card__state');
+  state.replaceChildren();
+  if (RETRYABLE.has(failed.reason)) {
+    const retry = document.createElement('button');
+    retry.type = 'button';
+    retry.className = 'pill glass pressable';
+    retry.textContent = 'Try again';
+    retry.addEventListener('click', () => lookUp(link));
+    state.append(retry);
+  }
+}
+
+function finding(text) {
+  const pill = span('finding glass', '');
+  pill.setAttribute('role', 'status');
+  pill.append(span('finding__text', text));
+  return pill;
+}
+
+function span(className, text) {
+  const el = document.createElement('span');
+  el.className = className;
+  el.textContent = text;
+  return el;
+}
+
+function paragraph(text, className = '') {
+  const el = document.createElement('p');
+  el.className = className;
+  el.textContent = text;
+  return el;
+}
+
+function count(n, word) {
+  return n === 0 ? '' : `${n} ${word}${n === 1 ? '' : 's'}`;
+}
+
+// ── Reading the address bar ─────────────────────────────────────────────────────────────────
+
 let asked = 0;
 async function recognise() {
   const text = address.value.trim();
   if (!text) {
-    result.replaceChildren();
+    forget();
     return;
   }
   const ask = ++asked;
@@ -140,7 +243,7 @@ document.getElementById('address-form').addEventListener('submit', (e) => {
 // A pasted link is recognised straight away, without waiting for Enter
 address.addEventListener('paste', () => setTimeout(recognise));
 address.addEventListener('input', () => {
-  if (!address.value.trim()) result.replaceChildren();
+  if (!address.value.trim()) forget();
 });
 
 document.addEventListener('keydown', (e) => {
@@ -152,7 +255,7 @@ document.addEventListener('keydown', (e) => {
     if (!settingsPanel.hidden) showSettings(false);
     else if (document.activeElement === address) {
       address.value = '';
-      result.replaceChildren();
+      forget();
     }
   }
 });

@@ -285,13 +285,19 @@ Share. Reached from the Downloads screen's menu.
 
 ## Chaya for Windows (`desktop/`)
 
-A Tauri 2 app, early: the window, its themes, and recognising links. [`../desktop/README.md`](../desktop/README.md)
-has the layout.
+A Tauri 2 app, early: the window, its themes, recognising links, and looking them up. Downloading
+comes next. [`../desktop/README.md`](../desktop/README.md) has the layout.
 
 - `desktop/core` (`chaya-core`) is plain Rust with no window in it, the desktop's equivalent of the
   phone's Android-free Kotlin. `links` recognises links with the phone's rules and test table.
-- `desktop/app/src-tauri` hands `chaya-core` to the window as commands (`recognise_link`). The window
-  may call only those and set its title bar's theme (`capabilities/default.json`); its content
-  security policy loads nothing from outside the app.
+- **Looking up a link is the phone's engine.** `chaya_engine` runs as a program (`chaya_engine/cli.py`)
+  in a Python the installer carries, with the same pinned packages, and QuickJS-ng (`qjs.exe`) for
+  YouTube's challenges: off the phone, `jsc_provider` stands aside and yt-dlp's own QuickJS provider
+  runs. `desktop/engine/prepare.py` puts the engine together from pinned, checksummed downloads.
+  `chaya-core` reads its answer (`media`, ported from `PlatformMedia`) and picks one choice per quality
+  (`formats`, ported from `FormatSelector`, with its tests and the same saved YouTube answer).
+- `desktop/app/src-tauri` hands `chaya-core` to the window as commands (`recognise_link`, `look_up`). The window
+  may call only those and set its title bar's theme (`capabilities/default.json`). Its content
+  security policy loads nothing from outside the app except a looked-up video's poster.
 - `desktop/app/ui` is the window, drawn with [`desktop/design`](../desktop/design/README.md).
   `assemble-ui.mjs` copies both into `desktop/app/dist`, which Tauri packs into the app.

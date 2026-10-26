@@ -6,15 +6,17 @@ drawn with the design system in [`design/`](design/README.md), shown by Windows'
 
 It is early. This build opens the window, follows Windows' light or dark setting (or the person's
 choice), and tells what a pasted link is: a video or post on YouTube, Instagram, TikTok or X, an
-account, another page, or words. Looking links up and downloading them come next
-([`../docs/ROADMAP.md`](../docs/ROADMAP.md)).
+account, another page, or words. A video or post is looked up with yt-dlp, as on the phone, and the
+window shows its title, poster and the qualities it can be saved in (or what a post holds, or why it
+can't be). Downloading comes next ([`../docs/ROADMAP.md`](../docs/ROADMAP.md)).
 
 ## Layout
 
 | Path | What it is |
 |---|---|
 | `design/` | The design system: tokens, fonts, components, motion. Plain CSS and an ES module |
-| `core/` | `chaya-core`, plain Rust with no window or web view in it, so it builds and tests anywhere. `links` recognises links, ported from the phone's `PlatformMatcher` and `ProfileMatcher` with the same test table |
+| `core/` | `chaya-core`, plain Rust with no window or web view in it, so it builds and tests anywhere. `links` recognises links (the phone's `PlatformMatcher` and `ProfileMatcher`); `engine` runs the engine; `media` reads its answer (`PlatformMedia`); `formats` picks one choice per quality (`FormatSelector`); `lookup` is what the window is sent. Each is ported with the phone's tests |
+| `engine/` | `prepare.py` puts together the engine the installer carries, in `app/src-tauri/engine/` (not in git); `run.py` starts it |
 | `app/ui/` | The window: `index.html`, `app.css`, `main.js` |
 | `app/scripts/assemble-ui.mjs` | Puts `ui/` and the design system together in `app/dist/`, which Tauri serves. Runs before every dev run and build |
 | `app/src-tauri/` | The Tauri app: window settings (`tauri.conf.json`), what the window may call (`capabilities/`), and the commands that hand `chaya-core` to the window (`src/lib.rs`) |
@@ -28,7 +30,15 @@ You need:
 - Rust (stable) from <https://rustup.rs>, with the MSVC toolchain.
 - Visual Studio Build Tools with *Desktop development with C++*.
 - Node 22.
+- Python 3.13, to put the engine together (the app carries its own Python; this one is only for building).
 - WebView2, which Windows 11 already has. The installer fetches it from Microsoft on a PC without it.
+
+Put the engine together once, and again when `app/src/main/python` or the pins in
+`app/build.gradle.kts` change:
+
+```sh
+python desktop/engine/prepare.py
+```
 
 Then, in `desktop/app`:
 
@@ -42,21 +52,51 @@ For titles in Cabinet Grotesk, download it once into `design/fonts/` first
 ([`design/fonts/README.md`](design/fonts/README.md)). Its licence keeps it out of git, so installers
 built by CI use Geist for titles.
 
+## The engine
+
+Looking a link up is the phone's engine, `chaya_engine` (`app/src/main/python`), with the same pinned
+yt-dlp, yt-dlp-ejs and gallery-dl. The phone runs it inside the app through Chaquopy; Windows has no
+Python inside the app, so the installer carries one:
+
+- `engine/python/`: Python 3.13's Windows embeddable package (3.13.17, the last 3.13 with Windows
+  downloads), checked against python.org's SHA-256.
+- `engine/packages/`: the pinned packages from PyPI (Windows wheels, compiled ahead of time), and
+  `chaya_engine`.
+- `engine/qjs.exe`: QuickJS-ng 0.17.0, checked against its release's SHA-256. yt-dlp runs YouTube's
+  challenge scripts in it, where the phone uses its embedded QuickJS through `jsc_provider`.
+- `engine/run.py`: what the app starts, `python -I run.py extract URL --cache DIR --js-runtime qjs.exe`
+  (`chaya_engine/cli.py`). It prints one line of JSON, the same answer the phone reads.
+
+`chaya-core`'s `engine` starts it with no console window, one lookup at a time, stops it after two
+minutes, and keeps answers for twenty minutes. Only links `links` recognises as a video or post are ever
+passed to it. A change to `chaya_engine` must keep both apps working: pytest covers it for both.
+
+Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the computer's own Python (set
+`CHAYA_ENGINE_PYTHON` to it, or `python3` is used), without QuickJS, for running the app in development.
+
 ## Tests
 
 ```sh
 cd desktop && cargo test --workspace     # chaya-core
+python -m pytest desktop/engine          # putting the engine together
+python -m pytest app/src/test/python     # chaya_engine, shared with the phone
 cd desktop/design && npm test            # the design system
 ```
+
+`CHAYA_ENGINE_DIR=<an engine folder> cargo test` also runs the prepared engine for real
+(`core/tests/bundled_engine.rs`), without the network; CI does this on Windows.
 
 On Linux, building `app/src-tauri` needs WebKitGTK (`libwebkit2gtk-4.1-dev`), the same as Tauri
 there. `core` needs nothing beyond Rust.
 
-CI: `desktop.yml` tests `core` on Linux, then lints, tests and builds the installer on Windows and keeps
-it as the run's `chaya-windows-installer` artifact. `desktop-design.yml` runs the design system's tests.
+CI: `desktop.yml` tests `core` and the packaging on Linux; on Windows it puts the engine together,
+checks it, lints, tests and builds the installer, and keeps it as the run's `chaya-windows-installer`
+artifact. `desktop-design.yml` runs the design system's tests.
 
 ## Privacy
 
-The window loads only files packed into the app (its content security policy allows nothing else)
-and makes no network requests. Fonts are bundled, never fetched. The phone app's privacy promises
-carry over as the desktop app gains lookups and downloads.
+The window's own files, fonts included, are packed into the app; nothing is fetched to draw it. The
+network is used only for what the person asks: a pasted link to a video or post is looked up with
+yt-dlp, which asks that site about it, and its poster is shown from the site's image server, without
+saying which page asked (`referrerpolicy="no-referrer"`). No sign-in is used; nothing is sent anywhere
+else. The phone app's privacy promises carry over as the desktop app gains downloads.
