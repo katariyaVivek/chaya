@@ -121,6 +121,7 @@ body {
 .card__meta { margin: 0; color: var(--muted); font-size: var(--text-sm); line-height: var(--leading-sm); }
 .card__meta:empty { display: none; }
 .card__state { display: grid; gap: var(--space-1); justify-items: start; margin-top: var(--space-1); }
+.card__actions { display: flex; flex-wrap: wrap; gap: var(--space-1); }
 
 .choices { display: grid; gap: var(--space-half); width: 100%; margin: 0; padding: 0; list-style: none; }
 .choice {

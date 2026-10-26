@@ -87,8 +87,10 @@ Python inside the app, so the installer carries one:
   one decoder is AAC's, which MPEG-TS sound needs for its sample rate to be known. About 2.2 MB, under
   the LGPL; its licence and source are in `engine/licenses/`.
 
-`chaya-core`'s `engine` starts it with no console window, one lookup at a time, stops it after two
-minutes, and keeps answers for twenty minutes. Only two kinds of address are ever passed to it: links
+`chaya-core`'s `engine` starts it with no console window and without yt-dlp's plugins
+(`YTDLP_NO_PLUGINS`: an add-on in the person's own yt-dlp folders would otherwise run inside it and see what
+it is given, a sign-in included), one lookup at a time, stops it after two minutes, and keeps answers for
+twenty minutes. Only two kinds of address are ever passed to it: links
 `links` recognises as a video or post, and a stream's own address that the browser found on a page, when
 the person asks for its qualities (`--referer` names the page, as its player would). A change to
 `chaya_engine` must keep both apps working: pytest covers it for both.
@@ -195,6 +197,13 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
   - The shield beside the address bar counts what was blocked on the page; its panel shows a site's ads,
     or every site's (`ad_blocking`, `allow_ads_on`, `block_ads`), and reloads the page. The choice is kept
     in `adblock.json` in the app's folder.
+- **Using the person's sign-in for a link**, as the phone's *Use my sign-in*: a lookup that fails because
+  the site wants a sign-in (or YouTube's bot check) says what the person's sign-in could do (`lookup::SignIn`).
+  When the browser holds that site's sign-in cookies (`session::is_signed_in`, the phone's markers), the card
+  offers *Use my sign-in*: the site's cookies go to the engine in a `CookieFile`, deleted when the lookup
+  ends, and the answer is kept for the download that follows. When it does not, *Sign in to {site}* opens
+  the link's own page in the browser (`browse::sign_in_page`), where the site asks for a sign-in; once
+  given, the page is looked up again as a video site's page is. Never without the person's tap.
 - Under Linux (development only), Tauri stacks a window's webviews instead of placing them, so the page
   shows below the window's content rather than in it, and WebKitGTK saves a page's downloads itself
   without asking the app. WebKitGTK also has no way to answer a page's requests, so there ad boxes are

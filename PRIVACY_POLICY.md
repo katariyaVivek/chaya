@@ -92,7 +92,13 @@ differences:
   the browser's cookie store each time the download starts or resumes, are sent only to that file's
   server, and are never written into Chaya's list of downloads.
 - **Links to YouTube, Instagram, TikTok and X** are looked up with yt-dlp on your PC, without any
-  sign-in. A stream found on a page is looked up the same way when you ask for its qualities: yt-dlp
+  sign-in, unless you choose it. When a link needs a sign-in, Chaya offers *Sign in to* the site, which
+  opens the link's page in its browser for you to sign in there, and once you are signed in, *Use my
+  sign-in*. Only if you tap that are the site's cookies (never your password) written to a temporary file in
+  Chaya's own folder for yt-dlp, which sends them only to that site; the file is deleted as soon as the
+  lookup ends. Sites can limit accounts used for downloading, so Chaya never uses your sign-in without that
+  tap. The yt-dlp Chaya carries runs without plugins, so no add-on installed for another copy of yt-dlp
+  on your PC ever sees what it is given. A stream found on a page is looked up the same way when you ask for its qualities: yt-dlp
   reads that stream's playlist from its server, naming the page as the referrer, as its player would.
   If the browser holds cookies for the stream's address, they are written to a temporary file for
   yt-dlp in Chaya's own folder, and the file is deleted as soon as the lookup ends, whether it worked or

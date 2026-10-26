@@ -73,7 +73,8 @@ The six-part plan after v0.4.0 has shipped (#34 to #39); it is in
   the phone: the phone's engine and lists, ported, block a page's requests, its ad pop-ups and its ad
   boxes, with a shield that counts them and lets the person show a site's ads (#59). What is saved
   from a page carries the browser's sign-in, as on the phone, so content behind the person's own login
-  saves. Lookups, downloads and the browser have not run on a real Windows PC yet; CI opens a real
+  saves (#60). A link that needs a sign-in offers *Sign in to* the site, then *Use my sign-in*, as on the
+  phone. Lookups, downloads and the browser have not run on a real Windows PC yet; CI opens a real
   WebView2 page to check the blocking.
 
 0. **First: check #48 on the phone.** #47's name search kept its first look for 3 seconds, so a page

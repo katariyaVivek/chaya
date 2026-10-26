@@ -734,6 +734,15 @@ mod tests {
 
         let task = s.manager.add(new_download(&s, &server, "Me at the zoo.m4a"));
         let done = wait_for(&s.manager, task.id, |st| *st == State::Completed).await;
+        // The list is saved before the window is told, so the last event can trail the state a moment.
+        for _ in 0..200 {
+            let told =
+                s.events.lock().unwrap().iter().any(|e| matches!(e, Event::Changed(t) if t.state == State::Completed));
+            if told {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
 
         assert_eq!(done.path, s.folder.path().join("Downloads").join("Me at the zoo.m4a"));
         assert_eq!(std::fs::read(&done.path).unwrap(), content);
