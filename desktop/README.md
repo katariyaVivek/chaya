@@ -12,7 +12,9 @@ can't be). Each choice downloads into the Downloads folder, with pause, resume, 
 the Downloads list keeps track across restarts. Qualities whose picture and sound come apart (most of
 YouTube's) are fetched as two files and joined into one MP4 by a cut-down ffmpeg the app carries, and
 YouTube's files come in pieces, three at a time. Qualities that come as streams, HLS (X's, a plain `.m3u8`
-link) or DASH (Vimeo's, Reddit's), are fetched piece by piece and saved as an MP4. A built-in browser comes
+link) or DASH (Vimeo's, Reddit's), are fetched piece by piece and saved as an MP4. Anything else typed in
+the address bar (a page, a site, an account, words to search for) opens in the built-in browser, and a
+video, sound or picture a page downloads is saved in the Downloads list. Finding the media on a page comes
 next ([`../docs/ROADMAP.md`](../docs/ROADMAP.md)).
 
 ## Layout
@@ -20,11 +22,11 @@ next ([`../docs/ROADMAP.md`](../docs/ROADMAP.md)).
 | Path | What it is |
 |---|---|
 | `design/` | The design system: tokens, fonts, components, motion. Plain CSS and an ES module |
-| `core/` | `chaya-core`, plain Rust with no window or web view in it, so it builds and tests anywhere. `links` recognises links (the phone's `PlatformMatcher` and `ProfileMatcher`); `engine` runs the engine; `media` reads its answer (`PlatformMedia`); `formats` picks one choice per quality (`FormatSelector`); `lookup` is what the window is sent. Each is ported with the phone's tests. `download` saves files: `http` fetches one with resume (`HttpDownloader`), `manager` keeps every download and its state (`DownloadManager`), `plan` turns a choice into downloads, `names` makes Windows-safe names, `error` explains failures (`DownloadError`), `join` joins picture and sound, and turns a stream into an MP4, with ffmpeg, `pieces` fetches YouTube's files in pieces (`PieceLog`), `stream` fetches a stream's pieces (HLS, DASH) |
+| `core/` | `chaya-core`, plain Rust with no window or web view in it, so it builds and tests anywhere. `links` recognises links (the phone's `PlatformMatcher` and `ProfileMatcher`); `engine` runs the engine; `media` reads its answer (`PlatformMedia`); `formats` picks one choice per quality (`FormatSelector`); `lookup` is what the window is sent. Each is ported with the phone's tests. `download` saves files: `http` fetches one with resume (`HttpDownloader`), `manager` keeps every download and its state (`DownloadManager`), `plan` turns a choice into downloads, `names` makes Windows-safe names, `error` explains failures (`DownloadError`), `join` joins picture and sound, and turns a stream into an MP4, with ffmpeg, `pieces` fetches YouTube's files in pieces (`PieceLog`), `stream` fetches a stream's pieces (HLS, DASH). `browse` holds the browser's rules: what typed text opens, where a page may go, and which page downloads Chaya keeps |
 | `engine/` | `prepare.py` puts together the engine the installer carries, in `app/src-tauri/engine/` (not in git); `run.py` starts it; `build_ffmpeg.sh` builds the cut-down ffmpeg |
 | `app/ui/` | The window: `index.html`, `app.css`, `main.js` |
 | `app/scripts/assemble-ui.mjs` | Puts `ui/` and the design system together in `app/dist/`, which Tauri serves. Runs before every dev run and build |
-| `app/src-tauri/` | The Tauri app: window settings (`tauri.conf.json`), what the window may call (`capabilities/`), and the commands that hand `chaya-core` to the window (`src/lib.rs`) |
+| `app/src-tauri/` | The Tauri app: window settings (`tauri.conf.json`), what the window may call (`capabilities/`), the commands that hand `chaya-core` to the window (`src/lib.rs`), and the browser's page (`src/browser.rs`) |
 
 Keep anything that does not need the window in `core/`, so it stays testable without one.
 
@@ -127,6 +129,27 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
   ffmpeg has none for pictures. The card says some qualities can't be saved yet when a link has some the
   app cannot save.
 
+## The built-in browser
+
+- Typing a page's address, a bare site (`example.com`), an account's address, or words opens the page
+  inside the window; words search Google, as on the phone. A link to a video or post on the four sites
+  is looked up instead, as before.
+- The page is a WebView2 webview of its own (Tauri's multiwebview, the `unstable` feature), drawn over
+  the window where the window's `.page` leaves room for it. The window draws the bar around it (back,
+  forward, reload or stop, Downloads, close), tells the app where the page goes whenever its layout
+  changes, and hides the page while it shows the downloads or the settings in its place.
+- **A page gets nothing of the app.** The app's commands are granted to the window's own webview only
+  (`capabilities/default.json`: `webviews: ["main"]`, not the whole window), and a page from the web is
+  never local, so a page asking for a command is refused. A page can go only to the web (`http`, `https`,
+  `about:blank`; never a file on the PC or another program's link). A page opening another window is held
+  back, and the window says so with *Open it here*.
+- A download a page starts of a video, a sound, a picture or an HLS playlist goes to the Downloads list,
+  named after the file (a playlist after the page), with the page as referrer and without the page's
+  cookies. Other files (a PDF, an installer) are saved as any browser saves them.
+- Under Linux (development only), Tauri stacks a window's webviews instead of placing them, so the page
+  shows below the window's content rather than in it, and WebKitGTK saves a page's downloads itself
+  without asking the app. Windows places the page where it is told and asks before every download.
+
 ## Tests
 
 ```sh
@@ -157,4 +180,6 @@ network is used only for what the person asks: a pasted link to a video or post 
 yt-dlp, which asks that site about it; its poster is shown from the site's image server, without
 saying which page asked (`referrerpolicy="no-referrer"`); and a download fetches the file from the
 site's server with the headers yt-dlp names for it. No sign-in is used and nothing is sent anywhere
-else. The list of downloads stays on the PC.
+else. The list of downloads stays on the PC. Pages the person opens in the built-in browser load as in
+any browser, and keep their cookies in the app's own WebView2 folder on the PC; they cannot reach the
+app, and Chaya's own downloads never carry their cookies.

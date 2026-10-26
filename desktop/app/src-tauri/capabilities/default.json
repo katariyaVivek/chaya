@@ -1,8 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "What the main window may ask of the app: its own commands, and setting its title bar's theme.",
-  "windows": ["main"],
+  "description": "What the window's own content may ask of the app: its own commands, and setting its title bar's theme. Granted to the window's own webview only, never to the built-in browser's page (webview \"page\"), which is also never local.",
+  "webviews": ["main"],
   "permissions": [
     "core:default",
     "core:window:allow-set-theme"

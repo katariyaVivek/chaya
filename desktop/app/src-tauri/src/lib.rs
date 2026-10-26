@@ -1,6 +1,8 @@
 //! Chaya for Windows: the Tauri app. The window is web content built from `desktop/design`; what
 //! the app knows lives in `chaya-core`, and this crate only hands it to the window.
 
+mod browser;
+
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
@@ -221,6 +223,7 @@ pub fn run() {
             let folder =
                 app.path().download_dir().or_else(|_| app.path().home_dir().map(|home| home.join("Downloads")))?;
             app.manage(Downloads { manager, folder, joins });
+            app.manage(browser::PageTitle::default());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -235,6 +238,11 @@ pub fn run() {
             retry_download,
             open_download,
             show_download,
+            browser::open_page,
+            browser::place_page,
+            browser::show_page,
+            browser::page_action,
+            browser::close_page,
         ])
         .run(tauri::generate_context!())
         .expect("the window could not be opened");

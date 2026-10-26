@@ -25,6 +25,8 @@
   <symbol id="i-retry" viewBox="0 0 24 24"><path d="M19 12a7 7 0 1 1-2.05-4.95M19 4.5V8h-3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
   <symbol id="i-close" viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H5m0 0l6-6m-6 6l6 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-forward" viewBox="0 0 24 24"><path d="M5 12h14m0 0l-6-6m6 6l-6 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="16" cy="7" r="2" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="8" cy="17" r="2" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
 </svg>
 
@@ -53,14 +55,30 @@
 
 <main class="main">
   <form class="urlbar" id="address-form" autocomplete="off">
+    <div class="page-nav" data-browsing hidden>
+      <button class="icon-btn pressable" type="button" id="page-back" aria-label="Back" title="Back"><svg><use href="#i-back"/></svg></button>
+      <button class="icon-btn pressable" type="button" id="page-forward" aria-label="Forward" title="Forward"><svg><use href="#i-forward"/></svg></button>
+      <button class="icon-btn pressable" type="button" id="page-reload" aria-label="Reload" title="Reload"><svg><use href="#i-retry"/></svg></button>
+    </div>
     <label class="urlbar__field glass" for="address">
       <svg class="urlbar__icon"><use href="#i-link"/></svg>
-      <input class="urlbar__input" id="address" type="text" spellcheck="false" placeholder="Paste a link from YouTube, Instagram, TikTok or X" aria-describedby="address-hint">
+      <input class="urlbar__input" id="address" type="text" spellcheck="false" placeholder="Paste a link, or search" aria-describedby="address-hint">
       <span class="kbd" id="address-hint">Ctrl L</span>
     </label>
+    <div class="page-nav" data-browsing hidden>
+      <button class="icon-btn pressable page-downloads" type="button" id="page-downloads" aria-label="Downloads" title="Downloads" aria-pressed="false"><svg><use href="#i-download"/></svg><span class="page-downloads__count num" hidden></span></button>
+      <button class="icon-btn pressable" type="button" id="page-close" aria-label="Close the page" title="Close the page"><svg><use href="#i-close"/></svg></button>
+    </div>
   </form>
 
   <section class="result" id="result" aria-live="polite"></section>
+
+  <p class="notice" id="page-notice" role="status" hidden><span class="notice__text"></span><button class="notice__action" type="button" hidden></button></p>
+
+  <div class="page-frame" data-browsing hidden>
+    <span class="page-load" id="page-load" aria-hidden="true"></span>
+    <div class="page glass" id="page"></div>
+  </div>
 
   <section class="downloads" aria-labelledby="downloads-title">
     <h1 class="title" id="downloads-title">Downloads</h1>
