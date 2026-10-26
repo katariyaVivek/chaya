@@ -47,8 +47,7 @@ pub fn plan(
             let n = (i + 1).to_string();
             let (kind, word) = if item.is_video { (Kind::Video, "Video") } else { (Kind::Picture, "Picture") };
             let name = names::file_name(&media.title, several.then_some(n.as_str()), &item.ext);
-            let source =
-                Source { url: item.url.clone(), headers: item.headers.clone(), expected_size: None, stream: false };
+            let source = Source { url: item.url.clone(), headers: item.headers.clone(), ..Source::default() };
             NewDownload {
                 thumbnail: if item.is_video { media.thumbnail_url.clone() } else { Some(item.url.clone()) },
                 group: Some(page_url.to_string()),
@@ -70,7 +69,7 @@ pub fn plan(
     };
     // Picture and sound joined are always an MP4: only MP4 pictures and M4A sound are paired (formats). A
     // stream, whatever its pieces are, is saved as an MP4, or an M4A for sound only.
-    let ext = match (found.needs_merge() || found.file.is_hls(), found.is_audio_only) {
+    let ext = match (found.needs_merge() || found.file.is_savable_stream(), found.is_audio_only) {
         (true, true) => "m4a".to_string(),
         (true, false) => "mp4".to_string(),
         (false, _) => ext,
@@ -80,7 +79,8 @@ pub fn plan(
         url: f.url.clone(),
         headers: f.headers.clone(),
         expected_size: f.size_bytes,
-        stream: f.is_hls(),
+        stream: f.is_savable_stream(),
+        fragments: f.fragments.clone(),
     };
     let mut download = base(found.label.clone(), kind, name, source_of(&found.file));
     download.sound = found.audio_to_merge.as_ref().map(source_of);
@@ -176,6 +176,29 @@ mod tests {
         assert!(plans[0].source.stream);
         assert!(plans[0].source.url.ends_with("/index.m3u8"));
         assert_eq!(plans[0].sound, None);
+        assert!(plans[0].source.fragments.is_empty(), "its playlist lists its pieces");
+    }
+
+    #[test]
+    fn a_dash_stream_is_saved_from_the_pieces_yt_dlp_listed() {
+        let pieces = vec!["https://cdn.example/v/init.mp4".to_string(), "https://cdn.example/v/1.m4s".to_string()];
+        let media = Media {
+            title: "Clip".into(),
+            formats: vec![Format {
+                id: "v720".into(),
+                url: "https://cdn.example/manifest.mpd".into(),
+                ext: Some("mp4".into()),
+                protocol: Some("http_dash_segments".into()),
+                height: Some(720),
+                fragments: pieces.clone(),
+                ..Format::default()
+            }],
+            ..Media::default()
+        };
+        let plans = plan(&media, "720p", "u", Path::new("D"), |_| true, true).unwrap();
+        assert_eq!(plans[0].file_name, "Clip (720p).mp4");
+        assert!(plans[0].source.stream);
+        assert_eq!(plans[0].source.fragments, pieces);
     }
 
     #[test]

@@ -7,7 +7,7 @@ A post with pictures (an Instagram carousel, a tweet of photos) comes back with 
 video in it, found by gallery-dl (see `posts`), and no "formats".
 """
 import json
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 from yt_dlp import YoutubeDL
 from yt_dlp.extractor.instagram import InstagramIE
@@ -27,11 +27,14 @@ _INFO_FIELDS = (
 )
 
 
-def extract(url, cache_dir, cookie_file=None, js_runtime=None):
+def extract(url, cache_dir, cookie_file=None, js_runtime=None, fragments=False):
     """Returns a JSON string describing [url]: its title, poster, and the formats it can be saved in.
 
     [js_runtime] is the path of a QuickJS program for YouTube's challenges. Chaya for Windows ships one; the
     phone has none and solves them through `jsc_provider` instead.
+
+    With [fragments], a DASH format also lists its pieces' addresses, as yt-dlp found them in the manifest:
+    Chaya for Windows fetches those itself. The phone hands the manifest to Media3 and never asks for them.
     """
     options = {
         'quiet': True,
@@ -73,7 +76,7 @@ def extract(url, cache_dir, cookie_file=None, js_runtime=None):
             post = _post_or_none(url, cache_dir, cookie_file)
             if post:
                 return json.dumps({'media': post})
-        return json.dumps({'media': _shape(info)})
+        return json.dumps({'media': _shape(info, fragments)})
     except Exception as error:  # noqa: BLE001
         return json.dumps(_error(error))
 
@@ -144,7 +147,7 @@ def _post_or_none(url, cache_dir, cookie_file):
     return media
 
 
-def _shape(info):
+def _shape(info, fragments=False):
     # A carousel post (several photos or videos) arrives as a playlist; the first item is the one shown.
     if info.get('_type') == 'playlist':
         entries = [entry for entry in info.get('entries') or [] if entry]
@@ -152,7 +155,7 @@ def _shape(info):
             raise ValueError('This link has nothing to download.')
         info = entries[0]
 
-    formats = [{key: f.get(key) for key in _FORMAT_FIELDS} for f in info.get('formats') or [] if f.get('url')]
+    formats = [_format(f, fragments) for f in info.get('formats') or [] if f.get('url')]
     if not formats and info.get('url'):
         # Some sites answer with one ready-to-use file and no format list.
         formats.append({key: info.get(key) for key in _FORMAT_FIELDS})
@@ -161,6 +164,32 @@ def _shape(info):
     shaped['thumbnail'] = _best_thumbnail(info)
     shaped['formats'] = formats
     return shaped
+
+
+def _format(f, fragments):
+    shaped = {key: f.get(key) for key in _FORMAT_FIELDS}
+    urls = _fragment_urls(f) if fragments else None
+    if urls:
+        shaped['fragments'] = urls
+    return shaped
+
+
+def _fragment_urls(f):
+    """A DASH format's pieces in order, each as an address (its initialization section first), or None when
+    yt-dlp listed none it could name."""
+    pieces = f.get('fragments')
+    if 'dash' not in (f.get('protocol') or '') or not isinstance(pieces, list) or not pieces:
+        return None
+    base = f.get('fragment_base_url')
+    urls = []
+    for piece in pieces:
+        url = piece.get('url') if isinstance(piece, dict) else None
+        if not url and isinstance(piece, dict) and piece.get('path') and base:
+            url = urljoin(base, piece['path'])
+        if not url:
+            return None
+        urls.append(url)
+    return urls
 
 
 def _best_thumbnail(info):

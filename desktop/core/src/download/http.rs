@@ -22,7 +22,7 @@ use super::pieces::{self, PieceOutcome};
 use super::stream;
 
 /// What to fetch: an address and the headers its server expects.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Source {
     pub url: String,
     #[serde(default)]
@@ -30,9 +30,12 @@ pub struct Source {
     /// The size the site gave, which decides whether a file is fetched in pieces.
     #[serde(default)]
     pub expected_size: Option<u64>,
-    /// An HLS stream: `url` is its playlist, and its pieces are what is fetched (`stream`).
+    /// A stream: its pieces are what is fetched (`stream`). For HLS, `url` is its playlist.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub stream: bool,
+    /// A DASH stream's pieces in order, as yt-dlp listed them; `url` is then its manifest, not fetched.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fragments: Vec<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -234,7 +237,7 @@ mod tests {
             url: server.url("/file"),
             headers: [("User-Agent".to_string(), "Chaya-test".to_string())].into(),
             expected_size: None,
-            stream: false,
+            ..Source::default()
         };
         let mut seen = Vec::new();
         let result = fetch(&Client::new(), &source, part, &stop, &mut |p| seen.push(p)).await;
@@ -340,7 +343,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let part = dir.path().join("a.mp4.part");
         let (stop_tx, stop) = watch::channel(false);
-        let source = Source { url: server.url("/file"), headers: BTreeMap::new(), expected_size: None, stream: false };
+        let source =
+            Source { url: server.url("/file"), headers: BTreeMap::new(), expected_size: None, ..Source::default() };
 
         let mut seen = 0u64;
         let result = fetch(&Client::new(), &source, &part, &stop, &mut |p| {
@@ -368,7 +372,7 @@ mod tests {
             url: format!("http://127.0.0.1:{port}/file"),
             headers: BTreeMap::new(),
             expected_size: None,
-            stream: false,
+            ..Source::default()
         };
 
         let result = fetch(&Client::new(), &source, &dir.path().join("a.part"), &stop, &mut |_| {}).await;

@@ -1,6 +1,7 @@
-//! Saving an HLS stream, which comes as a playlist of short pieces rather than as one file. As on the phone,
-//! where Media3 fetches a stream's pieces: the playlist is read (and when it lists the stream at several
-//! qualities, the best one's), its pieces are fetched in order, three at a time, with the site's headers,
+//! Saving a stream, which comes as short pieces rather than as one file: HLS, whose playlist lists them, or DASH,
+//! whose pieces yt-dlp listed from its manifest. As on the phone, where Media3 fetches a stream's pieces: an HLS
+//! playlist is read (and when it lists the stream at several qualities, the best one's), the pieces are fetched
+//! in order, three at a time, with the site's headers,
 //! pieces encrypted with AES-128 are decrypted with their key, and each is written after the one before into
 //! the `.part` file: MPEG-TS, or fragmented MP4 after its initialization section. ffmpeg then copies that into
 //! an MP4 (`join.rs`). `<part>.segments` notes how many pieces are written, so a resume asks only for the rest.
@@ -63,7 +64,7 @@ pub fn log_path(part: &Path) -> PathBuf {
     part.with_file_name(name)
 }
 
-/// Fetches the stream whose playlist is `source` into `part`, continuing what `part` already holds.
+/// Fetches the stream `source` into `part`, continuing what `part` already holds.
 pub async fn fetch(
     client: &Client,
     source: &Source,
@@ -72,9 +73,13 @@ pub async fn fetch(
     on_progress: &mut (dyn FnMut(Progress) + Send),
 ) -> Result<Outcome, DownloadError> {
     let mut stop_signal = stop.clone();
-    let pieces = tokio::select! {
-        pieces = pieces_of(client, source) => pieces?,
-        _ = until_stopped(&mut stop_signal) => return Ok(Outcome::Stopped),
+    let pieces = if source.fragments.is_empty() {
+        tokio::select! {
+            pieces = pieces_of(client, source) => pieces?,
+            _ = until_stopped(&mut stop_signal) => return Ok(Outcome::Stopped),
+        }
+    } else {
+        listed(&source.fragments)?
     };
     let log = log_path(part);
     let (mut count, mut written) = resume_point(part, &log, pieces.len()).await;
@@ -124,7 +129,19 @@ pub async fn fetch(
     Ok(Outcome::Done)
 }
 
-/// The pieces of the stream at `source`: its playlist's, or for a playlist of qualities, the best one's.
+/// A DASH stream's pieces, as yt-dlp listed them: its initialization section, then its pieces of fragmented MP4
+/// (or WebM), which follow each other as one file does.
+fn listed(fragments: &[String]) -> Result<Vec<Piece>, DownloadError> {
+    fragments
+        .iter()
+        .map(|url| {
+            let url = Url::parse(url).map_err(|_| DownloadError::UnreadableStream)?;
+            Ok(Piece { url, range: None, key: None })
+        })
+        .collect()
+}
+
+/// The pieces of the HLS stream at `source`: its playlist's, or for a playlist of qualities, the best one's.
 async fn pieces_of(client: &Client, source: &Source) -> Result<Vec<Piece>, DownloadError> {
     let mut url = Url::parse(&source.url).map_err(|_| DownloadError::UnreadableStream)?;
     for _ in 0..2 {
@@ -530,8 +547,8 @@ mod tests {
         Source {
             url: server.url(path),
             headers: [("Referer".to_string(), "https://site.example/".to_string())].into(),
-            expected_size: None,
             stream: true,
+            ..Source::default()
         }
     }
 
@@ -559,6 +576,27 @@ mod tests {
         assert_eq!(requests.len(), 8, "the playlist and each piece once");
         assert!(requests.iter().all(|r| r.contains("referer: https://site.example/")), "{requests:?}");
         assert!(!log_path(&part).exists());
+    }
+
+    #[tokio::test]
+    async fn a_dash_streams_listed_pieces_are_fetched_without_its_manifest() {
+        let parts: Vec<Vec<u8>> = (0..4).map(|i| body(30_000, i)).collect();
+        let server = stream(&parts, Behaviour::default());
+        let dir = tempfile::tempdir().unwrap();
+        let part = dir.path().join("a.part");
+        let dash = Source {
+            url: server.url("/manifest.mpd"),
+            fragments: (0..4).map(|i| server.url(&format!("/seg-{i}.ts"))).collect(),
+            ..source(&server, "/manifest.mpd")
+        };
+
+        let (result, _) = run(&dash, &part).await;
+
+        assert_eq!(result, Ok(Outcome::Done));
+        assert_eq!(std::fs::read(&part).unwrap(), parts.concat());
+        let requests = server.requests();
+        assert_eq!(requests.len(), 4, "the pieces only: {requests:?}");
+        assert!(requests.iter().all(|r| r.contains("referer: https://site.example/")));
     }
 
     #[tokio::test]

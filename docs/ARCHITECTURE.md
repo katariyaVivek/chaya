@@ -286,7 +286,7 @@ Share. Reached from the Downloads screen's menu.
 ## Chaya for Windows (`desktop/`)
 
 A Tauri 2 app, early: the window, its themes, recognising links, looking them up, and downloading:
-plain files, qualities whose picture and sound are joined by a cut-down ffmpeg, and HLS streams. DASH comes next. [`../desktop/README.md`](../desktop/README.md) has the layout.
+plain files, qualities whose picture and sound are joined by a cut-down ffmpeg, and HLS and DASH streams. [`../desktop/README.md`](../desktop/README.md) has the layout.
 
 - `desktop/core` (`chaya-core`) is plain Rust with no window in it, the desktop's equivalent of the
   phone's Android-free Kotlin. `links` recognises links with the phone's rules and test table.
@@ -305,9 +305,11 @@ plain files, qualities whose picture and sound are joined by a cut-down ffmpeg, 
   `desktop/engine/build_ffmpeg.sh` with no encoders (copying only), where the phone uses `MediaMuxer` for
   H.264 only. **Pieces** (`download/pieces.rs`) port the phone's 10 MB, three-at-a-time fetching of
   YouTube's files and its log of whole pieces.
-- **HLS streams** (`download/stream.rs`) are fetched by the app itself, not by Media3 as on the phone
-  nor by ffmpeg: the playlist is read (RFC 8216: byte ranges, initialization sections, AES-128 keys;
-  SAMPLE-AES and DRM key systems refused), its pieces come three at a time through the same reqwest
+- **Streams** (`download/stream.rs`) are fetched by the app itself, not by Media3 as on the phone nor by
+  ffmpeg. An HLS playlist is read (RFC 8216: byte ranges, initialization sections, AES-128 keys;
+  SAMPLE-AES and DRM key systems refused); a DASH stream's pieces are the ones yt-dlp listed from its
+  manifest, which the engine passes on when asked (`--fragments`; yt-dlp leaves DRM formats out). The
+  pieces come three at a time through the same reqwest
   client (the PC's proxy, the site's headers), and are written in order into one file, with a count of
   the pieces written so a resume asks only for the rest. ffmpeg then copies that file into an MP4, so it
   needs no network of its own. `formats` offers a stream when no file reaches its quality, and pairs a

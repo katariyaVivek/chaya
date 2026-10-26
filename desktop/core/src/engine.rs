@@ -1,7 +1,8 @@
 //! Running the engine: the bundled Python with `chaya_engine`, as a program.
 //!
 //! The phone calls the engine through Chaquopy. On Windows the app starts
-//! `python -I run.py extract URL --cache DIR [--js-runtime qjs.exe]` and reads the one line of JSON it prints
+//! `python -I run.py extract URL --cache DIR --fragments [--js-runtime qjs.exe]` and reads the one line of JSON it
+//! prints
 //! (`chaya_engine/cli.py`). A lookup that runs too long is stopped; an engine that crashes, or prints something
 //! that is not its answer, is reported as the engine's failure, not the link's.
 
@@ -55,6 +56,8 @@ impl Engine {
     pub fn look_up(&self, url: &str) -> Result<Media, Failure> {
         let mut args: Vec<OsString> =
             vec!["extract".into(), url.into(), "--cache".into(), self.cache_dir.clone().into()];
+        // DASH formats with their pieces listed: the app fetches those itself (`download::stream`).
+        args.push("--fragments".into());
         if let Some(qjs) = &self.js_runtime {
             args.extend(["--js-runtime".into(), qjs.clone().into()]);
         }
@@ -225,7 +228,7 @@ print(json.dumps({"media": {"title": " ".join(sys.argv[1:]), "formats": []}}))
         };
         let media = engine.look_up("https://youtu.be/x").unwrap();
         let expected = format!(
-            "extract https://youtu.be/x --cache {} --js-runtime {}",
+            "extract https://youtu.be/x --cache {} --fragments --js-runtime {}",
             engine.cache_dir.display(),
             engine.js_runtime.as_ref().unwrap().display()
         );

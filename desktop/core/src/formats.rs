@@ -1,9 +1,9 @@
 //! Turns what yt-dlp found into choices a person can read, best first, ending with "Audio only".
 //!
 //! Ported from the phone's `FormatSelector` (`app/src/main/java/com/chaya/app/platform/FormatSelector.kt`),
-//! with its tests: only what the app can really save is offered. Beyond the phone's, a picture-only HLS stream
-//! is paired with sound when nothing better reaches its quality, and a sound-only stream is the audio when
-//! there is no sound file.
+//! with its tests: only what the app can really save is offered. Beyond the phone's, a picture-only stream (HLS,
+//! or DASH with its pieces listed) is paired with sound when nothing better reaches its quality, and a sound-only
+//! stream is the audio when there is no sound file.
 
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
@@ -71,6 +71,14 @@ fn is_ext(f: &Format, ext: &str) -> bool {
     f.ext.as_deref() == Some(ext)
 }
 
+/// Whether a stream's picture can be copied into an MP4 as it is. VP8 and VP9 from WebM cannot: MP4 must be
+/// told the picture's settings, which only a decoder could read from it, and the app's ffmpeg has none for
+/// pictures (it would write an MP4 no player opens).
+fn picture_copies_into_mp4(f: &Format) -> bool {
+    let vp = f.video_codec.as_deref().is_some_and(|c| c.to_ascii_lowercase().starts_with("vp"));
+    !is_ext(f, "webm") && !(vp && !is_ext(f, "mp4"))
+}
+
 /// Whether a picture-only track is H.264, the one kind of picture the phone joins to sound.
 pub fn is_h264(f: &Format) -> bool {
     f.video_codec.as_deref().is_some_and(|c| c.starts_with("avc"))
@@ -95,7 +103,7 @@ pub fn choices(media: &Media, can_join: impl Fn(&Format) -> bool) -> Vec<Choice>
         return Vec::new();
     }
     let audio_only: Vec<&Format> = media.formats.iter().filter(|f| f.is_audio_only() && f.is_direct_file()).collect();
-    let audio_streams = || media.formats.iter().filter(|f| f.is_audio_only() && f.is_hls());
+    let audio_streams = || media.formats.iter().filter(|f| f.is_audio_only() && f.is_savable_stream());
     let best_audio =
         best(audio_only.iter().copied(), by_audio_preference).or_else(|| best(audio_streams(), by_audio_preference));
     let merge_audio =
@@ -130,8 +138,8 @@ pub fn choices(media: &Media, can_join: impl Fn(&Format) -> bool) -> Vec<Choice>
 }
 
 /// One choice per quality. A ready-made file wins; then, when joining is possible, a separate picture and sound;
-/// then an HLS stream with picture and sound; then a picture-only HLS stream and sound; a DASH stream, which the
-/// app cannot save yet, is the last resort.
+/// then a stream with picture and sound; then a picture-only stream and sound; a stream the app cannot save (DASH
+/// without its pieces listed) is the last resort.
 fn choice_for(
     quality: i64,
     candidates: &[&Format],
@@ -145,13 +153,13 @@ fn choice_for(
         }),
         by_merge_compatibility,
     );
-    let streams = || candidates.iter().copied().filter(|f| !f.is_direct_file());
-    let complete_stream = best(streams().filter(|f| f.is_hls() && f.has_audio()), by_preference);
+    let streams = || candidates.iter().copied().filter(|f| !f.is_direct_file() && picture_copies_into_mp4(f));
+    let complete_stream = best(streams().filter(|f| f.is_savable_stream() && f.has_audio()), by_preference);
     let picture_stream = best(
-        streams().filter(|f| f.is_hls() && f.audio_codec.as_deref() == Some("none") && can_join(f)),
+        streams().filter(|f| f.is_savable_stream() && f.audio_codec.as_deref() == Some("none") && can_join(f)),
         by_merge_compatibility,
     );
-    let other_stream = best(streams().filter(|f| !f.is_hls() && f.has_audio()), by_preference);
+    let other_stream = best(streams().filter(|f| !f.is_savable_stream() && f.has_audio()), by_preference);
 
     let (file, audio) = if let Some(file) = complete_file {
         (file, None)
@@ -177,7 +185,7 @@ fn choice(
 ) -> Choice {
     let mut choice = Choice { label, detail: String::new(), quality, file, audio_to_merge, is_audio_only };
     // A stream is saved as an MP4, or an M4A for sound only, whatever its pieces are.
-    let saved_as = match (choice.file.is_hls(), is_audio_only) {
+    let saved_as = match (choice.file.is_savable_stream(), is_audio_only) {
         (true, true) => Some("m4a"),
         (true, false) => Some("mp4"),
         (false, _) => choice.file.ext.as_deref(),
@@ -457,11 +465,55 @@ mod tests {
     }
 
     #[test]
-    fn an_hls_stream_is_preferred_to_dash_which_is_the_last_resort() {
+    fn a_stream_that_can_be_saved_is_preferred_to_dash_without_its_pieces_the_last_resort() {
         let m = media(vec![dash("dash-1080", 1920, 1080), stream("hls-1080", 1920, 1080)]);
         assert_eq!(choices(&m, ALWAYS)[0].file.id, "hls-1080");
         let only_dash = media(vec![dash("dash-1080", 1920, 1080)]);
         assert_eq!(choices(&only_dash, ALWAYS)[0].file.id, "dash-1080");
+        let listed = Format { fragments: vec!["https://cdn.example/init.mp4".into()], ..dash("listed", 1920, 1080) };
+        let m = media(vec![dash("dash-1080", 1920, 1080), listed]);
+        assert_eq!(choices(&m, ALWAYS)[0].file.id, "listed");
+    }
+
+    #[test]
+    fn a_webm_stream_is_not_offered_but_its_opus_sound_is() {
+        let pieces = vec!["https://cdn.example/init.webm".to_string()];
+        let vp9 = Format {
+            ext: Some("webm".into()),
+            video_codec: Some("vp9".into()),
+            audio_codec: Some("none".into()),
+            fragments: pieces.clone(),
+            ..dash("vp9-1080", 1920, 1080)
+        };
+        let opus = Format {
+            ext: Some("webm".into()),
+            width: None,
+            height: None,
+            video_codec: Some("none".into()),
+            audio_codec: Some("opus".into()),
+            fragments: pieces,
+            ..dash("opus", 0, 0)
+        };
+        assert_eq!(labels(&choices(&media(vec![vp9, opus]), ALWAYS)), ["Audio only"]);
+    }
+
+    #[test]
+    fn dash_picture_and_sound_with_their_pieces_listed_are_paired() {
+        let pieces =
+            |id: &str| vec![format!("https://cdn.example/{id}/init.mp4"), format!("https://cdn.example/{id}/1.m4s")];
+        let picture =
+            Format { audio_codec: Some("none".into()), fragments: pieces("v1080"), ..dash("v1080", 1920, 1080) };
+        let sound = Format {
+            width: None,
+            height: None,
+            video_codec: Some("none".into()),
+            fragments: pieces("a128"),
+            ..dash("a128", 0, 0)
+        };
+        let c = choices(&media(vec![picture, sound]), ALWAYS);
+        assert_eq!(labels(&c), ["1080p", "Audio only"]);
+        assert_eq!(c[0].audio_to_merge.as_ref().unwrap().id, "a128");
+        assert_eq!((c[0].detail.as_str(), c[1].detail.as_str()), ("MP4", "M4A"));
     }
 
     #[test]

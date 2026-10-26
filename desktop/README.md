@@ -11,16 +11,16 @@ window shows its title, poster and the qualities it can be saved in (or what a p
 can't be). Each choice downloads into the Downloads folder, with pause, resume, cancel and retry, and
 the Downloads list keeps track across restarts. Qualities whose picture and sound come apart (most of
 YouTube's) are fetched as two files and joined into one MP4 by a cut-down ffmpeg the app carries, and
-YouTube's files come in pieces, three at a time. Qualities that come as HLS streams (X's, Vimeo's, a
-plain `.m3u8` link) are fetched piece by piece and saved as an MP4. DASH streams come next
-([`../docs/ROADMAP.md`](../docs/ROADMAP.md)).
+YouTube's files come in pieces, three at a time. Qualities that come as streams, HLS (X's, a plain `.m3u8`
+link) or DASH (Vimeo's, Reddit's), are fetched piece by piece and saved as an MP4. A built-in browser comes
+next ([`../docs/ROADMAP.md`](../docs/ROADMAP.md)).
 
 ## Layout
 
 | Path | What it is |
 |---|---|
 | `design/` | The design system: tokens, fonts, components, motion. Plain CSS and an ES module |
-| `core/` | `chaya-core`, plain Rust with no window or web view in it, so it builds and tests anywhere. `links` recognises links (the phone's `PlatformMatcher` and `ProfileMatcher`); `engine` runs the engine; `media` reads its answer (`PlatformMedia`); `formats` picks one choice per quality (`FormatSelector`); `lookup` is what the window is sent. Each is ported with the phone's tests. `download` saves files: `http` fetches one with resume (`HttpDownloader`), `manager` keeps every download and its state (`DownloadManager`), `plan` turns a choice into downloads, `names` makes Windows-safe names, `error` explains failures (`DownloadError`), `join` joins picture and sound, and turns a stream into an MP4, with ffmpeg, `pieces` fetches YouTube's files in pieces (`PieceLog`), `stream` fetches an HLS stream's pieces |
+| `core/` | `chaya-core`, plain Rust with no window or web view in it, so it builds and tests anywhere. `links` recognises links (the phone's `PlatformMatcher` and `ProfileMatcher`); `engine` runs the engine; `media` reads its answer (`PlatformMedia`); `formats` picks one choice per quality (`FormatSelector`); `lookup` is what the window is sent. Each is ported with the phone's tests. `download` saves files: `http` fetches one with resume (`HttpDownloader`), `manager` keeps every download and its state (`DownloadManager`), `plan` turns a choice into downloads, `names` makes Windows-safe names, `error` explains failures (`DownloadError`), `join` joins picture and sound, and turns a stream into an MP4, with ffmpeg, `pieces` fetches YouTube's files in pieces (`PieceLog`), `stream` fetches a stream's pieces (HLS, DASH) |
 | `engine/` | `prepare.py` puts together the engine the installer carries, in `app/src-tauri/engine/` (not in git); `run.py` starts it; `build_ffmpeg.sh` builds the cut-down ffmpeg |
 | `app/ui/` | The window: `index.html`, `app.css`, `main.js` |
 | `app/scripts/assemble-ui.mjs` | Puts `ui/` and the design system together in `app/dist/`, which Tauri serves. Runs before every dev run and build |
@@ -74,8 +74,10 @@ Python inside the app, so the installer carries one:
   `chaya_engine`.
 - `engine/qjs.exe`: QuickJS-ng 0.17.0, checked against its release's SHA-256. yt-dlp runs YouTube's
   challenge scripts in it, where the phone uses its embedded QuickJS through `jsc_provider`.
-- `engine/run.py`: what the app starts, `python -I run.py extract URL --cache DIR --js-runtime qjs.exe`
-  (`chaya_engine/cli.py`). It prints one line of JSON, the same answer the phone reads.
+- `engine/run.py`: what the app starts, `python -I run.py extract URL --cache DIR --fragments --js-runtime
+  qjs.exe` (`chaya_engine/cli.py`). It prints one line of JSON, the same answer the phone reads;
+  `--fragments` adds each DASH format's pieces as yt-dlp listed them, which the phone, handing the manifest
+  to Media3, never asks for.
 - `engine/ffmpeg.exe`: FFmpeg 8.1.3, built by `build_ffmpeg.sh` from the release's commit with
   everything left out but copying tracks into an MP4: from MP4, M4A and WebM files, and from a stream's
   pieces (MPEG-TS, fragmented MP4, bare AAC or MP3). No encoders, no network, no outside libraries; its
@@ -111,16 +113,19 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
   place, as on the phone: one request goes at about the speed of playback. "name.part.pieces" lists
   the whole pieces, so a resume asks only for the rest. A server that answers a piece with anything but
   that piece, or a file of another length than yt-dlp said, gets the rest the ordinary way.
-- **HLS streams** (`stream`): the playlist is read (for a playlist of qualities, the best one's), and
-  its pieces are fetched in order, three at a time, with the site's headers, into "name.stream". Pieces
+- **Streams** (`stream`): for HLS, the playlist is read (for a playlist of qualities, the best one's); for
+  DASH, the pieces are those yt-dlp listed from the manifest, its initialization section first. They are
+  fetched in order, three at a time, with the site's headers, into "name.stream". Pieces
   encrypted with AES-128 are decrypted with their key; a stream with DRM (SAMPLE-AES, or a key only a
   DRM system opens) is refused, as on the phone. "name.stream.part.segments" counts the pieces written,
   so a resume asks only for the rest. Once whole, ffmpeg copies the stream into an MP4 ("Saving as
   MP4"), or an M4A for sound only. A picture-only stream is joined to its sound like a picture file.
   The size shown is yt-dlp's estimate until a few pieces have arrived, then worked out from them.
-- What is chosen for a quality: a ready-made file, then picture and sound files joined, then an HLS
-  stream with both, then a picture-only stream joined to sound. DASH streams are not offered yet; the
-  card says some qualities can't be saved yet when a link has them.
+- What is chosen for a quality: a ready-made file, then picture and sound files joined, then a stream with
+  both, then a picture-only stream joined to sound. A stream whose picture is VP8 or VP9 in WebM is not
+  offered: MP4 must be told that picture's settings, which only a decoder could read, and the app's
+  ffmpeg has none for pictures. The card says some qualities can't be saved yet when a link has some the
+  app cannot save.
 
 ## Tests
 

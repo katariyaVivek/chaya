@@ -54,7 +54,7 @@ impl Lookup {
     }
 
     /// `can_join` as for `formats::choices`: which picture-only tracks the app can join to sound. `streams`:
-    /// whether it can save HLS streams.
+    /// whether it can save streams.
     pub fn from_media(media: &Media, can_join: impl Fn(&crate::media::Format) -> bool, streams: bool) -> Lookup {
         if media.is_live {
             return Lookup::failed(FailureKind::Live);
@@ -94,10 +94,11 @@ impl Lookup {
     }
 }
 
-/// Whether the app can save `choice` yet: plain files, which it fetches as they are, and with `streams`, HLS
-/// streams, whose pieces it fetches and ffmpeg copies into an MP4. DASH it cannot save yet.
+/// Whether the app can save `choice` yet: plain files, which it fetches as they are, and with `streams`, streams
+/// whose pieces it can list (HLS, and DASH as yt-dlp listed them), which it fetches and ffmpeg copies into an
+/// MP4.
 pub fn can_save(choice: &Choice, streams: bool) -> bool {
-    let savable = |f: &crate::media::Format| f.is_direct_file() || (streams && f.is_hls());
+    let savable = |f: &crate::media::Format| f.is_direct_file() || (streams && f.is_savable_stream());
     savable(&choice.file) && choice.audio_to_merge.as_ref().is_none_or(savable)
 }
 
@@ -161,7 +162,7 @@ mod tests {
         };
         let Lookup::Found(found) = Lookup::from_media(&media, |_| true, true) else { panic!("not found") };
         assert_eq!(found.choices.iter().map(|c| c.label.as_str()).collect::<Vec<_>>(), ["720p", "360p"]);
-        assert!(found.more_later, "1080p is a DASH stream");
+        assert!(found.more_later, "1080p is a DASH stream without its pieces listed");
 
         let Lookup::Found(without) = Lookup::from_media(&media, |_| false, false) else { panic!("not found") };
         assert_eq!(without.choices.iter().map(|c| c.label.as_str()).collect::<Vec<_>>(), ["360p"]);
