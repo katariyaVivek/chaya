@@ -1,0 +1,128 @@
+/* The Chaya window. Built from desktop/design; nothing here sets a color or a timing of its own. */
+
+html, body { height: 100%; }
+
+[hidden] { display: none !important; }
+
+body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /* Glass needs something to soften: two very faint warm lights behind everything */
+  background:
+    radial-gradient(56rem 26rem at 78% -8rem, rgb(var(--accent-rgb) / 0.14), transparent 70%),
+    radial-gradient(36rem 20rem at 0% 70%, rgb(var(--accent-rgb) / 0.06), transparent 70%),
+    var(--bg);
+  background-repeat: no-repeat;
+  user-select: none;
+}
+
+.sprite { position: absolute; }
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-3);
+}
+
+.settings { position: relative; }
+
+.settings__panel {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  right: 0;
+  z-index: 10;
+  display: grid;
+  gap: var(--space-1);
+  width: max-content;
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  animation: var(--anim-enter) var(--dur-enter) var(--ease-out) both;
+}
+.settings__label { margin: 0; color: var(--muted); font-size: var(--text-sm); }
+.settings__label:not(:first-child) { margin-top: var(--space-1); }
+.settings__credit { max-width: 32ch; margin: var(--space-1) 0 0; color: var(--muted); font-size: var(--text-sm); line-height: var(--leading-sm); }
+
+.seg { display: flex; gap: 2px; padding: var(--space-half); border-radius: var(--radius-pill); background: var(--wash); }
+.seg button {
+  height: var(--space-4);
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--muted);
+  font: 500 var(--text-sm) / 1 var(--font-ui);
+  cursor: pointer;
+  transition: background-color var(--dur-hover) var(--ease-out), color var(--dur-hover) var(--ease-out);
+}
+.seg button:hover { color: var(--text); }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+
+.main {
+  flex: 1;
+  display: grid;
+  align-content: start;
+  gap: var(--space-3);
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-3) var(--space-6);
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+
+.result:empty { display: none; }
+
+.card {
+  display: grid;
+  grid-template-columns: var(--space-6) minmax(0, 1fr);
+  gap: var(--space-2);
+  align-items: start;
+  padding: var(--space-2);
+  border-radius: var(--radius-lg);
+  animation: var(--anim-enter) var(--dur-enter) var(--ease-out) both;
+}
+.card__icon {
+  display: grid;
+  place-items: center;
+  width: var(--space-6);
+  height: var(--space-6);
+  border-radius: var(--radius-md);
+  background: var(--wash-strong);
+  color: var(--muted);
+}
+.card__icon svg { width: 20px; height: 20px; }
+.card__body { display: grid; gap: var(--space-half); min-width: 0; padding-top: 2px; }
+.card__title { margin: 0; font-size: var(--text-lg); line-height: var(--leading-lg); font-weight: 600; }
+.card__url {
+  margin: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: text;
+}
+.card__note { margin: var(--space-1) 0 0; color: var(--muted); }
+
+.downloads { display: grid; gap: var(--space-2); margin-top: var(--space-3); }
+
+.empty {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--muted);
+}
+.empty p { margin: 0; }
+.empty__icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--space-6);
+  height: var(--space-6);
+  border-radius: var(--radius-pill);
+  background: var(--wash);
+}
+.empty__icon svg { width: 20px; height: 20px; }

@@ -1,0 +1,15 @@
+{
+  "name": "chaya-desktop-app",
+  "private": true,
+  "type": "module",
+  "description": "Chaya for Windows: the Tauri app.",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "assemble": "node scripts/assemble-ui.mjs",
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.12.4"
+  }
+}

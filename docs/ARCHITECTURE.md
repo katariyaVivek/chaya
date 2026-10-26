@@ -282,3 +282,16 @@ Share. Reached from the Downloads screen's menu.
 | `app/src/test/python` | pytest for `chaya_engine`, against the pinned yt-dlp | PRs touching the engine (`engine.yml`) |
 | `app/src/androidTest` | On a device: Python/yt-dlp and QuickJS, an engine update compiled and imported (and a broken one falling back), the real `MediaMuxer` join, the whole two-file save, ad blocking in a real WebView | `ui-check` label or manual (`device-tests.yml`); also *Run workflow* on `build.yml` |
 | `.github/scripts/walkthrough.py` | Drives the debug app in an emulator and saves screenshots, screen text and logs | `ui-check` label or manual (`emulator-check.yml`) |
+
+## Chaya for Windows (`desktop/`)
+
+A Tauri 2 app, early: the window, its themes, and recognising links. [`../desktop/README.md`](../desktop/README.md)
+has the layout.
+
+- `desktop/core` (`chaya-core`) is plain Rust with no window in it, the desktop's equivalent of the
+  phone's Android-free Kotlin. `links` recognises links with the phone's rules and test table.
+- `desktop/app/src-tauri` hands `chaya-core` to the window as commands (`recognise_link`). The window
+  may call only those and set its title bar's theme (`capabilities/default.json`); its content
+  security policy loads nothing from outside the app.
+- `desktop/app/ui` is the window, drawn with [`desktop/design`](../desktop/design/README.md).
+  `assemble-ui.mjs` copies both into `desktop/app/dist`, which Tauri packs into the app.

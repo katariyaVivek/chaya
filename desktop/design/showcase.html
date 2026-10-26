@@ -1,0 +1,477 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Chaya Desktop Design</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="fonts.css">
+<link rel="stylesheet" href="components.css">
+<style>
+  /* Showcase layout only. Everything visual still comes from tokens.css. */
+  body {
+    padding-block: var(--space-4) var(--space-8);
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    background:
+      radial-gradient(60rem 28rem at 70% -6rem, rgb(var(--accent-rgb) / 0.16), transparent 70%),
+      radial-gradient(40rem 22rem at 8% 18rem, rgb(var(--accent-rgb) / 0.07), transparent 70%),
+      var(--bg);
+    background-repeat: no-repeat;
+  }
+  .page { max-width: 1120px; margin: 0 auto; display: grid; gap: var(--space-8); }
+
+  .masthead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2); }
+  .masthead__name { display: flex; align-items: baseline; gap: var(--space-1); }
+  .controls { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+  .seg { display: inline-flex; padding: var(--space-half); border-radius: var(--radius-pill); gap: 2px; }
+  .seg button {
+    height: var(--space-4); padding: 0 var(--space-2); border: 0; border-radius: var(--radius-pill);
+    background: transparent; color: var(--muted); font: 500 var(--text-sm) / 1 var(--font-ui); cursor: pointer;
+  }
+  .seg button[aria-pressed="true"] { background: var(--wash-strong); color: var(--text); }
+  .seg__label { align-self: center; padding: 0 var(--space-1) 0 var(--space-1); color: var(--muted); font-size: var(--text-sm); }
+
+  .lede { max-width: 62ch; margin: var(--space-1) 0 0; color: var(--muted); font-size: var(--text-lg); line-height: var(--leading-lg); }
+
+  /* The example window */
+  .window { border-radius: var(--radius-lg); overflow: hidden; }
+  .window__bar { display: flex; align-items: center; justify-content: space-between; height: var(--space-6); padding: 0 0 0 var(--space-2); border-bottom: 1px solid var(--border); }
+  .window__controls { display: flex; }
+  .window__controls span { display: grid; place-items: center; width: 46px; height: var(--space-6); color: var(--muted); }
+  .window__controls svg { width: 10px; height: 10px; }
+  .window__body { display: grid; gap: var(--space-3); padding: var(--space-3); }
+  .found { display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; align-items: center; gap: var(--space-2); padding: var(--space-2); border-radius: var(--radius-md); }
+  .found__thumb { aspect-ratio: 16 / 10; border-radius: var(--radius-sm); background: linear-gradient(135deg, rgb(var(--accent-rgb) / 0.35), var(--wash-strong) 70%); }
+  .found__title { font-weight: 500; }
+  .list { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
+  .list-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
+
+  /* Reference sections */
+  section { display: grid; gap: var(--space-3); }
+  .section-head { display: grid; gap: var(--space-half); }
+  .section-head p { margin: 0; max-width: 62ch; color: var(--muted); }
+  .eyebrow { color: var(--muted); font: 500 11px / 16px var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; }
+  .grid { display: grid; gap: var(--space-2); grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+  .card { display: grid; gap: var(--space-2); align-content: start; padding: var(--space-3); border-radius: var(--radius-lg); min-width: 0; }
+  .card h3 { margin: 0; font-size: var(--text-md); font-weight: 600; }
+  .card p { margin: 0; color: var(--muted); font-size: var(--text-sm); line-height: var(--leading-sm); }
+  .stage { display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; min-height: 120px; border-radius: var(--radius-md); background: var(--wash); }
+
+  .swatch { display: grid; grid-template-columns: var(--space-6) minmax(0, 1fr); gap: var(--space-2); align-items: center; }
+  .chip { width: var(--space-6); height: var(--space-6); border-radius: var(--radius-sm); border: 1px solid var(--border); }
+  .chip--glass { background: var(--surface); box-shadow: var(--shadow); }
+  .chip--accent { background: var(--bg); box-shadow: var(--accent-glow); border-color: var(--accent-edge); }
+  .swatch dl { display: grid; grid-template-columns: auto 1fr; gap: 0 var(--space-1); margin: 0; font-size: var(--text-sm); line-height: var(--leading-sm); }
+  .swatch dt { color: var(--muted); }
+  .swatch dd { margin: 0; }
+  .swatch strong { grid-column: 1 / -1; font-weight: 600; }
+
+  .type-row { display: grid; grid-template-columns: 7rem minmax(0, 1fr); gap: var(--space-2); align-items: baseline; padding-block: var(--space-2); border-top: 1px solid var(--border); }
+  .type-row:first-child { border-top: 0; }
+  .type-row .eyebrow { align-self: center; }
+
+  .radii { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+  .radius { display: grid; place-items: center; width: 88px; height: 64px; border: 1px solid var(--border); background: var(--wash); font-size: var(--text-sm); }
+  .space { display: grid; gap: var(--space-1); }
+  .space div { display: grid; grid-template-columns: 5rem auto; align-items: center; gap: var(--space-2); font-size: var(--text-sm); }
+  .space span:last-child { height: var(--space-1); border-radius: 2px; background: var(--wash-strong); }
+
+  .tokens { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-half) var(--space-2); margin: 0; font-size: var(--text-sm); line-height: var(--leading-sm); }
+  .tokens dt { color: var(--muted); }
+  .tokens dd { margin: 0; overflow-wrap: anywhere; }
+  .curve { width: 100%; max-width: 360px; height: auto; color: var(--muted); }
+  .curve .line { fill: none; stroke: var(--accent); stroke-width: 2; }
+  .curve .axis { stroke: var(--border); stroke-width: 1; }
+  .curve text { fill: var(--muted); font: 11px var(--font-mono); }
+
+  .stack { display: grid; gap: var(--space-1); justify-items: start; }
+  .demo-list { display: grid; gap: var(--space-1); width: 100%; margin: 0; padding: 0; list-style: none; }
+  .demo-list li { height: var(--space-4); border-radius: var(--radius-sm); background: var(--wash-strong); }
+
+  @media (max-width: 640px) {
+    .found { grid-template-columns: 64px minmax(0, 1fr); }
+    .found .dl { grid-column: 1 / -1; justify-self: start; }
+    .row { grid-template-columns: var(--space-6) minmax(0, 1fr) auto; }
+    .row__pct { display: none; }
+    .type-row { grid-template-columns: 1fr; gap: var(--space-half); }
+  }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-video" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10 9.5v5l4.5-2.5z" fill="currentColor"/></symbol>
+  <symbol id="i-audio" viewBox="0 0 24 24"><path d="M9 18V6l10-2v12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="6.5" cy="18" r="2.5" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="16.5" cy="16" r="2.5" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+  <symbol id="i-zip" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 3v2m0 2v2m0 2v2" stroke="currentColor" stroke-width="1.6"/><rect x="10" y="13" width="4" height="4" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M9 6v12M15 6v12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l10-6.5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+</svg>
+
+<main class="page">
+  <header class="masthead">
+    <div>
+      <div class="masthead__name"><span class="wordmark">Chaya</span><span class="muted">for Windows</span></div>
+      <p class="lede">Warm light under glass. One accent, used as light and never as paint. Motion that moves things between states instead of swapping them.</p>
+    </div>
+    <div class="controls">
+      <div class="seg glass" role="group" aria-label="Theme">
+        <button type="button" data-theme-choice="day" aria-pressed="false">Day</button>
+        <button type="button" data-theme-choice="night" aria-pressed="false">Night</button>
+        <button type="button" data-theme-choice="system" aria-pressed="true">System</button>
+      </div>
+      <div class="seg glass" role="group" aria-label="Motion">
+        <button type="button" data-motion-choice="system" aria-pressed="true">Full motion</button>
+        <button type="button" data-motion-choice="reduce" aria-pressed="false">Reduced</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- The system put together: an example Chaya window -->
+  <div class="window glass" aria-label="Example Chaya window">
+    <div class="window__bar">
+      <span class="wordmark" style="font-size: var(--text-lg)">Chaya</span>
+      <div class="window__controls" aria-hidden="true">
+        <span><svg viewBox="0 0 10 10"><path d="M0 5h10" stroke="currentColor"/></svg></span>
+        <span><svg viewBox="0 0 10 10"><rect x=".5" y=".5" width="9" height="9" rx="1.5" fill="none" stroke="currentColor"/></svg></span>
+        <span><svg viewBox="0 0 10 10"><path d="M0 0l10 10M10 0L0 10" stroke="currentColor"/></svg></span>
+      </div>
+    </div>
+    <div class="window__body">
+      <div class="urlbar">
+        <label class="urlbar__field glass" for="hero-url">
+          <svg class="urlbar__icon"><use href="#i-link"/></svg>
+          <input class="urlbar__input" id="hero-url" type="text" spellcheck="false" autocomplete="off" placeholder="Paste a link or search" value="youtube.com/watch?v=example">
+          <span class="kbd">Ctrl L</span>
+        </label>
+      </div>
+
+      <div><span class="finding glass" role="status"><span class="finding__text">Finding media…</span></span></div>
+
+      <div class="found glass">
+        <div class="found__thumb" aria-hidden="true"></div>
+        <div class="row__body">
+          <div class="found__title">Monsoon over the Western Ghats</div>
+          <div class="row__meta num">1080p · MP4 · 1.21 GB · 12:48</div>
+        </div>
+        <button class="dl pill pill--primary glass" type="button" id="hero-dl">
+          <span class="dl__label">Download</span>
+          <span class="dl__ring" aria-hidden="true">
+            <svg class="dl__svg" viewBox="0 0 40 40"><circle class="dl__track" cx="20" cy="20" r="17"/><circle class="dl__arc" cx="20" cy="20" r="17" pathLength="100"/><path class="dl__check" d="M14 20.5l4 4 8-9" pathLength="1"/></svg>
+            <span class="dl__pct num">0%</span>
+          </span>
+        </button>
+      </div>
+
+      <div class="list-head">
+        <h2 class="title">Downloads</h2>
+        <span class="muted text-sm">Examples</span>
+      </div>
+      <ul class="list stagger" id="hero-list">
+        <li class="row glass" data-state="downloading" id="active-row">
+          <div class="row__thumb"><svg><use href="#i-video"/></svg></div>
+          <div class="row__body">
+            <div class="row__title">Monsoon over the Western Ghats (1080p).mp4</div>
+            <div class="row__meta num" id="active-meta">412.6 MB of 1.21 GB · 8.4 MB/s · 1 min 35 s left</div>
+            <div class="row__bar"><span id="active-bar" style="--p: 34"></span></div>
+          </div>
+          <span class="row__pct num" id="active-pct">34%</span>
+          <button class="icon-btn pressable" type="button" id="active-toggle" aria-label="Pause"><svg><use href="#i-pause"/></svg></button>
+        </li>
+        <li class="row glass" data-state="paused">
+          <div class="row__thumb"><svg><use href="#i-audio"/></svg></div>
+          <div class="row__body">
+            <div class="row__title">Lo-fi set, live from a Pune rooftop (audio).m4a</div>
+            <div class="row__meta num">Paused · 38.2 MB of 96.0 MB</div>
+            <div class="row__bar"><span style="--p: 39"></span></div>
+          </div>
+          <span class="row__pct num">39%</span>
+          <button class="icon-btn pressable" type="button" aria-label="Resume"><svg><use href="#i-play"/></svg></button>
+        </li>
+        <li class="row glass">
+          <div class="row__thumb"><svg><use href="#i-zip"/></svg></div>
+          <div class="row__body">
+            <div class="row__title">@studio.kiln, 14 posts.zip</div>
+            <div class="row__meta num">Saved · 212.4 MB · Downloads</div>
+          </div>
+          <span class="row__pct num"></span>
+          <button class="icon-btn pressable" type="button" aria-label="Show in folder"><svg><use href="#i-folder"/></svg></button>
+        </li>
+        <li class="row glass">
+          <div class="row__thumb"><svg><use href="#i-video"/></svg></div>
+          <div class="row__body">
+            <div class="row__title">Night market in Bangkok, walking tour (720p).mp4</div>
+            <div class="row__meta num">Waiting · 640.0 MB</div>
+          </div>
+          <span class="row__pct num"></span>
+          <button class="icon-btn pressable" type="button" aria-label="Start now"><svg><use href="#i-play"/></svg></button>
+        </li>
+      </ul>
+    </div>
+  </div>
+
+  <section aria-labelledby="color-h">
+    <div class="section-head">
+      <span class="eyebrow">Color</span>
+      <h2 class="title" id="color-h">Two grounds, one light</h2>
+      <p>Day is warm paper under frosted white; Night is near-black under smoked glass. The accent is the same amber in both, used only as glow, edges and thin progress, never as a filled shape. On Day it is too pale for text or focus rings (1.9:1), so those use the text color there.</p>
+    </div>
+    <div class="grid" id="swatches"></div>
+  </section>
+
+  <section aria-labelledby="type-h">
+    <div class="section-head">
+      <span class="eyebrow">Type</span>
+      <h2 class="title" id="type-h">Geist to read, Geist Mono to count</h2>
+      <p>Three UI sizes and no more. Every number that changes (sizes, speeds, percentages, times) is in Geist Mono with tabular figures, so it does not jitter as it counts. Cabinet Grotesk 600 is kept for page titles and the wordmark.</p>
+    </div>
+    <div class="card glass">
+      <div class="type-row"><span class="eyebrow">Title 24</span><span class="title">Downloads</span></div>
+      <div class="type-row"><span class="eyebrow">Large 16</span><span class="text-lg">Paste a link from YouTube, Instagram, TikTok or X</span></div>
+      <div class="type-row"><span class="eyebrow">Body 14</span><span>Saved to Downloads. Open the folder, or keep browsing.</span></div>
+      <div class="type-row"><span class="eyebrow">Small 13</span><span class="text-sm muted">The address expired, so Chaya looked it up again.</span></div>
+      <div class="type-row"><span class="eyebrow">Mono 13</span><span class="num text-sm">412.6 MB of 1.21 GB · 8.4 MB/s · 34% · 1 min 35 s</span></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="shape-h">
+    <div class="section-head">
+      <span class="eyebrow">Shape and space</span>
+      <h2 class="title" id="shape-h">Radii 10, 14, 20; everything on 8</h2>
+      <p>Small radius for thumbnails and chips, medium for rows and fields, large for cards and windows. Pills are fully round. Spacing steps in eights; the 4px half step is only for an icon beside its label.</p>
+    </div>
+    <div class="grid">
+      <div class="card glass">
+        <h3>Radii</h3>
+        <div class="radii">
+          <div class="radius" style="border-radius: var(--radius-sm)">10</div>
+          <div class="radius" style="border-radius: var(--radius-md)">14</div>
+          <div class="radius" style="border-radius: var(--radius-lg)">20</div>
+          <div class="radius" style="border-radius: var(--radius-pill)">pill</div>
+        </div>
+      </div>
+      <div class="card glass">
+        <h3>Spacing</h3>
+        <div class="space num" id="spacing"></div>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="motion-h">
+    <div class="section-head">
+      <span class="eyebrow">Motion</span>
+      <h2 class="title" id="motion-h">Things change shape, they do not jump</h2>
+      <p>Enter 220 ms, exit 160 ms, hover 120 ms, all on one ease-out. Presses spring. Lists arrive 30 ms apart. With reduced motion, from Windows or from Chaya's own setting, only opacity changes.</p>
+    </div>
+    <div class="grid">
+      <div class="card glass">
+        <h3>Press</h3>
+        <p>Scale 0.97 on a spring, stiffness 400 and damping 30. CSS traces the spring with <span class="num">linear()</span>, so it settles in <span class="num" id="spring-ms">453 ms</span> with <span class="num" id="spring-over">2.8%</span> overshoot, too little to read as bounce.</p>
+        <svg class="curve" id="curve" viewBox="0 0 360 150" role="img" aria-label="The press spring rising from 0 to 1 and settling"></svg>
+        <button class="pill glass pressable" type="button">Press and hold</button>
+      </div>
+      <div class="card glass">
+        <h3>Lists</h3>
+        <p>Each child fades in and rises 6px, 30 ms after the one before.</p>
+        <ul class="demo-list stagger" id="demo-list"><li></li><li></li><li></li><li></li><li></li></ul>
+        <button class="pill glass pressable" type="button" id="replay">Play again</button>
+      </div>
+      <div class="card glass">
+        <h3>Tokens</h3>
+        <dl class="tokens num" id="motion-tokens"></dl>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="comp-h">
+    <div class="section-head">
+      <span class="eyebrow">Components</span>
+      <h2 class="title" id="comp-h">Four moments to get right</h2>
+    </div>
+    <div class="grid">
+      <div class="card glass">
+        <h3>Download button</h3>
+        <div class="stage">
+          <button class="dl pill pill--primary glass" type="button" id="demo-dl">
+            <span class="dl__label">Download</span>
+            <span class="dl__ring" aria-hidden="true">
+              <svg class="dl__svg" viewBox="0 0 40 40"><circle class="dl__track" cx="20" cy="20" r="17"/><circle class="dl__arc" cx="20" cy="20" r="17" pathLength="100"/><path class="dl__check" d="M14 20.5l4 4 8-9" pathLength="1"/></svg>
+              <span class="dl__pct num">0%</span>
+            </span>
+          </button>
+        </div>
+        <p>Click to start. The pill shrinks into a ring counting in Geist Mono. Click the ring to pause: it stops and dims to half. At the end a check draws in, the button glows once, then settles back to a pill.</p>
+        <p class="num" id="demo-dl-state">State: idle</p>
+      </div>
+      <div class="card glass">
+        <h3>Finding media</h3>
+        <div class="stage"><span class="finding glass" role="status"><span class="finding__text">Finding media…</span></span></div>
+        <p>A warm light sweeps across the words every 1.6 s while a page or link is looked up. With reduced motion the words breathe instead.</p>
+      </div>
+      <div class="card glass">
+        <h3>Address and search</h3>
+        <div class="stage" style="padding: 0 var(--space-2)">
+          <div class="urlbar" style="width: 100%">
+            <label class="urlbar__field glass" for="demo-url">
+              <svg class="urlbar__icon"><use href="#i-link"/></svg>
+              <input class="urlbar__input" id="demo-url" type="text" spellcheck="false" autocomplete="off" placeholder="Paste a link">
+            </label>
+          </div>
+        </div>
+        <p>Focus the field: amber light fades in underneath, softened by the glass. Its edge turns to the focus color so focus never depends on the glow.</p>
+      </div>
+      <div class="card glass">
+        <h3>Download row</h3>
+        <p>While a download runs, a thin light circles its border once every 8 s. Paused, the light stays where it stopped, at half strength. Everything else has the plain hairline.</p>
+        <div class="row glass" data-state="downloading" id="demo-row">
+          <div class="row__thumb"><svg><use href="#i-video"/></svg></div>
+          <div class="row__body">
+            <div class="row__title">Western Ghats.mp4</div>
+            <div class="row__meta num" id="demo-row-meta">Downloading</div>
+          </div>
+          <span></span>
+          <button class="icon-btn pressable" type="button" id="demo-row-toggle" aria-label="Pause"><svg><use href="#i-pause"/></svg></button>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script type="module">
+import { DownloadButton, springEasing, PRESS_SPRING, replayEntrance, setTheme, setMotion } from './chaya-motion.js';
+
+// Theme and motion switches
+const pressGroup = (attr, value) =>
+  document.querySelectorAll(`[${attr}]`).forEach((b) => b.setAttribute('aria-pressed', String(b.getAttribute(attr) === value)));
+document.querySelectorAll('[data-theme-choice]').forEach((b) =>
+  b.addEventListener('click', () => {
+    setTheme(b.dataset.themeChoice);
+    pressGroup('data-theme-choice', b.dataset.themeChoice);
+    renderSwatches();
+  }),
+);
+document.querySelectorAll('[data-motion-choice]').forEach((b) =>
+  b.addEventListener('click', () => {
+    setMotion(b.dataset.motionChoice);
+    pressGroup('data-motion-choice', b.dataset.motionChoice);
+  }),
+);
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => renderSwatches());
+
+// Color swatches, read from the live tokens so they always match tokens.css
+const COLORS = [
+  ['--bg', 'Background', 'Behind everything.', '#F6F4F0', '#0B0B0D'],
+  ['--surface', 'Surface', 'Glass for what floats: rows, bars, cards. Blurred behind.', 'white 80% · blur 20', 'white 6% · blur 24'],
+  ['--border', 'Border', 'The hairline edge of glass.', 'ink 6%', 'white 8%'],
+  ['--text', 'Text', 'Titles and body.', '#1A1917', '#F2F1EE'],
+  ['--muted', 'Muted', 'Secondary lines, placeholders, idle icons.', '#6B6862', '#8A8883'],
+  ['--accent', 'Accent', 'Glow, edges, thin progress. Never a fill.', '#FF9A3C', '#FF9A3C'],
+];
+function renderSwatches() {
+  const box = document.getElementById('swatches');
+  box.replaceChildren(
+    ...COLORS.map(([token, name, use, day, night]) => {
+      const el = document.createElement('div');
+      el.className = 'card glass swatch';
+      const chip =
+        token === '--surface' ? 'chip chip--glass' : token === '--accent' ? 'chip chip--accent' : 'chip';
+      const fill = token === '--surface' || token === '--accent' ? '' : `background: var(${token})`;
+      el.innerHTML = `<div class="${chip}" style="${fill}"></div>
+        <dl><strong>${name}</strong><dt>Day</dt><dd class="num">${day}</dd><dt>Night</dt><dd class="num">${night}</dd></dl>
+        <p style="grid-column: 1 / -1">${use} <span class="num">${token}</span></p>`;
+      return el;
+    }),
+  );
+}
+renderSwatches();
+
+// Spacing scale
+document.getElementById('spacing').innerHTML = [4, 8, 16, 24, 32, 40, 48, 64]
+  .map((px) => `<div><span>${px}px</span><span style="width: ${px * 2}px"></span></div>`)
+  .join('');
+
+// Motion tokens, read from CSS
+const tokens = ['--ease-out', '--dur-enter', '--dur-exit', '--dur-hover', '--dur-spring', '--press-scale', '--stagger', '--rise', '--shimmer-period', '--orbit-period'];
+const motionList = document.getElementById('motion-tokens');
+function renderMotionTokens() {
+  const cs = getComputedStyle(document.documentElement);
+  motionList.innerHTML = tokens.map((t) => `<dt>${t}</dt><dd>${cs.getPropertyValue(t).trim()}</dd>`).join('');
+}
+renderMotionTokens();
+new MutationObserver(renderMotionTokens).observe(document.documentElement, { attributes: true, attributeFilter: ['data-motion'] });
+matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', renderMotionTokens);
+
+// The spring, drawn from the same numbers tokens.css carries
+const spring = springEasing(PRESS_SPRING);
+const stops = spring.easing.slice(7, -1).split(',').map(Number);
+const [w, h, left, top, plotH] = [360, 150, 36, 12, 110];
+const y = (v) => top + plotH - v * (plotH / 1.1);
+const x = (i) => left + (i / (stops.length - 1)) * (w - left - 8);
+document.getElementById('curve').innerHTML = `
+  <line class="axis" x1="${left}" x2="${w - 8}" y1="${y(1)}" y2="${y(1)}" stroke-dasharray="3 3"/>
+  <line class="axis" x1="${left}" x2="${w - 8}" y1="${y(0)}" y2="${y(0)}"/>
+  <text x="0" y="${y(1) + 4}">1.0</text><text x="0" y="${y(0) + 4}">0</text>
+  <text x="${left}" y="${h - 4}">0 ms</text><text x="${w - 56}" y="${h - 4}">${spring.duration} ms</text>
+  <polyline class="line" points="${stops.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ')}"/>`;
+document.getElementById('spring-ms').textContent = `${spring.duration} ms`;
+document.getElementById('spring-over').textContent = `${(spring.overshoot * 100).toFixed(1)}%`;
+
+document.getElementById('replay').addEventListener('click', () => replayEntrance(document.getElementById('demo-list')));
+
+// Download buttons, driven by a pretend download
+function simulate(el, onState) {
+  let timer;
+  const button = new DownloadButton(el, {
+    onEvent: (event, state) => {
+      onState?.(state);
+      clearInterval(timer);
+      if (state === 'progress') {
+        timer = setInterval(() => {
+          const next = button.fraction + 0.012 + Math.random() * 0.02;
+          if (next >= 1) button.send('complete');
+          else button.setProgress(next);
+        }, 120);
+      }
+    },
+  });
+  return button;
+}
+simulate(document.getElementById('hero-dl'));
+const stateLine = document.getElementById('demo-dl-state');
+simulate(document.getElementById('demo-dl'), (s) => (stateLine.textContent = `State: ${s}`));
+
+// The example window's active row keeps downloading
+const total = 1210;
+let done = 412.6;
+let running = true;
+const row = document.getElementById('active-row');
+const toggle = document.getElementById('active-toggle');
+setInterval(() => {
+  if (!running) return;
+  const speed = 7.6 + Math.random() * 1.6;
+  done = done + speed * 0.5 >= total ? 120 : done + speed * 0.5;
+  const pct = Math.floor((done / total) * 100);
+  const left = Math.round((total - done) / speed);
+  document.getElementById('active-meta').textContent =
+    `${done.toFixed(1)} MB of 1.21 GB · ${speed.toFixed(1)} MB/s · ${left >= 60 ? `${Math.floor(left / 60)} min ${left % 60} s` : `${left} s`} left`;
+  document.getElementById('active-pct').textContent = `${pct}%`;
+  document.getElementById('active-bar').style.setProperty('--p', pct);
+}, 500);
+function togglePause(rowEl, btn, meta) {
+  const paused = rowEl.dataset.state === 'paused';
+  rowEl.dataset.state = paused ? 'downloading' : 'paused';
+  btn.setAttribute('aria-label', paused ? 'Pause' : 'Resume');
+  btn.querySelector('use').setAttribute('href', paused ? '#i-pause' : '#i-play');
+  if (meta) meta.textContent = paused ? 'Downloading' : 'Paused';
+  return !paused;
+}
+toggle.addEventListener('click', () => (running = !togglePause(row, toggle)));
+const demoRow = document.getElementById('demo-row');
+document.getElementById('demo-row-toggle').addEventListener('click', (e) =>
+  togglePause(demoRow, e.currentTarget, document.getElementById('demo-row-meta')),
+);
+</script>
+</body>
+</html>
