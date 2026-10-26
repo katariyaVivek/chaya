@@ -482,7 +482,8 @@ impl Manager {
         let mut meter = Meter::new(task.id);
         let manager = self.clone();
         http::fetch(&self.inner.client, source, part, stop, &mut |p| {
-            let total = p.total.zip(after).map(|(this, after)| before + this + after);
+            // Halves of unknown size count once they start, rather than leaving no total at all.
+            let total = p.total.map(|this| before + this + after.unwrap_or(0));
             manager.progress(&mut meter, Progress { done: before + p.done, total })
         })
         .await
@@ -1142,6 +1143,38 @@ mod tests {
             })
             .collect();
         assert_eq!(seen, [(STREAM.len() as u64, Some((STREAM.len() + SOUND.len()) as u64))]);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_sound_of_unknown_size_still_leaves_a_total_to_show() {
+        let Some(joiner) = joiner() else { return };
+        let (picture, sound) = (stream_server(), TestServer::start(SOUND.to_vec(), Behaviour::default()));
+        let s = setup(AT_ONCE);
+        s.manager.set_joiner(Some(joiner));
+
+        let new = NewDownload {
+            sound: Some(Source {
+                url: sound.url("/audio.m4a"),
+                headers: Default::default(),
+                expected_size: None,
+                stream: false,
+            }),
+            ..stream_download(&s, &picture)
+        };
+        let task = s.manager.add(new);
+        wait_for(&s.manager, task.id, |st| *st == State::Completed).await;
+
+        let at_sound: Vec<Option<u64>> = s
+            .events
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|e| match e {
+                Event::Changed(t) if t.step == Some(Step::Sound) => Some(t.total),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(at_sound, [Some(STREAM.len() as u64)], "the picture's size, until the sound's is known");
     }
 
     #[tokio::test(flavor = "multi_thread")]
