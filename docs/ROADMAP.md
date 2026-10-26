@@ -57,9 +57,10 @@ The six-part plan after v0.4.0 has shipped (#34 to #39); it is in
 
 - **Chaya for Windows.** Started: its design system is in
   [`desktop/design/`](../desktop/design/README.md) (Day and Night themes, Geist, the download button,
-  the address bar, the download row, motion with an opacity-only reduced mode). Next: choose the
-  app's shell (the design system is CSS, which suits Tauri on WebView2), then a first version with
-  paste-a-link lookups and downloads, without a built-in browser.
+  the address bar, the download row, motion with an opacity-only reduced mode). The app is Tauri 2
+  on WebView2 ([`desktop/`](../desktop/README.md)): its window follows Windows' theme or the
+  person's, and recognises a pasted link with the phone's rules. Next: look links up with yt-dlp
+  and download them, then the Downloads list; a built-in browser comes after.
 
 0. **First: check #48 on the phone.** #47's name search kept its first look for 3 seconds, so a page
    that drew its name late and then went quiet (7movies) kept no name; #48 looks again when the kept

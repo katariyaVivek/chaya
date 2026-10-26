@@ -3,8 +3,10 @@
  * so opening the app tells no one anything.
  *
  * Geist and Geist Mono: SIL Open Font License 1.1 (fonts/OFL-Geist.txt).
- * Cabinet Grotesk: Indian Type Foundry, free from Fontshare. Its file is not in the
- * repository yet (fonts/README.md); until it is, titles and the wordmark use Geist 600.
+ * Cabinet Grotesk: (c) Indian Type Foundry, ITF Free Font License, from Fontshare. Its licence
+ * forbids sharing the file through a repository, so each person downloads it (fonts/README.md);
+ * without it, titles and the wordmark use Geist 600. Its official variable TTF is used as it
+ * comes: the licence forbids converting it to WOFF2.
  */
 
 @font-face {
@@ -25,8 +27,8 @@
 
 @font-face {
   font-family: "Cabinet Grotesk";
-  src: url("fonts/CabinetGrotesk-Semibold.woff2") format("woff2");
-  font-weight: 600;
+  src: url("fonts/CabinetGrotesk-Variable.ttf") format("truetype");
+  font-weight: 100 900;
   font-style: normal;
   font-display: swap;
 }

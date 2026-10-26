@@ -7,7 +7,8 @@ copy.
 
 Chaya is a native Android app (Kotlin, Jetpack Compose, one `:app` module): a WebView browser that
 detects the media on a page and downloads it, plus links from YouTube, Instagram, TikTok and X
-looked up by yt-dlp running inside the app. It is a working app with releases, not a plan.
+looked up by yt-dlp running inside the app. It is a working app with releases, not a plan. A
+Windows version (Tauri 2, in `desktop/`) has started.
 
 ## Read first
 
@@ -29,6 +30,7 @@ local checkout of Aloha Browser's source, used for that research; it is not in t
 gradle testDebugUnitTest      # all JVM/Robolectric tests; run before every push
 gradle assembleDebug
 python -m pytest app/src/test/python
+cd desktop && cargo test --workspace   # Chaya for Windows (desktop/README.md)
 ```
 
 There is no checked-in wrapper jar; CI calls `gradle` directly. Building needs JDK 17, Android SDK
@@ -56,6 +58,8 @@ platform 36, Gradle 8.14.3 and Python 3.13 (Chaquopy). Versions are in `gradle/l
   Android Gradle plugin cannot be fetched. Pure-Kotlin code can still be compiled and tested with a
   scratch Kotlin/JVM Gradle project whose source set points at the repo's files; keep such code free
   of Android imports so this stays possible.
+- **Chaya for Windows** (`desktop/`) is Tauri 2. Code that does not need the window goes in
+  `desktop/core`, plain Rust, tested with `cargo test`. Its UI follows `desktop/design`.
 - **pytest rewrites tracked `.pyc` files** under `__pycache__/`; run
   `git checkout -- '*__pycache__*'` before committing.
 

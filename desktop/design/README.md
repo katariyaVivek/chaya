@@ -12,7 +12,7 @@ folder) to see every token and component live, in both themes, with full or redu
 | File | What it is |
 |---|---|
 | `tokens.css` | Every color, size, radius, space and timing, for Day and Night. The only place values live |
-| `fonts.css`, `fonts/` | Geist and Geist Mono (bundled, OFL), Cabinet Grotesk (to be added, see `fonts/README.md`) |
+| `fonts.css`, `fonts/` | Geist and Geist Mono (bundled, OFL); Cabinet Grotesk, which each builder downloads from Fontshare (`fonts/README.md`) |
 | `components.css` | Base styles and the signature components, built only from tokens |
 | `chaya-motion.js` | The spring-to-CSS generator, the download button's state machine and controller, list and theme helpers. An ES module with no dependencies |
 | `showcase.html` | The living reference |

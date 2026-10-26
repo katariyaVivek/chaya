@@ -24,3 +24,12 @@ captures/
 # Python bytecode from running the engine tests
 __pycache__/
 *.pyc
+
+# Chaya for Windows
+# Cabinet Grotesk's licence (Fontshare, ITF FFL) forbids sharing the file through a repository;
+# each person downloads it from Fontshare (desktop/design/fonts/README.md).
+desktop/design/fonts/CabinetGrotesk-*
+desktop/target/
+desktop/app/dist/
+desktop/app/node_modules/
+desktop/app/src-tauri/gen/

@@ -48,6 +48,13 @@ curl -o app/src/main/assets/adblock/easyprivacy.txt https://easylist.to/easylist
 | `engine.yml` | PRs touching the Python engine | pytest with the versions pinned in `app/build.gradle.kts` (`enginePackages`) |
 | `device-tests.yml` | `ui-check` label on a PR, or manual | `connectedDebugAndroidTest` in a cloud emulator |
 | `emulator-check.yml` | `ui-check` label on a PR, or manual | `walkthrough.py` drives the app; screenshots, screen text and logs are uploaded as `emulator-evidence` |
+| `desktop.yml` | PRs touching `desktop/` | Chaya for Windows: `chaya-core` tests on Linux, then lint, tests and the NSIS installer on Windows, uploaded as `chaya-windows-installer` |
+| `desktop-design.yml` | PRs touching `desktop/design/` | the desktop design system's tests (`npm test`) |
+
+## Chaya for Windows
+
+The desktop app is in `desktop/`, built with Tauri 2 (Rust, Node 22). How to build it, its tests,
+and what Windows needs are in [`../desktop/README.md`](../desktop/README.md).
 
 ## Releases
 
