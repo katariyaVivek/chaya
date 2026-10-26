@@ -1,0 +1,142 @@
+/*
+ * Chaya desktop: design tokens.
+ *
+ * Two themes share every token name. Day is the default. Night applies with
+ * <html data-theme="night">, or with no data-theme while Windows is set to dark;
+ * data-theme="day" keeps Day whatever Windows says. Components use only these tokens.
+ * README.md says what each one is for.
+ */
+
+:root {
+  color-scheme: light;
+
+  /* Color: Day */
+  --bg: #F6F4F0;
+  --surface: rgb(255 255 255 / 0.8);
+  --surface-blur: 20px;
+  --border: rgb(26 25 23 / 0.06); /* hairline so glass keeps an edge on a pale ground */
+  --text: #1A1917;
+  --muted: #6B6862;
+  --wash: rgb(26 25 23 / 0.04); /* hover tint on a control */
+  --wash-strong: rgb(26 25 23 / 0.07); /* pressed, or a selected item */
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 8px 24px rgb(0 0 0 / 0.06);
+  --focus: var(--text); /* the accent is too pale on Day for a focus ring (1.9:1) */
+
+  /* Accent, the same in both themes: light, never a fill */
+  --accent: #FF9A3C;
+  --accent-rgb: 255 154 60;
+  --accent-glow: 0 0 24px rgb(var(--accent-rgb) / 0.35);
+  --accent-edge: rgb(var(--accent-rgb) / 0.45); /* border of the one primary control */
+
+  /* Type */
+  --font-ui: "Geist", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Geist Mono", "Cascadia Mono", Consolas, ui-monospace, monospace;
+  --font-display: "Cabinet Grotesk", "Geist", "Segoe UI Variable Display", sans-serif;
+  --text-sm: 13px; --leading-sm: 18px;
+  --text-md: 14px; --leading-md: 20px;
+  --text-lg: 16px; --leading-lg: 24px;
+  --title-size: 24px; --title-leading: 32px; /* Cabinet Grotesk 600: page titles */
+  --wordmark-size: 20px;
+
+  /* Shape */
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-pill: 9999px;
+
+  /* Space: an 8px grid; the half step is for icon-to-label gaps only */
+  --space-half: 4px;
+  --space-1: 8px;
+  --space-2: 16px;
+  --space-3: 24px;
+  --space-4: 32px;
+  --space-5: 40px;
+  --space-6: 48px;
+  --space-8: 64px;
+  --control-height: 40px;
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-enter: 220ms;
+  --dur-exit: 160ms;
+  --dur-hover: 120ms;
+  /* Spring, stiffness 400 and damping 30, traced by springEasing() in chaya-motion.js */
+  --spring-press: linear(0, 0.0377, 0.1276, 0.2407, 0.3634, 0.4845, 0.6006, 0.6994, 0.7834, 0.8522, 0.9085, 0.9498, 0.98, 1.0011, 1.0152, 1.0231, 1.0268, 1.0275, 1.0261, 1.0235, 1.0204, 1.017, 1.0136, 1.0105, 1.0079, 1.0056, 1.0037, 1.0023, 1.0012, 1.0004, 0.9999, 0.9995, 1);
+  --dur-spring: 453ms;
+  --press-scale: 0.97;
+  --stagger: 30ms;
+  --rise: 6px;
+  --dur-morph: var(--dur-enter); /* the download button changing shape */
+  --shimmer-period: 1.6s;
+  --orbit-period: 8s;
+  /* Animations by name, so reduced motion can swap each for an opacity-only one in one place */
+  --anim-enter: chaya-rise-in;
+  --anim-exit: chaya-fall-out;
+  --anim-shimmer: chaya-shimmer;
+  --anim-orbit: chaya-orbit;
+  --anim-draw: chaya-draw;
+  --anim-breathe: chaya-breathe;
+}
+
+/* Night, when Windows is dark and the person has not picked Day */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="day"]) {
+    color-scheme: dark;
+    --bg: #0B0B0D;
+    --surface: rgb(255 255 255 / 0.06);
+    --surface-blur: 24px;
+    --border: rgb(255 255 255 / 0.08);
+    --text: #F2F1EE;
+    --muted: #8A8883;
+    --wash: rgb(255 255 255 / 0.05);
+    --wash-strong: rgb(255 255 255 / 0.09);
+    --shadow: 0 8px 32px rgb(0 0 0 / 0.5);
+    --focus: var(--accent);
+  }
+}
+
+/* Night, picked by the person. The same values as above. */
+:root[data-theme="night"] {
+  color-scheme: dark;
+  --bg: #0B0B0D;
+  --surface: rgb(255 255 255 / 0.06);
+  --surface-blur: 24px;
+  --border: rgb(255 255 255 / 0.08);
+  --text: #F2F1EE;
+  --muted: #8A8883;
+  --wash: rgb(255 255 255 / 0.05);
+  --wash-strong: rgb(255 255 255 / 0.09);
+  --shadow: 0 8px 32px rgb(0 0 0 / 0.5);
+  --focus: var(--accent);
+}
+
+/*
+ * Reduced motion: opacity only. Nothing moves, scales or rotates; things still fade, and
+ * progress still fills, because that is information, not motion. data-motion="reduce" is the
+ * app's own setting, for people who want it without changing Windows.
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --press-scale: 1;
+    --rise: 0px;
+    --stagger: 0ms;
+    --dur-morph: 0ms;
+    --anim-enter: chaya-fade-in;
+    --anim-exit: chaya-fade-out;
+    --anim-shimmer: chaya-breathe;
+    --anim-orbit: none;
+    --anim-draw: chaya-fade-in;
+  }
+}
+
+:root[data-motion="reduce"] {
+  --press-scale: 1;
+  --rise: 0px;
+  --stagger: 0ms;
+  --dur-morph: 0ms;
+  --anim-enter: chaya-fade-in;
+  --anim-exit: chaya-fade-out;
+  --anim-shimmer: chaya-breathe;
+  --anim-orbit: none;
+  --anim-draw: chaya-fade-in;
+}

@@ -17,6 +17,7 @@ looked up by yt-dlp running inside the app. It is a working app with releases, n
 | [`docs/BUILD_AND_TEST.md`](docs/BUILD_AND_TEST.md) | Toolchain, commands, CI workflows, releases |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | What is released, merged, and next; start here when resuming |
 | [`DESIGN.md`](DESIGN.md), [`PRODUCT.md`](PRODUCT.md) | Design tokens and product register; UI work must follow them |
+| [`desktop/design/README.md`](desktop/design/README.md) | The Windows app's own design system (tokens, components, motion); desktop UI work follows it |
 | [`LIMITATIONS.md`](LIMITATIONS.md), [`PRIVACY_POLICY.md`](PRIVACY_POLICY.md) | Scope and privacy promises; a change that affects either must update it |
 
 `docs/history/` is background only; do not treat it as current. `aloha-core-study/` is a gitignored
