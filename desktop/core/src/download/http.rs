@@ -36,6 +36,10 @@ pub struct Source {
     /// A DASH stream's pieces in order, as yt-dlp listed them; `url` is then its manifest, not fetched.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub fragments: Vec<String>,
+    /// Saved from a page: fetched with the browser's own sign-in, its cookies and user agent for `url`. They are
+    /// asked for each time the download starts (`Manager::set_session`) and never kept with it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub session: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

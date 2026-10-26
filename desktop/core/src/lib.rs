@@ -9,6 +9,7 @@ pub mod found;
 pub mod links;
 pub mod lookup;
 pub mod media;
+pub mod session;
 
 /// The HTTP client downloads use, so the app builds it with the same version.
 pub use reqwest;

@@ -81,6 +81,8 @@ pub fn plan(
         expected_size: f.size_bytes,
         stream: f.is_savable_stream(),
         fragments: f.fragments.clone(),
+        // A link's file needs no sign-in of the browser's; a stream found on a page asks for it (`browser`).
+        session: false,
     };
     let mut download = base(found.label.clone(), kind, name, source_of(&found.file));
     download.sound = found.audio_to_merge.as_ref().map(source_of);

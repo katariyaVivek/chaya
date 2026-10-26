@@ -73,9 +73,10 @@ pub async fn fetch(
     on_progress: &mut (dyn FnMut(Progress) + Send),
 ) -> Result<Outcome, DownloadError> {
     let mut stop_signal = stop.clone();
+    let sent = Sent::new(source);
     let pieces = if source.fragments.is_empty() {
         tokio::select! {
-            pieces = pieces_of(client, source) => pieces?,
+            pieces = pieces_of(client, source, &sent) => pieces?,
             _ = until_stopped(&mut stop_signal) => return Ok(Outcome::Stopped),
         }
     } else {
@@ -95,7 +96,7 @@ pub async fn fetch(
     };
     let arrived = AtomicU64::new(written);
     let keys = Mutex::new(HashMap::new());
-    let (headers, keys, arrived_so_far) = (&source.headers, &keys, &arrived);
+    let (headers, keys, arrived_so_far) = (&sent, &keys, &arrived);
     // Owned pieces, and references copied into each future, keep this future `Send` for the runtime.
     let mut queue = stream::iter(pieces[count..].to_vec())
         .map(move |piece| async move { fetch_piece(client, headers, &piece, keys, arrived_so_far).await })
@@ -142,11 +143,11 @@ fn listed(fragments: &[String]) -> Result<Vec<Piece>, DownloadError> {
 }
 
 /// The pieces of the HLS stream at `source`: its playlist's, or for a playlist of qualities, the best one's.
-async fn pieces_of(client: &Client, source: &Source) -> Result<Vec<Piece>, DownloadError> {
+async fn pieces_of(client: &Client, source: &Source, sent: &Sent<'_>) -> Result<Vec<Piece>, DownloadError> {
     let mut url = Url::parse(&source.url).map_err(|_| DownloadError::UnreadableStream)?;
     for _ in 0..2 {
         // Pieces named relative to the playlist are found from where it really is, after any redirect.
-        let (at, body) = fetch_bytes(client, &source.headers, &url, None, None).await?;
+        let (at, body) = fetch_bytes(client, sent.to(&url), &url, None, None).await?;
         match parse(&String::from_utf8_lossy(&body), &at)? {
             Playlist::Pieces(pieces) => return Ok(pieces),
             Playlist::Variants(variants) => {
@@ -302,15 +303,44 @@ async fn note(log: &Path, count: usize, bytes: u64, of: usize) -> Result<(), Dow
     tokio::fs::write(log, format!("{count} {bytes} {of}\n")).await.map_err(io)
 }
 
+/// The headers a stream's requests carry. Cookies (a page's sign-in, `Source::session`) go only to the server of
+/// the stream's own address; pieces and keys from another server get the rest, as a browser's would not get them.
+struct Sent<'a> {
+    origin: Option<url::Origin>,
+    all: &'a BTreeMap<String, String>,
+    elsewhere: BTreeMap<String, String>,
+}
+
+impl<'a> Sent<'a> {
+    fn new(source: &'a Source) -> Sent<'a> {
+        let elsewhere = source
+            .headers
+            .iter()
+            .filter(|(name, _)| !name.eq_ignore_ascii_case("cookie"))
+            .map(|(name, value)| (name.clone(), value.clone()))
+            .collect();
+        Sent { origin: Url::parse(&source.url).ok().map(|u| u.origin()), all: &source.headers, elsewhere }
+    }
+
+    /// The headers for a request to `url`.
+    fn to(&self, url: &Url) -> &BTreeMap<String, String> {
+        if self.origin.as_ref() == Some(&url.origin()) {
+            self.all
+        } else {
+            &self.elsewhere
+        }
+    }
+}
+
 /// Fetches `piece` and decrypts it when it is encrypted.
 async fn fetch_piece(
     client: &Client,
-    headers: &BTreeMap<String, String>,
+    headers: &Sent<'_>,
     piece: &Piece,
     keys: &Mutex<HashMap<Url, [u8; 16]>>,
     arrived: &AtomicU64,
 ) -> Result<Vec<u8>, DownloadError> {
-    let (_, mut bytes) = fetch_bytes(client, headers, &piece.url, piece.range, Some(arrived)).await?;
+    let (_, mut bytes) = fetch_bytes(client, headers.to(&piece.url), &piece.url, piece.range, Some(arrived)).await?;
     if let Some(key) = &piece.key {
         let secret = key_bytes(client, headers, &key.url, keys).await?;
         let length = cbc::Decryptor::<aes::Aes128>::new(&secret.into(), &key.iv.into())
@@ -325,7 +355,7 @@ async fn fetch_piece(
 /// The key at `url`, fetched once for all the pieces it opens.
 async fn key_bytes(
     client: &Client,
-    headers: &BTreeMap<String, String>,
+    headers: &Sent<'_>,
     url: &Url,
     keys: &Mutex<HashMap<Url, [u8; 16]>>,
 ) -> Result<[u8; 16], DownloadError> {
@@ -333,7 +363,7 @@ async fn key_bytes(
     if let Some(key) = keys.get(url) {
         return Ok(*key);
     }
-    let (_, body) = fetch_bytes(client, headers, url, None, None).await?;
+    let (_, body) = fetch_bytes(client, headers.to(url), url, None, None).await?;
     let key: [u8; 16] = body.try_into().map_err(|_| DownloadError::UnreadableStream)?;
     keys.insert(url.clone(), key);
     Ok(key)
@@ -576,6 +606,32 @@ mod tests {
         assert_eq!(requests.len(), 8, "the playlist and each piece once");
         assert!(requests.iter().all(|r| r.contains("referer: https://site.example/")), "{requests:?}");
         assert!(!log_path(&part).exists());
+    }
+
+    #[tokio::test]
+    async fn a_pages_sign_in_goes_only_to_the_streams_own_server() {
+        let elsewhere = TestServer::with_files(vec![("/seg-1.ts".into(), body(20_000, 1))], Behaviour::default());
+        let playlist = format!(
+            "#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXTINF:2.0,\nseg-0.ts\n#EXTINF:2.0,\n{}\n#EXT-X-ENDLIST\n",
+            elsewhere.url("/seg-1.ts")
+        );
+        let own = TestServer::with_files(
+            vec![("/index.m3u8".into(), playlist.into_bytes()), ("/seg-0.ts".into(), body(20_000, 0))],
+            Behaviour::default(),
+        );
+        let mut signed_in = source(&own, "/index.m3u8");
+        signed_in.headers.insert("Cookie".into(), "sid=abc".into());
+        let dir = tempfile::tempdir().unwrap();
+
+        let (result, _) = run(&signed_in, &dir.path().join("a.part")).await;
+
+        assert_eq!(result, Ok(Outcome::Done));
+        let (own, elsewhere) = (own.requests(), elsewhere.requests());
+        assert_eq!(own.len(), 2);
+        assert!(own.iter().all(|r| r.contains("\ncookie: sid=abc")), "{own:?}");
+        assert_eq!(elsewhere.len(), 1);
+        assert!(!elsewhere[0].contains("cookie"), "{elsewhere:?}");
+        assert!(elsewhere[0].contains("referer: https://site.example/"), "other headers still go");
     }
 
     #[tokio::test]

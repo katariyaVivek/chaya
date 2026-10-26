@@ -147,8 +147,16 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
   `about:blank`; never a file on the PC or another program's link). A page opening another window is held
   back, and the window says so with *Open it here*.
 - A download a page starts of a video, a sound, a picture or an HLS playlist goes to the Downloads list,
-  named after the file (a playlist after the page), with the page as referrer and without the page's
-  cookies. Other files (a PDF, an installer) are saved as any browser saves them.
+  named after the file (a playlist after the page), with the page as referrer. Other files (a PDF, an
+  installer) are saved as any browser saves them.
+- **The browser's sign-in goes with what a page downloads**, as on the phone, so a video behind the
+  person's own login saves. Whatever is saved from a page (a download it starts, a file or stream found on
+  it) is marked `Source::session`; each time the download starts or resumes, the manager asks the browser's
+  cookie store (`cookies_for_url`) for the cookies it holds for that address and adds them, with the
+  browser's user agent, to that run's requests only. They are never written into `downloads.json`. A
+  stream's pieces and keys from another server than its own get no cookies, and a redirect to another server
+  drops them (reqwest). A stream's qualities are read by yt-dlp with the cookies for the stream's address in
+  a cookie file (`session::CookieFile`), deleted as soon as the lookup ends.
 - **What a page holds.** `src-tauri/src/detector.js` runs at the start of every document of the page,
   frames from other servers included, as the phone's detector and frame agent do between them. It
   watches what the page's players show and load: video and audio elements and their sources, what the
@@ -225,9 +233,11 @@ The window's own files, fonts included, are packed into the app; nothing is fetc
 network is used only for what the person asks: a pasted link to a video or post is looked up with
 yt-dlp, which asks that site about it; its poster is shown from the site's image server, without
 saying which page asked (`referrerpolicy="no-referrer"`); and a download fetches the file from the
-site's server with the headers yt-dlp names for it. No sign-in is used and nothing is sent anywhere
-else. The list of downloads stays on the PC. Pages the person opens in the built-in browser load as in
-any browser, and keep their cookies in the app's own WebView2 folder on the PC; they cannot reach the
-app, and Chaya's own downloads never carry their cookies. The ad blocker decides on the PC; about once a
+site's server with the headers yt-dlp names for it. No sign-in is used for a link and nothing is sent
+anywhere else. The list of downloads stays on the PC. Pages the person opens in the built-in browser load
+as in any browser, and keep their cookies in the app's own WebView2 folder on the PC; they cannot reach
+the app. What is saved from a page is fetched with the browser's cookies for that file's own address, read
+from that folder each time the download starts and never kept elsewhere; a stream's lookup gets them in a
+file that is deleted as soon as it ends. The ad blocker decides on the PC; about once a
 week it fetches fresh lists from easylist.to, sending nothing about the person, and its settings (on or
 off, the sites allowed ads) stay on the PC.
