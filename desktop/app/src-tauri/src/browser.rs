@@ -24,7 +24,11 @@ use serde::{Deserialize, Serialize};
 use tauri::webview::{DownloadEvent, NewWindowResponse, PageLoadEvent, WebviewBuilder};
 use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Url, Webview, WebviewUrl};
 
-use crate::Downloads;
+use chaya_core::download::plan::plan;
+use chaya_core::lookup::Lookup;
+use chaya_core::media::{FailureKind, Media};
+
+use crate::{Downloads, Lookups};
 
 /// The page's webview.
 const PAGE: &str = "page";
@@ -220,13 +224,22 @@ pub struct FoundView {
     host: String,
     main: bool,
     ad: bool,
-    /// Whether the app can save it: a DASH stream from a page, or an HLS stream without ffmpeg, it cannot yet.
+    /// Whether the app can save it as it is: a file, or with ffmpeg an HLS stream.
     savable: bool,
+    /// Whether its qualities can be looked up: a stream, when the app carries ffmpeg to save one.
+    qualities: bool,
 }
 
-/// What the page's players have loaded so far, the main video first.
+/// What the page holds, as the window last asked: where it is now (a page that changes its address itself, as
+/// YouTube does, loads nothing new), and what its players have loaded so far, the main video first.
+#[derive(Clone, Serialize)]
+pub struct PageMedia {
+    url: String,
+    items: Vec<FoundView>,
+}
+
 #[tauri::command]
-pub async fn page_media(app: AppHandle) -> Result<Vec<FoundView>, String> {
+pub async fn page_media(app: AppHandle) -> Result<PageMedia, String> {
     let page = app.get_webview(PAGE).ok_or("No page is open.")?;
     let key = page_state(&app).key.clone();
     let (tx, rx) = tokio::sync::oneshot::channel::<String>();
@@ -263,10 +276,56 @@ pub async fn page_media(app: AppHandle) -> Result<Vec<FoundView>, String> {
             main: f.main,
             ad: f.ad,
             savable: browse::can_save_found(f, joins),
+            qualities: joins && matches!(f.kind, FoundKind::Stream | FoundKind::Dash),
         })
         .collect();
     page_state(&app).found = list;
-    Ok(views)
+    Ok(PageMedia { url: page_url, items: views })
+}
+
+/// The qualities of a stream found on the page (an HLS playlist or a DASH manifest), as the bundled engine reads
+/// them, with the page (or its player's frame) as referrer. Only an address the page's detector found is ever
+/// looked up this way.
+#[tauri::command]
+pub async fn look_up_found(url: String, app: AppHandle) -> Result<Lookup, ()> {
+    let Some(item) = found_stream(&app, &url) else {
+        return Ok(Lookup::failed(FailureKind::Unsupported));
+    };
+    let lookups = app.state::<Lookups>();
+    let downloads = app.state::<Downloads>();
+    Ok(match lookups.stream_media(item.url.clone(), item.referer.clone()).await {
+        Ok(media) => Lookup::from_media(&named(media, &item), |f| downloads.can_join(f), downloads.joins),
+        Err(failure) => Lookup::from_failure(&failure),
+    })
+}
+
+/// Saves `choice` ("720p", "Audio only") of a stream found on the page, as `look_up_found` offered it.
+#[tauri::command]
+pub async fn download_found(url: String, choice: String, app: AppHandle) -> Result<Vec<crate::TaskView>, String> {
+    let item = found_stream(&app, &url).ok_or("This is no longer on the page.")?;
+    let page_url = app.get_webview(PAGE).and_then(|p| p.url().ok()).map(|u| u.to_string()).unwrap_or_default();
+    let lookups = app.state::<Lookups>();
+    let downloads = app.state::<Downloads>();
+    let media = lookups.stream_media(item.url.clone(), item.referer.clone()).await.map_err(|f| f.kind.message())?;
+    let plans =
+        plan(&named(media, &item), &choice, &page_url, &downloads.folder, |f| downloads.can_join(f), downloads.joins)
+            .ok_or("This choice can't be saved any more. Look it up again.")?;
+    Ok(plans.into_iter().map(|p| crate::TaskView::from(&downloads.manager.add(p))).collect())
+}
+
+/// The stream at `url` in what the page was last found to hold.
+fn found_stream(app: &AppHandle, url: &str) -> Option<Found> {
+    page_state(app)
+        .found
+        .iter()
+        .find(|f| f.url == url && matches!(f.kind, FoundKind::Stream | FoundKind::Dash))
+        .cloned()
+}
+
+/// A stream's own address names nothing ("manifest", "index"): it is called what the page calls it.
+fn named(mut media: Media, item: &Found) -> Media {
+    media.title = item.name.clone();
+    media
 }
 
 /// Saves what the window listed at `url` on the page.

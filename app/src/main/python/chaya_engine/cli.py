@@ -3,7 +3,7 @@
 The phone calls `extract` through Chaquopy. The desktop app has no Python inside it, so it runs a bundled
 Python with this module instead, and reads one line of JSON from what it prints:
 
-    python -I run.py extract URL --cache DIR [--cookies FILE] [--js-runtime QJS] [--fragments]
+    python -I run.py extract URL --cache DIR [--cookies FILE] [--js-runtime QJS] [--fragments] [--referer PAGE]
     python -I run.py selftest [--js-runtime QJS]
 
 `extract` prints what `extract.extract` returns. `selftest` prints `selftest.status`, plus what yt-dlp makes
@@ -30,6 +30,7 @@ def main(argv=None):
     extract_command.add_argument('--js-runtime', help="a QuickJS program for YouTube's challenges")
     extract_command.add_argument('--fragments', action='store_true',
                                  help="list each DASH format's pieces, for an app that fetches them itself")
+    extract_command.add_argument('--referer', help='the page a stream was found on, sent as its referrer')
 
     selftest_command = commands.add_parser('selftest', help='Check the engine without using the network.')
     selftest_command.add_argument('--js-runtime', help='a QuickJS program to check as well')
@@ -38,7 +39,8 @@ def main(argv=None):
     if args.command == 'extract':
         from .extract import extract
 
-        print(extract(args.url, args.cache, args.cookies, js_runtime=args.js_runtime, fragments=args.fragments))
+        print(extract(args.url, args.cache, args.cookies, js_runtime=args.js_runtime, fragments=args.fragments,
+                      referer=args.referer))
     else:
         print(selftest(args.js_runtime))
     sys.stdout.flush()

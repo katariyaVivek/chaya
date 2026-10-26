@@ -28,7 +28,7 @@ _INFO_FIELDS = (
 )
 
 
-def extract(url, cache_dir, cookie_file=None, js_runtime=None, fragments=False):
+def extract(url, cache_dir, cookie_file=None, js_runtime=None, fragments=False, referer=None):
     """Returns a JSON string describing [url]: its title, poster, and the formats it can be saved in.
 
     [js_runtime] is the path of a QuickJS program for YouTube's challenges. Chaya for Windows ships one; the
@@ -36,6 +36,9 @@ def extract(url, cache_dir, cookie_file=None, js_runtime=None, fragments=False):
 
     With [fragments], a DASH format also lists its pieces' addresses, as yt-dlp found them in the manifest:
     Chaya for Windows fetches those itself. The phone hands the manifest to Media3 and never asks for them.
+
+    [referer] is the page a stream was found on, for a stream's address looked up directly (Chaya for Windows,
+    listing a stream's qualities): its server may answer only the page's player.
     """
     options = {
         'quiet': True,
@@ -52,6 +55,8 @@ def extract(url, cache_dir, cookie_file=None, js_runtime=None, fragments=False):
         options['cookiefile'] = cookie_file
     if js_runtime:
         options['js_runtimes'] = {'quickjs': {'path': js_runtime}}
+    if referer:
+        options['http_headers'] = {'Referer': referer}
     instagram = _KeepingInstagramIE() if _is_instagram(url) else None
 
     try:

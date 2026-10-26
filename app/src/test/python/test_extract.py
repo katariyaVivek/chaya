@@ -207,6 +207,17 @@ def test_the_desktops_quickjs_program_is_handed_to_yt_dlp(monkeypatch):
     assert _FakeYoutubeDL.options['js_runtimes'] == {'quickjs': {'path': 'C:/Chaya/engine/qjs.exe'}}
 
 
+def test_a_streams_page_is_sent_as_its_referrer_only_when_given(monkeypatch):
+    _FakeYoutubeDL.result = {'id': 'x', 'title': 'T'}
+    monkeypatch.setattr(engine, 'YoutubeDL', _FakeYoutubeDL)
+
+    engine.extract('https://cdn.example/v/manifest.mpd', '/cache', referer='https://example.com/watch')
+    assert _FakeYoutubeDL.options['http_headers'] == {'Referer': 'https://example.com/watch'}
+
+    engine.extract('https://youtu.be/x', '/cache')
+    assert 'http_headers' not in _FakeYoutubeDL.options
+
+
 def test_a_failure_comes_back_as_an_error_with_its_kind(monkeypatch):
     class Failing(_FakeYoutubeDL):
         def extract_info(self, url, download):

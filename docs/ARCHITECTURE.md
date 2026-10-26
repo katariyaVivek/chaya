@@ -323,7 +323,8 @@ a built-in browser. [`../desktop/README.md`](../desktop/README.md) has the layou
   goes to Chaya's list. A page's media is found by `detector.js` in every frame (the phone's detector
   and frame agent in one), which the app reads by evaluating a call under a random name instead of
   handing the page a bridge; `chaya-core`'s `found` ports the classifier, the ad hosts and the core of
-  the ranker and namer.
+  the ranker and namer. A stream found on a page is looked up by the engine for its qualities, with the
+  page as referrer (`--referer`); a video site's page is looked up as its link is.
 - `desktop/app/src-tauri` hands `chaya-core` to the window as commands (`recognise_link`, `look_up`,
   `download` and the download controls) and sends it `download` events. The window
   may call only those and set its title bar's theme (`capabilities/default.json`). Its content

@@ -163,7 +163,10 @@ pub fn found(report: &Report, page_url: &str) -> Vec<Found> {
     for (f, _) in &mut items {
         let n = &mut counts[f.kind as usize];
         *n += 1;
-        f.name = if f.main {
+        // A page's stream is its video, whatever its playlist is called ("index", "out"): it is named after the
+        // page too, unless it is an ad.
+        let page_video = f.main || (!f.ad && matches!(f.kind, FoundKind::Stream | FoundKind::Dash));
+        f.name = if page_video {
             base_name.clone().or_else(|| human_file_name(&f.url)).unwrap_or_else(|| noun(f.kind).to_string())
         } else {
             human_file_name(&f.url).unwrap_or_else(|| format!("{} {}", noun(f.kind), *n))
@@ -754,6 +757,29 @@ mod tests {
         );
         assert_eq!(list[0].referer, "https://player.example/embed/7", "its frame is its referrer");
         assert_eq!(list[1].host, "ads.doubleclick.net");
+    }
+
+    #[test]
+    fn a_pages_other_streams_are_named_after_it_too() {
+        let report = Report {
+            items: vec![
+                seen("https://cdn.example/films/clip.mp4", "video", "file"),
+                seen("https://cdn.example/v/out.mpd", "fetch", "dash"),
+            ],
+            meta: PageMeta {
+                title: "Monsoon over the Ghats".into(),
+                players: vec![Player {
+                    src: "https://cdn.example/films/clip.mp4".into(),
+                    w: 640.0,
+                    h: 360.0,
+                    visible: true,
+                    playing: false,
+                }],
+                ..PageMeta::default()
+            },
+        };
+        let names: Vec<String> = found(&report, "https://films.example.com/").into_iter().map(|f| f.name).collect();
+        assert_eq!(names, ["Monsoon over the Ghats", "Monsoon over the Ghats"]);
     }
 
     #[test]

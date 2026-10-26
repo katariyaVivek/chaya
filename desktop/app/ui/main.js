@@ -107,27 +107,43 @@ function forget() {
 /** Failures worth another try as they are; the others need something about the link to change. */
 const RETRYABLE = new Set(['network', 'engine', 'unknown', 'bot_check']);
 
-async function lookUp(link) {
+/** Looks a link to a video or post up, and shows what it can be saved as. */
+function lookUp(link) {
+  return showLookup({
+    title: `${link.site} ${link.lookingFor}`,
+    meta: link.url,
+    finding: `Finding the ${link.lookingFor}…`,
+    ask: () => tauri.core.invoke('look_up', { url: link.url }),
+    save: (choice) => tauri.core.invoke('download', { url: link.url, choice }),
+    again: () => lookUp(link),
+  });
+}
+
+/**
+ * A card for something being looked up: `ask` answers with what was found, `save(choice)` starts saving one of
+ * its choices, and `again` looks it up again.
+ */
+async function showLookup(lookup) {
   const ask = ++looking;
   const card = lookupTemplate.content.firstElementChild.cloneNode(true);
-  card.querySelector('.card__title').textContent = `${link.site} ${link.lookingFor}`;
-  card.querySelector('.card__meta').textContent = link.url;
-  card.querySelector('.card__state').replaceChildren(finding(`Finding the ${link.lookingFor}…`));
+  card.querySelector('.card__title').textContent = lookup.title;
+  card.querySelector('.card__meta').textContent = lookup.meta;
+  card.querySelector('.card__state').replaceChildren(finding(lookup.finding));
   result.replaceChildren(card);
 
   let answer;
   try {
-    answer = await tauri.core.invoke('look_up', { url: link.url });
+    answer = await lookup.ask();
   } catch (error) {
-    console.error('look_up failed', error);
+    console.error('lookup failed', error);
     answer = { kind: 'failed', reason: 'engine', message: "The video finder couldn't start. Try again in a moment." };
   }
   if (ask !== looking) return;
-  if (answer.kind === 'found') showFound(card, link, answer);
-  else showFailed(card, link, answer);
+  if (answer.kind === 'found') showFound(card, lookup, answer);
+  else showFailed(card, lookup, answer);
 }
 
-function showFound(card, link, found) {
+function showFound(card, lookup, found) {
   card.querySelector('.card__title').textContent = found.title;
   card.querySelector('.card__meta').textContent = [found.author, found.duration].filter(Boolean).join(' · ');
   const poster = card.querySelector('.poster img');
@@ -144,7 +160,7 @@ function showFound(card, link, found) {
     const row = document.createElement('div');
     row.className = 'choice';
     row.append(span('choice__label', counted), span('choice__detail', 'each saved as it is'));
-    row.append(downloadButton(() => tauri.core.invoke('download', { url: link.url, choice: 'post' }), 'Save all', state));
+    row.append(downloadButton(() => lookup.save('post'), 'Save all', state));
     parts.push(row);
   } else {
     const list = document.createElement('ul');
@@ -153,9 +169,7 @@ function showFound(card, link, found) {
       const row = document.createElement('li');
       row.className = 'choice';
       row.append(span('choice__label', choice.label), span('choice__detail num', choice.detail));
-      row.append(
-        downloadButton(() => tauri.core.invoke('download', { url: link.url, choice: choice.label }), 'Download', state),
-      );
+      row.append(downloadButton(() => lookup.save(choice.label), 'Download', state));
       list.append(row);
     }
     parts.push(list);
@@ -166,7 +180,7 @@ function showFound(card, link, found) {
   state.replaceChildren(...parts);
 }
 
-function showFailed(card, link, failed) {
+function showFailed(card, lookup, failed) {
   card.querySelector('.card__meta').textContent = failed.message;
   const state = card.querySelector('.card__state');
   state.replaceChildren();
@@ -175,7 +189,7 @@ function showFailed(card, link, failed) {
     retry.type = 'button';
     retry.className = 'pill glass pressable';
     retry.textContent = 'Try again';
-    retry.addEventListener('click', () => lookUp(link));
+    retry.addEventListener('click', () => lookup.again());
     state.append(retry);
   }
 }
@@ -467,6 +481,7 @@ function setBrowsing(on) {
     showDownloads(false);
     hideNotice();
     forgetFound();
+    pageLookedAt = '';
     setLoading(false);
     pageUrl = '';
   }
@@ -600,11 +615,45 @@ function forgetFound() {
   foundBox.hidden = true;
 }
 
+/** Looks a stream found on the page up for its qualities. */
+function lookUpFound(item) {
+  return showLookup({
+    title: item.name,
+    meta: item.host,
+    finding: 'Finding its qualities…',
+    ask: () => tauri.core.invoke('look_up_found', { url: item.url }),
+    save: (choice) => tauri.core.invoke('download_found', { url: item.url, choice }),
+    again: () => lookUpFound(item),
+  });
+}
+
+/** The page's address last looked at, so a video site's page is looked up once, when it is reached. */
+let pageLookedAt = '';
+
+/**
+ * A page that is a video or post on YouTube, Instagram, TikTok or X is looked up as its link is. Such sites
+ * change their address without loading a new page, so the address is followed as the window asks the page.
+ */
+async function followPage(url) {
+  if (url === pageLookedAt) return;
+  pageLookedAt = url;
+  try {
+    const link = await tauri.core.invoke('recognise_link', { text: url });
+    if (url !== pageLookedAt || !browsing) return;
+    if (link.kind === 'media') lookUp(link);
+    else forget();
+  } catch {
+    // Not recognised this time; the next address is.
+  }
+}
+
 async function askPage() {
   if (!browsing || asking || document.body.classList.contains('showing-downloads')) return;
   asking = true;
   try {
-    showPageMedia(await tauri.core.invoke('page_media'));
+    const page = await tauri.core.invoke('page_media');
+    followPage(page.url);
+    showPageMedia(page.items);
   } catch {
     // No page, or it did not answer this time.
   } finally {
@@ -623,7 +672,15 @@ function showPageMedia(list) {
     const facts = [item.ad ? 'Ad' : null, FOUND_NOUN[item.kind], item.host].filter(Boolean);
     el.querySelector('.found__meta').textContent = facts.join(' · ');
     const state = el.querySelector('.found__state');
-    if (item.savable) {
+    if (item.qualities) {
+      // A stream's qualities are looked up, and chosen from as a link's are.
+      const choose = document.createElement('button');
+      choose.type = 'button';
+      choose.className = 'pill glass pressable';
+      choose.textContent = 'Choose quality';
+      choose.addEventListener('click', () => lookUpFound(item));
+      el.querySelector('.found__action').append(choose);
+    } else if (item.savable) {
       el.querySelector('.found__action').append(
         downloadButton(() => tauri.core.invoke('save_found', { url: item.url }), 'Download', state),
       );

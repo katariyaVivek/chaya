@@ -34,6 +34,21 @@ struct Lookups {
 impl Lookups {
     /// What the engine found at `url`: a kept answer when there is one and `fresh` is false.
     async fn media(&self, url: String, fresh: bool) -> Result<Media, Failure> {
+        self.answer(url.clone(), fresh, move |engine| engine.look_up(&url)).await
+    }
+
+    /// What the engine found at the address of a stream found on the page at `referer`, kept as `url`'s answer.
+    async fn stream_media(&self, url: String, referer: String) -> Result<Media, Failure> {
+        let key = url.clone();
+        self.answer(key, false, move |engine| engine.look_up_stream(&url, &referer)).await
+    }
+
+    async fn answer(
+        &self,
+        url: String,
+        fresh: bool,
+        look: impl FnOnce(&Engine) -> Result<Media, Failure> + Send + 'static,
+    ) -> Result<Media, Failure> {
         let (engine, turn, answers) = (self.engine.clone(), self.turn.clone(), self.answers.clone());
         // The engine blocks while it runs, so it gets a thread of its own and the window stays responsive.
         tauri::async_runtime::spawn_blocking(move || {
@@ -44,7 +59,7 @@ impl Lookups {
                     return Ok(media);
                 }
             }
-            let media = engine.look_up(&url)?;
+            let media = look(&engine)?;
             answers.lock().unwrap_or_else(PoisonError::into_inner).put(&url, media.clone(), Instant::now());
             Ok(media)
         })
@@ -54,7 +69,8 @@ impl Lookups {
 }
 
 /// Looks up a link to a video or post on YouTube, Instagram, TikTok or X with the bundled engine. Only such
-/// links are looked up: anything else never reaches yt-dlp.
+/// links are looked up here; a stream found on a page is looked up by `browser::look_up_found`. Nothing else
+/// reaches yt-dlp.
 #[tauri::command]
 async fn look_up(url: String, lookups: State<'_, Lookups>, downloads: State<'_, Downloads>) -> Result<Lookup, ()> {
     let Some(link) = links::match_media(&url) else {
@@ -245,6 +261,8 @@ pub fn run() {
             browser::close_page,
             browser::page_media,
             browser::save_found,
+            browser::look_up_found,
+            browser::download_found,
         ])
         .run(tauri::generate_context!())
         .expect("the window could not be opened");

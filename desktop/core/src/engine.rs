@@ -54,8 +54,21 @@ impl Engine {
 
     /// Looks `url` up: its title, poster, and the formats it can be saved in, or why not.
     pub fn look_up(&self, url: &str) -> Result<Media, Failure> {
+        self.extract(url, None)
+    }
+
+    /// Looks up a stream's own address, found on the page at `referer` (an HLS playlist, a DASH manifest), for its
+    /// qualities; its server may answer only the page's player, so the page goes with the request.
+    pub fn look_up_stream(&self, url: &str, referer: &str) -> Result<Media, Failure> {
+        self.extract(url, Some(referer))
+    }
+
+    fn extract(&self, url: &str, referer: Option<&str>) -> Result<Media, Failure> {
         let mut args: Vec<OsString> =
             vec!["extract".into(), url.into(), "--cache".into(), self.cache_dir.clone().into()];
+        if let Some(referer) = referer {
+            args.extend(["--referer".into(), referer.into()]);
+        }
         // DASH formats with their pieces listed: the app fetches those itself (`download::stream`).
         args.push("--fragments".into());
         if let Some(qjs) = &self.js_runtime {
@@ -233,6 +246,26 @@ print(json.dumps({"media": {"title": " ".join(sys.argv[1:]), "formats": []}}))
             engine.js_runtime.as_ref().unwrap().display()
         );
         assert_eq!(media.title, expected);
+    }
+
+    #[test]
+    fn a_stream_found_on_a_page_is_looked_up_with_the_page_as_referrer() {
+        let Some((engine, _dir)) = fake_engine(
+            r#"
+import json, sys
+print(json.dumps({"media": {"title": " ".join(sys.argv[1:]), "formats": []}}))
+"#,
+            LOOKUP_TIMEOUT,
+        ) else {
+            return;
+        };
+        let media = engine.look_up_stream("https://cdn.example/v/out.mpd", "https://example.com/watch").unwrap();
+        assert!(
+            media.title.starts_with("extract https://cdn.example/v/out.mpd --cache ")
+                && media.title.contains(" --referer https://example.com/watch --fragments"),
+            "{}",
+            media.title
+        );
     }
 
     #[test]
