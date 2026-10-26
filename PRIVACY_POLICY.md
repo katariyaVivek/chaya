@@ -89,7 +89,8 @@ differences:
 - **Downloads never carry a page's cookies.** A video, sound or picture a page downloads is fetched by
   Chaya with the page as referrer only, so content behind a login may not download yet.
 - **Links to YouTube, Instagram, TikTok and X** are looked up with yt-dlp on your PC, without any
-  sign-in.
+  sign-in. So is a stream found on a page when you ask for its qualities: yt-dlp reads that stream's
+  playlist from its server, naming the page as the referrer, as its player would.
 
 ## What Chaya never does
 

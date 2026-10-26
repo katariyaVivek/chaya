@@ -88,8 +88,10 @@ Python inside the app, so the installer carries one:
   the LGPL; its licence and source are in `engine/licenses/`.
 
 `chaya-core`'s `engine` starts it with no console window, one lookup at a time, stops it after two
-minutes, and keeps answers for twenty minutes. Only links `links` recognises as a video or post are ever
-passed to it. A change to `chaya_engine` must keep both apps working: pytest covers it for both.
+minutes, and keeps answers for twenty minutes. Only two kinds of address are ever passed to it: links
+`links` recognises as a video or post, and a stream's own address that the browser found on a page, when
+the person asks for its qualities (`--referer` names the page, as its player would). A change to
+`chaya_engine` must keep both apps working: pytest covers it for both.
 
 Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the computer's own Python (set
 `CHAYA_ENGINE_PYTHON` to it, or `python3` is used), without QuickJS, for running the app in development.
@@ -157,8 +159,13 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
   never given a way into the app. `found` checks all of it (http(s) only, bounded), leaves out stream
   pieces and the thumbnails a player shows while seeking, makes byte ranges of one file one item, folds
   likely ads to the end, and names the main video (the biggest visible player's, or the page's stream)
-  after the page. Files and HLS streams save from there (`save_found`), with the page or the player's
-  frame as referrer; a DASH stream from a page cannot be saved yet.
+  after the page, as is any other stream on it. A file saves from there (`save_found`), with the page or
+  the player's frame as referrer. A stream (HLS or DASH) offers *Choose quality*: the bundled yt-dlp
+  reads its playlist or manifest with the page as referrer (`look_up_found`), and its qualities show in
+  the same card as a link's, saved by `download_found`.
+- **A video site's page.** When the page is a video or post on YouTube, Instagram, TikTok or X, it is
+  looked up as its link is, and its card shows above the page. Those sites change their address without
+  loading a new page, so the window follows the address the page reports each time it asks.
 - Under Linux (development only), Tauri stacks a window's webviews instead of placing them, so the page
   shows below the window's content rather than in it, and WebKitGTK saves a page's downloads itself
   without asking the app. Windows places the page where it is told and asks before every download.

@@ -68,8 +68,9 @@ The six-part plan after v0.4.0 has shipped (#34 to #39); it is in
   YouTube's files come in pieces, three at a time (#53). HLS streams (#54) and DASH streams are fetched
   piece by piece and saved as MP4s (#55). A built-in browser opens pages, searches and accounts in
   the window, and takes over a page's media downloads (#56). It finds what a page's players load and
-  lists it, the main video first. Next: DASH streams found on a page, and a video site's own page
-  looked up as its link is. Lookups, downloads and the browser have not run on a real Windows PC yet.
+  lists it, the main video first (#57). A stream found on a page (HLS or DASH) offers its qualities,
+  and a video site's own page is looked up as its link is. Next: ad blocking in the browser, as on the
+  phone. Lookups, downloads and the browser have not run on a real Windows PC yet.
 
 0. **First: check #48 on the phone.** #47's name search kept its first look for 3 seconds, so a page
    that drew its name late and then went quiet (7movies) kept no name; #48 looks again when the kept
