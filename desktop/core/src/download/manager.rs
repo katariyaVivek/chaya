@@ -181,6 +181,13 @@ pub struct NewDownload {
     pub group: Option<String>,
 }
 
+/// A download's addresses, from looking its link up again: the sites' addresses expire.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Fresh {
+    pub source: Source,
+    pub sound: Option<Source>,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Event {
     /// Boxed: a task is large next to the other events, which come many times a second.
@@ -309,16 +316,18 @@ impl Manager {
         }
     }
 
-    /// Tries a failed download again, from where it stopped, with `source` when the link was looked up
-    /// again for a fresh address.
-    pub fn retry(&self, id: u64, source: Option<Source>) {
+    /// Tries a failed download again, from where it stopped, with `fresh` addresses when the link was looked
+    /// up again. They replace both halves of a joined download, since either may have expired; addresses for
+    /// something else (a quality that is now one file where it was two) are not used.
+    pub fn retry(&self, id: u64, fresh: Option<Fresh>) {
         {
             let mut tasks = lock(&self.inner.tasks);
             let Some(task) = tasks.iter_mut().find(|t| t.id == id && matches!(t.state, State::Failed(_))) else {
                 return;
             };
-            if let Some(source) = source {
-                task.source = source;
+            if let Some(fresh) = fresh.filter(|f| f.sound.is_some() == task.sound.is_some()) {
+                task.source = fresh.source;
+                task.sound = fresh.sound;
             }
             task.state = State::Queued;
         }
@@ -735,8 +744,8 @@ mod tests {
         let failed = wait_for(&s.manager, task.id, |st| matches!(st, State::Failed(_))).await;
         assert_eq!(failed.state, State::Failed(DownloadError::Http(403)));
 
-        s.manager
-            .retry(task.id, Some(Source { url: fresh.url("/file"), headers: Default::default(), expected_size: None }));
+        let source = Source { url: fresh.url("/file"), headers: Default::default(), expected_size: None };
+        s.manager.retry(task.id, Some(Fresh { source, sound: None }));
         let done = wait_for(&s.manager, task.id, |st| *st == State::Completed).await;
         assert_eq!(std::fs::read(&done.path).unwrap(), content);
         assert_eq!(done.source.url, fresh.url("/file"));
@@ -928,6 +937,42 @@ mod tests {
 
         assert!(picture.requests().is_empty(), "the whole picture is not fetched again");
         assert_eq!(sound.requests().len(), 1);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn retry_gives_a_joined_download_a_fresh_address_for_its_sound_too() {
+        let Some(joiner) = joiner() else { return };
+        let picture = TestServer::start(PICTURE.to_vec(), Behaviour::default());
+        let expired = TestServer::start(Vec::new(), Behaviour { status: Some(403), ..Behaviour::default() });
+        let fresh = TestServer::start(SOUND.to_vec(), Behaviour::default());
+        let s = setup(AT_ONCE);
+        s.manager.set_joiner(Some(joiner));
+
+        let new = joined_download(&s, &picture, &expired);
+        let task = s.manager.add(new.clone());
+        let failed = wait_for(&s.manager, task.id, |st| matches!(st, State::Failed(_))).await;
+        assert_eq!(failed.state, State::Failed(DownloadError::Http(403)));
+
+        let sound = Source { url: fresh.url("/140"), ..new.sound.clone().unwrap() };
+        s.manager.retry(task.id, Some(Fresh { source: new.source.clone(), sound: Some(sound) }));
+        let done = wait_for(&s.manager, task.id, |st| *st == State::Completed).await;
+
+        assert_eq!(done.sound.unwrap().url, fresh.url("/140"));
+        assert_eq!(picture.requests().len(), 1, "the whole picture is not fetched again");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn fresh_addresses_of_another_shape_are_not_used() {
+        let server = TestServer::start(Vec::new(), Behaviour { status: Some(403), ..Behaviour::default() });
+        let s = setup(AT_ONCE);
+        let task = s.manager.add(new_download(&s, &server, "Clip.mp4"));
+        wait_for(&s.manager, task.id, |st| matches!(st, State::Failed(_))).await;
+
+        let other = Source { url: "http://127.0.0.1:9/other".into(), ..task.source.clone() };
+        s.manager.retry(task.id, Some(Fresh { source: other.clone(), sound: Some(other) }));
+        let again = wait_for(&s.manager, task.id, |st| matches!(st, State::Failed(_))).await;
+
+        assert_eq!((again.source, again.sound), (task.source, None));
     }
 
     #[tokio::test(flavor = "multi_thread")]

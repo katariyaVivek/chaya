@@ -5,9 +5,8 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
-use chaya_core::download::http::Source;
 use chaya_core::download::join::Joiner;
-use chaya_core::download::manager::{Event, Manager as DownloadManager, TaskView};
+use chaya_core::download::manager::{Event, Fresh, Manager as DownloadManager, TaskView};
 use chaya_core::download::plan::plan;
 use chaya_core::engine::{AnswerCache, Engine};
 use chaya_core::links::{self, Link};
@@ -124,16 +123,16 @@ fn remove_download(id: u64, downloads: State<'_, Downloads>) {
 }
 
 /// Tries a failed download again. The sites' addresses expire, so the link is looked up again first for a
-/// fresh one; if that lookup fails, the old address is tried.
+/// fresh one (both halves' for a joined download); if that lookup fails, the old addresses are tried.
 #[tauri::command]
 async fn retry_download(id: u64, lookups: State<'_, Lookups>, downloads: State<'_, Downloads>) -> Result<(), ()> {
     let Some(task) = downloads.manager.get(id) else { return Ok(()) };
-    let fresh: Option<Source> = match lookups.media(task.page_url.clone(), true).await {
+    let fresh: Option<Fresh> = match lookups.media(task.page_url.clone(), true).await {
         Ok(media) => {
             let choice = if task.group.is_some() { chaya_core::download::plan::WHOLE_POST } else { &task.choice };
             plan(&media, choice, &task.page_url, &downloads.folder, |f| downloads.can_join(f))
                 .and_then(|plans| plans.into_iter().find(|p| p.choice == task.choice))
-                .map(|p| p.source)
+                .map(|p| Fresh { source: p.source, sound: p.sound })
         }
         Err(_) => None,
     };
