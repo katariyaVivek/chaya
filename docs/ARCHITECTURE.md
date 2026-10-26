@@ -320,7 +320,10 @@ a built-in browser. [`../desktop/README.md`](../desktop/README.md) has the layou
   the phone gives the page's detector a capability per navigation, the desktop gives a page nothing:
   the app's commands are granted to the window's own webview only (`webviews: ["main"]`), and a page is
   never local. Pages go only to http(s); windows they open are held back; a media file a page downloads
-  goes to Chaya's list. Finding a page's media (the phone's `detection/`) is next.
+  goes to Chaya's list. A page's media is found by `detector.js` in every frame (the phone's detector
+  and frame agent in one), which the app reads by evaluating a call under a random name instead of
+  handing the page a bridge; `chaya-core`'s `found` ports the classifier, the ad hosts and the core of
+  the ranker and namer.
 - `desktop/app/src-tauri` hands `chaya-core` to the window as commands (`recognise_link`, `look_up`,
   `download` and the download controls) and sends it `download` events. The window
   may call only those and set its title bar's theme (`capabilities/default.json`). Its content

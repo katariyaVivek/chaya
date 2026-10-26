@@ -7,10 +7,18 @@
 //! go only to the web (`browse::may_open`); a window it tries to open is held back and the window asked. A
 //! download it starts of a video, a sound, a picture or a stream goes to Chaya's list (without the page's
 //! cookies); any other file is saved as any browser saves it.
+//!
+//! What a page's players load is found by `detector.js`, run in every document of the page. The app reads it
+//! (`page_media`) without the page ever being handed a way in: the script keeps its list under a random name the
+//! page's own scripts do not know, and the app evaluates a call to it.
 
+use std::collections::hash_map::RandomState;
+use std::hash::{BuildHasher, Hasher};
 use std::sync::Mutex;
+use std::time::Duration;
 
 use chaya_core::browse;
+use chaya_core::found::{self, Found, FoundKind, Report};
 use chaya_core::links;
 use serde::{Deserialize, Serialize};
 use tauri::webview::{DownloadEvent, NewWindowResponse, PageLoadEvent, WebviewBuilder};
@@ -55,9 +63,37 @@ enum PageEvent {
     },
 }
 
-/// The page's title, for naming what it downloads.
+/// What the app knows about the page: its title, for naming what it downloads; the name its detector keeps its
+/// list under; and what was found on it when the window last asked.
 #[derive(Default)]
-pub struct PageTitle(Mutex<String>);
+pub struct PageState(Mutex<PageInner>);
+
+#[derive(Default)]
+struct PageInner {
+    title: String,
+    key: String,
+    found: Vec<Found>,
+}
+
+fn page_state(app: &AppHandle) -> std::sync::MutexGuard<'_, PageInner> {
+    app.state::<PageState>().inner().0.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// A word no page can guess: 128 bits from the hasher's random keys, which the system seeds.
+fn random_word() -> String {
+    (0..2)
+        .map(|i| {
+            let mut hasher = RandomState::new().build_hasher();
+            hasher.write_u64(i);
+            format!("{:016x}", hasher.finish())
+        })
+        .collect()
+}
+
+/// The detector, with this page's names in it.
+fn detector(key: &str, nonce: &str) -> String {
+    include_str!("detector.js").replace("__CHAYA_KEY__", key).replace("__CHAYA_NONCE__", nonce)
+}
 
 fn emit(app: &AppHandle, event: PageEvent) {
     let _ = app.emit("page", event);
@@ -78,13 +114,19 @@ pub async fn open_page(text: String, bounds: Bounds, app: AppHandle) -> Result<S
         return Ok(address);
     }
     let window = app.get_window("main").ok_or("The window is gone.")?;
+    let key = format!("__chaya_{}", random_word());
+    page_state(&app).key = key.clone();
     let events = app.clone();
     let titles = app.clone();
     let popups = app.clone();
     let builder = WebviewBuilder::new(PAGE, WebviewUrl::External(url))
         .on_navigation(browse::may_open)
+        .initialization_script_for_all_frames(detector(&key, &random_word()))
         .on_page_load(move |_, payload| {
             let url = payload.url().to_string();
+            if payload.event() == PageLoadEvent::Started {
+                page_state(&events).found.clear();
+            }
             emit(
                 &events,
                 match payload.event() {
@@ -94,7 +136,7 @@ pub async fn open_page(text: String, bounds: Bounds, app: AppHandle) -> Result<S
             );
         })
         .on_document_title_changed(move |_, title| {
-            *titles.state::<PageTitle>().0.lock().unwrap_or_else(|e| e.into_inner()) = title.clone();
+            page_state(&titles).title = title.clone();
             emit(&titles, PageEvent::Title { title });
         })
         .on_new_window(move |url, _| {
@@ -115,7 +157,7 @@ fn page_download(page: Webview, event: DownloadEvent<'_>) -> bool {
     let DownloadEvent::Requested { url, .. } = event else { return true };
     let app = page.app_handle();
     let page_url = page.url().map(|u| u.to_string()).unwrap_or_default();
-    let title = app.state::<PageTitle>().0.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    let title = page_state(app).title.clone();
     let downloads = app.state::<Downloads>();
     match browse::page_download(url.as_str(), &page_url, &title, &downloads.folder, downloads.joins) {
         Some(new) => {
@@ -166,7 +208,77 @@ pub fn close_page(app: AppHandle) {
     if let Some(page) = app.get_webview(PAGE) {
         let _ = page.close();
     }
-    app.state::<PageTitle>().0.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    *page_state(&app) = PageInner::default();
+}
+
+/// Something found on the page, as the window lists it.
+#[derive(Clone, Serialize)]
+pub struct FoundView {
+    url: String,
+    kind: FoundKind,
+    name: String,
+    host: String,
+    main: bool,
+    ad: bool,
+    /// Whether the app can save it: a DASH stream from a page, or an HLS stream without ffmpeg, it cannot yet.
+    savable: bool,
+}
+
+/// What the page's players have loaded so far, the main video first.
+#[tauri::command]
+pub async fn page_media(app: AppHandle) -> Result<Vec<FoundView>, String> {
+    let page = app.get_webview(PAGE).ok_or("No page is open.")?;
+    let key = page_state(&app).key.clone();
+    let (tx, rx) = tokio::sync::oneshot::channel::<String>();
+    let tx = Mutex::new(Some(tx));
+    // The page's own document runs this; a page whose detector is missing (a page that failed to load) has none.
+    let call =
+        format!("(function () {{ var read = window['{key}']; return typeof read === 'function' ? read() : ''; }})()");
+    page.eval_with_callback(call, move |answer| {
+        if let Some(tx) = tx.lock().unwrap_or_else(|e| e.into_inner()).take() {
+            let _ = tx.send(answer);
+        }
+    })
+    .map_err(|_| "The page didn't respond.".to_string())?;
+    let answer = tokio::time::timeout(Duration::from_secs(3), rx)
+        .await
+        .map_err(|_| "The page didn't respond.".to_string())?
+        .unwrap_or_default();
+    // The answer is the script's string, written as JSON; the page's word is checked by `found`.
+    let report: Report = serde_json::from_str::<String>(&answer)
+        .ok()
+        .filter(|text| text.len() <= 2 * 1024 * 1024)
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or_default();
+    let page_url = page.url().map(|u| u.to_string()).unwrap_or_default();
+    let list = found::found(&report, &page_url);
+    let joins = app.state::<Downloads>().joins;
+    let views = list
+        .iter()
+        .map(|f| FoundView {
+            url: f.url.clone(),
+            kind: f.kind,
+            name: f.name.clone(),
+            host: f.host.clone(),
+            main: f.main,
+            ad: f.ad,
+            savable: browse::can_save_found(f, joins),
+        })
+        .collect();
+    page_state(&app).found = list;
+    Ok(views)
+}
+
+/// Saves what the window listed at `url` on the page.
+#[tauri::command]
+pub fn save_found(url: String, app: AppHandle) -> Result<Vec<crate::TaskView>, String> {
+    let item = page_state(&app).found.iter().find(|f| f.url == url).cloned();
+    let item = item.ok_or("This is no longer on the page.")?;
+    let page_url = app.get_webview(PAGE).and_then(|p| p.url().ok()).map(|u| u.to_string()).unwrap_or_default();
+    let downloads = app.state::<Downloads>();
+    let new = browse::found_download(&item, &page_url, &downloads.folder, downloads.joins)
+        .ok_or("Chaya can't save this yet.")?;
+    Ok(vec![crate::TaskView::from(&downloads.manager.add(new))])
 }
 
 fn position(bounds: Bounds) -> LogicalPosition<f64> {
@@ -175,4 +287,24 @@ fn position(bounds: Bounds) -> LogicalPosition<f64> {
 
 fn size(bounds: Bounds) -> LogicalSize<f64> {
     LogicalSize::new(bounds.width.max(1.0), bounds.height.max(1.0))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_page_gets_names_no_page_can_guess() {
+        let (a, b) = (random_word(), random_word());
+        assert_eq!(a.len(), 32);
+        assert!(a.chars().all(|c| c.is_ascii_hexdigit()));
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn the_detector_carries_this_pages_names_and_nothing_left_to_fill() {
+        let script = detector("__chaya_key1", "nonce1");
+        assert!(script.contains("'__chaya_key1'") && script.contains("'nonce1'"));
+        assert!(!script.contains("__CHAYA_KEY__") && !script.contains("__CHAYA_NONCE__"));
+    }
 }

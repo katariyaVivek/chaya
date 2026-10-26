@@ -14,15 +14,16 @@ YouTube's) are fetched as two files and joined into one MP4 by a cut-down ffmpeg
 YouTube's files come in pieces, three at a time. Qualities that come as streams, HLS (X's, a plain `.m3u8`
 link) or DASH (Vimeo's, Reddit's), are fetched piece by piece and saved as an MP4. Anything else typed in
 the address bar (a page, a site, an account, words to search for) opens in the built-in browser, and a
-video, sound or picture a page downloads is saved in the Downloads list. Finding the media on a page comes
-next ([`../docs/ROADMAP.md`](../docs/ROADMAP.md)).
+video, sound or picture a page downloads is saved in the Downloads list. What a page's players load is
+found and listed above the page, its main video first, each with a Download button
+([`../docs/ROADMAP.md`](../docs/ROADMAP.md)).
 
 ## Layout
 
 | Path | What it is |
 |---|---|
 | `design/` | The design system: tokens, fonts, components, motion. Plain CSS and an ES module |
-| `core/` | `chaya-core`, plain Rust with no window or web view in it, so it builds and tests anywhere. `links` recognises links (the phone's `PlatformMatcher` and `ProfileMatcher`); `engine` runs the engine; `media` reads its answer (`PlatformMedia`); `formats` picks one choice per quality (`FormatSelector`); `lookup` is what the window is sent. Each is ported with the phone's tests. `download` saves files: `http` fetches one with resume (`HttpDownloader`), `manager` keeps every download and its state (`DownloadManager`), `plan` turns a choice into downloads, `names` makes Windows-safe names, `error` explains failures (`DownloadError`), `join` joins picture and sound, and turns a stream into an MP4, with ffmpeg, `pieces` fetches YouTube's files in pieces (`PieceLog`), `stream` fetches a stream's pieces (HLS, DASH). `browse` holds the browser's rules: what typed text opens, where a page may go, and which page downloads Chaya keeps |
+| `core/` | `chaya-core`, plain Rust with no window or web view in it, so it builds and tests anywhere. `links` recognises links (the phone's `PlatformMatcher` and `ProfileMatcher`); `engine` runs the engine; `media` reads its answer (`PlatformMedia`); `formats` picks one choice per quality (`FormatSelector`); `lookup` is what the window is sent. Each is ported with the phone's tests. `download` saves files: `http` fetches one with resume (`HttpDownloader`), `manager` keeps every download and its state (`DownloadManager`), `plan` turns a choice into downloads, `names` makes Windows-safe names, `error` explains failures (`DownloadError`), `join` joins picture and sound, and turns a stream into an MP4, with ffmpeg, `pieces` fetches YouTube's files in pieces (`PieceLog`), `stream` fetches a stream's pieces (HLS, DASH). `browse` holds the browser's rules: what typed text opens, where a page may go, and which page downloads Chaya keeps. `found` turns what a page's detector saw into the list the window shows (`MediaUrlClassifier`, `AdHosts`, and the core of `MediaRanker` and `MediaNamer`) |
 | `engine/` | `prepare.py` puts together the engine the installer carries, in `app/src-tauri/engine/` (not in git); `run.py` starts it; `build_ffmpeg.sh` builds the cut-down ffmpeg |
 | `app/ui/` | The window: `index.html`, `app.css`, `main.js` |
 | `app/scripts/assemble-ui.mjs` | Puts `ui/` and the design system together in `app/dist/`, which Tauri serves. Runs before every dev run and build |
@@ -146,6 +147,18 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
 - A download a page starts of a video, a sound, a picture or an HLS playlist goes to the Downloads list,
   named after the file (a playlist after the page), with the page as referrer and without the page's
   cookies. Other files (a PDF, an installer) are saved as any browser saves them.
+- **What a page holds.** `src-tauri/src/detector.js` runs at the start of every document of the page,
+  frames from other servers included, as the phone's detector and frame agent do between them. It
+  watches what the page's players show and load: video and audio elements and their sources, what the
+  browser loaded for the page (its resource timings), and the page's fetch and XHR answers that are media
+  by their name, their type, or a playlist's first characters (`#EXTM3U`, `<MPD`). A frame tells the
+  page's document by `postMessage`, with a nonce only the script knows. The app reads the list every
+  1.5 s, while the page shows, by evaluating a call to it under a random name (`page_media`); the page is
+  never given a way into the app. `found` checks all of it (http(s) only, bounded), leaves out stream
+  pieces and the thumbnails a player shows while seeking, makes byte ranges of one file one item, folds
+  likely ads to the end, and names the main video (the biggest visible player's, or the page's stream)
+  after the page. Files and HLS streams save from there (`save_found`), with the page or the player's
+  frame as referrer; a DASH stream from a page cannot be saved yet.
 - Under Linux (development only), Tauri stacks a window's webviews instead of placing them, so the page
   shows below the window's content rather than in it, and WebKitGTK saves a page's downloads itself
   without asking the app. Windows places the page where it is told and asks before every download.

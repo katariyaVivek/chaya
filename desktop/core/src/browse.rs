@@ -12,6 +12,7 @@ use url::Url;
 use crate::download::http::Source;
 use crate::download::manager::{Kind, NewDownload};
 use crate::download::names;
+use crate::found::{Found, FoundKind};
 use crate::links::Link;
 
 /// The page that searches for `words`.
@@ -99,6 +100,58 @@ pub fn page_download(url: &str, page_url: &str, page_title: &str, folder: &Path,
         source: Source { url: url.to_string(), headers, stream, ..Source::default() },
         sound: None,
         thumbnail: (kind == Kind::Picture).then(|| url.to_string()),
+        group: None,
+    })
+}
+
+/// Whether the app can save `found`: a file, and with `streams` (the app carries ffmpeg) an HLS stream. A DASH
+/// stream found on a page it cannot save yet.
+pub fn can_save_found(found: &Found, streams: bool) -> bool {
+    match found.kind {
+        FoundKind::Video | FoundKind::Audio => true,
+        FoundKind::Stream => streams,
+        FoundKind::Dash => false,
+    }
+}
+
+/// What saving `found` from the page at `page_url` takes: one download, named after it, with the page (or the
+/// frame its player is in) as referrer. `None` when the app cannot save it.
+pub fn found_download(found: &Found, page_url: &str, folder: &Path, streams: bool) -> Option<NewDownload> {
+    if !can_save_found(found, streams) {
+        return None;
+    }
+    let url = Url::parse(&found.url).ok()?;
+    let named = url
+        .path_segments()
+        .and_then(|mut s| s.next_back())
+        .and_then(|name| name.rsplit_once('.'))
+        .map(|(_, ext)| ext.to_ascii_lowercase())
+        .filter(|ext| media_kind(&url).is_some_and(|(_, stream)| !stream) && !ext.is_empty());
+    let (kind, ext, choice) = match found.kind {
+        FoundKind::Audio => (Kind::Audio, named.unwrap_or_else(|| "m4a".into()), "Audio"),
+        FoundKind::Stream => (Kind::Video, "mp4".to_string(), "Stream"),
+        _ => (Kind::Video, named.unwrap_or_else(|| "mp4".into()), "Video"),
+    };
+    let headers: BTreeMap<String, String> = Url::parse(&found.referer)
+        .ok()
+        .filter(|u| matches!(u.scheme(), "http" | "https"))
+        .map(|_| [("Referer".to_string(), found.referer.clone())].into())
+        .unwrap_or_default();
+    Some(NewDownload {
+        title: found.name.clone(),
+        page_url: page_url.to_string(),
+        choice: choice.to_string(),
+        kind,
+        file_name: names::file_name(&found.name, None, &ext),
+        folder: folder.to_path_buf(),
+        source: Source {
+            url: found.url.clone(),
+            headers,
+            stream: found.kind == FoundKind::Stream,
+            ..Source::default()
+        },
+        sound: None,
+        thumbnail: None,
         group: None,
     })
 }
@@ -211,6 +264,39 @@ mod tests {
         assert!(
             page_download("data:video/mp4;base64,AAAA", "https://example.com/", "T", Path::new("D"), true).is_none()
         );
+    }
+
+    fn found(url: &str, kind: FoundKind, name: &str) -> Found {
+        Found {
+            url: url.into(),
+            kind,
+            name: name.into(),
+            host: "cdn.example".into(),
+            main: true,
+            ad: false,
+            referer: "https://player.example/embed/7".into(),
+        }
+    }
+
+    #[test]
+    fn what_a_page_shows_is_saved_under_its_name_with_its_player_as_referrer() {
+        let video = found("https://cdn.example/v/a8f3c29e.webm?sig=1", FoundKind::Video, "Monsoon over the Ghats");
+        let d = found_download(&video, "https://films.example.com/monsoon", Path::new("D"), false).unwrap();
+        assert_eq!(d.file_name, "Monsoon over the Ghats.webm");
+        assert_eq!(d.source.headers.get("Referer").map(String::as_str), Some("https://player.example/embed/7"));
+        assert_eq!(d.page_url, "https://films.example.com/monsoon");
+        assert!(!d.source.stream);
+
+        let unnamed = found("https://cdn.example/play?id=7", FoundKind::Audio, "Rain Song");
+        assert_eq!(found_download(&unnamed, "u", Path::new("D"), false).unwrap().file_name, "Rain Song.m4a");
+
+        let stream = found("https://cdn.example/v/index.m3u8", FoundKind::Stream, "Lecture 4");
+        assert!(found_download(&stream, "u", Path::new("D"), false).is_none(), "not without ffmpeg");
+        let d = found_download(&stream, "u", Path::new("D"), true).unwrap();
+        assert_eq!((d.file_name.as_str(), d.source.stream, d.kind), ("Lecture 4.mp4", true, Kind::Video));
+
+        let dash = found("https://cdn.example/v/manifest.mpd", FoundKind::Dash, "Lecture 4");
+        assert!(found_download(&dash, "u", Path::new("D"), true).is_none(), "DASH from a page comes later");
     }
 
     #[test]

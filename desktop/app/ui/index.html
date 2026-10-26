@@ -75,6 +75,11 @@
 
   <p class="notice" id="page-notice" role="status" hidden><span class="notice__text"></span><button class="notice__action" type="button" hidden></button></p>
 
+  <section class="found" id="found" aria-label="Found on this page" hidden>
+    <ul class="found__list"></ul>
+    <button class="found__more" type="button" hidden></button>
+  </section>
+
   <div class="page-frame" data-browsing hidden>
     <span class="page-load" id="page-load" aria-hidden="true"></span>
     <div class="page glass" id="page"></div>
@@ -124,6 +129,18 @@
       <button class="icon-btn pressable row__main" type="button"><svg><use href=""/></svg></button>
       <button class="icon-btn pressable row__close" type="button"><svg><use href="#i-close"/></svg></button>
     </div>
+  </li>
+</template>
+
+<template id="found-template">
+  <li class="found__item">
+    <span class="found__icon"><svg><use href=""/></svg></span>
+    <div class="found__body">
+      <p class="found__name"></p>
+      <p class="found__meta num"></p>
+      <div class="found__state"></div>
+    </div>
+    <div class="found__action"></div>
   </li>
 </template>
 

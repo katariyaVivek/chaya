@@ -223,7 +223,7 @@ pub fn run() {
             let folder =
                 app.path().download_dir().or_else(|_| app.path().home_dir().map(|home| home.join("Downloads")))?;
             app.manage(Downloads { manager, folder, joins });
-            app.manage(browser::PageTitle::default());
+            app.manage(browser::PageState::default());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -243,6 +243,8 @@ pub fn run() {
             browser::show_page,
             browser::page_action,
             browser::close_page,
+            browser::page_media,
+            browser::save_found,
         ])
         .run(tauri::generate_context!())
         .expect("the window could not be opened");
