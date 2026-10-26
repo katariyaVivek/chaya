@@ -320,7 +320,7 @@ function taskRemoved(id) {
 /** While a page is open, the Downloads button says how many downloads are under way. */
 function countRunning() {
   const running = [...tasks.values()].filter((t) => t.state === 'downloading' || t.state === 'queued').length;
-  const badge = document.querySelector('.page-downloads__count');
+  const badge = document.querySelector('.page-downloads .page-count');
   badge.textContent = String(running);
   badge.hidden = running === 0;
 }
@@ -478,6 +478,7 @@ function setBrowsing(on) {
   document.body.classList.toggle('browsing', on);
   document.querySelectorAll('[data-browsing]').forEach((el) => (el.hidden = !on));
   if (!on) {
+    openShield(false);
     showDownloads(false);
     hideNotice();
     forgetFound();
@@ -516,7 +517,8 @@ function closePage() {
 /** Shows the page unless something is shown in its place. */
 function showPageView() {
   if (!browsing) return;
-  const covered = !settingsPanel.hidden || document.body.classList.contains('showing-downloads');
+  const covered =
+    !settingsPanel.hidden || !shieldPanel.hidden || document.body.classList.contains('showing-downloads');
   tauri.core.invoke('show_page', { visible: !covered });
 }
 
@@ -654,6 +656,7 @@ async function askPage() {
     const page = await tauri.core.invoke('page_media');
     followPage(page.url);
     showPageMedia(page.items);
+    showShield(page.ads);
   } catch {
     // No page, or it did not answer this time.
   } finally {
@@ -708,6 +711,106 @@ foundBox.querySelector('.found__more').addEventListener('click', () => {
 
 setInterval(askPage, 1500);
 
+// ── The ad blocker ──────────────────────────────────────────────────────────────────────────
+//
+// The shield says how many ads and trackers were blocked on the page; its panel lets the person show a site's ads,
+// or every site's, as the phone's ad blocker sheet does.
+
+const shieldButton = document.getElementById('page-shield');
+const shieldPanel = document.getElementById('shield-panel');
+const shieldSite = document.getElementById('shield-site');
+/** The ad blocker as last heard, for the panel's buttons. */
+let ads = null;
+
+function openShield(open) {
+  shieldPanel.hidden = !open;
+  shieldButton.setAttribute('aria-expanded', String(open));
+  if (open) {
+    tauri.core
+      .invoke('ad_blocking')
+      .then((view) => {
+        showAds(view);
+        showShield(view.shield);
+      })
+      .catch(() => {});
+  }
+  showPageView();
+}
+
+function adStatus({ site, enabled, blocking, blocked }) {
+  if (!enabled) return 'Off: pages show their ads.';
+  if (!site) return 'Nothing to block on this page.';
+  if (!blocking) return `Ads are shown on ${site}.`;
+  return blocked === 1 ? '1 ad or tracker blocked on this page.' : `${blocked} ads and trackers blocked on this page.`;
+}
+
+function listsNote(rules, updated) {
+  const lists = 'Uses EasyList and EasyPrivacy, the lists uBlock Origin uses';
+  if (rules == null) return `${lists}. Reading them…`;
+  let when = 'the copies that came with Chaya';
+  if (updated != null) {
+    const days = Math.floor((Date.now() / 1000 - updated) / 86400);
+    when = days <= 0 ? 'updated today' : days === 1 ? 'updated yesterday' : `updated ${days} days ago`;
+  }
+  return `${lists} (${rules.toLocaleString()} rules, ${when}). Chaya fetches fresh copies about once a week.`;
+}
+
+/** The shield's count, and the panel when it is open. */
+function showShield(shield) {
+  if (!shield) return;
+  const badge = shieldButton.querySelector('.page-count');
+  const counting = shield.enabled && shield.blocking && shield.blocked > 0;
+  badge.textContent = shield.blocked > 99 ? '99+' : String(shield.blocked);
+  badge.hidden = !counting;
+  shieldButton.classList.toggle('page-shield--off', !(shield.enabled && shield.blocking));
+  const label = `Ad blocker: ${adStatus(shield)}`;
+  shieldButton.setAttribute('aria-label', label);
+  shieldButton.title = label;
+  if (!shieldPanel.hidden) showAds({ ...(ads ?? {}), shield });
+}
+
+function showAds(view) {
+  ads = view;
+  const { shield, updated } = view;
+  document.getElementById('shield-status').textContent = adStatus(shield);
+  document.getElementById('shield-lists').textContent = listsNote(shield.rules, updated);
+  const siteShown = shield.enabled && Boolean(shield.site);
+  shieldSite.hidden = !siteShown;
+  document.getElementById('shield-site-label').hidden = !siteShown;
+  document.getElementById('shield-site-label').textContent = `On ${shield.site}`;
+  shieldSite.querySelectorAll('[data-site-ads]').forEach((b) =>
+    b.setAttribute('aria-pressed', String((b.dataset.siteAds === 'block') === shield.blocking)),
+  );
+  shieldPanel.querySelectorAll('[data-all-ads]').forEach((b) =>
+    b.setAttribute('aria-pressed', String((b.dataset.allAds === 'block') === shield.enabled)),
+  );
+}
+
+/** A choice changes what the page loads, so the page loads again under it. */
+async function chooseAds(command, args) {
+  try {
+    const view = await tauri.core.invoke(command, args);
+    showAds(view);
+    showShield(view.shield);
+    tauri.core.invoke('page_action', { action: 'reload' });
+  } catch (message) {
+    showNotice(String(message));
+  }
+}
+
+shieldButton.addEventListener('click', () => openShield(shieldPanel.hidden));
+shieldSite.querySelectorAll('[data-site-ads]').forEach((button) =>
+  button.addEventListener('click', () => {
+    if (ads?.shield.site) chooseAds('allow_ads_on', { site: ads.shield.site, allowed: button.dataset.siteAds === 'show' });
+  }),
+);
+shieldPanel.querySelectorAll('[data-all-ads]').forEach((button) =>
+  button.addEventListener('click', () => chooseAds('block_ads', { on: button.dataset.allAds === 'block' })),
+);
+document.addEventListener('click', (e) => {
+  if (!shieldPanel.hidden && !e.target.closest('.shield')) openShield(false);
+});
+
 // ── Reading the address bar ─────────────────────────────────────────────────────────────────
 
 let asked = 0;
@@ -743,6 +846,7 @@ document.addEventListener('keydown', (e) => {
     address.select();
   } else if (e.key === 'Escape') {
     if (!settingsPanel.hidden) showSettings(false);
+    else if (!shieldPanel.hidden) openShield(false);
     else if (document.activeElement === address && browsing) {
       // Back to the page's own address.
       address.value = pageUrl;

@@ -11,12 +11,16 @@
 //! What a page's players load is found by `detector.js`, run in every document of the page. The app reads it
 //! (`page_media`) without the page ever being handed a way in: the script keeps its list under a random name the
 //! page's own scripts do not know, and the app evaluates a call to it.
+//!
+//! Ads are blocked as on the phone (`ads`): the page's requests on Windows, its ad pop-ups, and the ad boxes in
+//! its top document.
 
 use std::collections::hash_map::RandomState;
 use std::hash::{BuildHasher, Hasher};
 use std::sync::Mutex;
 use std::time::Duration;
 
+use chaya_core::adblock::{kind, Shield};
 use chaya_core::browse;
 use chaya_core::found::{self, Found, FoundKind, Report};
 use chaya_core::links;
@@ -28,6 +32,7 @@ use chaya_core::download::plan::plan;
 use chaya_core::lookup::Lookup;
 use chaya_core::media::{FailureKind, Media};
 
+use crate::ads::{self, Ads};
 use crate::{Downloads, Lookups};
 
 /// The page's webview.
@@ -68,7 +73,8 @@ enum PageEvent {
 }
 
 /// What the app knows about the page: its title, for naming what it downloads; the name its detector keeps its
-/// list under; and what was found on it when the window last asked.
+/// list under; what was found on it when the window last asked; and which opening of the page this is, so work
+/// for a page that was closed stops.
 #[derive(Default)]
 pub struct PageState(Mutex<PageInner>);
 
@@ -77,6 +83,7 @@ struct PageInner {
     title: String,
     key: String,
     found: Vec<Found>,
+    generation: u64,
 }
 
 fn page_state(app: &AppHandle) -> std::sync::MutexGuard<'_, PageInner> {
@@ -99,6 +106,29 @@ fn detector(key: &str, nonce: &str) -> String {
     include_str!("detector.js").replace("__CHAYA_KEY__", key).replace("__CHAYA_NONCE__", nonce)
 }
 
+/// The page, while it is still the one opened as `generation`.
+pub fn current_page(app: &AppHandle, generation: u64) -> Option<Webview> {
+    if page_state(app).generation != generation {
+        return None;
+    }
+    app.get_webview(PAGE)
+}
+
+/// What `call`, evaluated in the page's top document, returns: a string, or None when the page did not answer.
+pub async fn ask(page: &Webview, call: String) -> Option<String> {
+    let (tx, rx) = tokio::sync::oneshot::channel::<String>();
+    let tx = Mutex::new(Some(tx));
+    page.eval_with_callback(call, move |answer| {
+        if let Some(tx) = tx.lock().unwrap_or_else(|e| e.into_inner()).take() {
+            let _ = tx.send(answer);
+        }
+    })
+    .ok()?;
+    let answer = tokio::time::timeout(Duration::from_secs(3), rx).await.ok()?.ok()?;
+    // The answer is the call's value written as JSON.
+    serde_json::from_str::<String>(&answer).ok()
+}
+
 fn emit(app: &AppHandle, event: PageEvent) {
     let _ = app.emit("page", event);
 }
@@ -118,14 +148,33 @@ pub async fn open_page(text: String, bounds: Bounds, app: AppHandle) -> Result<S
         return Ok(address);
     }
     let window = app.get_window("main").ok_or("The window is gone.")?;
+    let ads = app.state::<Ads>();
+    ads.start();
     let key = format!("__chaya_{}", random_word());
-    page_state(&app).key = key.clone();
+    let hide_key = format!("__chaya_{}", random_word());
+    let generation = {
+        let mut state = page_state(&app);
+        state.key = key.clone();
+        state.generation += 1;
+        state.generation
+    };
     let events = app.clone();
     let titles = app.clone();
     let popups = app.clone();
-    let builder = WebviewBuilder::new(PAGE, WebviewUrl::External(url))
-        .on_navigation(browse::may_open)
+    let blocker = ads.blocker.clone();
+    let popup_blocker = ads.blocker.clone();
+    // The page starts blank, so ad blocking is in place before it loads anything.
+    let blank = Url::parse("about:blank").expect("a valid address");
+    let builder = WebviewBuilder::new(PAGE, WebviewUrl::External(blank))
+        .on_navigation(move |url| {
+            let allowed = browse::may_open(url);
+            if allowed {
+                blocker.begin_page(url.as_str());
+            }
+            allowed
+        })
         .initialization_script_for_all_frames(detector(&key, &random_word()))
+        .initialization_script(ads::hider(&hide_key))
         .on_page_load(move |_, payload| {
             let url = payload.url().to_string();
             if payload.event() == PageLoadEvent::Started {
@@ -144,15 +193,19 @@ pub async fn open_page(text: String, bounds: Bounds, app: AppHandle) -> Result<S
             emit(&titles, PageEvent::Title { title });
         })
         .on_new_window(move |url, _| {
-            if browse::may_open(&url) {
+            // An ad's window is refused without asking; the shield counts it.
+            if browse::may_open(&url) && !popup_blocker.should_block_popup(url.as_str()) {
                 emit(&popups, PageEvent::Popup { url: url.to_string() });
             }
             NewWindowResponse::Deny
         })
         .on_download(page_download);
-    window
+    let page = window
         .add_child(builder, position(bounds), size(bounds))
         .map_err(|_| "The page couldn't be opened.".to_string())?;
+    let _ = ads::block_requests(&page, ads.blocker.clone());
+    page.navigate(url).map_err(|_| "The page couldn't be opened.".to_string())?;
+    tauri::async_runtime::spawn(ads::hide_ads(app.clone(), hide_key, generation));
     Ok(address)
 }
 
@@ -212,7 +265,8 @@ pub fn close_page(app: AppHandle) {
     if let Some(page) = app.get_webview(PAGE) {
         let _ = page.close();
     }
-    *page_state(&app) = PageInner::default();
+    let mut state = page_state(&app);
+    *state = PageInner { generation: state.generation + 1, ..PageInner::default() };
 }
 
 /// Something found on the page, as the window lists it.
@@ -231,38 +285,31 @@ pub struct FoundView {
 }
 
 /// What the page holds, as the window last asked: where it is now (a page that changes its address itself, as
-/// YouTube does, loads nothing new), and what its players have loaded so far, the main video first.
+/// YouTube does, loads nothing new), what its players have loaded so far, the main video first, and how many ads
+/// were blocked on it.
 #[derive(Clone, Serialize)]
 pub struct PageMedia {
     url: String,
     items: Vec<FoundView>,
+    ads: Shield,
 }
 
 #[tauri::command]
 pub async fn page_media(app: AppHandle) -> Result<PageMedia, String> {
     let page = app.get_webview(PAGE).ok_or("No page is open.")?;
     let key = page_state(&app).key.clone();
-    let (tx, rx) = tokio::sync::oneshot::channel::<String>();
-    let tx = Mutex::new(Some(tx));
     // The page's own document runs this; a page whose detector is missing (a page that failed to load) has none.
     let call =
         format!("(function () {{ var read = window['{key}']; return typeof read === 'function' ? read() : ''; }})()");
-    page.eval_with_callback(call, move |answer| {
-        if let Some(tx) = tx.lock().unwrap_or_else(|e| e.into_inner()).take() {
-            let _ = tx.send(answer);
-        }
-    })
-    .map_err(|_| "The page didn't respond.".to_string())?;
-    let answer = tokio::time::timeout(Duration::from_secs(3), rx)
-        .await
-        .map_err(|_| "The page didn't respond.".to_string())?
-        .unwrap_or_default();
-    // The answer is the script's string, written as JSON; the page's word is checked by `found`.
-    let report: Report = serde_json::from_str::<String>(&answer)
-        .ok()
+    let answer = ask(&page, call).await.ok_or("The page didn't respond.")?;
+    // The page's word is checked by `found`.
+    let mut report: Report = Some(answer)
         .filter(|text| text.len() <= 2 * 1024 * 1024)
         .and_then(|text| serde_json::from_str(&text).ok())
         .unwrap_or_default();
+    // An ad the blocker stops is never offered, even where its address was seen.
+    let blocker = app.state::<Ads>().blocker.clone();
+    report.items.retain(|seen| !blocker.blocks(&seen.url, kind::MEDIA));
     let page_url = page.url().map(|u| u.to_string()).unwrap_or_default();
     let list = found::found(&report, &page_url);
     let joins = app.state::<Downloads>().joins;
@@ -280,7 +327,7 @@ pub async fn page_media(app: AppHandle) -> Result<PageMedia, String> {
         })
         .collect();
     page_state(&app).found = list;
-    Ok(PageMedia { url: page_url, items: views })
+    Ok(PageMedia { url: page_url, items: views, ads: blocker.shield() })
 }
 
 /// The qualities of a stream found on the page (an HLS playlist or a DASH manifest), as the bundled engine reads

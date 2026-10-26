@@ -23,11 +23,11 @@ found and listed above the page, its main video first, each with a Download butt
 | Path | What it is |
 |---|---|
 | `design/` | The design system: tokens, fonts, components, motion. Plain CSS and an ES module |
-| `core/` | `chaya-core`, plain Rust with no window or web view in it, so it builds and tests anywhere. `links` recognises links (the phone's `PlatformMatcher` and `ProfileMatcher`); `engine` runs the engine; `media` reads its answer (`PlatformMedia`); `formats` picks one choice per quality (`FormatSelector`); `lookup` is what the window is sent. Each is ported with the phone's tests. `download` saves files: `http` fetches one with resume (`HttpDownloader`), `manager` keeps every download and its state (`DownloadManager`), `plan` turns a choice into downloads, `names` makes Windows-safe names, `error` explains failures (`DownloadError`), `join` joins picture and sound, and turns a stream into an MP4, with ffmpeg, `pieces` fetches YouTube's files in pieces (`PieceLog`), `stream` fetches a stream's pieces (HLS, DASH). `browse` holds the browser's rules: what typed text opens, where a page may go, and which page downloads Chaya keeps. `found` turns what a page's detector saw into the list the window shows (`MediaUrlClassifier`, `AdHosts`, and the core of `MediaRanker` and `MediaNamer`) |
+| `core/` | `chaya-core`, plain Rust with no window or web view in it, so it builds and tests anywhere. `links` recognises links (the phone's `PlatformMatcher` and `ProfileMatcher`); `engine` runs the engine; `media` reads its answer (`PlatformMedia`); `formats` picks one choice per quality (`FormatSelector`); `lookup` is what the window is sent. Each is ported with the phone's tests. `download` saves files: `http` fetches one with resume (`HttpDownloader`), `manager` keeps every download and its state (`DownloadManager`), `plan` turns a choice into downloads, `names` makes Windows-safe names, `error` explains failures (`DownloadError`), `join` joins picture and sound, and turns a stream into an MP4, with ffmpeg, `pieces` fetches YouTube's files in pieces (`PieceLog`), `stream` fetches a stream's pieces (HLS, DASH). `browse` holds the browser's rules: what typed text opens, where a page may go, and which page downloads Chaya keeps. `found` turns what a page's detector saw into the list the window shows (`MediaUrlClassifier`, `AdHosts`, and the core of `MediaRanker` and `MediaNamer`). `adblock` is the phone's ad blocker (`FilterEngine`, `CosmeticRules`, `FilterLists`, `AdBlockSettings`) with its tests |
 | `engine/` | `prepare.py` puts together the engine the installer carries, in `app/src-tauri/engine/` (not in git); `run.py` starts it; `build_ffmpeg.sh` builds the cut-down ffmpeg |
 | `app/ui/` | The window: `index.html`, `app.css`, `main.js` |
 | `app/scripts/assemble-ui.mjs` | Puts `ui/` and the design system together in `app/dist/`, which Tauri serves. Runs before every dev run and build |
-| `app/src-tauri/` | The Tauri app: window settings (`tauri.conf.json`), what the window may call (`capabilities/`), the commands that hand `chaya-core` to the window (`src/lib.rs`), and the browser's page (`src/browser.rs`) |
+| `app/src-tauri/` | The Tauri app: window settings (`tauri.conf.json`), what the window may call (`capabilities/`), the commands that hand `chaya-core` to the window (`src/lib.rs`), the browser's page (`src/browser.rs`), and its ad blocking (`src/ads.rs`) |
 
 Keep anything that does not need the window in `core/`, so it stays testable without one.
 
@@ -166,9 +166,32 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
 - **A video site's page.** When the page is a video or post on YouTube, Instagram, TikTok or X, it is
   looked up as its link is, and its card shows above the page. Those sites change their address without
   loading a new page, so the window follows the address the page reports each time it asks.
+- **Ads are blocked**, as on the phone, with the phone's copies of EasyList and EasyPrivacy (the lists
+  uBlock Origin starts with; the installer carries them from `app/src/main/assets/adblock`). `chaya-core`'s
+  `adblock` is the phone's engine ported: bare `||host^` rules in a set, the rest indexed by a word of
+  their pattern; exceptions, `$important`, `$third-party` (by the public suffix list), `$domain`, kinds of
+  request and page-wide exceptions honoured; regular expressions, scriptlets, procedural selectors and
+  rewriting options skipped, never half-applied. The lists are read in the background when the browser
+  first opens (pages load unblocked until then), and fresh copies are fetched from easylist.to about once
+  a week; all are fetched before any is replaced, and a copy that does not look like a list is thrown away.
+  - *Requests* (Windows): the page's WebView2 hands the app every request it makes
+    (`WebResourceRequested`), and an ad's or a tracker's gets an empty 204. The page's own document is
+    never blocked. The page opens on `about:blank` and is sent on once this is in place, so its first
+    files are judged too.
+  - *Pop-ups*: a window the lists name as an ad is refused without asking.
+  - *Ad boxes*: `src-tauri/src/hider.js`, in the page's top document, notes the classes and ids the
+    document holds once the app asks. The app asks four times a second, under a random name, and
+    evaluates the CSS for what was reported (the site's rules, and the rules for every site that start
+    with one of those names) back into the same document. Like the detector it hands the page nothing.
+  - What the page was found to hold is not offered when it is an ad the lists block.
+  - The shield beside the address bar counts what was blocked on the page; its panel shows a site's ads,
+    or every site's (`ad_blocking`, `allow_ads_on`, `block_ads`), and reloads the page. The choice is kept
+    in `adblock.json` in the app's folder.
 - Under Linux (development only), Tauri stacks a window's webviews instead of placing them, so the page
   shows below the window's content rather than in it, and WebKitGTK saves a page's downloads itself
-  without asking the app. Windows places the page where it is told and asks before every download.
+  without asking the app. WebKitGTK also has no way to answer a page's requests, so there ad boxes are
+  hidden and ad pop-ups refused, but requests are not blocked. Windows places the page where it is told,
+  asks before every download, and blocks requests.
 
 ## Tests
 
@@ -183,7 +206,10 @@ cd desktop/design && npm test            # the design system
 (`core/tests/bundled_engine.rs`), without the network; CI does this on Windows, where the engine's ffmpeg
 joins the test tracks in `core/tests/fixtures` and saves the test stream (`stream.ts`) as an MP4. The
 ffmpeg tests use `CHAYA_FFMPEG`, or an `ffmpeg` on the PATH, and say they were skipped when there is none.
-The stream tests serve playlists and pieces from a local server, encrypted ones included.
+The stream tests serve playlists and pieces from a local server, encrypted ones included. The ad
+blocker's tests read the phone's lists from `app/src/main/assets/adblock`, and fetch fresh ones from a
+local server. On Windows, `ads::webview_tests` opens a real WebView2 page served from the PC and checks
+that its ads are never fetched and the rest of it is.
 
 On Linux, building `app/src-tauri` needs WebKitGTK (`libwebkit2gtk-4.1-dev`), the same as Tauri
 there. `core` needs nothing beyond Rust.
@@ -202,4 +228,6 @@ saying which page asked (`referrerpolicy="no-referrer"`); and a download fetches
 site's server with the headers yt-dlp names for it. No sign-in is used and nothing is sent anywhere
 else. The list of downloads stays on the PC. Pages the person opens in the built-in browser load as in
 any browser, and keep their cookies in the app's own WebView2 folder on the PC; they cannot reach the
-app, and Chaya's own downloads never carry their cookies.
+app, and Chaya's own downloads never carry their cookies. The ad blocker decides on the PC; about once a
+week it fetches fresh lists from easylist.to, sending nothing about the person, and its settings (on or
+off, the sites allowed ads) stay on the PC.
