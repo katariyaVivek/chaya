@@ -335,7 +335,7 @@ impl Manager {
         self.pump();
     }
 
-    /// Stops a download and deletes what arrived.
+    /// Stops a download and deletes what arrived; a running download deletes the rest as it stops (`run`).
     pub fn cancel(&self, id: u64) {
         let Some(task) = self.take(id) else { return };
         self.stop(id);
@@ -422,11 +422,16 @@ impl Manager {
         };
         // Still registered means nobody paused or cancelled it while it ran.
         let still_running = lock(&self.inner.running).remove(&task.id).is_some();
-        match result {
-            Ok(Outcome::Done) if self.get(task.id).is_none() => {
-                // Cancelled just as the last bytes arrived: cancelling deletes what arrived.
-                let _ = std::fs::remove_file(&part);
+        if self.get(task.id).is_none() {
+            // Cancelled while it ran. Cancelling deleted what had arrived, but a file opened since (the `.part`
+            // as the server answered, a half renamed into place) is deleted here, now that nothing writes.
+            for file in task.leftovers() {
+                let _ = std::fs::remove_file(file);
             }
+            self.pump();
+            return;
+        }
+        match result {
             // Whole, even if a pause came at the last moment: a finished file is finished.
             Ok(Outcome::Done) => {
                 let state = match finish(&part, &task.path) {
