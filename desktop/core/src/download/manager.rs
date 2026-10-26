@@ -209,6 +209,10 @@ pub enum Event {
 
 type Listener = Box<dyn Fn(Event) + Send + Sync>;
 
+/// The browser's own headers for an address (its cookies and user agent), for a source saved from a page. It may
+/// wait on the browser, so it is called off the runtime's threads.
+pub type Session = Arc<dyn Fn(&str) -> Vec<(String, String)> + Send + Sync>;
+
 #[derive(Clone)]
 pub struct Manager {
     inner: Arc<Inner>,
@@ -221,10 +225,13 @@ struct Inner {
     at_once: usize,
     listener: Listener,
     tasks: Mutex<Vec<Task>>,
-    /// The stop signal of each download that is running.
+    /// The stop signal of each download that is running. A stopped download stays here until its transfer has
+    /// really stopped, so resuming it straight away never starts a second transfer into the same file.
     running: Mutex<HashMap<u64, watch::Sender<bool>>>,
     /// What joins picture and sound, and turns streams into MP4s; without it, such downloads fail.
     joiner: Mutex<Option<Joiner>>,
+    /// The browser's sign-in, for sources saved from a page; without it, they are fetched without one.
+    session: Mutex<Option<Session>>,
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -255,10 +262,16 @@ impl Manager {
                 tasks: Mutex::new(tasks),
                 running: Mutex::new(HashMap::new()),
                 joiner: Mutex::new(None),
+                session: Mutex::new(None),
             }),
         };
         manager.save();
         manager
+    }
+
+    /// Sets where a source saved from a page gets the browser's sign-in from.
+    pub fn set_session(&self, session: Option<Session>) {
+        *lock(&self.inner.session) = session;
     }
 
     /// Sets what joins picture and sound, and saves streams (`Joiner::find`).
@@ -373,10 +386,9 @@ impl Manager {
     }
 
     fn stop(&self, id: u64) {
-        if let Some(stop) = lock(&self.inner.running).remove(&id) {
+        if let Some(stop) = lock(&self.inner.running).get(&id) {
             let _ = stop.send(true);
         }
-        self.pump();
     }
 
     /// Changes `id`'s state to `to` when `from` accepts its current one; true when it did.
@@ -420,6 +432,7 @@ impl Manager {
     }
 
     async fn run(&self, task: Task, stop: watch::Receiver<bool>) {
+        let task = self.signed_in(task).await;
         let part = task.part_path();
         let result = match prepare_folder(&task.path).await {
             Err(error) => Err(error),
@@ -429,8 +442,10 @@ impl Manager {
             }
             Ok(()) => self.fetch_and_copy(&task, &stop).await,
         };
-        // Still registered means nobody paused or cancelled it while it ran.
-        let still_running = lock(&self.inner.running).remove(&task.id).is_some();
+        // Its transfer has stopped: the download may start again (a resume that came meanwhile is waiting).
+        lock(&self.inner.running).remove(&task.id);
+        // Not signalled means nobody paused or cancelled it while it ran.
+        let still_running = !*stop.borrow();
         if self.get(task.id).is_none() {
             // Cancelled while it ran. Cancelling deleted what had arrived, but a file opened since (the `.part`
             // as the server answered, a half renamed into place) is deleted here, now that nothing writes.
@@ -467,6 +482,24 @@ impl Manager {
             Err(_) => {}
         }
         self.pump();
+    }
+
+    /// `task` as it is fetched: a source saved from a page carries the browser's cookies and user agent for its
+    /// address, as they are now. Only this copy carries them; the list of downloads never does.
+    async fn signed_in(&self, mut task: Task) -> Task {
+        let Some(session) = lock(&self.inner.session).clone() else { return task };
+        for source in std::iter::once(&mut task.source).chain(task.sound.as_mut()) {
+            if !source.session {
+                continue;
+            }
+            let (session, url) = (session.clone(), source.url.clone());
+            let headers = self.inner.runtime.spawn_blocking(move || session(&url)).await.unwrap_or_default();
+            for (name, value) in headers {
+                source.headers.retain(|have, _| !have.eq_ignore_ascii_case(&name));
+                source.headers.insert(name, value);
+            }
+        }
+        task
     }
 
     /// Fetches `source` into `part`. Its progress is counted among other files: `before` bytes already
@@ -752,6 +785,72 @@ mod tests {
         let done = wait_for(&s.manager, task.id, |st| *st == State::Completed).await;
         assert_eq!(std::fs::read(&done.path).unwrap(), content);
         assert!(server.requests().iter().any(|r| r.contains("range: bytes=")), "resumed with a range");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn resuming_straight_after_a_pause_waits_for_the_paused_transfer_to_stop() {
+        let content = body(3_000_000);
+        let server = TestServer::start(
+            content.clone(),
+            Behaviour { chunk_delay: Duration::from_millis(5), ..Behaviour::default() },
+        );
+        let s = setup(AT_ONCE);
+
+        let task = s.manager.add(new_download(&s, &server, "Clip.mp4"));
+        for _ in 0..3 {
+            let done = s.manager.get(task.id).unwrap().done;
+            wait_for(&s.manager, task.id, |_| s.manager.get(task.id).is_some_and(|t| t.done > done + 100_000)).await;
+            s.manager.pause(task.id);
+            s.manager.resume(task.id);
+        }
+        let done = wait_for(&s.manager, task.id, |st| *st == State::Completed).await;
+        assert_eq!(std::fs::read(&done.path).unwrap(), content, "one transfer at a time wrote the file");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_pages_download_carries_the_browsers_sign_in_as_it_is_now_and_never_keeps_it() {
+        let content = body(3_000_000);
+        let server = TestServer::start(
+            content.clone(),
+            Behaviour { chunk_delay: Duration::from_millis(5), ..Behaviour::default() },
+        );
+        let s = setup(AT_ONCE);
+        let asked = Arc::new(Mutex::new(Vec::new()));
+        let seen = asked.clone();
+        s.manager.set_session(Some(Arc::new(move |url: &str| {
+            let mut seen = seen.lock().unwrap();
+            seen.push(url.to_string());
+            vec![("Cookie".into(), format!("sid={}", seen.len())), ("User-Agent".into(), "Browser/1".into())]
+        })));
+
+        let mut from_page = new_download(&s, &server, "Clip.mp4");
+        from_page.source.session = true;
+        let task = s.manager.add(from_page);
+        wait_for(&s.manager, task.id, |_| s.manager.get(task.id).is_some_and(|t| t.done > 200_000)).await;
+        s.manager.pause(task.id);
+        wait_for(&s.manager, task.id, |st| *st == State::Paused).await;
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        s.manager.resume(task.id);
+        wait_for(&s.manager, task.id, |st| *st == State::Completed).await;
+
+        assert_eq!(*asked.lock().unwrap(), vec![server.url("/file"), server.url("/file")], "asked at each start");
+        let requests = server.requests();
+        assert!(
+            requests[0].contains("\ncookie: sid=1") && requests[0].contains("\nuser-agent: browser/1"),
+            "{}",
+            requests[0]
+        );
+        let resumed = requests.iter().find(|r| r.contains("range: bytes=")).expect("a resumed request");
+        assert!(resumed.contains("\ncookie: sid=2"), "the sign-in as it is when the download resumes: {resumed}");
+        let kept = std::fs::read_to_string(s.folder.path().join("data").join("downloads.json")).unwrap();
+        assert!(!kept.contains("sid=") && !kept.contains("Browser/1"), "never written down: {kept}");
+        assert!(s.manager.list().iter().all(|t| !t.source.headers.contains_key("Cookie")));
+
+        // A link's download is never given the browser's sign-in.
+        let link = s.manager.add(new_download(&s, &server, "Link.mp4"));
+        wait_for(&s.manager, link.id, |st| *st == State::Completed).await;
+        assert_eq!(asked.lock().unwrap().len(), 2);
+        assert!(!server.requests().last().unwrap().contains("cookie"));
     }
 
     #[tokio::test(flavor = "multi_thread")]

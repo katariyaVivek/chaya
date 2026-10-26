@@ -24,6 +24,7 @@ use chaya_core::adblock::{kind, Shield};
 use chaya_core::browse;
 use chaya_core::found::{self, Found, FoundKind, Report};
 use chaya_core::links;
+use chaya_core::session::{self, CookieFile, SessionCookie};
 use serde::{Deserialize, Serialize};
 use tauri::webview::{DownloadEvent, NewWindowResponse, PageLoadEvent, WebviewBuilder};
 use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Url, Webview, WebviewUrl};
@@ -85,6 +86,10 @@ struct PageInner {
     found: Vec<Found>,
     generation: u64,
 }
+
+/// The browser's user agent, sent with what a page downloads as its sign-in is.
+#[derive(Default)]
+pub struct Agent(Mutex<Option<String>>);
 
 fn page_state(app: &AppHandle) -> std::sync::MutexGuard<'_, PageInner> {
     app.state::<PageState>().inner().0.lock().unwrap_or_else(|e| e.into_inner())
@@ -205,8 +210,75 @@ pub async fn open_page(text: String, bounds: Bounds, app: AppHandle) -> Result<S
         .map_err(|_| "The page couldn't be opened.".to_string())?;
     let _ = ads::block_requests(&page, ads.blocker.clone());
     page.navigate(url).map_err(|_| "The page couldn't be opened.".to_string())?;
+    tauri::async_runtime::spawn(learn_agent(app.clone()));
     tauri::async_runtime::spawn(ads::hide_ads(app.clone(), hide_key, generation));
     Ok(address)
+}
+
+/// Reads the browser's user agent from the window's own content, once: the page's could be told anything.
+async fn learn_agent(app: AppHandle) {
+    if app.state::<Agent>().0.lock().unwrap_or_else(|e| e.into_inner()).is_some() {
+        return;
+    }
+    let Some(window) = app.get_webview("main") else { return };
+    let agent = ask(&window, "navigator.userAgent".into()).await;
+    if let Some(agent) = agent.filter(|a| (1..=512).contains(&a.len()) && session::is_header_safe(a)) {
+        *app.state::<Agent>().0.lock().unwrap_or_else(|e| e.into_inner()) = Some(agent);
+    }
+}
+
+/// The cookies the browser holds for `url`, as it would send them there. They may wait on the browser, so this is
+/// never called on the window's thread.
+fn browser_cookies(app: &AppHandle, url: &Url) -> Vec<SessionCookie> {
+    // One cookie store serves every webview of the app, so the window's own reads it when no page is open.
+    let Some(webview) = app.get_webview(PAGE).or_else(|| app.get_webview("main")) else { return Vec::new() };
+    webview
+        .cookies_for_url(url.clone())
+        .unwrap_or_default()
+        .iter()
+        .map(|c| SessionCookie {
+            name: c.name().to_string(),
+            value: c.value().to_string(),
+            // For the address's own host: these are the cookies the browser sends there, and no further.
+            domain: None,
+            path: None,
+            secure: c.secure().unwrap_or(false),
+            http_only: c.http_only().unwrap_or(false),
+            expires: c.expires_datetime().map(|t| t.unix_timestamp()),
+        })
+        .collect()
+}
+
+/// The browser's sign-in for `url`, for a download saved from a page (`Source::session`): its cookies there, and
+/// its user agent. Read each time the download starts; nothing of it is kept.
+pub fn session_headers(app: &AppHandle, url: &str) -> Vec<(String, String)> {
+    let Ok(url) = Url::parse(url) else { return Vec::new() };
+    if !matches!(url.scheme(), "http" | "https") {
+        return Vec::new();
+    }
+    let mut headers = Vec::new();
+    if let Some(cookies) = session::cookie_header(&browser_cookies(app, &url)) {
+        headers.push(("Cookie".to_string(), cookies));
+    }
+    if let Some(agent) = app.state::<Agent>().0.lock().unwrap_or_else(|e| e.into_inner()).clone() {
+        headers.push(("User-Agent".to_string(), agent));
+    }
+    headers
+}
+
+/// The browser's sign-in for a stream found on the page, in a file for yt-dlp that is deleted when the lookup ends;
+/// None when it has none there.
+async fn stream_sign_in(app: &AppHandle, url: &str) -> Option<CookieFile> {
+    let url = Url::parse(url).ok().filter(|u| matches!(u.scheme(), "http" | "https"))?;
+    let dir = app.path().app_cache_dir().ok()?.join("sign-in");
+    let app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let host = url.host_str().unwrap_or_default().to_string();
+        CookieFile::write(&dir, &browser_cookies(&app, &url), &host).ok().flatten()
+    })
+    .await
+    .ok()
+    .flatten()
 }
 
 /// A download the page started: Chaya's own when it is media (`browse::page_download`), else the browser's.
@@ -340,7 +412,8 @@ pub async fn look_up_found(url: String, app: AppHandle) -> Result<Lookup, ()> {
     };
     let lookups = app.state::<Lookups>();
     let downloads = app.state::<Downloads>();
-    Ok(match lookups.stream_media(item.url.clone(), item.referer.clone()).await {
+    let sign_in = stream_sign_in(&app, &item.url).await;
+    Ok(match lookups.stream_media(item.url.clone(), item.referer.clone(), sign_in).await {
         Ok(media) => Lookup::from_media(&named(media, &item), |f| downloads.can_join(f), downloads.joins),
         Err(failure) => Lookup::from_failure(&failure),
     })
@@ -353,10 +426,19 @@ pub async fn download_found(url: String, choice: String, app: AppHandle) -> Resu
     let page_url = app.get_webview(PAGE).and_then(|p| p.url().ok()).map(|u| u.to_string()).unwrap_or_default();
     let lookups = app.state::<Lookups>();
     let downloads = app.state::<Downloads>();
-    let media = lookups.stream_media(item.url.clone(), item.referer.clone()).await.map_err(|f| f.kind.message())?;
-    let plans =
+    let sign_in = stream_sign_in(&app, &item.url).await;
+    let media =
+        lookups.stream_media(item.url.clone(), item.referer.clone(), sign_in).await.map_err(|f| f.kind.message())?;
+    let mut plans =
         plan(&named(media, &item), &choice, &page_url, &downloads.folder, |f| downloads.can_join(f), downloads.joins)
             .ok_or("This choice can't be saved any more. Look it up again.")?;
+    // The stream is fetched as the page's player fetched it: with the browser's sign-in for its server.
+    for new in &mut plans {
+        new.source.session = true;
+        if let Some(sound) = &mut new.sound {
+            sound.session = true;
+        }
+    }
     Ok(plans.into_iter().map(|p| crate::TaskView::from(&downloads.manager.add(p))).collect())
 }
 

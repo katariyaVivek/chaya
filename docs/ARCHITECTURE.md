@@ -301,7 +301,10 @@ a built-in browser. [`../desktop/README.md`](../desktop/README.md) has the layou
   `.part` file with `Range` resume and the site's headers (reqwest, with Windows' own TLS); `manager`
   owns every task, `Queued → Downloading ⇄ Paused → Completed | Failed`, three at once, kept in
   `downloads.json`; `error` sorts failures as `DownloadError` does. Retry looks the link up again for
-  a fresh address. Both are tested against a local test server (`download/testserver.rs`).
+  a fresh address. Both are tested against a local test server (`download/testserver.rs`). What is saved
+  from a page carries the browser's sign-in as the phone's `sessionHeaders` does: a `session` source gets
+  the cookies the WebView2 store holds for its address (and the browser's user agent) at each start,
+  never stored; `chaya-core`'s `session` also writes them as a cookie file for yt-dlp's stream lookups.
 - **Joining** (`download/join.rs`) runs the ffmpeg in the engine folder, built by
   `desktop/engine/build_ffmpeg.sh` with no encoders (copying only), where the phone uses `MediaMuxer` for
   H.264 only. **Pieces** (`download/pieces.rs`) port the phone's 10 MB, three-at-a-time fetching of

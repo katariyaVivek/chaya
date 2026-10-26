@@ -15,6 +15,7 @@ use chaya_core::engine::{AnswerCache, Engine};
 use chaya_core::links::{self, Link};
 use chaya_core::lookup::Lookup;
 use chaya_core::media::{Failure, FailureKind, Format, Media};
+use chaya_core::session::CookieFile;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_opener::OpenerExt;
@@ -39,9 +40,16 @@ impl Lookups {
     }
 
     /// What the engine found at the address of a stream found on the page at `referer`, kept as `url`'s answer.
-    async fn stream_media(&self, url: String, referer: String) -> Result<Media, Failure> {
+    /// With `cookies`, the browser's sign-in for the stream (`session::CookieFile`), kept until this returns.
+    async fn stream_media(&self, url: String, referer: String, cookies: Option<CookieFile>) -> Result<Media, Failure> {
         let key = url.clone();
-        self.answer(key, false, move |engine| engine.look_up_stream(&url, &referer)).await
+        self.answer(key, false, move |engine| {
+            let media = engine.look_up_stream(&url, &referer, cookies.as_ref().map(CookieFile::path));
+            // The file is deleted here, as soon as the lookup ends, whether it worked or not.
+            drop(cookies);
+            media
+        })
+        .await
     }
 
     async fn answer(
@@ -234,6 +242,9 @@ pub fn run() {
                     let _ = handle.emit("download", DownloadEvent::from(event));
                 }),
             );
+            // What a page downloads is fetched with the browser's sign-in, read from its cookie store at each start.
+            let browser = app.handle().clone();
+            manager.set_session(Some(Arc::new(move |url: &str| browser::session_headers(&browser, url))));
             let joiner = Joiner::find(&engine_dir);
             let joins = joiner.is_some();
             manager.set_joiner(joiner);
@@ -242,6 +253,7 @@ pub fn run() {
                 app.path().download_dir().or_else(|_| app.path().home_dir().map(|home| home.join("Downloads")))?;
             app.manage(Downloads { manager, folder, joins });
             app.manage(browser::PageState::default());
+            app.manage(browser::Agent::default());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

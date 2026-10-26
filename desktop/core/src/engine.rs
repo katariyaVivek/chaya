@@ -54,18 +54,22 @@ impl Engine {
 
     /// Looks `url` up: its title, poster, and the formats it can be saved in, or why not.
     pub fn look_up(&self, url: &str) -> Result<Media, Failure> {
-        self.extract(url, None)
+        self.extract(url, None, None)
     }
 
     /// Looks up a stream's own address, found on the page at `referer` (an HLS playlist, a DASH manifest), for its
-    /// qualities; its server may answer only the page's player, so the page goes with the request.
-    pub fn look_up_stream(&self, url: &str, referer: &str) -> Result<Media, Failure> {
-        self.extract(url, Some(referer))
+    /// qualities; its server may answer only the page's player, so the page goes with the request, and with
+    /// `cookies` (the browser's for the stream, `session::CookieFile`) when it has any.
+    pub fn look_up_stream(&self, url: &str, referer: &str, cookies: Option<&Path>) -> Result<Media, Failure> {
+        self.extract(url, Some(referer), cookies)
     }
 
-    fn extract(&self, url: &str, referer: Option<&str>) -> Result<Media, Failure> {
+    fn extract(&self, url: &str, referer: Option<&str>, cookies: Option<&Path>) -> Result<Media, Failure> {
         let mut args: Vec<OsString> =
             vec!["extract".into(), url.into(), "--cache".into(), self.cache_dir.clone().into()];
+        if let Some(cookies) = cookies {
+            args.extend(["--cookies".into(), cookies.into()]);
+        }
         if let Some(referer) = referer {
             args.extend(["--referer".into(), referer.into()]);
         }
@@ -259,13 +263,18 @@ print(json.dumps({"media": {"title": " ".join(sys.argv[1:]), "formats": []}}))
         ) else {
             return;
         };
-        let media = engine.look_up_stream("https://cdn.example/v/out.mpd", "https://example.com/watch").unwrap();
+        let media = engine.look_up_stream("https://cdn.example/v/out.mpd", "https://example.com/watch", None).unwrap();
         assert!(
             media.title.starts_with("extract https://cdn.example/v/out.mpd --cache ")
                 && media.title.contains(" --referer https://example.com/watch --fragments"),
             "{}",
             media.title
         );
+        assert!(!media.title.contains("--cookies"), "no sign-in unless the browser has one for the stream");
+
+        let cookies = Path::new("sign-in.txt");
+        let media = engine.look_up_stream("https://cdn.example/v/out.mpd", "https://example.com/watch", Some(cookies));
+        assert!(media.unwrap().title.contains(" --cookies sign-in.txt --referer "));
     }
 
     #[test]

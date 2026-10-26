@@ -97,7 +97,8 @@ pub fn page_download(url: &str, page_url: &str, page_title: &str, folder: &Path,
         .to_string(),
         kind,
         folder: folder.to_path_buf(),
-        source: Source { url: url.to_string(), headers, stream, ..Source::default() },
+        // What the page downloads is fetched as the browser would: with its sign-in for the file's address.
+        source: Source { url: url.to_string(), headers, stream, session: true, ..Source::default() },
         sound: None,
         thumbnail: (kind == Kind::Picture).then(|| url.to_string()),
         group: None,
@@ -148,6 +149,8 @@ pub fn found_download(found: &Found, page_url: &str, folder: &Path, streams: boo
             url: found.url.clone(),
             headers,
             stream: found.kind == FoundKind::Stream,
+            // What the page showed is fetched as the browser fetched it: with its sign-in for the file's address.
+            session: true,
             ..Source::default()
         },
         sound: None,
@@ -250,6 +253,7 @@ mod tests {
         .unwrap();
         assert_eq!(d.file_name, "Lecture 4.mp4");
         assert!(d.source.stream);
+        assert!(d.source.session, "a page's download is fetched with the browser's sign-in");
         assert!(page_download("https://cdn.example/v/master.m3u8", "https://example.com/", "T", Path::new("D"), false)
             .is_none());
     }
@@ -286,6 +290,7 @@ mod tests {
         assert_eq!(d.source.headers.get("Referer").map(String::as_str), Some("https://player.example/embed/7"));
         assert_eq!(d.page_url, "https://films.example.com/monsoon");
         assert!(!d.source.stream);
+        assert!(d.source.session, "what a page showed is fetched with the browser's sign-in");
 
         let unnamed = found("https://cdn.example/play?id=7", FoundKind::Audio, "Rain Song");
         assert_eq!(found_download(&unnamed, "u", Path::new("D"), false).unwrap().file_name, "Rain Song.m4a");
