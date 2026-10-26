@@ -174,7 +174,7 @@ enum DownloadEvent {
 impl From<Event> for DownloadEvent {
     fn from(event: Event) -> DownloadEvent {
         match event {
-            Event::Changed(task) => DownloadEvent::Changed { task: TaskView::from(&task) },
+            Event::Changed(task) => DownloadEvent::Changed { task: TaskView::from(&*task) },
             Event::Progress { id, done, total, bytes_per_second } => {
                 DownloadEvent::Progress { id, done, total, bytes_per_second }
             }

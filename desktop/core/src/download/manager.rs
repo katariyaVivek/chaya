@@ -138,8 +138,14 @@ pub struct NewDownload {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Event {
-    Changed(Task),
-    Progress { id: u64, done: u64, total: Option<u64>, bytes_per_second: u64 },
+    /// Boxed: a task is large next to the other events, which come many times a second.
+    Changed(Box<Task>),
+    Progress {
+        id: u64,
+        done: u64,
+        total: Option<u64>,
+        bytes_per_second: u64,
+    },
     Removed(u64),
 }
 
@@ -404,7 +410,7 @@ impl Manager {
     fn changed(&self, id: u64) {
         self.save();
         if let Some(task) = self.get(id) {
-            (self.inner.listener)(Event::Changed(task));
+            (self.inner.listener)(Event::Changed(Box::new(task)));
         }
     }
 
