@@ -1,6 +1,6 @@
 [package]
 name = "chaya-core"
-description = "What Chaya for Windows does, without its window: recognising links, and soon looking them up and downloading."
+description = "What Chaya for Windows does, without its window: recognising and looking up links, and soon downloading."
 version.workspace = true
 edition.workspace = true
 publish = false
@@ -8,7 +8,9 @@ rust-version.workspace = true
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 url = "2"
 
+
 [dev-dependencies]
-serde_json = "1"
+tempfile = "3"

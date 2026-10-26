@@ -107,6 +107,37 @@ body {
 }
 .card__note { margin: var(--space-1) 0 0; color: var(--muted); }
 
+/* A looked-up video: its poster, then what it is and what it can be saved as */
+.card--media { grid-template-columns: 160px minmax(0, 1fr); }
+.poster {
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-md);
+  background: var(--wash-strong);
+}
+.poster img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.poster img:not([src]) { visibility: hidden; }
+.card__meta { margin: 0; color: var(--muted); font-size: var(--text-sm); line-height: var(--leading-sm); }
+.card__meta:empty { display: none; }
+.card__state { display: grid; gap: var(--space-1); justify-items: start; margin-top: var(--space-1); }
+
+.choices { display: grid; gap: var(--space-half); width: 100%; margin: 0; padding: 0; list-style: none; }
+.choice {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--wash);
+}
+.choice__label { font-weight: 600; }
+.choice__detail { color: var(--muted); font-size: var(--text-sm); }
+
+@media (max-width: 640px) {
+  .card--media { grid-template-columns: minmax(0, 1fr); }
+}
+
 .downloads { display: grid; gap: var(--space-2); margin-top: var(--space-3); }
 
 .empty {

@@ -60,6 +60,8 @@ platform 36, Gradle 8.14.3 and Python 3.13 (Chaquopy). Versions are in `gradle/l
   of Android imports so this stays possible.
 - **Chaya for Windows** (`desktop/`) is Tauri 2. Code that does not need the window goes in
   `desktop/core`, plain Rust, tested with `cargo test`. Its UI follows `desktop/design`.
+- **`chaya_engine` is shared.** The phone runs it through Chaquopy; Windows runs it as a program
+  (`chaya_engine/cli.py`, `desktop/engine/`). A change to it must keep both working.
 - **pytest rewrites tracked `.pyc` files** under `__pycache__/`; run
   `git checkout -- '*__pycache__*'` before committing.
 

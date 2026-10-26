@@ -27,8 +27,12 @@ _INFO_FIELDS = (
 )
 
 
-def extract(url, cache_dir, cookie_file=None):
-    """Returns a JSON string describing [url]: its title, poster, and the formats it can be saved in."""
+def extract(url, cache_dir, cookie_file=None, js_runtime=None):
+    """Returns a JSON string describing [url]: its title, poster, and the formats it can be saved in.
+
+    [js_runtime] is the path of a QuickJS program for YouTube's challenges. Chaya for Windows ships one; the
+    phone has none and solves them through `jsc_provider` instead.
+    """
     options = {
         'quiet': True,
         'no_warnings': True,
@@ -42,6 +46,8 @@ def extract(url, cache_dir, cookie_file=None):
     }
     if cookie_file:
         options['cookiefile'] = cookie_file
+    if js_runtime:
+        options['js_runtimes'] = {'quickjs': {'path': js_runtime}}
     instagram = _KeepingInstagramIE() if _is_instagram(url) else None
 
     try:
