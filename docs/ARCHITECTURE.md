@@ -286,7 +286,8 @@ Share. Reached from the Downloads screen's menu.
 ## Chaya for Windows (`desktop/`)
 
 A Tauri 2 app, early: the window, its themes, recognising links, looking them up, and downloading:
-plain files, qualities whose picture and sound are joined by a cut-down ffmpeg, and HLS and DASH streams. [`../desktop/README.md`](../desktop/README.md) has the layout.
+plain files, qualities whose picture and sound are joined by a cut-down ffmpeg, HLS and DASH streams, and
+a built-in browser. [`../desktop/README.md`](../desktop/README.md) has the layout.
 
 - `desktop/core` (`chaya-core`) is plain Rust with no window in it, the desktop's equivalent of the
   phone's Android-free Kotlin. `links` recognises links with the phone's rules and test table.
@@ -314,6 +315,12 @@ plain files, qualities whose picture and sound are joined by a cut-down ffmpeg, 
   the pieces written so a resume asks only for the rest. ffmpeg then copies that file into an MP4, so it
   needs no network of its own. `formats` offers a stream when no file reaches its quality, and pairs a
   picture-only stream with sound as it pairs files.
+- **The built-in browser** (`desktop/app/src-tauri/src/browser.rs`, rules in `chaya-core`'s `browse`)
+  shows one page in a webview of its own over the window, where the window leaves room for it. Where
+  the phone gives the page's detector a capability per navigation, the desktop gives a page nothing:
+  the app's commands are granted to the window's own webview only (`webviews: ["main"]`), and a page is
+  never local. Pages go only to http(s); windows they open are held back; a media file a page downloads
+  goes to Chaya's list. Finding a page's media (the phone's `detection/`) is next.
 - `desktop/app/src-tauri` hands `chaya-core` to the window as commands (`recognise_link`, `look_up`,
   `download` and the download controls) and sends it `download` events. The window
   may call only those and set its title bar's theme (`capabilities/default.json`). Its content

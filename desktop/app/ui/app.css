@@ -180,3 +180,89 @@ body {
   background: var(--wash);
 }
 .empty__icon svg { width: 20px; height: 20px; }
+
+/* ── Browsing: the page in its own webview, where .page leaves room for it ───────────────── */
+
+/* The window gives the page its whole width, and keeps the bar and the page on one screen */
+body.browsing .main {
+  display: flex;
+  flex-direction: column;
+  max-width: none;
+  padding: 0 var(--space-3) var(--space-3);
+  overflow: hidden;
+}
+body.browsing .main > * { flex: none; }
+body.browsing .downloads { margin-top: 0; overflow-y: auto; }
+body.browsing:not(.showing-downloads) .downloads { display: none; }
+body.browsing.showing-downloads .page-frame { display: none; }
+
+body.browsing .urlbar { display: flex; align-items: center; gap: var(--space-1); }
+body.browsing .urlbar__field { flex: 1; min-width: 0; }
+body.browsing .urlbar__icon { display: none; }
+.page-nav { display: flex; gap: var(--space-half); }
+
+.page-downloads { position: relative; }
+.page-downloads[aria-pressed="true"] { background: var(--wash-strong); color: var(--text); }
+.page-downloads__count {
+  position: absolute;
+  top: 2px;
+  right: 0;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  border: 1px solid var(--accent-edge);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 11px;
+  line-height: 14px;
+}
+
+.page-frame {
+  display: flex;
+  flex: 1 !important;
+  flex-direction: column;
+  gap: var(--space-half);
+  min-height: 0;
+}
+/* The page's webview covers .page exactly; until it does, the glass shows */
+.page { flex: 1; min-height: 0; border-radius: var(--radius-md); }
+
+/* While the page loads: a thin light runs along the top of it */
+.page-load {
+  height: 2px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, transparent 0%, transparent 35%, var(--accent) 50%, transparent 65%, transparent 100%);
+  background-size: 300% 100%;
+  opacity: 0;
+  transition: opacity var(--dur-exit) var(--ease-out);
+}
+.page-load[data-loading] {
+  opacity: 1;
+  animation: var(--anim-shimmer) var(--shimmer-period) linear infinite;
+  transition-duration: var(--dur-enter);
+}
+
+/* What the page did that the person should know: a window held back, a download taken over */
+.notice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+  animation: var(--anim-enter) var(--dur-enter) var(--ease-out) both;
+}
+.notice__text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.notice__action {
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: 600 var(--text-sm) / var(--leading-sm) var(--font-ui);
+  cursor: pointer;
+}
+.notice__action:hover { text-decoration: underline; text-underline-offset: 3px; }
