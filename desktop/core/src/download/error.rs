@@ -16,6 +16,8 @@ pub enum DownloadError {
     CantWrite,
     /// The server said the file was complete before it was.
     Incomplete,
+    /// Picture and sound arrived, but could not be put together into one file.
+    CouldNotJoin,
 }
 
 impl DownloadError {
@@ -32,6 +34,7 @@ impl DownloadError {
             DownloadError::StorageFull => "There isn't enough space on the disk.".into(),
             DownloadError::CantWrite => "Chaya couldn't write the file to its folder.".into(),
             DownloadError::Incomplete => "The download ended before the whole file arrived.".into(),
+            DownloadError::CouldNotJoin => "Chaya couldn't join the picture and sound into one file.".into(),
         }
     }
 
@@ -95,6 +98,7 @@ mod tests {
             DownloadError::StorageFull,
             DownloadError::CantWrite,
             DownloadError::Incomplete,
+            DownloadError::CouldNotJoin,
         ] {
             let message = error.message();
             assert!(message.ends_with('.') && !message.contains('—'), "{error:?}: {message}");

@@ -2,8 +2,10 @@
 
 pub mod error;
 pub mod http;
+pub mod join;
 pub mod manager;
 pub mod names;
+pub mod pieces;
 pub mod plan;
 
 #[cfg(test)]

@@ -180,7 +180,7 @@ function showFound(card, link, found) {
     }
     parts.push(list);
     if (found.moreLater) {
-      parts.push(paragraph('Higher qualities, where picture and sound come apart, are coming to Chaya for Windows.', 'card__note'));
+      parts.push(paragraph("Some of this video's qualities come as streams, which Chaya for Windows can't save yet.", 'card__note'));
     }
   }
   state.replaceChildren(...parts);
@@ -255,7 +255,8 @@ function downloadButton(url, choice, label, state) {
         try {
           const started = await tauri.core.invoke('download', { url, choice });
           entry.ids = started.map((t) => t.id);
-          started.forEach(taskChanged);
+          // Events about these downloads may have come before this answer, and are newer than it.
+          started.filter((t) => !tasks.has(t.id)).forEach(taskChanged);
           follow(entry);
         } catch (message) {
           entry.button.send('fail');
@@ -392,7 +393,11 @@ function metaOf(task) {
     case 'queued':
       return 'Waiting for another download to finish';
     case 'downloading': {
+      if (task.step === 'joining') return 'Joining picture and sound';
       const parts = [sizes];
+      // A quality whose picture and sound come apart: which of the two is on its way.
+      if (task.step === 'picture') parts.unshift('Picture');
+      if (task.step === 'sound') parts.unshift('Sound');
       if (task.speed > 0) {
         parts.push(`${fileSize(task.speed)}/s`);
         if (task.total) parts.push(`${timeLeft((task.total - task.done) / task.speed)} left`);

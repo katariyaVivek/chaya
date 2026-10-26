@@ -31,6 +31,7 @@ pub fn plan(
         file_name,
         folder: folder.to_path_buf(),
         source,
+        sound: None,
         thumbnail: media.thumbnail_url.clone(),
         group: None,
     };
@@ -44,7 +45,7 @@ pub fn plan(
             let n = (i + 1).to_string();
             let (kind, word) = if item.is_video { (Kind::Video, "Video") } else { (Kind::Picture, "Picture") };
             let name = names::file_name(&media.title, several.then_some(n.as_str()), &item.ext);
-            let source = Source { url: item.url.clone(), headers: item.headers.clone() };
+            let source = Source { url: item.url.clone(), headers: item.headers.clone(), expected_size: None };
             NewDownload {
                 thumbnail: if item.is_video { media.thumbnail_url.clone() } else { Some(item.url.clone()) },
                 group: Some(page_url.to_string()),
@@ -55,8 +56,7 @@ pub fn plan(
     }
 
     let found = formats::choices(media, can_join).into_iter().find(|c| c.label == choice)?;
-    // Joining picture and sound comes with the next part of downloads.
-    if !can_save(&found) || found.needs_merge() {
+    if !can_save(&found) {
         return None;
     }
     let ext = found.file.ext.clone().unwrap_or_else(|| if found.is_audio_only { "m4a".into() } else { "mp4".into() });
@@ -65,9 +65,13 @@ pub fn plan(
         (false, Some(_)) => (Kind::Video, Some(found.label.as_str())),
         (false, None) => (Kind::Video, None),
     };
+    // Picture and sound joined are always an MP4: only MP4 pictures and M4A sound are paired (formats).
+    let ext = if found.needs_merge() { "mp4".to_string() } else { ext };
     let name = names::file_name(&media.title, label, &ext);
-    let source = Source { url: found.file.url.clone(), headers: found.file.headers.clone() };
-    Some(vec![base(found.label.clone(), kind, name, source)])
+    let source_of = |f: &Format| Source { url: f.url.clone(), headers: f.headers.clone(), expected_size: f.size_bytes };
+    let mut download = base(found.label.clone(), kind, name, source_of(&found.file));
+    download.sound = found.audio_to_merge.as_ref().map(source_of);
+    Some(vec![download])
 }
 
 #[cfg(test)]
@@ -121,9 +125,22 @@ mod tests {
     #[test]
     fn a_choice_that_is_not_offered_or_needs_joining_plans_nothing() {
         assert!(plan(&zoo(), "1080p", "u", Path::new("D"), NEVER).is_none());
-        // With joining allowed the 240p choice exists, but joining is not here yet.
-        assert!(plan(&zoo(), "240p", "u", Path::new("D"), |_| true).is_none());
+        // Without joining, the 240p that needs it is not offered.
+        assert!(plan(&zoo(), "240p", "u", Path::new("D"), NEVER).is_none());
         assert!(plan(&zoo(), WHOLE_POST, "u", Path::new("D"), NEVER).is_none());
+    }
+
+    #[test]
+    fn a_quality_whose_picture_and_sound_come_apart_fetches_both_for_joining() {
+        let plans = plan(&zoo(), "240p", "https://youtu.be/jNQXAC9IVRw", Path::new("D"), |_| true).unwrap();
+        let p = &plans[0];
+        assert_eq!(p.file_name, "Me at the zoo (240p).mp4");
+        assert_eq!(p.kind, Kind::Video);
+        assert!(p.source.url.ends_with("/133"), "the H.264 picture: {}", p.source.url);
+        let sound = p.sound.as_ref().expect("the sound to join");
+        assert!(sound.url.ends_with("/140"));
+        assert_eq!(sound.expected_size, Some(309_288));
+        assert!(p.source.expected_size.is_some(), "sizes known, so progress counts both");
     }
 
     #[test]

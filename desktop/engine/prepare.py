@@ -8,6 +8,8 @@ The result is desktop/app/src-tauri/engine/, which the installer carries (tauri.
     engine/python/      Python's Windows embeddable package (not with --host)
     engine/packages/    the engine packages at the versions the phone app pins, and chaya_engine itself
     engine/qjs.exe      QuickJS-ng, which yt-dlp runs YouTube's challenge scripts in (not with --host)
+    engine/ffmpeg.exe   the cut-down ffmpeg that joins picture and sound, when given with --ffmpeg
+                        (build_ffmpeg.sh makes it; without it, qualities that need joining are not offered)
     engine/run.py       what the app starts: `python -I run.py extract URL --cache DIR ...`
     engine/engine.json  what is in it, read by the app and shown in diagnostics
 
@@ -55,6 +57,8 @@ def main(argv=None):
     parser.add_argument('--out', type=Path, default=OUT)
     parser.add_argument('--python-zip', type=Path, help='a downloaded copy of the embeddable package')
     parser.add_argument('--qjs', type=Path, help='a downloaded copy of qjs-windows-x86_64.exe')
+    parser.add_argument('--ffmpeg', type=Path,
+                        help='the ffmpeg build_ffmpeg.sh made, with its ffmpeg-LICENSE.txt beside it')
     args = parser.parse_args(argv)
 
     out = args.out
@@ -62,16 +66,20 @@ def main(argv=None):
         shutil.rmtree(out)
     out.mkdir(parents=True)
 
-    manifest = {'packages': {}, 'python': None, 'quickjs': None}
+    manifest = {'packages': {}, 'python': None, 'quickjs': None, 'ffmpeg': None}
     if not args.host:
         unpack_python(args.python_zip or download(PYTHON), out / 'python')
         manifest['python'] = PYTHON['version']
         place_quickjs(args.qjs or download(QUICKJS), out / 'qjs.exe')
         manifest['quickjs'] = QUICKJS['version']
+    if args.ffmpeg:
+        manifest['ffmpeg'] = place_ffmpeg(args.ffmpeg, out)
+    else:
+        print('No --ffmpeg: qualities whose picture and sound need joining will not be offered.')
     manifest['packages'] = install_packages(out / 'packages', for_windows=not args.host)
     copy_engine(out / 'packages' / 'chaya_engine')
     shutil.copy2(HERE / 'run.py', out / 'run.py')
-    shutil.copytree(HERE / 'licenses', out / 'licenses')
+    shutil.copytree(HERE / 'licenses', out / 'licenses', dirs_exist_ok=True)
     if not args.host and sys.platform == 'win32':
         # Compiled once here, so the engine does not compile yt-dlp again at every lookup.
         python = out / 'python' / 'python.exe'
@@ -117,6 +125,18 @@ def unpack_python(archive, target):
 def place_quickjs(program, target):
     check_sha256(program, QUICKJS['sha256'])
     shutil.copy2(program, target)
+
+
+def place_ffmpeg(program, out):
+    """Copies the ffmpeg build_ffmpeg.sh made, and its licence, into the engine; returns the FFmpeg version."""
+    licence = program.with_name('ffmpeg-LICENSE.txt')
+    if not program.is_file() or not licence.is_file():
+        raise SystemExit(f'{program} or its ffmpeg-LICENSE.txt is missing. Make them with build_ffmpeg.sh.')
+    shutil.copy2(program, out / program.name)
+    (out / 'licenses').mkdir(exist_ok=True)
+    shutil.copy2(licence, out / 'licenses' / 'ffmpeg.txt')
+    found = re.search(r'FFmpeg (\S+), built from', licence.read_text(encoding='utf-8'))
+    return found.group(1) if found else 'unknown'
 
 
 def install_packages(target, for_windows):

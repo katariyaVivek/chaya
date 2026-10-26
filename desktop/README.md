@@ -9,16 +9,18 @@ choice), and tells what a pasted link is: a video or post on YouTube, Instagram,
 account, another page, or words. A video or post is looked up with yt-dlp, as on the phone, and the
 window shows its title, poster and the qualities it can be saved in (or what a post holds, or why it
 can't be). Each choice downloads into the Downloads folder, with pause, resume, cancel and retry, and
-the Downloads list keeps track across restarts. Qualities that arrive as separate picture and sound
-(most of YouTube's), and streams, come next ([`../docs/ROADMAP.md`](../docs/ROADMAP.md)).
+the Downloads list keeps track across restarts. Qualities whose picture and sound come apart (most of
+YouTube's) are fetched as two files and joined into one MP4 by a cut-down ffmpeg the app carries, and
+YouTube's files come in pieces, three at a time. Streams (HLS, DASH) come next
+([`../docs/ROADMAP.md`](../docs/ROADMAP.md)).
 
 ## Layout
 
 | Path | What it is |
 |---|---|
 | `design/` | The design system: tokens, fonts, components, motion. Plain CSS and an ES module |
-| `core/` | `chaya-core`, plain Rust with no window or web view in it, so it builds and tests anywhere. `links` recognises links (the phone's `PlatformMatcher` and `ProfileMatcher`); `engine` runs the engine; `media` reads its answer (`PlatformMedia`); `formats` picks one choice per quality (`FormatSelector`); `lookup` is what the window is sent. Each is ported with the phone's tests. `download` saves files: `http` fetches one with resume (`HttpDownloader`), `manager` keeps every download and its state (`DownloadManager`), `plan` turns a choice into downloads, `names` makes Windows-safe names, `error` explains failures (`DownloadError`) |
-| `engine/` | `prepare.py` puts together the engine the installer carries, in `app/src-tauri/engine/` (not in git); `run.py` starts it |
+| `core/` | `chaya-core`, plain Rust with no window or web view in it, so it builds and tests anywhere. `links` recognises links (the phone's `PlatformMatcher` and `ProfileMatcher`); `engine` runs the engine; `media` reads its answer (`PlatformMedia`); `formats` picks one choice per quality (`FormatSelector`); `lookup` is what the window is sent. Each is ported with the phone's tests. `download` saves files: `http` fetches one with resume (`HttpDownloader`), `manager` keeps every download and its state (`DownloadManager`), `plan` turns a choice into downloads, `names` makes Windows-safe names, `error` explains failures (`DownloadError`), `join` joins picture and sound with ffmpeg, `pieces` fetches YouTube's files in pieces (`PieceLog`) |
+| `engine/` | `prepare.py` puts together the engine the installer carries, in `app/src-tauri/engine/` (not in git); `run.py` starts it; `build_ffmpeg.sh` builds the cut-down ffmpeg |
 | `app/ui/` | The window: `index.html`, `app.css`, `main.js` |
 | `app/scripts/assemble-ui.mjs` | Puts `ui/` and the design system together in `app/dist/`, which Tauri serves. Runs before every dev run and build |
 | `app/src-tauri/` | The Tauri app: window settings (`tauri.conf.json`), what the window may call (`capabilities/`), and the commands that hand `chaya-core` to the window (`src/lib.rs`) |
@@ -39,8 +41,13 @@ Put the engine together once, and again when `app/src/main/python` or the pins i
 `app/build.gradle.kts` change:
 
 ```sh
-python desktop/engine/prepare.py
+python desktop/engine/prepare.py --ffmpeg path/to/ffmpeg.exe
 ```
+
+`ffmpeg.exe` is the cut-down build that joins picture and sound. `desktop/engine/build_ffmpeg.sh windows
+OUT_DIR` makes it on Linux or in WSL (it cross-compiles with mingw-w64); or take it from the `ffmpeg`
+artifact of any `desktop.yml` run. Without `--ffmpeg` the app works, but offers no quality that needs
+joining.
 
 Then, in `desktop/app`:
 
@@ -68,6 +75,9 @@ Python inside the app, so the installer carries one:
   challenge scripts in it, where the phone uses its embedded QuickJS through `jsc_provider`.
 - `engine/run.py`: what the app starts, `python -I run.py extract URL --cache DIR --js-runtime qjs.exe`
   (`chaya_engine/cli.py`). It prints one line of JSON, the same answer the phone reads.
+- `engine/ffmpeg.exe`: FFmpeg 8.1.3, built by `build_ffmpeg.sh` from the release's commit with
+  everything left out but copying MP4, M4A and WebM tracks into one file: no codecs, no network, no
+  outside libraries. About 2 MB, under the LGPL; its licence and source are in `engine/licenses/`.
 
 `chaya-core`'s `engine` starts it with no console window, one lookup at a time, stops it after two
 minutes, and keeps answers for twenty minutes. Only links `links` recognises as a video or post are ever
@@ -88,8 +98,18 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
   change of state; downloads running when the app closed come back paused.
 - **Retry** looks the link up again first, because the sites' addresses expire, and carries on from
   what arrived. Cancel deletes what arrived; removing a finished download from the list keeps the file.
-- Only what the app can save is offered: plain files. A quality that needs its picture and sound
-  joined, or a stream, is left out and the card says better qualities are coming.
+- **Picture and sound apart** (most of YouTube's qualities): the picture is fetched into
+  "name.picture", then the sound into "name.sound", then ffmpeg copies both into one MP4 (nothing is
+  re-encoded, so it takes seconds and loses nothing) with its index at the front, and the halves are
+  deleted. What is left to do is worked out from which halves exist, so pause, a closed app and Retry
+  carry on from the right step. The row says which half is on its way, then "Joining picture and
+  sound". Any MP4 picture joins: H.264, and the AV1 and HEVC of YouTube's higher qualities.
+- **YouTube's files** (`googlevideo.com`) come in 10 MB pieces, three at a time, each written at its
+  place, as on the phone: one request goes at about the speed of playback. "name.part.pieces" lists
+  the whole pieces, so a resume asks only for the rest. A server that answers a piece with anything but
+  that piece, or a file of another length than yt-dlp said, gets the rest the ordinary way.
+- Streams (HLS, DASH) are not offered yet; the card says better qualities are coming when a link has
+  them.
 
 ## Tests
 
@@ -101,14 +121,17 @@ cd desktop/design && npm test            # the design system
 ```
 
 `CHAYA_ENGINE_DIR=<an engine folder> cargo test` also runs the prepared engine for real
-(`core/tests/bundled_engine.rs`), without the network; CI does this on Windows.
+(`core/tests/bundled_engine.rs`), without the network; CI does this on Windows, where the engine's ffmpeg
+joins the test tracks in `core/tests/fixtures`. The joining tests use `CHAYA_FFMPEG`, or an `ffmpeg` on
+the PATH, and say they were skipped when there is none.
 
 On Linux, building `app/src-tauri` needs WebKitGTK (`libwebkit2gtk-4.1-dev`), the same as Tauri
 there. `core` needs nothing beyond Rust.
 
-CI: `desktop.yml` tests `core` and the packaging on Linux; on Windows it puts the engine together,
-checks it, lints, tests and builds the installer, and keeps it as the run's `chaya-windows-installer`
-artifact. `desktop-design.yml` runs the design system's tests.
+CI: `desktop.yml` builds the cut-down ffmpeg for Windows and Linux (once per version of
+`build_ffmpeg.sh`, kept in the Actions cache); tests `core` and the packaging on Linux with it; and on
+Windows puts the engine together, checks it, lints, tests and builds the installer, kept as the run's
+`chaya-windows-installer` artifact. `desktop-design.yml` runs the design system's tests.
 
 ## Privacy
 
