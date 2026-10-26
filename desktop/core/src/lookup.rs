@@ -24,7 +24,8 @@ pub struct Found {
     pub choices: Vec<ChoiceView>,
     /// For a post of pictures (and maybe videos), what is in it; each is saved as it is.
     pub post: Option<PostView>,
-    /// Whether better qualities exist that the app cannot save yet (picture and sound apart, or a stream).
+    /// Whether better qualities exist that the app cannot save yet (picture and sound apart, or a stream it
+    /// cannot save).
     #[serde(rename = "moreLater")]
     pub more_later: bool,
 }
@@ -52,8 +53,9 @@ impl Lookup {
         Lookup::failed(failure.kind)
     }
 
-    /// `can_join` as for `formats::choices`: which picture-only tracks the app can join to sound.
-    pub fn from_media(media: &Media, can_join: impl Fn(&crate::media::Format) -> bool) -> Lookup {
+    /// `can_join` as for `formats::choices`: which picture-only tracks the app can join to sound. `streams`:
+    /// whether it can save HLS streams.
+    pub fn from_media(media: &Media, can_join: impl Fn(&crate::media::Format) -> bool, streams: bool) -> Lookup {
         if media.is_live {
             return Lookup::failed(FailureKind::Live);
         }
@@ -64,9 +66,13 @@ impl Lookup {
         let (choices, more_later) = if post.is_some() {
             (Vec::new(), false)
         } else {
-            let offered: Vec<ChoiceView> =
-                formats::choices(media, can_join).iter().filter(|c| can_save(c)).map(ChoiceView::from).collect();
-            // Every choice there is, if the app could join and stream: anything beyond what is offered comes later.
+            let offered: Vec<ChoiceView> = formats::choices(media, can_join)
+                .iter()
+                .filter(|c| can_save(c, streams))
+                .map(ChoiceView::from)
+                .collect();
+            // Every choice there is, if the app could join and save every stream: anything beyond what is offered
+            // comes later.
             let more = formats::choices(media, |_| true)
                 .iter()
                 .filter(|c| !c.is_audio_only)
@@ -88,10 +94,11 @@ impl Lookup {
     }
 }
 
-/// Whether the app can save `choice` yet: plain files, which it fetches as they are. A stream (HLS or DASH)
-/// is a list of pieces, which saving as one file needs more than fetching.
-pub fn can_save(choice: &Choice) -> bool {
-    choice.file.is_direct_file() && choice.audio_to_merge.as_ref().is_none_or(|a| a.is_direct_file())
+/// Whether the app can save `choice` yet: plain files, which it fetches as they are, and with `streams`, HLS
+/// streams, whose pieces it fetches and ffmpeg copies into an MP4. DASH it cannot save yet.
+pub fn can_save(choice: &Choice, streams: bool) -> bool {
+    let savable = |f: &crate::media::Format| f.is_direct_file() || (streams && f.is_hls());
+    savable(&choice.file) && choice.audio_to_merge.as_ref().is_none_or(savable)
 }
 
 impl From<&Choice> for ChoiceView {
@@ -120,9 +127,9 @@ mod tests {
     #[test]
     fn a_video_shows_its_facts_and_choices() {
         let zoo = parse(include_str!("../../../app/src/test/resources/platform/youtube_me_at_the_zoo.json")).unwrap();
-        let Lookup::Found(found) = Lookup::from_media(&zoo, is_h264) else { panic!("not found") };
+        let Lookup::Found(found) = Lookup::from_media(&zoo, is_h264, true) else { panic!("not found") };
         assert!(!found.more_later);
-        let Lookup::Found(without_joining) = Lookup::from_media(&zoo, |_| false) else { panic!("not found") };
+        let Lookup::Found(without_joining) = Lookup::from_media(&zoo, |_| false, false) else { panic!("not found") };
         assert_eq!(without_joining.choices.len(), 1, "only the sound");
         assert!(without_joining.more_later, "240p and 144p come once joining does");
         assert_eq!(found.title, "Me at the zoo");
@@ -131,6 +138,33 @@ mod tests {
         assert_eq!(found.choices.iter().map(|c| c.label.as_str()).collect::<Vec<_>>(), ["240p", "144p", "Audio only"]);
         assert!(found.choices.last().unwrap().audio_only);
         assert_eq!(found.post, None);
+    }
+
+    #[test]
+    fn a_stream_is_offered_when_the_app_can_save_streams_and_dash_comes_later() {
+        let format = |id: &str, protocol: &str, height: i64| crate::media::Format {
+            id: id.into(),
+            url: format!("https://cdn.example/{id}"),
+            ext: Some("mp4".into()),
+            protocol: Some(protocol.into()),
+            height: Some(height),
+            ..Default::default()
+        };
+        let media = Media {
+            title: "Clip".into(),
+            formats: vec![
+                format("dash-1080", "http_dash_segments", 1080),
+                format("hls-720", "m3u8_native", 720),
+                format("http-360", "https", 360),
+            ],
+            ..Media::default()
+        };
+        let Lookup::Found(found) = Lookup::from_media(&media, |_| true, true) else { panic!("not found") };
+        assert_eq!(found.choices.iter().map(|c| c.label.as_str()).collect::<Vec<_>>(), ["720p", "360p"]);
+        assert!(found.more_later, "1080p is a DASH stream");
+
+        let Lookup::Found(without) = Lookup::from_media(&media, |_| false, false) else { panic!("not found") };
+        assert_eq!(without.choices.iter().map(|c| c.label.as_str()).collect::<Vec<_>>(), ["360p"]);
     }
 
     #[test]
@@ -145,7 +179,7 @@ mod tests {
         };
         let post =
             Media { title: "A post".into(), items: vec![item(false), item(false), item(true)], ..Media::default() };
-        let Lookup::Found(found) = Lookup::from_media(&post, is_h264) else { panic!("not found") };
+        let Lookup::Found(found) = Lookup::from_media(&post, is_h264, true) else { panic!("not found") };
         assert_eq!(found.post, Some(PostView { pictures: 2, videos: 1 }));
         assert!(found.choices.is_empty());
     }
@@ -153,9 +187,9 @@ mod tests {
     #[test]
     fn a_live_broadcast_or_nothing_savable_is_explained() {
         let live = Media { title: "Live".into(), is_live: true, ..Media::default() };
-        assert_eq!(Lookup::from_media(&live, is_h264), Lookup::failed(FailureKind::Live));
+        assert_eq!(Lookup::from_media(&live, is_h264, true), Lookup::failed(FailureKind::Live));
         let empty = Media { title: "Nothing".into(), ..Media::default() };
-        assert_eq!(Lookup::from_media(&empty, is_h264), Lookup::failed(FailureKind::NoFormat));
+        assert_eq!(Lookup::from_media(&empty, is_h264, true), Lookup::failed(FailureKind::NoFormat));
     }
 
     #[test]
@@ -166,7 +200,7 @@ mod tests {
             serde_json::json!({"kind": "failed", "reason": "private", "message": "This video is private."})
         );
         let zoo = parse(include_str!("../../../app/src/test/resources/platform/youtube_me_at_the_zoo.json")).unwrap();
-        let json = serde_json::to_value(Lookup::from_media(&zoo, is_h264)).unwrap();
+        let json = serde_json::to_value(Lookup::from_media(&zoo, is_h264, true)).unwrap();
         assert_eq!(json["kind"], "found");
         assert_eq!(
             json["choices"][2],

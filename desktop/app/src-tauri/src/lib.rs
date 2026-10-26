@@ -59,7 +59,7 @@ async fn look_up(url: String, lookups: State<'_, Lookups>, downloads: State<'_, 
         return Ok(Lookup::failed(FailureKind::Unsupported));
     };
     Ok(match lookups.media(link.url, false).await {
-        Ok(media) => Lookup::from_media(&media, |f| downloads.can_join(f)),
+        Ok(media) => Lookup::from_media(&media, |f| downloads.can_join(f), downloads.joins),
         Err(failure) => Lookup::from_failure(&failure),
     })
 }
@@ -68,7 +68,8 @@ struct Downloads {
     manager: DownloadManager,
     /// Where files are saved: the person's Downloads folder.
     folder: PathBuf,
-    /// Whether the app carries the ffmpeg that joins picture and sound.
+    /// Whether the app carries the ffmpeg that joins picture and sound, and turns a stream into an MP4: what
+    /// lets it offer those qualities.
     joins: bool,
 }
 
@@ -92,7 +93,7 @@ async fn download(
 ) -> Result<Vec<TaskView>, String> {
     let link = links::match_media(&url).ok_or_else(|| FailureKind::Unsupported.message().to_string())?;
     let media = lookups.media(link.url.clone(), false).await.map_err(|f| f.kind.message().to_string())?;
-    let plans = plan(&media, &choice, &link.url, &downloads.folder, |f| downloads.can_join(f))
+    let plans = plan(&media, &choice, &link.url, &downloads.folder, |f| downloads.can_join(f), downloads.joins)
         .ok_or_else(|| "This choice can't be saved any more. Look the link up again.".to_string())?;
     Ok(plans.into_iter().map(|p| TaskView::from(&downloads.manager.add(p))).collect())
 }
@@ -130,7 +131,7 @@ async fn retry_download(id: u64, lookups: State<'_, Lookups>, downloads: State<'
     let fresh: Option<Fresh> = match lookups.media(task.page_url.clone(), true).await {
         Ok(media) => {
             let choice = if task.group.is_some() { chaya_core::download::plan::WHOLE_POST } else { &task.choice };
-            plan(&media, choice, &task.page_url, &downloads.folder, |f| downloads.can_join(f))
+            plan(&media, choice, &task.page_url, &downloads.folder, |f| downloads.can_join(f), downloads.joins)
                 .and_then(|plans| plans.into_iter().find(|p| p.choice == task.choice))
                 .map(|p| Fresh { source: p.source, sound: p.sound })
         }

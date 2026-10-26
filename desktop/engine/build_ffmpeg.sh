@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Builds the ffmpeg Chaya for Windows carries, cut down to the one thing the app asks of it: copying a
-# picture-only file and a sound-only file into one MP4, as they are (no re-encoding). It has no codecs, no
-# network and no outside libraries, so it is a few MB and stays under the LGPL.
+# Builds the ffmpeg Chaya for Windows carries, cut down to what the app asks of it: copying a picture-only
+# file and a sound-only file into one MP4, and a downloaded stream (MPEG-TS, fragmented MP4 or bare AAC) into
+# an MP4, as they are (no re-encoding). It has no encoders, no network and no outside libraries, so it is a few
+# MB and stays under the LGPL. The app fetches streams itself; ffmpeg only reads the files it saved.
 #
 #   desktop/engine/build_ffmpeg.sh windows OUT_DIR   # OUT_DIR/ffmpeg.exe, cross-compiled with mingw-w64
 #   desktop/engine/build_ffmpeg.sh host OUT_DIR      # OUT_DIR/ffmpeg for this computer, for development
@@ -30,11 +31,15 @@ options=(
   --disable-everything --disable-autodetect --disable-network --disable-doc --disable-debug --disable-x86asm
   --enable-small --disable-ffplay --disable-ffprobe --enable-ffmpeg
   --enable-protocol=file,pipe
-  # MP4 and M4A in (mov), WebM in (matroska); MP4 out, and Matroska for what MP4 cannot hold.
-  --enable-demuxer=mov,matroska
+  # MP4 and M4A in (mov), WebM in (matroska), and HLS streams' pieces: MPEG-TS, and bare AAC or MP3 sound.
+  # MP4 out, and Matroska for what MP4 cannot hold.
+  --enable-demuxer=mov,matroska,mpegts,aac,mp3
   --enable-muxer=mp4,mov,ipod,matroska,webm
-  --enable-parser=h264,hevc,av1,vp9,aac,opus
+  --enable-parser=h264,hevc,av1,vp9,aac,opus,mpegaudio,ac3
   --enable-bsf=aac_adtstoasc,h264_mp4toannexb,hevc_mp4toannexb,vp9_superframe
+  # Its one decoder: a stream's AAC sound says its sample rate only once decoded, and MP4 must be told it.
+  # Nothing is re-encoded.
+  --enable-decoder=aac
 )
 case "$target" in
   windows)
@@ -58,7 +63,7 @@ if [ "$target" = windows ]; then x86_64-w64-mingw32-strip "$out/$program"; else 
 
 # The LGPL asks that the licence and the way to the source go with the program.
 {
-  echo "ffmpeg ($program), shipped with Chaya for Windows to join picture and sound into one file."
+  echo "ffmpeg ($program), shipped with Chaya for Windows to join picture and sound, and save streams, as MP4."
   echo "FFmpeg $VERSION, built from $SOURCE at commit $COMMIT, unmodified, with:"
   echo "  ${options[*]}"
   echo "Built by desktop/engine/build_ffmpeg.sh in https://github.com/katariyaVivek/chaya."

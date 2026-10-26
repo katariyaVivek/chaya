@@ -18,6 +18,12 @@ pub enum DownloadError {
     Incomplete,
     /// Picture and sound arrived, but could not be put together into one file.
     CouldNotJoin,
+    /// A stream arrived, but could not be copied into an MP4.
+    CouldNotConvert,
+    /// A stream's playlist could not be read, or a piece of it not decrypted.
+    UnreadableStream,
+    /// A stream protected with DRM, which only the site's own player can open.
+    Protected,
 }
 
 impl DownloadError {
@@ -35,12 +41,18 @@ impl DownloadError {
             DownloadError::CantWrite => "Chaya couldn't write the file to its folder.".into(),
             DownloadError::Incomplete => "The download ended before the whole file arrived.".into(),
             DownloadError::CouldNotJoin => "Chaya couldn't join the picture and sound into one file.".into(),
+            DownloadError::CouldNotConvert => "Chaya couldn't save the stream as a file.".into(),
+            DownloadError::UnreadableStream => "Chaya couldn't read this stream.".into(),
+            DownloadError::Protected => "This stream is protected, so it can't be saved.".into(),
         }
     }
 
     /// Whether Retry can help as things stand. An expired address can: Retry looks the link up again first.
     pub fn retryable(self) -> bool {
-        !matches!(self, DownloadError::StorageFull | DownloadError::CantWrite | DownloadError::Http(404))
+        !matches!(
+            self,
+            DownloadError::StorageFull | DownloadError::CantWrite | DownloadError::Http(404) | DownloadError::Protected
+        )
     }
 
     /// Whether the download's address may have expired, so Retry should look the link up again.
@@ -77,6 +89,7 @@ mod tests {
         assert_eq!(DownloadError::Http(418).message(), "The download failed (HTTP 418).");
         assert!(!DownloadError::StorageFull.retryable());
         assert!(DownloadError::Network.retryable());
+        assert!(!DownloadError::Protected.retryable(), "a protected stream stays protected");
     }
 
     #[test]
@@ -99,6 +112,9 @@ mod tests {
             DownloadError::CantWrite,
             DownloadError::Incomplete,
             DownloadError::CouldNotJoin,
+            DownloadError::CouldNotConvert,
+            DownloadError::UnreadableStream,
+            DownloadError::Protected,
         ] {
             let message = error.message();
             assert!(message.ends_with('.') && !message.contains('—'), "{error:?}: {message}");
