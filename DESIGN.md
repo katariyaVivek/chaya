@@ -1,5 +1,8 @@
 # Design System — Chaya
 
+This is the Android app's system. The Windows app has its own, in
+[`desktop/design/`](desktop/design/README.md).
+
 Product register. Soft premium, fluid-assured-soft personality. Strategy: **Restrained** — warm tinted neutrals + one violet-indigo accent ≤10% of surface.
 
 ## Color

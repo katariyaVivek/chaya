@@ -76,6 +76,18 @@ Chaya talks only to the sites involved in what you do:
   you look up or the pages you visit. Turn this off under Downloads › ⋮ › Diagnostics › *Keep it up
   to date*.
 
+## Chaya for Windows
+
+Chaya for Windows is in development and not released yet. It keeps the same promises, with these
+differences:
+
+- **Pages you open** in its built-in browser load as in any browser (Microsoft Edge WebView2), and keep
+  their cookies in Chaya's own WebView2 folder on your PC. A page cannot reach the app.
+- **Downloads never carry a page's cookies.** A video, sound or picture a page downloads is fetched by
+  Chaya with the page as referrer only, so content behind a login may not download yet.
+- **Links to YouTube, Instagram, TikTok and X** are looked up with yt-dlp on your PC, without any
+  sign-in.
+
 ## What Chaya never does
 
 - No analytics, no tracking, no ads, no third-party SDKs.

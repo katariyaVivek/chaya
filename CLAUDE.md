@@ -7,7 +7,8 @@ copy.
 
 Chaya is a native Android app (Kotlin, Jetpack Compose, one `:app` module): a WebView browser that
 detects the media on a page and downloads it, plus links from YouTube, Instagram, TikTok, X and Pinterest
-looked up by yt-dlp running inside the app. It is a working app with releases, not a plan.
+looked up by yt-dlp running inside the app. It is a working app with releases, not a plan. A
+Windows version (Tauri 2, in `desktop/`) has started.
 
 ## Read first
 
@@ -17,6 +18,7 @@ looked up by yt-dlp running inside the app. It is a working app with releases, n
 | [`docs/BUILD_AND_TEST.md`](docs/BUILD_AND_TEST.md) | Toolchain, commands, CI workflows, releases |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | What is released, merged, and next; start here when resuming |
 | [`DESIGN.md`](DESIGN.md), [`PRODUCT.md`](PRODUCT.md) | Design tokens and product register; UI work must follow them |
+| [`desktop/design/README.md`](desktop/design/README.md) | The Windows app's own design system (tokens, components, motion); desktop UI work follows it |
 | [`LIMITATIONS.md`](LIMITATIONS.md), [`PRIVACY_POLICY.md`](PRIVACY_POLICY.md) | Scope and privacy promises; a change that affects either must update it |
 
 `docs/history/` is background only; do not treat it as current. `aloha-core-study/` is a gitignored
@@ -28,6 +30,7 @@ local checkout of Aloha Browser's source, used for that research; it is not in t
 gradle testDebugUnitTest      # all JVM/Robolectric tests; run before every push
 gradle assembleDebug
 python -m pytest app/src/test/python
+cd desktop && cargo test --workspace   # Chaya for Windows (desktop/README.md)
 ```
 
 There is no checked-in wrapper jar; CI calls `gradle` directly. Building needs JDK 17, Android SDK
@@ -55,6 +58,10 @@ platform 36, Gradle 8.14.3 and Python 3.13 (Chaquopy). Versions are in `gradle/l
   Android Gradle plugin cannot be fetched. Pure-Kotlin code can still be compiled and tested with a
   scratch Kotlin/JVM Gradle project whose source set points at the repo's files; keep such code free
   of Android imports so this stays possible.
+- **Chaya for Windows** (`desktop/`) is Tauri 2. Code that does not need the window goes in
+  `desktop/core`, plain Rust, tested with `cargo test`. Its UI follows `desktop/design`.
+- **`chaya_engine` is shared.** The phone runs it through Chaquopy; Windows runs it as a program
+  (`chaya_engine/cli.py`, `desktop/engine/`). A change to it must keep both working.
 - **pytest rewrites tracked `.pyc` files** under `__pycache__/`; run
   `git checkout -- '*__pycache__*'` before committing.
 

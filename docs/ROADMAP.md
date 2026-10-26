@@ -56,6 +56,20 @@ up by yt-dlp on the phone, with picture and sound joined into one MP4. Merged as
 The six-part plan after v0.4.0 has shipped (#34 to #39); it is in
 [`history/plan-after-v0.4.md`](history/plan-after-v0.4.md). What is left:
 
+- **Chaya for Windows.** Started: its design system is in
+  [`desktop/design/`](../desktop/design/README.md) (Day and Night themes, Geist, the download button,
+  the address bar, the download row, motion with an opacity-only reduced mode). The app is Tauri 2
+  on WebView2 ([`desktop/`](../desktop/README.md)): its window follows Windows' theme or the
+  person's, and recognises a pasted link with the phone's rules (#50). A video or post is looked up
+  with the phone's engine, which the installer carries with its own Python and QuickJS, and its
+  qualities are shown (#51). What can be saved as plain files downloads, with pause, resume, cancel,
+  and a Retry that looks the link up again, into a Downloads list kept across restarts (#52).
+  Qualities whose picture and sound come apart are joined by a cut-down ffmpeg the app carries, and
+  YouTube's files come in pieces, three at a time (#53). HLS streams (#54) and DASH streams are fetched
+  piece by piece and saved as MP4s (#55). A built-in browser opens pages, searches and accounts in
+  the window, and takes over a page's media downloads. Next: finding the media on a page, as the
+  phone's detection does. Lookups, downloads and the browser have not run on a real Windows PC yet.
+
 0. **First: check #48 on the phone.** #47's name search kept its first look for 3 seconds, so a page
    that drew its name late and then went quiet (7movies) kept no name; #48 looks again when the kept
    result runs out. #48 also reads a stream's length from its playlist, so the quality sheet

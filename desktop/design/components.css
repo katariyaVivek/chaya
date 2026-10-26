@@ -1,0 +1,411 @@
+/*
+ * Chaya desktop: base styles and the signature components. Needs tokens.css and fonts.css.
+ * Every color, size and timing comes from a token; README.md has the markup for each component.
+ */
+
+/* ── Base ─────────────────────────────────────────────────────────────────────────────── */
+
+@property --orbit-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 400 var(--text-md) / var(--leading-md) var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.text-sm { font-size: var(--text-sm); line-height: var(--leading-sm); }
+.text-lg { font-size: var(--text-lg); line-height: var(--leading-lg); }
+.muted { color: var(--muted); }
+
+/* Sizes, speeds, percentages, times: anything that counts */
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* Cabinet Grotesk is for page titles and the wordmark, nothing else */
+.title {
+  margin: 0;
+  font: 600 var(--title-size) / var(--title-leading) var(--font-display);
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+.wordmark {
+  font: 600 var(--wordmark-size) / 1 var(--font-display);
+  letter-spacing: -0.02em;
+}
+
+/* Glass: the one surface material. Use it for things that float over the page. */
+.glass {
+  background: var(--surface);
+  -webkit-backdrop-filter: blur(var(--surface-blur));
+  backdrop-filter: blur(var(--surface-blur));
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+
+/* Anything you press springs down to 97% and back */
+.pressable {
+  transition:
+    transform var(--dur-spring) var(--spring-press),
+    background-color var(--dur-hover) var(--ease-out),
+    border-color var(--dur-hover) var(--ease-out),
+    box-shadow var(--dur-hover) var(--ease-out);
+}
+.pressable:active { transform: scale(var(--press-scale)); }
+
+/* ── Pills and buttons ────────────────────────────────────────────────────────────────── */
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  box-sizing: border-box;
+  height: var(--control-height);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-pill);
+  font: 500 var(--text-md) / 1 var(--font-ui);
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+}
+/* A wash over the surface, not instead of it, so glass stays glass */
+.pill:hover { background-image: linear-gradient(var(--wash), var(--wash)); }
+
+/* The one control on a screen that starts something: an accent edge, and the glow on hover */
+.pill--primary { border-color: var(--accent-edge); }
+.pill--primary:hover { box-shadow: var(--shadow), var(--accent-glow); }
+
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: var(--control-height);
+  height: var(--control-height);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.icon-btn:hover { background-color: var(--wash); color: var(--text); }
+.icon-btn svg { width: 18px; height: 18px; }
+
+.kbd {
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: 500 11px / 16px var(--font-mono);
+  color: var(--muted);
+}
+
+/* ── a. Download button: pill → progress ring → check → pill ──────────────────────────── */
+
+.dl {
+  --dl-pad: var(--space-2);
+  --p: 0;
+  position: relative;
+  overflow: hidden;
+  padding: 0 var(--dl-pad);
+  transition:
+    transform var(--dur-spring) var(--spring-press),
+    width var(--dur-morph) var(--ease-out),
+    background-color var(--dur-hover) var(--ease-out),
+    border-color var(--dur-hover) var(--ease-out),
+    box-shadow var(--dur-enter) var(--ease-out);
+}
+
+.dl__label {
+  white-space: nowrap;
+  transition: opacity var(--dur-enter) var(--ease-out) 60ms;
+}
+
+.dl__ring {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  opacity: 0;
+  transition: opacity var(--dur-exit) var(--ease-out);
+}
+
+.dl__svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.dl__track { fill: none; stroke: var(--wash-strong); stroke-width: 2.5; }
+
+.dl__arc {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-dasharray: 100;
+  stroke-dashoffset: calc(100 - var(--p));
+  transform: rotate(-90deg);
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: stroke-dashoffset var(--dur-enter) var(--ease-out);
+}
+
+.dl__pct {
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 500;
+  transition: opacity var(--dur-exit) var(--ease-out);
+}
+
+.dl__check {
+  fill: none;
+  stroke: var(--text);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  opacity: 0;
+}
+
+/* Ring states: the label goes first (exit), the ring follows (enter) */
+.dl:is([data-state="progress"], [data-state="paused"], [data-state="done"]) {
+  border-color: var(--accent-edge);
+}
+.dl:is([data-state="progress"], [data-state="paused"], [data-state="done"]) .dl__label {
+  opacity: 0;
+  transition: opacity var(--dur-exit) var(--ease-out);
+}
+.dl:is([data-state="progress"], [data-state="paused"], [data-state="done"]) .dl__ring {
+  opacity: 1;
+  transition: opacity var(--dur-enter) var(--ease-out) 80ms;
+}
+
+/* Downloading: the arc's light breathes */
+.dl[data-state="progress"] .dl__arc {
+  animation: chaya-glow 2s var(--ease-out) infinite;
+}
+
+/* Paused: the ring stops where it is and dims to half */
+.dl[data-state="paused"] .dl__ring { opacity: 0.5; }
+.dl[data-state="paused"] .dl__arc {
+  animation: chaya-glow 2s var(--ease-out) infinite paused;
+  transition: none;
+}
+
+/* Done: the percentage gives way to a check drawn in, and the button glows once */
+.dl[data-state="done"] { box-shadow: var(--shadow), var(--accent-glow); }
+.dl[data-state="done"] .dl__pct { opacity: 0; }
+.dl[data-state="done"] .dl__check {
+  opacity: 1;
+  animation: var(--anim-draw) var(--dur-enter) var(--ease-out) 80ms both;
+}
+
+/* Saved: back to a quiet pill */
+.dl[data-state="saved"] { border-color: var(--border); color: var(--muted); }
+
+/* ── b. "Finding media…": a warm light sweeping across the words ──────────────────────── */
+
+.finding {
+  --shimmer-hi: color-mix(in oklab, var(--text) 70%, var(--accent));
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  height: var(--space-4);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-pill);
+  font: 500 var(--text-sm) / 1 var(--font-ui);
+}
+
+.finding__text {
+  background: linear-gradient(
+      100deg,
+      var(--muted) 0%,
+      var(--muted) 40%,
+      var(--shimmer-hi) 50%,
+      var(--muted) 60%,
+      var(--muted) 100%
+    )
+    0 0 / 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: var(--anim-shimmer) var(--shimmer-period) linear infinite;
+}
+
+/* ── c. Address and search bar: light under glass when focused ────────────────────────── */
+
+.urlbar {
+  position: relative;
+  isolation: isolate;
+}
+
+/* The glow sits behind the field, so the field's blur softens it */
+.urlbar::before {
+  content: "";
+  position: absolute;
+  inset: 35% 8% -14px;
+  z-index: -1;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgb(var(--accent-rgb) / 0.6), rgb(var(--accent-rgb) / 0));
+  filter: blur(14px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-exit) var(--ease-out);
+}
+.urlbar:focus-within::before {
+  opacity: 1;
+  transition: opacity var(--dur-enter) var(--ease-out);
+}
+
+.urlbar__field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  box-sizing: border-box;
+  height: var(--space-6);
+  padding: 0 var(--space-1) 0 var(--space-2);
+  border-radius: var(--radius-md);
+  cursor: text;
+  transition: border-color var(--dur-enter) var(--ease-out);
+}
+.urlbar:focus-within .urlbar__field { border-color: var(--focus); }
+
+.urlbar__icon { flex: none; width: 18px; height: 18px; color: var(--muted); }
+
+.urlbar__input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font: 400 var(--text-lg) / var(--leading-lg) var(--font-ui);
+}
+.urlbar__input::placeholder { color: var(--muted); }
+
+/* ── d. Download row: a light circling the border while it downloads ──────────────────── */
+
+.row {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--space-8) minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+}
+
+.row::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  padding: 1px;
+  border-radius: inherit;
+  background: conic-gradient(
+    from var(--orbit-angle),
+    rgb(var(--accent-rgb) / 0) 0turn,
+    rgb(var(--accent-rgb) / 0.9) 0.1turn,
+    rgb(var(--accent-rgb) / 0) 0.3turn,
+    rgb(var(--accent-rgb) / 0) 1turn
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-enter) var(--ease-out);
+}
+.row[data-state="downloading"]::before {
+  opacity: 1;
+  animation: var(--anim-orbit) var(--orbit-period) linear infinite;
+}
+/* Paused: the light stays where it stopped */
+.row[data-state="paused"]::before { opacity: 0.5; }
+
+.row__thumb {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 10;
+  border-radius: var(--radius-sm);
+  background: var(--wash-strong);
+  color: var(--muted);
+}
+.row__thumb svg { width: 18px; height: 18px; }
+
+.row__body { display: grid; gap: var(--space-half); min-width: 0; }
+.row__title { overflow: hidden; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.row__meta { color: var(--muted); font-size: var(--text-sm); line-height: var(--leading-sm); }
+
+.row__bar {
+  height: 2px;
+  margin-top: var(--space-half);
+  border-radius: var(--radius-pill);
+  background: var(--wash-strong);
+  overflow: hidden;
+}
+.row__bar > span {
+  display: block;
+  width: calc(var(--p, 0) * 1%);
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  box-shadow: 0 0 8px rgb(var(--accent-rgb) / 0.6);
+  transition: width var(--dur-enter) var(--ease-out);
+}
+.row[data-state="paused"] .row__bar > span { opacity: 0.5; box-shadow: none; }
+
+.row__pct { min-width: 4ch; text-align: right; font-size: var(--text-sm); color: var(--muted); }
+
+/* ── Lists: children enter 30 ms apart, fading up 6px ─────────────────────────────────── */
+
+.stagger > * {
+  animation: var(--anim-enter) var(--dur-enter) var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * var(--stagger));
+}
+.stagger > :nth-child(2) { --i: 1; }
+.stagger > :nth-child(3) { --i: 2; }
+.stagger > :nth-child(4) { --i: 3; }
+.stagger > :nth-child(5) { --i: 4; }
+.stagger > :nth-child(6) { --i: 5; }
+.stagger > :nth-child(7) { --i: 6; }
+.stagger > :nth-child(8) { --i: 7; }
+.stagger > :nth-child(9) { --i: 8; }
+.stagger > :nth-child(10) { --i: 9; }
+.stagger > :nth-child(11) { --i: 10; }
+.stagger > :nth-child(12) { --i: 11; }
+
+.is-leaving { animation: var(--anim-exit) var(--dur-exit) var(--ease-out) forwards; }
+
+/* ── Keyframes. Reduced motion swaps the moving ones for fades through the --anim-* tokens. */
+
+@keyframes chaya-rise-in { from { opacity: 0; transform: translateY(var(--rise)); } }
+@keyframes chaya-fall-out { to { opacity: 0; transform: translateY(var(--rise)); } }
+@keyframes chaya-fade-in { from { opacity: 0; } }
+@keyframes chaya-fade-out { to { opacity: 0; } }
+@keyframes chaya-breathe { 50% { opacity: 0.55; } }
+@keyframes chaya-shimmer { from { background-position: 100% 0; } to { background-position: 0% 0; } }
+@keyframes chaya-orbit { to { --orbit-angle: 360deg; } }
+@keyframes chaya-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@keyframes chaya-glow { 50% { filter: drop-shadow(0 0 3px rgb(var(--accent-rgb) / 0.8)); } }
+
+/* The check is drawn, or with reduced motion faded in, but it ends drawn either way */
+.dl[data-state="done"] .dl__check { stroke-dashoffset: 0; }

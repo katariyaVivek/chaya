@@ -1,0 +1,268 @@
+/* The Chaya window. Built from desktop/design; nothing here sets a color or a timing of its own. */
+
+html, body { height: 100%; }
+
+[hidden] { display: none !important; }
+
+body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /* Glass needs something to soften: two very faint warm lights behind everything */
+  background:
+    radial-gradient(56rem 26rem at 78% -8rem, rgb(var(--accent-rgb) / 0.14), transparent 70%),
+    radial-gradient(36rem 20rem at 0% 70%, rgb(var(--accent-rgb) / 0.06), transparent 70%),
+    var(--bg);
+  background-repeat: no-repeat;
+  user-select: none;
+}
+
+.sprite { position: absolute; }
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-3);
+}
+
+.settings { position: relative; }
+
+.settings__panel {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  right: 0;
+  z-index: 10;
+  display: grid;
+  gap: var(--space-1);
+  width: max-content;
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  animation: var(--anim-enter) var(--dur-enter) var(--ease-out) both;
+}
+.settings__label { margin: 0; color: var(--muted); font-size: var(--text-sm); }
+.settings__label:not(:first-child) { margin-top: var(--space-1); }
+.settings__credit { max-width: 32ch; margin: var(--space-1) 0 0; color: var(--muted); font-size: var(--text-sm); line-height: var(--leading-sm); }
+
+.seg { display: flex; gap: 2px; padding: var(--space-half); border-radius: var(--radius-pill); background: var(--wash); }
+.seg button {
+  height: var(--space-4);
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--muted);
+  font: 500 var(--text-sm) / 1 var(--font-ui);
+  cursor: pointer;
+  transition: background-color var(--dur-hover) var(--ease-out), color var(--dur-hover) var(--ease-out);
+}
+.seg button:hover { color: var(--text); }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+
+.main {
+  flex: 1;
+  display: grid;
+  align-content: start;
+  gap: var(--space-3);
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-3) var(--space-6);
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+
+.result:empty { display: none; }
+
+.card {
+  display: grid;
+  grid-template-columns: var(--space-6) minmax(0, 1fr);
+  gap: var(--space-2);
+  align-items: start;
+  padding: var(--space-2);
+  border-radius: var(--radius-lg);
+  animation: var(--anim-enter) var(--dur-enter) var(--ease-out) both;
+}
+.card__icon {
+  display: grid;
+  place-items: center;
+  width: var(--space-6);
+  height: var(--space-6);
+  border-radius: var(--radius-md);
+  background: var(--wash-strong);
+  color: var(--muted);
+}
+.card__icon svg { width: 20px; height: 20px; }
+.card__body { display: grid; gap: var(--space-half); min-width: 0; padding-top: 2px; }
+.card__title { margin: 0; font-size: var(--text-lg); line-height: var(--leading-lg); font-weight: 600; }
+.card__url {
+  margin: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: text;
+}
+.card__note { margin: var(--space-1) 0 0; color: var(--muted); }
+
+/* A looked-up video: its poster, then what it is and what it can be saved as */
+.card--media { grid-template-columns: 160px minmax(0, 1fr); }
+.poster {
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-md);
+  background: var(--wash-strong);
+}
+.poster img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.poster img:not([src]) { visibility: hidden; }
+.card__meta { margin: 0; color: var(--muted); font-size: var(--text-sm); line-height: var(--leading-sm); }
+.card__meta:empty { display: none; }
+.card__state { display: grid; gap: var(--space-1); justify-items: start; margin-top: var(--space-1); }
+
+.choices { display: grid; gap: var(--space-half); width: 100%; margin: 0; padding: 0; list-style: none; }
+.choice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--wash);
+}
+.choice__label { font-weight: 600; }
+.choice__detail { margin-left: auto; color: var(--muted); font-size: var(--text-sm); }
+.choice .dl { flex: none; }
+.card__error { margin: 0; color: var(--text); font-size: var(--text-sm); }
+
+@media (max-width: 640px) {
+  .card--media { grid-template-columns: minmax(0, 1fr); }
+}
+
+.downloads { display: grid; gap: var(--space-2); margin-top: var(--space-3); }
+.list { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
+.list:empty { display: none; }
+
+/* A download in the list (the row component, desktop/design) */
+.row__thumb { position: relative; overflow: hidden; }
+.row__thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.row__thumb img:not([src]) { display: none; }
+.row__title {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+.row[data-state="completed"] .row__title { cursor: pointer; }
+.row[data-state="completed"] .row__title:hover { text-decoration: underline; text-underline-offset: 3px; }
+.row[data-state="failed"] .row__meta { color: var(--text); }
+.row:not([data-state="downloading"]):not([data-state="paused"]) .row__bar { display: none; }
+.row__actions { display: flex; gap: var(--space-half); }
+.row__main[hidden] { display: none; }
+
+.empty {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--muted);
+}
+.empty p { margin: 0; }
+.empty__icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--space-6);
+  height: var(--space-6);
+  border-radius: var(--radius-pill);
+  background: var(--wash);
+}
+.empty__icon svg { width: 20px; height: 20px; }
+
+/* ── Browsing: the page in its own webview, where .page leaves room for it ───────────────── */
+
+/* The window gives the page its whole width, and keeps the bar and the page on one screen */
+body.browsing .main {
+  display: flex;
+  flex-direction: column;
+  max-width: none;
+  padding: 0 var(--space-3) var(--space-3);
+  overflow: hidden;
+}
+body.browsing .main > * { flex: none; }
+body.browsing .downloads { margin-top: 0; overflow-y: auto; }
+body.browsing:not(.showing-downloads) .downloads { display: none; }
+body.browsing.showing-downloads .page-frame { display: none; }
+
+body.browsing .urlbar { display: flex; align-items: center; gap: var(--space-1); }
+body.browsing .urlbar__field { flex: 1; min-width: 0; }
+body.browsing .urlbar__icon { display: none; }
+.page-nav { display: flex; gap: var(--space-half); }
+
+.page-downloads { position: relative; }
+.page-downloads[aria-pressed="true"] { background: var(--wash-strong); color: var(--text); }
+.page-downloads__count {
+  position: absolute;
+  top: 2px;
+  right: 0;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  border: 1px solid var(--accent-edge);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 11px;
+  line-height: 14px;
+}
+
+.page-frame {
+  display: flex;
+  flex: 1 !important;
+  flex-direction: column;
+  gap: var(--space-half);
+  min-height: 0;
+}
+/* The page's webview covers .page exactly; until it does, the glass shows */
+.page { flex: 1; min-height: 0; border-radius: var(--radius-md); }
+
+/* While the page loads: a thin light runs along the top of it */
+.page-load {
+  height: 2px;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, transparent 0%, transparent 35%, var(--accent) 50%, transparent 65%, transparent 100%);
+  background-size: 300% 100%;
+  opacity: 0;
+  transition: opacity var(--dur-exit) var(--ease-out);
+}
+.page-load[data-loading] {
+  opacity: 1;
+  animation: var(--anim-shimmer) var(--shimmer-period) linear infinite;
+  transition-duration: var(--dur-enter);
+}
+
+/* What the page did that the person should know: a window held back, a download taken over */
+.notice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+  animation: var(--anim-enter) var(--dur-enter) var(--ease-out) both;
+}
+.notice__text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.notice__action {
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: 600 var(--text-sm) / var(--leading-sm) var(--font-ui);
+  cursor: pointer;
+}
+.notice__action:hover { text-decoration: underline; text-underline-offset: 3px; }

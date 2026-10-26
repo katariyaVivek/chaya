@@ -68,6 +68,33 @@ def test_only_what_the_app_needs_is_kept():
     json.dumps(shaped)  # must be plain data all the way down
 
 
+def test_a_dash_formats_pieces_are_listed_only_when_asked_for():
+    info = {
+        'title': 'A video',
+        'formats': [
+            {'format_id': 'v720', 'url': 'https://cdn.example/clip/manifest.mpd', 'protocol': 'http_dash_segments',
+             'fragment_base_url': 'https://cdn.example/clip/',
+             'fragments': [{'path': 'v720/init.mp4'}, {'path': 'v720/seg-1.m4s', 'duration': 4.0},
+                           {'url': 'https://other.example/seg-2.m4s', 'duration': 4.0}]},
+            {'format_id': 'hls-1', 'url': 'https://cdn.example/1.m3u8', 'protocol': 'm3u8_native',
+             'fragments': [{'url': 'piece'}]},
+            {'format_id': 'live', 'url': 'https://cdn.example/live.mpd', 'protocol': 'http_dash_segments',
+             'fragments': '<function>'},
+        ],
+    }
+
+    asked = engine._shape(info, fragments=True)['formats']
+    assert asked[0]['fragments'] == [
+        'https://cdn.example/clip/v720/init.mp4',
+        'https://cdn.example/clip/v720/seg-1.m4s',
+        'https://other.example/seg-2.m4s',
+    ]
+    # HLS lists its pieces in its playlist; a list yt-dlp makes as the stream plays is no list.
+    assert 'fragments' not in asked[1] and 'fragments' not in asked[2]
+    assert all('fragments' not in f for f in engine._shape(info)['formats']), 'the phone never asks'
+    json.dumps(asked)
+
+
 def test_a_carousel_shows_its_first_item():
     carousel = {
         '_type': 'playlist',
@@ -160,6 +187,24 @@ def test_the_browsers_cookies_are_handed_over_when_given(monkeypatch):
     engine.extract('https://example.com/v', '/cache', '/cookies.txt')
 
     assert _FakeYoutubeDL.options['cookiefile'] == '/cookies.txt'
+
+
+def test_without_a_javascript_program_yt_dlp_keeps_its_defaults(monkeypatch):
+    _FakeYoutubeDL.result = {'id': 'x', 'title': 'T'}
+    monkeypatch.setattr(engine, 'YoutubeDL', _FakeYoutubeDL)
+
+    engine.extract('https://youtu.be/x', '/cache')
+
+    assert 'js_runtimes' not in _FakeYoutubeDL.options
+
+
+def test_the_desktops_quickjs_program_is_handed_to_yt_dlp(monkeypatch):
+    _FakeYoutubeDL.result = {'id': 'x', 'title': 'T'}
+    monkeypatch.setattr(engine, 'YoutubeDL', _FakeYoutubeDL)
+
+    engine.extract('https://youtu.be/x', '/cache', js_runtime='C:/Chaya/engine/qjs.exe')
+
+    assert _FakeYoutubeDL.options['js_runtimes'] == {'quickjs': {'path': 'C:/Chaya/engine/qjs.exe'}}
 
 
 def test_a_failure_comes_back_as_an_error_with_its_kind(monkeypatch):

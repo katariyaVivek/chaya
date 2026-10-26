@@ -1,0 +1,22 @@
+[package]
+name = "chaya-desktop"
+description = "Chaya for Windows"
+version.workspace = true
+edition.workspace = true
+publish = false
+rust-version.workspace = true
+
+[lib]
+name = "chaya_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7", features = [] }
+
+[dependencies]
+chaya-core = { path = "../../core" }
+# "unstable": a page in a webview of its own inside the window (the built-in browser).
+tauri = { version = "2.12", features = ["unstable"] }
+tauri-plugin-opener = "2.7"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

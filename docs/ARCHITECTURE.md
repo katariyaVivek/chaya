@@ -282,3 +282,48 @@ Share. Reached from the Downloads screen's menu.
 | `app/src/test/python` | pytest for `chaya_engine`, against the pinned yt-dlp | PRs touching the engine (`engine.yml`) |
 | `app/src/androidTest` | On a device: Python/yt-dlp and QuickJS, an engine update compiled and imported (and a broken one falling back), the real `MediaMuxer` join, the whole two-file save, ad blocking in a real WebView | `ui-check` label or manual (`device-tests.yml`); also *Run workflow* on `build.yml` |
 | `.github/scripts/walkthrough.py` | Drives the debug app in an emulator and saves screenshots, screen text and logs | `ui-check` label or manual (`emulator-check.yml`) |
+
+## Chaya for Windows (`desktop/`)
+
+A Tauri 2 app, early: the window, its themes, recognising links, looking them up, and downloading:
+plain files, qualities whose picture and sound are joined by a cut-down ffmpeg, HLS and DASH streams, and
+a built-in browser. [`../desktop/README.md`](../desktop/README.md) has the layout.
+
+- `desktop/core` (`chaya-core`) is plain Rust with no window in it, the desktop's equivalent of the
+  phone's Android-free Kotlin. `links` recognises links with the phone's rules and test table.
+- **Looking up a link is the phone's engine.** `chaya_engine` runs as a program (`chaya_engine/cli.py`)
+  in a Python the installer carries, with the same pinned packages, and QuickJS-ng (`qjs.exe`) for
+  YouTube's challenges: off the phone, `jsc_provider` stands aside and yt-dlp's own QuickJS provider
+  runs. `desktop/engine/prepare.py` puts the engine together from pinned, checksummed downloads.
+  `chaya-core` reads its answer (`media`, ported from `PlatformMedia`) and picks one choice per quality
+  (`formats`, ported from `FormatSelector`, with its tests and the same saved YouTube answer).
+- **Downloads** (`chaya-core`'s `download`) follow the phone's design in Rust: `http` fetches into a
+  `.part` file with `Range` resume and the site's headers (reqwest, with Windows' own TLS); `manager`
+  owns every task, `Queued → Downloading ⇄ Paused → Completed | Failed`, three at once, kept in
+  `downloads.json`; `error` sorts failures as `DownloadError` does. Retry looks the link up again for
+  a fresh address. Both are tested against a local test server (`download/testserver.rs`).
+- **Joining** (`download/join.rs`) runs the ffmpeg in the engine folder, built by
+  `desktop/engine/build_ffmpeg.sh` with no encoders (copying only), where the phone uses `MediaMuxer` for
+  H.264 only. **Pieces** (`download/pieces.rs`) port the phone's 10 MB, three-at-a-time fetching of
+  YouTube's files and its log of whole pieces.
+- **Streams** (`download/stream.rs`) are fetched by the app itself, not by Media3 as on the phone nor by
+  ffmpeg. An HLS playlist is read (RFC 8216: byte ranges, initialization sections, AES-128 keys;
+  SAMPLE-AES and DRM key systems refused); a DASH stream's pieces are the ones yt-dlp listed from its
+  manifest, which the engine passes on when asked (`--fragments`; yt-dlp leaves DRM formats out). The
+  pieces come three at a time through the same reqwest
+  client (the PC's proxy, the site's headers), and are written in order into one file, with a count of
+  the pieces written so a resume asks only for the rest. ffmpeg then copies that file into an MP4, so it
+  needs no network of its own. `formats` offers a stream when no file reaches its quality, and pairs a
+  picture-only stream with sound as it pairs files.
+- **The built-in browser** (`desktop/app/src-tauri/src/browser.rs`, rules in `chaya-core`'s `browse`)
+  shows one page in a webview of its own over the window, where the window leaves room for it. Where
+  the phone gives the page's detector a capability per navigation, the desktop gives a page nothing:
+  the app's commands are granted to the window's own webview only (`webviews: ["main"]`), and a page is
+  never local. Pages go only to http(s); windows they open are held back; a media file a page downloads
+  goes to Chaya's list. Finding a page's media (the phone's `detection/`) is next.
+- `desktop/app/src-tauri` hands `chaya-core` to the window as commands (`recognise_link`, `look_up`,
+  `download` and the download controls) and sends it `download` events. The window
+  may call only those and set its title bar's theme (`capabilities/default.json`). Its content
+  security policy loads nothing from outside the app except a looked-up video's poster.
+- `desktop/app/ui` is the window, drawn with [`desktop/design`](../desktop/design/README.md).
+  `assemble-ui.mjs` copies both into `desktop/app/dist`, which Tauri packs into the app.

@@ -1,0 +1,9 @@
+{
+  "name": "chaya-desktop-design",
+  "private": true,
+  "type": "module",
+  "description": "Chaya desktop's design system: tokens, fonts, components and motion helpers.",
+  "scripts": {
+    "test": "node --test test/design.test.mjs"
+  }
+}

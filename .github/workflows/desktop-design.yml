@@ -1,0 +1,36 @@
+name: Desktop design system
+
+# The Windows app's tokens, components and motion helpers (desktop/design). Checks that the CSS spring
+# matches the physics, that both themes keep their contrast, that reduced motion only fades, and that
+# the download button's states work. Plain Node, a few seconds.
+
+on:
+  pull_request:
+    paths:
+      - 'desktop/design/**'
+      - '.github/workflows/desktop-design.yml'
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'desktop/design/**'
+  workflow_dispatch:
+
+concurrency:
+  group: desktop-design-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Test
+        working-directory: desktop/design
+        run: npm test
