@@ -10,7 +10,34 @@ use crate::media::{Failure, FailureKind, Media};
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum Lookup {
     Found(Found),
-    Failed { reason: FailureKind, message: &'static str },
+    Failed {
+        reason: FailureKind,
+        message: &'static str,
+        /// What the person's sign-in could do, when the site wants one (`SignIn`).
+        #[serde(rename = "signIn", skip_serializing_if = "Option::is_none")]
+        sign_in: Option<SignIn>,
+    },
+}
+
+/// What the window offers when a site wants a sign-in, as the phone's link sheet does.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SignIn {
+    /// The built-in browser is signed in to the site: *Use my sign-in* looks the link up again with it.
+    Use,
+    /// It is not: *Sign in to {site}* opens the link in the browser, where the site asks for one.
+    SignInFirst,
+}
+
+impl SignIn {
+    /// What to offer after a lookup failed with `kind`: nothing unless the site wants a sign-in and this lookup
+    /// did not already use the person's. `signed_in`: whether the browser is signed in to the site.
+    pub fn after(kind: FailureKind, used_sign_in: bool, signed_in: bool) -> Option<SignIn> {
+        if !matches!(kind, FailureKind::NeedsLogin | FailureKind::BotCheck) || used_sign_in {
+            return None;
+        }
+        Some(if signed_in { SignIn::Use } else { SignIn::SignInFirst })
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -46,11 +73,16 @@ pub struct PostView {
 
 impl Lookup {
     pub fn failed(kind: FailureKind) -> Lookup {
-        Lookup::Failed { reason: kind, message: kind.message() }
+        Lookup::Failed { reason: kind, message: kind.message(), sign_in: None }
     }
 
     pub fn from_failure(failure: &Failure) -> Lookup {
         Lookup::failed(failure.kind)
+    }
+
+    /// A failed lookup of a link, with what the person's sign-in could do about it (`SignIn::after`).
+    pub fn failed_with(failure: &Failure, sign_in: Option<SignIn>) -> Lookup {
+        Lookup::Failed { reason: failure.kind, message: failure.kind.message(), sign_in }
     }
 
     /// `can_join` as for `formats::choices`: which picture-only tracks the app can join to sound. `streams`:
@@ -200,6 +232,9 @@ mod tests {
             json,
             serde_json::json!({"kind": "failed", "reason": "private", "message": "This video is private."})
         );
+        let login = Failure { kind: FailureKind::NeedsLogin, detail: None };
+        let json = serde_json::to_value(Lookup::failed_with(&login, Some(SignIn::SignInFirst))).unwrap();
+        assert_eq!(json["signIn"], "signInFirst");
         let zoo = parse(include_str!("../../../app/src/test/resources/platform/youtube_me_at_the_zoo.json")).unwrap();
         let json = serde_json::to_value(Lookup::from_media(&zoo, is_h264, true)).unwrap();
         assert_eq!(json["kind"], "found");
@@ -207,6 +242,18 @@ mod tests {
             json["choices"][2],
             serde_json::json!({"label": "Audio only", "detail": "M4A · ≈ 302.0 KB", "audioOnly": true})
         );
+    }
+
+    #[test]
+    fn a_sign_in_is_offered_only_when_the_site_wants_one_and_it_was_not_used() {
+        use FailureKind::*;
+        assert_eq!(SignIn::after(NeedsLogin, false, true), Some(SignIn::Use));
+        assert_eq!(SignIn::after(BotCheck, false, true), Some(SignIn::Use));
+        assert_eq!(SignIn::after(NeedsLogin, false, false), Some(SignIn::SignInFirst));
+        assert_eq!(SignIn::after(NeedsLogin, true, true), None, "it was used, and was not enough");
+        for kind in [Private, Geo, Unavailable, Network, Engine, Unknown] {
+            assert_eq!(SignIn::after(kind, false, true), None, "{kind:?}");
+        }
     }
 
     #[test]

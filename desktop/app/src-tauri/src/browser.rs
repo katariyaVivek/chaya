@@ -23,7 +23,7 @@ use std::time::Duration;
 use chaya_core::adblock::{kind, Shield};
 use chaya_core::browse;
 use chaya_core::found::{self, Found, FoundKind, Report};
-use chaya_core::links;
+use chaya_core::links::{self, Platform};
 use chaya_core::session::{self, CookieFile, SessionCookie};
 use serde::{Deserialize, Serialize};
 use tauri::webview::{DownloadEvent, NewWindowResponse, PageLoadEvent, WebviewBuilder};
@@ -141,8 +141,11 @@ fn emit(app: &AppHandle, event: PageEvent) {
 /// Opens what `text` names (an address, a site, an account, or words to search for) in the page, creating the
 /// page where `bounds` says when there is none. Returns the address opened, for the address bar.
 #[tauri::command]
-pub async fn open_page(text: String, bounds: Bounds, app: AppHandle) -> Result<String, String> {
-    let address = browse::page_for(&links::recognise(&text)).ok_or("This is looked up, not opened.")?;
+pub async fn open_page(text: String, bounds: Bounds, sign_in: Option<bool>, app: AppHandle) -> Result<String, String> {
+    // A video's link is looked up, not opened; only to sign in to its site is its page opened.
+    let link = links::recognise(&text);
+    let address = if sign_in.unwrap_or(false) { browse::sign_in_page(&link) } else { browse::page_for(&link) };
+    let address = address.ok_or("This is looked up, not opened.")?;
     let url = Url::parse(&address).map_err(|_| "This isn't an address Chaya can open.".to_string())?;
     if !browse::may_open(&url) {
         return Err("Chaya opens only web pages.".into());
@@ -247,6 +250,27 @@ fn browser_cookies(app: &AppHandle, url: &Url) -> Vec<SessionCookie> {
             expires: c.expires_datetime().map(|t| t.unix_timestamp()),
         })
         .collect()
+}
+
+/// The person's sign-in on `platform`, as the browser holds it: the cookies of each of its sites, for the site
+/// and its subdomains, as the phone reads them (`WebViewSignIn`). It may wait on the browser, so it runs off the
+/// window's thread.
+pub async fn site_sign_in(app: &AppHandle, platform: Platform) -> Vec<SessionCookie> {
+    let app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        session::sign_in_sites(platform)
+            .iter()
+            .filter_map(|site| Url::parse(&format!("https://www.{site}/")).ok().map(|url| (site, url)))
+            .flat_map(|(site, url)| {
+                browser_cookies(&app, &url)
+                    .into_iter()
+                    .map(|c| SessionCookie { domain: Some(site.to_string()), ..c })
+                    .collect::<Vec<_>>()
+            })
+            .collect()
+    })
+    .await
+    .unwrap_or_default()
 }
 
 /// The browser's sign-in for `url`, for a download saved from a page (`Source::session`): its cookies there, and

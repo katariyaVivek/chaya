@@ -304,7 +304,9 @@ a built-in browser. [`../desktop/README.md`](../desktop/README.md) has the layou
   a fresh address. Both are tested against a local test server (`download/testserver.rs`). What is saved
   from a page carries the browser's sign-in as the phone's `sessionHeaders` does: a `session` source gets
   the cookies the WebView2 store holds for its address (and the browser's user agent) at each start,
-  never stored; `chaya-core`'s `session` also writes them as a cookie file for yt-dlp's stream lookups.
+  never stored; `chaya-core`'s `session` also writes them as a cookie file for yt-dlp's stream lookups, and
+  for a link's lookup when the person taps *Use my sign-in* (the phone's `WebViewSignIn`). The engine runs
+  with yt-dlp's plugins off.
 - **Joining** (`download/join.rs`) runs the ffmpeg in the engine folder, built by
   `desktop/engine/build_ffmpeg.sh` with no encoders (copying only), where the phone uses `MediaMuxer` for
   H.264 only. **Pieces** (`download/pieces.rs`) port the phone's 10 MB, three-at-a-time fetching of

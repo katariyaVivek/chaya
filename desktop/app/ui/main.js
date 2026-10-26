@@ -108,14 +108,19 @@ function forget() {
 const RETRYABLE = new Set(['network', 'engine', 'unknown', 'bot_check']);
 
 /** Looks a link to a video or post up, and shows what it can be saved as. */
-function lookUp(link) {
+function lookUp(link, useSignIn = false) {
   return showLookup({
     title: `${link.site} ${link.lookingFor}`,
     meta: link.url,
-    finding: `Finding the ${link.lookingFor}…`,
-    ask: () => tauri.core.invoke('look_up', { url: link.url }),
+    finding: useSignIn ? `Finding the ${link.lookingFor} with your sign-in…` : `Finding the ${link.lookingFor}…`,
+    ask: () => tauri.core.invoke('look_up', { url: link.url, useSignIn }),
     save: (choice) => tauri.core.invoke('download', { url: link.url, choice }),
     again: () => lookUp(link),
+    site: link.site,
+    // Only when the person taps it: some sites limit accounts that download a lot.
+    withSignIn: () => lookUp(link, true),
+    // The site asks for its sign-in on its own page; once signed in there, that page is looked up again.
+    signInFirst: () => openPage(link.url, true),
   });
 }
 
@@ -184,14 +189,36 @@ function showFailed(card, lookup, failed) {
   card.querySelector('.card__meta').textContent = failed.message;
   const state = card.querySelector('.card__state');
   state.replaceChildren();
-  if (RETRYABLE.has(failed.reason)) {
-    const retry = document.createElement('button');
-    retry.type = 'button';
-    retry.className = 'pill glass pressable';
-    retry.textContent = 'Try again';
-    retry.addEventListener('click', () => lookup.again());
-    state.append(retry);
+  const actions = document.createElement('div');
+  actions.className = 'card__actions';
+  if (RETRYABLE.has(failed.reason)) actions.append(pill('Try again', () => lookup.again()));
+  if (failed.signIn === 'use' && lookup.withSignIn) {
+    actions.append(pill('Use my sign-in', () => lookup.withSignIn(), true));
+    state.append(actions, paragraph(
+      `This uses the ${lookup.site} account you're signed in to in Chaya's browser. Some sites limit accounts ` +
+        'that download a lot, so it is only done when you ask.',
+      'card__note',
+    ));
+    return;
   }
+  if (failed.signIn === 'signInFirst' && lookup.signInFirst) {
+    actions.append(pill(`Sign in to ${lookup.site}`, () => lookup.signInFirst(), true));
+    state.append(actions, paragraph(
+      `Sign in to ${lookup.site} in Chaya's browser. Once you're signed in, this link is looked up there again.`,
+      'card__note',
+    ));
+    return;
+  }
+  if (actions.childElementCount) state.append(actions);
+}
+
+function pill(text, onClick, primary = false) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = primary ? 'pill pill--primary glass pressable' : 'pill glass pressable';
+  button.textContent = text;
+  button.addEventListener('click', onClick);
+  return button;
 }
 
 function finding(text) {
@@ -489,7 +516,7 @@ function setBrowsing(on) {
 }
 
 /** Opens what `text` names in the page: an address, a site, an account, or a search. */
-async function openPage(text) {
+async function openPage(text, signIn = false) {
   forget();
   const first = !browsing;
   if (first) setBrowsing(true);
@@ -497,7 +524,7 @@ async function openPage(text) {
   // Laid out first, so the page opens where .page is.
   await new Promise(requestAnimationFrame);
   try {
-    const url = await tauri.core.invoke('open_page', { text, bounds: boundsOf(pageEl) });
+    const url = await tauri.core.invoke('open_page', { text, bounds: boundsOf(pageEl), signIn });
     pageUrl = url;
     address.value = url;
     address.blur();

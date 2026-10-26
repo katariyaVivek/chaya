@@ -24,6 +24,15 @@ pub fn search_url(words: &str) -> String {
 
 /// The page `link` opens in the browser: a page, an account's page, or a search. `None` for a video or post on
 /// a supported site, which is looked up instead.
+/// Where to sign in for `link`: a video's or post's own page, where its site asks for a sign-in and returns to it
+/// once given; anything else, as `page_for` opens it.
+pub fn sign_in_page(link: &Link) -> Option<String> {
+    match link {
+        Link::Media { link, .. } => Some(link.url.clone()),
+        other => page_for(other),
+    }
+}
+
 pub fn page_for(link: &Link) -> Option<String> {
     match link {
         Link::Media { .. } => None,
@@ -184,6 +193,14 @@ fn percent_decode(text: &str) -> String {
 mod tests {
     use super::*;
     use crate::links::recognise;
+
+    #[test]
+    fn a_video_is_opened_only_to_sign_in_to_its_site() {
+        let link = recognise("https://www.instagram.com/p/abc/");
+        assert_eq!(page_for(&link), None, "a pasted video is looked up, not opened");
+        assert_eq!(sign_in_page(&link).as_deref(), Some("https://www.instagram.com/p/abc/"));
+        assert_eq!(sign_in_page(&recognise("example.com")).as_deref(), Some("https://example.com"));
+    }
 
     #[test]
     fn typed_text_opens_an_address_a_bare_site_or_a_search_as_on_the_phone() {

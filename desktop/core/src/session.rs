@@ -8,6 +8,8 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
+use crate::links::Platform;
+
 /// One cookie the browser holds for an address.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct SessionCookie {
@@ -63,6 +65,27 @@ pub fn netscape(cookies: &[SessionCookie], host: &str) -> String {
         ));
     }
     text
+}
+
+/// The addresses whose cookies are the person's sign-in on `platform`, as the phone reads them (`WebViewSignIn`).
+pub fn sign_in_sites(platform: Platform) -> &'static [&'static str] {
+    match platform {
+        Platform::YouTube => &["youtube.com"],
+        Platform::Instagram => &["instagram.com"],
+        Platform::TikTok => &["tiktok.com"],
+        Platform::X => &["x.com", "twitter.com"],
+    }
+}
+
+/// Whether `cookies` (the browser's for `platform`'s sites) hold a sign-in: cookies that exist only while signed in.
+pub fn is_signed_in(platform: Platform, cookies: &[SessionCookie]) -> bool {
+    let markers: &[&str] = match platform {
+        Platform::YouTube => &["SAPISID", "__Secure-3PAPISID", "SID"],
+        Platform::Instagram => &["sessionid"],
+        Platform::TikTok => &["sessionid", "sid_tt"],
+        Platform::X => &["auth_token"],
+    };
+    cookies.iter().any(|c| markers.contains(&c.name.as_str()) && !c.value.is_empty())
 }
 
 /// A cookie file for one lookup, deleted when it is dropped, whether the lookup worked or not.
@@ -144,6 +167,16 @@ mod tests {
              #HttpOnly_.example.com\tTRUE\t/\tTRUE\t1900000000\tsid\tabc\n\
              www.example.com\tFALSE\t/\tFALSE\t0\thost_only\t1\n"
         );
+    }
+
+    #[test]
+    fn a_site_counts_as_signed_in_only_with_its_own_sign_in_cookie() {
+        assert!(is_signed_in(Platform::Instagram, &[cookie("csrftoken", "x"), cookie("sessionid", "1%3Aabc")]));
+        assert!(!is_signed_in(Platform::Instagram, &[cookie("csrftoken", "x"), cookie("mid", "y")]));
+        assert!(!is_signed_in(Platform::Instagram, &[cookie("sessionid", "")]));
+        assert!(is_signed_in(Platform::X, &[cookie("auth_token", "t")]));
+        assert!(is_signed_in(Platform::YouTube, &[cookie("SAPISID", "s")]));
+        assert_eq!(sign_in_sites(Platform::X), ["x.com", "twitter.com"]);
     }
 
     #[test]

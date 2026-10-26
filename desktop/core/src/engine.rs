@@ -57,6 +57,11 @@ impl Engine {
         self.extract(url, None, None)
     }
 
+    /// Looks `url` up with the person's sign-in for its site (`session::CookieFile`), only when they chose it.
+    pub fn look_up_signed_in(&self, url: &str, cookies: &Path) -> Result<Media, Failure> {
+        self.extract(url, None, Some(cookies))
+    }
+
     /// Looks up a stream's own address, found on the page at `referer` (an HLS playlist, a DASH manifest), for its
     /// qualities; its server may answer only the page's player, so the page goes with the request, and with
     /// `cookies` (the browser's for the stream, `session::CookieFile`) when it has any.
@@ -98,6 +103,9 @@ impl Engine {
             .arg("-I")
             .arg(&self.script)
             .args(args)
+            // Only the app's own pinned yt-dlp runs: no plugins from the person's yt-dlp folders, which would see
+            // everything the engine is given, a sign-in included.
+            .env("YTDLP_NO_PLUGINS", "1")
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -250,6 +258,20 @@ print(json.dumps({"media": {"title": " ".join(sys.argv[1:]), "formats": []}}))
             engine.js_runtime.as_ref().unwrap().display()
         );
         assert_eq!(media.title, expected);
+    }
+
+    #[test]
+    fn the_engine_never_loads_yt_dlp_plugins() {
+        let Some((engine, _dir)) = fake_engine(
+            r#"
+import json, os
+print(json.dumps({"media": {"title": os.environ.get("YTDLP_NO_PLUGINS", "plugins on"), "formats": []}}))
+"#,
+            LOOKUP_TIMEOUT,
+        ) else {
+            return;
+        };
+        assert_eq!(engine.look_up_signed_in("https://www.instagram.com/p/x/", Path::new("c.txt")).unwrap().title, "1");
     }
 
     #[test]

@@ -13,9 +13,9 @@ use chaya_core::download::manager::{Event, Fresh, Manager as DownloadManager, Ta
 use chaya_core::download::plan::plan;
 use chaya_core::engine::{AnswerCache, Engine};
 use chaya_core::links::{self, Link};
-use chaya_core::lookup::Lookup;
+use chaya_core::lookup::{Lookup, SignIn};
 use chaya_core::media::{Failure, FailureKind, Format, Media};
-use chaya_core::session::CookieFile;
+use chaya_core::session::{self, CookieFile};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_opener::OpenerExt;
@@ -40,6 +40,17 @@ impl Lookups {
     }
 
     /// What the engine found at the address of a stream found on the page at `referer`, kept as `url`'s answer.
+    /// What the engine found at `url` with the person's sign-in for its site, which they chose; the cookie file is
+    /// deleted as soon as the lookup ends. The answer is kept as `url`'s, for the download that follows.
+    async fn signed_in_media(&self, url: String, cookies: CookieFile) -> Result<Media, Failure> {
+        self.answer(url.clone(), true, move |engine| {
+            let media = engine.look_up_signed_in(&url, cookies.path());
+            drop(cookies);
+            media
+        })
+        .await
+    }
+
     /// With `cookies`, the browser's sign-in for the stream (`session::CookieFile`), kept until this returns.
     async fn stream_media(&self, url: String, referer: String, cookies: Option<CookieFile>) -> Result<Media, Failure> {
         let key = url.clone();
@@ -80,14 +91,44 @@ impl Lookups {
 /// Looks up a link to a video or post on YouTube, Instagram, TikTok or X with the bundled engine. Only such
 /// links are looked up here; a stream found on a page is looked up by `browser::look_up_found`. Nothing else
 /// reaches yt-dlp.
+///
+/// `use_sign_in`: the person tapped *Use my sign-in*, so the engine gets the browser's sign-in for the site, in a
+/// file deleted when the lookup ends. Never without that tap: sites can limit accounts used to download. When a
+/// lookup fails for want of a sign-in, the answer says what the person's could do (`SignIn`).
 #[tauri::command]
-async fn look_up(url: String, lookups: State<'_, Lookups>, downloads: State<'_, Downloads>) -> Result<Lookup, ()> {
+async fn look_up(
+    url: String,
+    use_sign_in: Option<bool>,
+    app: AppHandle,
+    lookups: State<'_, Lookups>,
+    downloads: State<'_, Downloads>,
+) -> Result<Lookup, ()> {
     let Some(link) = links::match_media(&url) else {
         return Ok(Lookup::failed(FailureKind::Unsupported));
     };
-    Ok(match lookups.media(link.url, false).await {
+    let use_sign_in = use_sign_in.unwrap_or(false);
+    let answer = if use_sign_in {
+        let cookies = browser::site_sign_in(&app, link.platform).await;
+        // Signed out since the offer was made: the site asks for a sign-in again.
+        let file = session::is_signed_in(link.platform, &cookies)
+            .then(|| app.path().app_cache_dir().ok())
+            .flatten()
+            .and_then(|dir| CookieFile::write(&dir.join("sign-in"), &cookies, "").ok().flatten());
+        match file {
+            Some(file) => lookups.signed_in_media(link.url, file).await,
+            None => Err(Failure { kind: FailureKind::NeedsLogin, detail: None }),
+        }
+    } else {
+        lookups.media(link.url, false).await
+    };
+    Ok(match answer {
         Ok(media) => Lookup::from_media(&media, |f| downloads.can_join(f), downloads.joins),
-        Err(failure) => Lookup::from_failure(&failure),
+        Err(failure) => {
+            let wants_sign_in = matches!(failure.kind, FailureKind::NeedsLogin | FailureKind::BotCheck);
+            let signed_in = wants_sign_in
+                && session::is_signed_in(link.platform, &browser::site_sign_in(&app, link.platform).await);
+            Lookup::failed_with(&failure, SignIn::after(failure.kind, use_sign_in, signed_in))
+        }
     })
 }
 

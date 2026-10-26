@@ -152,12 +152,14 @@ pub enum FailureKind {
 }
 
 impl FailureKind {
-    /// What the window says. The phone's messages, without its browser's sign-in, which the desktop lacks.
+    /// What the window says, as the phone does.
     pub fn message(self) -> &'static str {
         match self {
-            FailureKind::BotCheck => "YouTube wants to check that you're not a bot. Try again in a while.",
+            FailureKind::BotCheck => {
+                "YouTube wants to check that you're not a bot. Signing in to YouTube in Chaya's browser can help."
+            }
             FailureKind::Private => "This video is private.",
-            FailureKind::NeedsLogin => "This needs a signed-in account, which Chaya for Windows can't use yet.",
+            FailureKind::NeedsLogin => "This needs a signed-in account.",
             FailureKind::Geo => "This video isn't available in your country.",
             FailureKind::Unsupported => "This link isn't supported.",
             FailureKind::Unavailable => "This video is unavailable or has been removed.",
@@ -482,7 +484,8 @@ mod tests {
             FailureKind::Unknown,
         ] {
             let message = kind.message();
-            assert!(message.ends_with('.') && !message.contains("browser"), "{kind:?}: {message}");
+            // The window's own words: the phone's "this browser" is "Chaya's browser" here.
+            assert!(message.ends_with('.') && !message.contains("this browser"), "{kind:?}: {message}");
         }
     }
 }
