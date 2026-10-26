@@ -1,12 +1,13 @@
-"""Finds out what a YouTube, Instagram, TikTok or X link points to, using yt-dlp.
+"""Finds out what a YouTube, Instagram, TikTok, X or Pinterest link points to, using yt-dlp.
 
 Called from Kotlin (`PlatformEngine`) through Chaquopy. Only text crosses the language boundary: the
 result is a JSON string, either {"media": {...}} or {"error": {"kind": ..., "detail": ...}}.
 
-A post with pictures (an Instagram carousel, a tweet of photos) comes back with "items", every picture and
-video in it, found by gallery-dl (see `posts`), and no "formats".
+A post with pictures (an Instagram carousel, a tweet of photos, a Pinterest picture or story pin) comes back with
+"items", every picture and video in it, found by gallery-dl (see `posts`), and no "formats".
 """
 import json
+import re
 from urllib.parse import urljoin, urlparse
 
 from yt_dlp import YoutubeDL
@@ -76,6 +77,12 @@ def extract(url, cache_dir, cookie_file=None, js_runtime=None, fragments=False):
             post = _post_or_none(url, cache_dir, cookie_file)
             if post:
                 return json.dumps({'media': post})
+        # yt-dlp sees only the first video of a Pinterest story pin. A pin that only shows a video from elsewhere
+        # (YouTube, Vimeo) is that site's video, and is left as yt-dlp found it.
+        if _is_pinterest(url) and info.get('extractor_key') == 'Pinterest':
+            post = _post_or_none(url, cache_dir, cookie_file)
+            if post and (len(post['items']) > 1 or any(item['kind'] == 'image' for item in post['items'])):
+                return json.dumps({'media': post})
         return json.dumps({'media': _shape(info, fragments)})
     except Exception as error:  # noqa: BLE001
         return json.dumps(_error(error))
@@ -123,13 +130,23 @@ def _is_instagram(url):
     return host == 'instagram.com' or host.endswith('.instagram.com')
 
 
+# pinterest.com, its country sites (pinterest.co.uk, de.pinterest.com...), and its short links.
+_PINTEREST_HOST = re.compile(r'(?:[a-z0-9-]+\.)*pinterest\.(?:com|[a-z]{2}|co\.[a-z]{2}|com\.[a-z]{2})|pin\.it')
+
+
+def _is_pinterest(url):
+    return bool(_PINTEREST_HOST.fullmatch((urlparse(url).hostname or '').lower()))
+
+
 def _is_post_site(url):
     host = (urlparse(url).hostname or '').lower()
-    return any(host == site or host.endswith('.' + site) for site in _POST_HOSTS)
+    return any(host == site or host.endswith('.' + site) for site in _POST_HOSTS) or _is_pinterest(url)
 
 
 def _may_hold_pictures(url, error):
-    return _is_post_site(url) and _kind_of(error) in ('unavailable', 'unknown')
+    # yt-dlp has no pin.it short links of its own, and fails on a pin of pictures ("No video formats found").
+    kinds = ('unavailable', 'unknown', 'unsupported') if _is_pinterest(url) else ('unavailable', 'unknown')
+    return _is_post_site(url) and _kind_of(error) in kinds
 
 
 def _post_or_none(url, cache_dir, cookie_file):

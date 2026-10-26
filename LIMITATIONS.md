@@ -12,12 +12,18 @@ These are deliberate scope decisions, not open bugs.
   save, stays in Chaya's cache, where it still plays, with *Save as MP4* to try again.
 - **Extensionless endpoints** whose server reports a media `Content-Type`, after you tap *Scan more
   thoroughly* (same-origin only, at most ten checks, no redirects followed).
-- **Links to a single video on YouTube, Instagram, TikTok and X**, looked up by yt-dlp running on
+- **Links to a single video on YouTube, Instagram, TikTok, X and Pinterest**, looked up by yt-dlp running on
   the phone, with one choice per quality. Where a site serves picture and sound separately, Chaya
   downloads both and joins them into one MP4.
 - **Pictures in Instagram and X posts**, carousels and tweets of several photos included: every
   picture and video in the post, saved together or one at a time. A public Instagram post needs no
   sign-in. A tweet with one video and some photos offers only the video.
+- **Pinterest pins** (`pinterest.com/pin/...` on any of Pinterest's country sites, and `pin.it` short
+  links): a picture or GIF pin saves the original file, a video pin offers its qualities, and a
+  story pin saves each of its pages' pictures and videos, as found by gallery-dl. A pin that shows a
+  video from another site (YouTube, Vimeo) saves that video. The text and background music of a story
+  pin are not saved. Boards, profiles and searches are not supported, and Chaya does not use a
+  Pinterest sign-in: a pin only signed-in people can see cannot be saved.
 - **Everything an Instagram or X account has posted, as one ZIP** (posts only: not stories,
   highlights or reels tabs). Without a sign-in a site shows a visitor little or nothing (Instagram a
   few recent posts at most, X no timeline), so the person can choose to use their sign-in. Listing

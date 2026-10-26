@@ -49,6 +49,7 @@ up by yt-dlp on the phone, with picture and sound joined into one MP4. Merged as
 | [#46](https://github.com/katariyaVivek/chaya/pull/46) | A stream found by its `.m3u8` address downloads, plays and lists its qualities: Media3 is handed the type spelling it recognises (it took `application/vnd.apple.mpegurl` for a plain file and saved the playlist) |
 | [#47](https://github.com/katariyaVivek/chaya/pull/47) | A page whose name is styled text rather than a heading still names its media (the biggest text near the top), and a stream download shows an estimated total size and a real progress bar |
 | [#48](https://github.com/katariyaVivek/chaya/pull/48) | A page that draws its name after loading is named (#47 kept the first, empty look), and the quality sheet estimates each quality's size from the stream's own length when the page's player is embedded from another server |
+| [#49](https://github.com/katariyaVivek/chaya/pull/49) | Pinterest pins, pasted, shared or browsed (any country site, `pin.it` links): a picture or GIF saves the original, a video offers its qualities, a story pin saves each page's pictures and videos; a Pinterest filter in the library |
 
 ## Next
 

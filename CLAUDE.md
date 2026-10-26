@@ -6,7 +6,7 @@ copy.
 ## What this is
 
 Chaya is a native Android app (Kotlin, Jetpack Compose, one `:app` module): a WebView browser that
-detects the media on a page and downloads it, plus links from YouTube, Instagram, TikTok and X
+detects the media on a page and downloads it, plus links from YouTube, Instagram, TikTok, X and Pinterest
 looked up by yt-dlp running inside the app. It is a working app with releases, not a plan. A
 Windows version (Tauri 2, in `desktop/`) has started.
 
