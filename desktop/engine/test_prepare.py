@@ -57,7 +57,7 @@ def test_the_engine_folder_holds_the_launcher_the_engine_and_what_is_in_it(tmp_p
     assert (engine / 'cli.py').is_file() and (engine / 'extract.py').is_file()
     assert not list(engine.rglob('__pycache__'))
     assert json.loads((out / 'engine.json').read_text()) == {
-        'packages': {'yt-dlp': '2026.8.19'}, 'python': None, 'quickjs': None}
+        'packages': {'yt-dlp': '2026.8.19'}, 'python': None, 'quickjs': None, 'ffmpeg': None}
 
 
 def test_an_engine_prepared_again_starts_from_an_empty_folder(tmp_path, monkeypatch):
@@ -69,3 +69,26 @@ def test_an_engine_prepared_again_starts_from_an_empty_folder(tmp_path, monkeypa
     prepare.main(['--host', '--out', str(out)])
 
     assert not (out / 'left-over.txt').exists()
+
+
+def test_the_ffmpeg_given_goes_in_with_its_licence(tmp_path, monkeypatch):
+    monkeypatch.setattr(prepare, 'install_packages', lambda target, for_windows: target.mkdir(parents=True) or {})
+    built = tmp_path / 'built'
+    built.mkdir()
+    (built / 'ffmpeg.exe').write_bytes(b'MZ')
+    (built / 'ffmpeg-LICENSE.txt').write_text('ffmpeg (ffmpeg.exe), shipped with Chaya for Windows.\n'
+                                              'FFmpeg n8.1.3, built from https://github.com/FFmpeg/FFmpeg\n')
+    out = tmp_path / 'engine'
+
+    prepare.main(['--host', '--out', str(out), '--ffmpeg', str(built / 'ffmpeg.exe')])
+
+    assert (out / 'ffmpeg.exe').read_bytes() == b'MZ'
+    assert 'n8.1.3' in (out / 'licenses' / 'ffmpeg.txt').read_text()
+    assert json.loads((out / 'engine.json').read_text())['ffmpeg'] == 'n8.1.3'
+
+
+def test_an_ffmpeg_without_its_licence_is_refused(tmp_path):
+    (tmp_path / 'ffmpeg.exe').write_bytes(b'MZ')
+
+    with pytest.raises(SystemExit, match='LICENSE'):
+        prepare.place_ffmpeg(tmp_path / 'ffmpeg.exe', tmp_path)

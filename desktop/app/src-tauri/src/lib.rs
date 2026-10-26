@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use chaya_core::download::http::Source;
+use chaya_core::download::join::Joiner;
 use chaya_core::download::manager::{Event, Manager as DownloadManager, TaskView};
 use chaya_core::download::plan::plan;
 use chaya_core::engine::{AnswerCache, Engine};
@@ -15,13 +16,6 @@ use chaya_core::media::{Failure, FailureKind, Format, Media};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_opener::OpenerExt;
-
-/// Which picture-only tracks the app can join to sound. None yet: joining comes with the next part of
-/// downloads, so qualities that need it are not offered. Lookups and downloads both use this, so what the
-/// window offers is always what a download can save.
-fn can_join(_: &Format) -> bool {
-    false
-}
 
 /// What the address bar holds: a video or post, an account, another page, or words.
 #[tauri::command]
@@ -61,12 +55,12 @@ impl Lookups {
 /// Looks up a link to a video or post on YouTube, Instagram, TikTok or X with the bundled engine. Only such
 /// links are looked up: anything else never reaches yt-dlp.
 #[tauri::command]
-async fn look_up(url: String, lookups: State<'_, Lookups>) -> Result<Lookup, ()> {
+async fn look_up(url: String, lookups: State<'_, Lookups>, downloads: State<'_, Downloads>) -> Result<Lookup, ()> {
     let Some(link) = links::match_media(&url) else {
         return Ok(Lookup::failed(FailureKind::Unsupported));
     };
     Ok(match lookups.media(link.url, false).await {
-        Ok(media) => Lookup::from_media(&media, can_join),
+        Ok(media) => Lookup::from_media(&media, |f| downloads.can_join(f)),
         Err(failure) => Lookup::from_failure(&failure),
     })
 }
@@ -75,6 +69,17 @@ struct Downloads {
     manager: DownloadManager,
     /// Where files are saved: the person's Downloads folder.
     folder: PathBuf,
+    /// Whether the app carries the ffmpeg that joins picture and sound.
+    joins: bool,
+}
+
+impl Downloads {
+    /// Which picture-only tracks can be joined to sound: all of them (they are MP4s, `formats` sees to that)
+    /// when the app carries ffmpeg, none without it. Lookups and downloads both ask here, so what the window
+    /// offers is always what a download can save.
+    fn can_join(&self, _: &Format) -> bool {
+        self.joins
+    }
 }
 
 /// Saves `choice` ("720p", "Audio only", or "post" for every picture and video in a post) from the link at
@@ -88,7 +93,7 @@ async fn download(
 ) -> Result<Vec<TaskView>, String> {
     let link = links::match_media(&url).ok_or_else(|| FailureKind::Unsupported.message().to_string())?;
     let media = lookups.media(link.url.clone(), false).await.map_err(|f| f.kind.message().to_string())?;
-    let plans = plan(&media, &choice, &link.url, &downloads.folder, can_join)
+    let plans = plan(&media, &choice, &link.url, &downloads.folder, |f| downloads.can_join(f))
         .ok_or_else(|| "This choice can't be saved any more. Look the link up again.".to_string())?;
     Ok(plans.into_iter().map(|p| TaskView::from(&downloads.manager.add(p))).collect())
 }
@@ -126,7 +131,7 @@ async fn retry_download(id: u64, lookups: State<'_, Lookups>, downloads: State<'
     let fresh: Option<Source> = match lookups.media(task.page_url.clone(), true).await {
         Ok(media) => {
             let choice = if task.group.is_some() { chaya_core::download::plan::WHOLE_POST } else { &task.choice };
-            plan(&media, choice, &task.page_url, &downloads.folder, can_join)
+            plan(&media, choice, &task.page_url, &downloads.folder, |f| downloads.can_join(f))
                 .and_then(|plans| plans.into_iter().find(|p| p.choice == task.choice))
                 .map(|p| p.source)
         }
@@ -209,10 +214,13 @@ pub fn run() {
                     let _ = handle.emit("download", DownloadEvent::from(event));
                 }),
             );
+            let joiner = Joiner::find(&engine_dir);
+            let joins = joiner.is_some();
+            manager.set_joiner(joiner);
             // Windows names a Downloads folder for everyone; elsewhere it may be unset, so fall back to the usual one.
             let folder =
                 app.path().download_dir().or_else(|_| app.path().home_dir().map(|home| home.join("Downloads")))?;
-            app.manage(Downloads { manager, folder });
+            app.manage(Downloads { manager, folder, joins });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

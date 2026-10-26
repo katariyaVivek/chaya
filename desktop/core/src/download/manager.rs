@@ -19,7 +19,9 @@ use tokio::sync::watch;
 
 use super::error::DownloadError;
 use super::http::{self, Outcome, Progress, Source};
+use super::join::Joiner;
 use super::names;
+use super::pieces;
 
 pub const AT_ONCE: usize = 3;
 /// How often progress reaches the window.
@@ -63,14 +65,52 @@ pub struct Task {
     pub total: Option<u64>,
     /// Seconds since 1970, when it was added.
     pub added: u64,
+    /// For a quality whose picture and sound come apart: the sound, fetched after the picture (`source`) and
+    /// joined to it.
+    #[serde(default)]
+    pub sound: Option<Source>,
+    /// Where a joined download has got to.
+    #[serde(default)]
+    pub step: Option<Step>,
+}
+
+/// The steps of a download whose picture and sound come apart. What is left is decided from the files that
+/// exist ("name.picture", "name.sound"), so pause, a closed app and Retry all carry on from the right place.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Step {
+    Picture,
+    Sound,
+    Joining,
 }
 
 impl Task {
     pub fn part_path(&self) -> PathBuf {
-        let mut name = self.path.file_name().unwrap_or_default().to_os_string();
-        name.push(".part");
-        self.path.with_file_name(name)
+        with_suffix(&self.path, ".part")
     }
+
+    /// "name.picture" or "name.sound": one half of a joined download, once whole.
+    fn half(&self, which: &str) -> PathBuf {
+        with_suffix(&self.path, &format!(".{which}"))
+    }
+
+    /// Every file a download leaves on the way to its own: the `.part`, the halves, and their piece logs.
+    fn leftovers(&self) -> Vec<PathBuf> {
+        let mut files = vec![self.part_path()];
+        for half in [self.half("picture"), self.half("sound")] {
+            files.push(with_suffix(&half, ".part"));
+            files.push(half);
+        }
+        let logs: Vec<PathBuf> = files.iter().map(|f| pieces::log_path(f)).collect();
+        files.extend(logs);
+        files
+    }
+}
+
+fn with_suffix(path: &Path, suffix: &str) -> PathBuf {
+    let mut name = path.file_name().unwrap_or_default().to_os_string();
+    name.push(suffix);
+    path.with_file_name(name)
 }
 
 /// A download as the window shows it.
@@ -92,6 +132,8 @@ pub struct TaskView {
     pub retryable: bool,
     pub done: u64,
     pub total: Option<u64>,
+    /// "picture", "sound" or "joining", for a download whose picture and sound come apart.
+    pub step: Option<Step>,
 }
 
 impl From<&Task> for TaskView {
@@ -117,6 +159,7 @@ impl From<&Task> for TaskView {
             retryable: error.is_some_and(DownloadError::retryable),
             done: task.done,
             total: task.total,
+            step: task.step.filter(|_| task.state == State::Downloading),
         }
     }
 }
@@ -132,6 +175,8 @@ pub struct NewDownload {
     pub file_name: String,
     pub folder: PathBuf,
     pub source: Source,
+    /// The sound to join to `source`, for a quality whose picture and sound come apart.
+    pub sound: Option<Source>,
     pub thumbnail: Option<String>,
     pub group: Option<String>,
 }
@@ -165,6 +210,8 @@ struct Inner {
     tasks: Mutex<Vec<Task>>,
     /// The stop signal of each download that is running.
     running: Mutex<HashMap<u64, watch::Sender<bool>>>,
+    /// What joins picture and sound; without it, such downloads fail as unable to join.
+    joiner: Mutex<Option<Joiner>>,
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -194,10 +241,16 @@ impl Manager {
                 listener,
                 tasks: Mutex::new(tasks),
                 running: Mutex::new(HashMap::new()),
+                joiner: Mutex::new(None),
             }),
         };
         manager.save();
         manager
+    }
+
+    /// Sets what joins picture and sound (`Joiner::find`).
+    pub fn set_joiner(&self, joiner: Option<Joiner>) {
+        *lock(&self.inner.joiner) = joiner;
     }
 
     /// Newest first.
@@ -233,6 +286,8 @@ impl Manager {
                 done: 0,
                 total: None,
                 added: SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs()),
+                sound: new.sound,
+                step: None,
             };
             tasks.push(task.clone());
             task
@@ -275,7 +330,9 @@ impl Manager {
     pub fn cancel(&self, id: u64) {
         let Some(task) = self.take(id) else { return };
         self.stop(id);
-        let _ = std::fs::remove_file(task.part_path());
+        for file in task.leftovers() {
+            let _ = std::fs::remove_file(file);
+        }
     }
 
     /// Takes a finished or failed download off the list. A finished file stays where it is.
@@ -349,16 +406,10 @@ impl Manager {
 
     async fn run(&self, task: Task, stop: watch::Receiver<bool>) {
         let part = task.part_path();
-        let result = match prepare_folder(&task.path).await {
-            Err(error) => Err(error),
-            Ok(()) => {
-                let mut meter = Meter::new(task.id);
-                let manager = self.clone();
-                http::fetch(&self.inner.client, &task.source, &part, &stop, &mut |progress| {
-                    manager.progress(&mut meter, progress)
-                })
-                .await
-            }
+        let result = match (prepare_folder(&task.path).await, &task.sound) {
+            (Err(error), _) => Err(error),
+            (Ok(()), None) => self.fetch_into(&task, &task.source, &part, 0, None, &stop).await,
+            (Ok(()), Some(sound)) => self.fetch_joined(&task, sound, &stop).await,
         };
         // Still registered means nobody paused or cancelled it while it ran.
         let still_running = lock(&self.inner.running).remove(&task.id).is_some();
@@ -373,6 +424,7 @@ impl Manager {
                     Ok(path) => {
                         if let Some(t) = lock(&self.inner.tasks).iter_mut().find(|t| t.id == task.id) {
                             t.path = path;
+                            t.step = None;
                             t.total = Some(t.done.max(t.total.unwrap_or(0)));
                             t.done = t.total.unwrap_or(t.done);
                         }
@@ -390,6 +442,65 @@ impl Manager {
             Err(_) => {}
         }
         self.pump();
+    }
+
+    /// Fetches `source` into `part`, its progress counted after `before` bytes of other files, out of `total`
+    /// when the sizes are known in advance.
+    async fn fetch_into(
+        &self,
+        task: &Task,
+        source: &Source,
+        part: &Path,
+        before: u64,
+        total: Option<u64>,
+        stop: &watch::Receiver<bool>,
+    ) -> Result<Outcome, DownloadError> {
+        let mut meter = Meter::new(task.id);
+        let manager = self.clone();
+        http::fetch(&self.inner.client, source, part, stop, &mut |p| {
+            let total = total.or(p.total.map(|t| before + t));
+            manager.progress(&mut meter, Progress { done: before + p.done, total })
+        })
+        .await
+    }
+
+    /// The picture, then the sound, each into its half once whole, then the two joined into the `.part` file.
+    /// Halves already whole (from before a pause, or a closed app) are not fetched again.
+    async fn fetch_joined(
+        &self,
+        task: &Task,
+        sound: &Source,
+        stop: &watch::Receiver<bool>,
+    ) -> Result<Outcome, DownloadError> {
+        let joiner = lock(&self.inner.joiner).clone().ok_or(DownloadError::CouldNotJoin)?;
+        let (picture_file, sound_file) = (task.half("picture"), task.half("sound"));
+        let total = task.source.expected_size.zip(sound.expected_size).map(|(a, b)| a + b);
+        for (step, source, file) in [(Step::Picture, &task.source, &picture_file), (Step::Sound, sound, &sound_file)] {
+            if file.exists() {
+                continue;
+            }
+            self.set_step(task.id, step);
+            let before = if step == Step::Sound { file_size(&picture_file) } else { 0 };
+            let part = with_suffix(file, ".part");
+            if self.fetch_into(task, source, &part, before, total, stop).await? == Outcome::Stopped {
+                return Ok(Outcome::Stopped);
+            }
+            std::fs::rename(&part, file).map_err(|e| DownloadError::from_io(&e))?;
+        }
+        self.set_step(task.id, Step::Joining);
+        let outcome = joiner.join(&picture_file, &sound_file, &task.part_path(), stop).await?;
+        if outcome == Outcome::Done {
+            let _ = std::fs::remove_file(&picture_file);
+            let _ = std::fs::remove_file(&sound_file);
+        }
+        Ok(outcome)
+    }
+
+    fn set_step(&self, id: u64, step: Step) {
+        if let Some(task) = lock(&self.inner.tasks).iter_mut().find(|t| t.id == id) {
+            task.step = Some(step);
+        }
+        self.changed(id);
     }
 
     fn progress(&self, meter: &mut Meter, progress: Progress) {
@@ -426,6 +537,10 @@ impl Manager {
             let _ = std::fs::rename(&temporary, &self.inner.store);
         }
     }
+}
+
+fn file_size(path: &Path) -> u64 {
+    std::fs::metadata(path).map_or(0, |m| m.len())
 }
 
 async fn prepare_folder(path: &Path) -> Result<(), DownloadError> {
@@ -508,7 +623,8 @@ mod tests {
             kind: Kind::Audio,
             file_name: name.into(),
             folder: setup.folder.path().join("Downloads"),
-            source: Source { url: server.url("/file"), headers: Default::default() },
+            source: Source { url: server.url("/file"), headers: Default::default(), expected_size: None },
+            sound: None,
             thumbnail: None,
             group: None,
         }
@@ -619,7 +735,8 @@ mod tests {
         let failed = wait_for(&s.manager, task.id, |st| matches!(st, State::Failed(_))).await;
         assert_eq!(failed.state, State::Failed(DownloadError::Http(403)));
 
-        s.manager.retry(task.id, Some(Source { url: fresh.url("/file"), headers: Default::default() }));
+        s.manager
+            .retry(task.id, Some(Source { url: fresh.url("/file"), headers: Default::default(), expected_size: None }));
         let done = wait_for(&s.manager, task.id, |st| *st == State::Completed).await;
         assert_eq!(std::fs::read(&done.path).unwrap(), content);
         assert_eq!(done.source.url, fresh.url("/file"));
@@ -668,13 +785,15 @@ mod tests {
             choice: "720p".into(),
             kind: Kind::Video,
             path: folder.path().join("Clip (720p).mp4"),
-            source: Source { url: "https://cdn.example/x".into(), headers: Default::default() },
+            source: Source { url: "https://cdn.example/x".into(), headers: Default::default(), expected_size: None },
             thumbnail: None,
             group: None,
             state: State::Downloading,
             done: 10,
             total: Some(100),
             added: 1,
+            sound: None,
+            step: None,
         };
         std::fs::write(&store, serde_json::to_vec(&vec![task.clone()]).unwrap()).unwrap();
 
@@ -705,13 +824,15 @@ mod tests {
             choice: "Audio only".into(),
             kind: Kind::Audio,
             path: PathBuf::from("Downloads").join("Me at the zoo.m4a"),
-            source: Source { url: "u".into(), headers: Default::default() },
+            source: Source { url: "u".into(), headers: Default::default(), expected_size: None },
             thumbnail: None,
             group: None,
             state: State::Failed(DownloadError::Http(403)),
             done: 10,
             total: Some(100),
             added: 0,
+            sound: None,
+            step: None,
         };
         let view = serde_json::to_value(TaskView::from(&task)).unwrap();
         assert_eq!(view["fileName"], "Me at the zoo.m4a");
@@ -720,6 +841,127 @@ mod tests {
         assert_eq!(view["error"], "The site refused the download. Its address may have expired.");
         assert_eq!(view["retryable"], true);
         assert_eq!(view["kind"], "audio");
+    }
+
+    fn joiner() -> Option<Joiner> {
+        let ffmpeg = std::env::var_os("CHAYA_FFMPEG").map(PathBuf::from).unwrap_or_else(|| "ffmpeg".into());
+        let works = std::process::Command::new(&ffmpeg).arg("-version").output().is_ok_and(|o| o.status.success());
+        if !works {
+            eprintln!("No ffmpeg here; skipping the joined download test.");
+        }
+        works.then_some(Joiner { ffmpeg })
+    }
+
+    const PICTURE: &[u8] = include_bytes!("../../tests/fixtures/picture.mp4");
+    const SOUND: &[u8] = include_bytes!("../../tests/fixtures/sound.m4a");
+
+    fn joined_download(s: &Setup, picture: &TestServer, sound: &TestServer) -> NewDownload {
+        NewDownload {
+            choice: "240p".into(),
+            kind: Kind::Video,
+            file_name: "Me at the zoo (240p).mp4".into(),
+            source: Source {
+                url: picture.url("/133"),
+                headers: Default::default(),
+                expected_size: Some(PICTURE.len() as u64),
+            },
+            sound: Some(Source {
+                url: sound.url("/140"),
+                headers: Default::default(),
+                expected_size: Some(SOUND.len() as u64),
+            }),
+            ..new_download(s, picture, "unused.mp4")
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_quality_whose_picture_and_sound_come_apart_is_saved_as_one_mp4() {
+        let Some(joiner) = joiner() else { return };
+        let (picture, sound) = (
+            TestServer::start(PICTURE.to_vec(), Behaviour::default()),
+            TestServer::start(SOUND.to_vec(), Behaviour::default()),
+        );
+        let s = setup(AT_ONCE);
+        s.manager.set_joiner(Some(joiner));
+
+        let task = s.manager.add(joined_download(&s, &picture, &sound));
+        let done = wait_for(&s.manager, task.id, |st| *st == State::Completed).await;
+
+        let file = std::fs::read(&done.path).unwrap();
+        assert_eq!(&file[4..8], b"ftyp");
+        assert!(file.len() > PICTURE.len(), "picture and sound are both in it");
+        assert!(done.leftovers().iter().all(|f| !f.exists()), "the halves are gone");
+        assert_eq!(done.step, None);
+        assert_eq!(done.total, Some((PICTURE.len() + SOUND.len()) as u64), "both halves counted");
+        let steps: Vec<Step> = s
+            .events
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|e| match e {
+                Event::Changed(t) => t.step,
+                _ => None,
+            })
+            .collect();
+        assert!(
+            steps.contains(&Step::Picture) && steps.contains(&Step::Sound) && steps.contains(&Step::Joining),
+            "{steps:?}"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_joined_download_carries_on_from_the_halves_already_whole() {
+        let Some(joiner) = joiner() else { return };
+        let (picture, sound) = (
+            TestServer::start(PICTURE.to_vec(), Behaviour::default()),
+            TestServer::start(SOUND.to_vec(), Behaviour::default()),
+        );
+        let s = setup(AT_ONCE);
+        s.manager.set_joiner(Some(joiner));
+        // The picture arrived before the app closed.
+        let folder = s.folder.path().join("Downloads");
+        std::fs::create_dir_all(&folder).unwrap();
+        std::fs::write(folder.join("Me at the zoo (240p).mp4.picture"), PICTURE).unwrap();
+
+        let task = s.manager.add(joined_download(&s, &picture, &sound));
+        wait_for(&s.manager, task.id, |st| *st == State::Completed).await;
+
+        assert!(picture.requests().is_empty(), "the whole picture is not fetched again");
+        assert_eq!(sound.requests().len(), 1);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn without_ffmpeg_a_joined_download_says_it_cannot_join() {
+        let (picture, sound) = (
+            TestServer::start(PICTURE.to_vec(), Behaviour::default()),
+            TestServer::start(SOUND.to_vec(), Behaviour::default()),
+        );
+        let s = setup(AT_ONCE);
+
+        let task = s.manager.add(joined_download(&s, &picture, &sound));
+        let failed = wait_for(&s.manager, task.id, |st| matches!(st, State::Failed(_))).await;
+
+        assert_eq!(failed.state, State::Failed(DownloadError::CouldNotJoin));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn cancelling_a_joined_download_deletes_its_halves() {
+        let server = TestServer::start(
+            body(3_000_000),
+            Behaviour { chunk_delay: Duration::from_millis(5), ..Behaviour::default() },
+        );
+        let s = setup(AT_ONCE);
+        s.manager.set_joiner(Some(Joiner { ffmpeg: "ffmpeg".into() }));
+        let folder = s.folder.path().join("Downloads");
+        std::fs::create_dir_all(&folder).unwrap();
+        std::fs::write(folder.join("Me at the zoo (240p).mp4.picture"), PICTURE).unwrap();
+
+        let task = s.manager.add(joined_download(&s, &server, &server));
+        wait_for(&s.manager, task.id, |_| s.manager.get(task.id).is_some_and(|t| t.step == Some(Step::Sound))).await;
+        s.manager.cancel(task.id);
+        tokio::time::sleep(Duration::from_millis(300)).await;
+
+        assert!(task.leftovers().iter().all(|f| !f.exists()), "{:?}", task.leftovers());
     }
 
     #[test]
@@ -731,13 +973,15 @@ mod tests {
             choice: "720p".into(),
             kind: Kind::Video,
             path: "C:/Downloads/T (720p).mp4".into(),
-            source: Source { url: "u".into(), headers: Default::default() },
+            source: Source { url: "u".into(), headers: Default::default(), expected_size: None },
             thumbnail: None,
             group: None,
             state: State::Failed(DownloadError::Http(403)),
             done: 0,
             total: None,
             added: 0,
+            sound: None,
+            step: None,
         })
         .unwrap();
         assert_eq!(json["state"], "failed");

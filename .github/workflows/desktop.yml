@@ -2,8 +2,9 @@ name: Desktop app
 
 # Chaya for Windows (desktop/): the core crate's tests on Linux, then the Tauri app built on Windows
 # into an NSIS installer, kept as a run artifact. On Windows the engine the installer carries (a Python,
-# yt-dlp, gallery-dl, chaya_engine and QuickJS: desktop/engine/prepare.py) is put together first and checked
-# without the network. Titles in this installer use Geist: Cabinet Grotesk's licence keeps its file out of
+# yt-dlp, gallery-dl, chaya_engine, QuickJS and ffmpeg: desktop/engine/prepare.py) is put together first and
+# checked without the network. The cut-down ffmpeg that joins picture and sound is built once per version of
+# its build script (desktop/engine/build_ffmpeg.sh) and kept in the Actions cache. Titles in this installer use Geist: Cabinet Grotesk's licence keeps its file out of
 # the repository (desktop/design/fonts/README.md).
 
 on:
@@ -25,8 +26,39 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  ffmpeg:
+    name: ffmpeg
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Look for this build of ffmpeg
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: ffmpeg-out
+          key: ffmpeg-${{ hashFiles('desktop/engine/build_ffmpeg.sh') }}
+
+      # For Windows (cross-compiled with mingw-w64), and for the Linux tests below.
+      - name: Build ffmpeg
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mingw-w64
+          desktop/engine/build_ffmpeg.sh windows ffmpeg-out/windows
+          desktop/engine/build_ffmpeg.sh host ffmpeg-out/host
+
+      - name: Hand it to the other jobs
+        uses: actions/upload-artifact@v4
+        with:
+          name: ffmpeg
+          path: ffmpeg-out
+          if-no-files-found: error
+
   core:
     name: Core tests
+    needs: ffmpeg
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -61,16 +93,34 @@ jobs:
         working-directory: desktop
         run: cargo clippy -p chaya-core --all-targets -- -D warnings
 
+      - name: Get ffmpeg
+        uses: actions/download-artifact@v4
+        with:
+          name: ffmpeg
+          path: ffmpeg-out
+
+      # The joining tests use the cut-down ffmpeg itself, built for Linux.
       - name: Test
         working-directory: desktop
-        run: cargo test -p chaya-core
+        env:
+          CHAYA_FFMPEG: ${{ github.workspace }}/ffmpeg-out/host/ffmpeg
+        run: |
+          chmod +x "$CHAYA_FFMPEG"
+          cargo test -p chaya-core
 
   windows:
     name: Windows build
+    needs: ffmpeg
     runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Get ffmpeg
+        uses: actions/download-artifact@v4
+        with:
+          name: ffmpeg
+          path: ffmpeg-out
 
       - name: Set up Node 22
         uses: actions/setup-node@v4
@@ -99,7 +149,7 @@ jobs:
         run: npm ci
 
       - name: Put the engine together
-        run: python desktop/engine/prepare.py
+        run: python desktop/engine/prepare.py --ffmpeg ffmpeg-out/windows/ffmpeg.exe
 
       - name: Lint
         working-directory: desktop
@@ -108,11 +158,13 @@ jobs:
           cargo clippy --workspace --all-targets -- -D warnings
 
       # CHAYA_ENGINE_DIR also runs the prepared engine's own check (core/tests/bundled_engine.rs): its Python
-      # starts, the packages are the pinned ones, and yt-dlp accepts the bundled QuickJS.
+      # starts, the packages are the pinned ones, yt-dlp accepts the bundled QuickJS, and the bundled ffmpeg
+      # joins a picture and its sound.
       - name: Test
         working-directory: desktop
         env:
           CHAYA_ENGINE_DIR: ${{ github.workspace }}\desktop\app\src-tauri\engine
+          CHAYA_FFMPEG: ${{ github.workspace }}\desktop\app\src-tauri\engine\ffmpeg.exe
         run: cargo test --workspace -- --nocapture
 
       - name: Build the installer

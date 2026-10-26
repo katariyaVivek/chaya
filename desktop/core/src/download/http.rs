@@ -18,6 +18,7 @@ use tokio::io::{AsyncWriteExt, BufWriter};
 use tokio::sync::watch;
 
 use super::error::DownloadError;
+use super::pieces::{self, PieceOutcome};
 
 /// What to fetch: an address and the headers its server expects.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -25,6 +26,9 @@ pub struct Source {
     pub url: String,
     #[serde(default)]
     pub headers: BTreeMap<String, String>,
+    /// The size the site gave, which decides whether a file is fetched in pieces.
+    #[serde(default)]
+    pub expected_size: Option<u64>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -52,6 +56,14 @@ pub async fn fetch(
     stop: &watch::Receiver<bool>,
     on_progress: &mut (dyn FnMut(Progress) + Send),
 ) -> Result<Outcome, DownloadError> {
+    // YouTube's servers send one request at about the speed of playback; several pieces at once go faster.
+    if let Some(total) = source.expected_size.filter(|_| pieces::wanted(source)) {
+        match pieces::fetch(client, source, part, pieces::Layout::for_file(total), stop, on_progress).await? {
+            PieceOutcome::Finished(outcome) => return Ok(outcome),
+            // The server would not serve pieces: the rest comes the ordinary way.
+            PieceOutcome::NoPieces => {}
+        }
+    }
     let mut waits = RETRY_WAITS.iter();
     loop {
         match fetch_once(client, source, part, stop.clone(), on_progress).await {
@@ -70,7 +82,7 @@ pub async fn fetch(
 
 /// Returns once the stop signal is raised (or its sender is gone). The guard `wait_for` returns is dropped
 /// here, so the futures waiting on this stay `Send`.
-async fn until_stopped(stop: &mut watch::Receiver<bool>) {
+pub(crate) async fn until_stopped(stop: &mut watch::Receiver<bool>) {
     let _ = stop.wait_for(|stopped| *stopped).await;
 }
 
@@ -211,8 +223,11 @@ mod tests {
 
     async fn run(server: &TestServer, part: &Path) -> (Result<Outcome, DownloadError>, Vec<Progress>) {
         let (_tx, stop) = watch::channel(false);
-        let source =
-            Source { url: server.url("/file"), headers: [("User-Agent".to_string(), "Chaya-test".to_string())].into() };
+        let source = Source {
+            url: server.url("/file"),
+            headers: [("User-Agent".to_string(), "Chaya-test".to_string())].into(),
+            expected_size: None,
+        };
         let mut seen = Vec::new();
         let result = fetch(&Client::new(), &source, part, &stop, &mut |p| seen.push(p)).await;
         (result, seen)
@@ -317,7 +332,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let part = dir.path().join("a.mp4.part");
         let (stop_tx, stop) = watch::channel(false);
-        let source = Source { url: server.url("/file"), headers: BTreeMap::new() };
+        let source = Source { url: server.url("/file"), headers: BTreeMap::new(), expected_size: None };
 
         let mut seen = 0u64;
         let result = fetch(&Client::new(), &source, &part, &stop, &mut |p| {
@@ -341,7 +356,8 @@ mod tests {
         let (_tx, stop) = watch::channel(false);
         // A port nothing listens on: bind one, then close it.
         let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
-        let source = Source { url: format!("http://127.0.0.1:{port}/file"), headers: BTreeMap::new() };
+        let source =
+            Source { url: format!("http://127.0.0.1:{port}/file"), headers: BTreeMap::new(), expected_size: None };
 
         let result = fetch(&Client::new(), &source, &dir.path().join("a.part"), &stop, &mut |_| {}).await;
 

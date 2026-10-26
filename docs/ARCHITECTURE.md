@@ -285,8 +285,8 @@ Share. Reached from the Downloads screen's menu.
 
 ## Chaya for Windows (`desktop/`)
 
-A Tauri 2 app, early: the window, its themes, recognising links, looking them up, and downloading
-what can be saved as plain files. Joining picture and sound, and streams, come next. [`../desktop/README.md`](../desktop/README.md) has the layout.
+A Tauri 2 app, early: the window, its themes, recognising links, looking them up, and downloading:
+plain files, and qualities whose picture and sound are joined by a cut-down ffmpeg. Streams come next. [`../desktop/README.md`](../desktop/README.md) has the layout.
 
 - `desktop/core` (`chaya-core`) is plain Rust with no window in it, the desktop's equivalent of the
   phone's Android-free Kotlin. `links` recognises links with the phone's rules and test table.
@@ -301,6 +301,10 @@ what can be saved as plain files. Joining picture and sound, and streams, come n
   owns every task, `Queued → Downloading ⇄ Paused → Completed | Failed`, three at once, kept in
   `downloads.json`; `error` sorts failures as `DownloadError` does. Retry looks the link up again for
   a fresh address. Both are tested against a local test server (`download/testserver.rs`).
+- **Joining** (`download/join.rs`) runs the ffmpeg in the engine folder, built by
+  `desktop/engine/build_ffmpeg.sh` with no codecs (copying only), where the phone uses `MediaMuxer` for
+  H.264 only. **Pieces** (`download/pieces.rs`) port the phone's 10 MB, three-at-a-time fetching of
+  YouTube's files and its log of whole pieces.
 - `desktop/app/src-tauri` hands `chaya-core` to the window as commands (`recognise_link`, `look_up`,
   `download` and the download controls) and sends it `download` events. The window
   may call only those and set its title bar's theme (`capabilities/default.json`). Its content
