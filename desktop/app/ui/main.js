@@ -180,7 +180,7 @@ function showFound(card, link, found) {
     }
     parts.push(list);
     if (found.moreLater) {
-      parts.push(paragraph("Some of this video's qualities come as streams, which Chaya for Windows can't save yet.", 'card__note'));
+      parts.push(paragraph("Some of this video's qualities come in a form Chaya for Windows can't save yet.", 'card__note'));
     }
   }
   state.replaceChildren(...parts);
@@ -394,6 +394,8 @@ function metaOf(task) {
       return 'Waiting for another download to finish';
     case 'downloading': {
       if (task.step === 'joining') return 'Joining picture and sound';
+      // A stream arrives as pieces, then becomes one file.
+      if (task.step === 'saving') return task.kind === 'audio' ? 'Saving as M4A' : 'Saving as MP4';
       const parts = [sizes];
       // A quality whose picture and sound come apart: which of the two is on its way.
       if (task.step === 'picture') parts.unshift('Picture');

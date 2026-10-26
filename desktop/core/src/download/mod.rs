@@ -7,6 +7,7 @@ pub mod manager;
 pub mod names;
 pub mod pieces;
 pub mod plan;
+pub mod stream;
 
 #[cfg(test)]
 pub(crate) mod testserver;

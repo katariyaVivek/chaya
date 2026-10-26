@@ -7,6 +7,8 @@ publish = false
 rust-version.workspace = true
 
 [dependencies]
+aes = "0.9"
+cbc = "0.2"
 futures-util = "0.3"
 # Windows' own TLS (Schannel): the PC's certificates and proxy settings, no extra build tools.
 reqwest = { version = "0.13", default-features = false, features = ["native-tls", "stream", "http2", "system-proxy"] }

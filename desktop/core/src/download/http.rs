@@ -19,6 +19,7 @@ use tokio::sync::watch;
 
 use super::error::DownloadError;
 use super::pieces::{self, PieceOutcome};
+use super::stream;
 
 /// What to fetch: an address and the headers its server expects.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -29,6 +30,9 @@ pub struct Source {
     /// The size the site gave, which decides whether a file is fetched in pieces.
     #[serde(default)]
     pub expected_size: Option<u64>,
+    /// An HLS stream: `url` is its playlist, and its pieces are what is fetched (`stream`).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub stream: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -56,6 +60,9 @@ pub async fn fetch(
     stop: &watch::Receiver<bool>,
     on_progress: &mut (dyn FnMut(Progress) + Send),
 ) -> Result<Outcome, DownloadError> {
+    if source.stream {
+        return stream::fetch(client, source, part, stop, on_progress).await;
+    }
     // YouTube's servers send one request at about the speed of playback; several pieces at once go faster.
     if let Some(total) = source.expected_size.filter(|_| pieces::wanted(source)) {
         match pieces::fetch(client, source, part, pieces::Layout::for_file(total), stop, on_progress).await? {
@@ -227,6 +234,7 @@ mod tests {
             url: server.url("/file"),
             headers: [("User-Agent".to_string(), "Chaya-test".to_string())].into(),
             expected_size: None,
+            stream: false,
         };
         let mut seen = Vec::new();
         let result = fetch(&Client::new(), &source, part, &stop, &mut |p| seen.push(p)).await;
@@ -332,7 +340,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let part = dir.path().join("a.mp4.part");
         let (stop_tx, stop) = watch::channel(false);
-        let source = Source { url: server.url("/file"), headers: BTreeMap::new(), expected_size: None };
+        let source = Source { url: server.url("/file"), headers: BTreeMap::new(), expected_size: None, stream: false };
 
         let mut seen = 0u64;
         let result = fetch(&Client::new(), &source, &part, &stop, &mut |p| {
@@ -356,8 +364,12 @@ mod tests {
         let (_tx, stop) = watch::channel(false);
         // A port nothing listens on: bind one, then close it.
         let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
-        let source =
-            Source { url: format!("http://127.0.0.1:{port}/file"), headers: BTreeMap::new(), expected_size: None };
+        let source = Source {
+            url: format!("http://127.0.0.1:{port}/file"),
+            headers: BTreeMap::new(),
+            expected_size: None,
+            stream: false,
+        };
 
         let result = fetch(&Client::new(), &source, &dir.path().join("a.part"), &stop, &mut |_| {}).await;
 

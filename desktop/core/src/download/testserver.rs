@@ -1,7 +1,8 @@
-//! A small HTTP server for the download tests, standing in for a video site's file server: it honours
-//! `Range`, and can ignore it, refuse, drop the connection part-way, or send slowly. Nothing reaches the
-//! internet.
+//! A small HTTP server for the download tests, standing in for a video site's file server: it serves one file
+//! at any path, or several at their own (a stream's playlist and pieces), honours `Range`, and can ignore it,
+//! refuse, drop the connection part-way, or send slowly. Nothing reaches the internet.
 
+use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
@@ -14,12 +15,20 @@ pub struct Behaviour {
     pub status: Option<u16>,
     /// Send the whole file with 200 even when a range is asked for.
     pub ignore_range: bool,
-    /// Close the first connection after this many bytes of the body.
+    /// Close the first connection for each path after this many bytes of the body.
     pub cut_first_after: Option<usize>,
     /// Pause between 16 KiB pieces of the body.
     pub chunk_delay: Duration,
     /// Answer a range with an end ("bytes=a-b") with the whole file, as a server that serves no pieces does.
     pub refuse_pieces: bool,
+    /// Answer requests for this path, and only this one, with 403.
+    pub refuse_path: Option<String>,
+}
+
+/// One file served at any path, or files at their paths (anything else is not found).
+enum Files {
+    One(Vec<u8>),
+    At(HashMap<String, Vec<u8>>),
 }
 
 pub struct TestServer {
@@ -28,18 +37,29 @@ pub struct TestServer {
 }
 
 impl TestServer {
+    /// Serves `body` at any path.
     pub fn start(body: Vec<u8>, behaviour: Behaviour) -> TestServer {
+        TestServer::serving(Files::One(body), behaviour)
+    }
+
+    /// Serves each file at its path ("/index.m3u8"); paths are matched lowercased.
+    pub fn with_files(files: Vec<(String, Vec<u8>)>, behaviour: Behaviour) -> TestServer {
+        TestServer::serving(Files::At(files.into_iter().map(|(p, b)| (p.to_lowercase(), b)).collect()), behaviour)
+    }
+
+    fn serving(files: Files, behaviour: Behaviour) -> TestServer {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
         let requests = Arc::new(Mutex::new(Vec::new()));
         let seen = requests.clone();
-        let body = Arc::new(body);
+        let files = Arc::new(files);
+        let cut = Arc::new(Mutex::new(HashSet::new()));
         thread::spawn(move || {
-            for (index, stream) in listener.incoming().enumerate() {
+            for stream in listener.incoming() {
                 let Ok(stream) = stream else { continue };
-                let (body, behaviour, seen) = (body.clone(), behaviour.clone(), seen.clone());
+                let (files, behaviour, seen, cut) = (files.clone(), behaviour.clone(), seen.clone(), cut.clone());
                 thread::spawn(move || {
-                    let _ = serve(stream, &body, &behaviour, index == 0, &seen);
+                    let _ = serve(stream, &files, &behaviour, &cut, &seen);
                 });
             }
         });
@@ -58,9 +78,9 @@ impl TestServer {
 
 fn serve(
     mut stream: TcpStream,
-    body: &[u8],
+    files: &Files,
     behaviour: &Behaviour,
-    first: bool,
+    cut: &Mutex<HashSet<String>>,
     seen: &Mutex<Vec<String>>,
 ) -> std::io::Result<()> {
     let mut reader = BufReader::new(stream.try_clone()?);
@@ -75,9 +95,18 @@ fn serve(
     let head = head.to_lowercase();
     seen.lock().unwrap().push(head.clone());
 
-    if let Some(status) = behaviour.status {
+    // "get /path http/1.1"
+    let path = head.split_whitespace().nth(1).unwrap_or("/").to_string();
+    let refused = behaviour.refuse_path.as_ref().is_some_and(|p| p.to_lowercase() == path);
+    let status = behaviour.status.or(refused.then_some(403));
+    let body = match files {
+        Files::One(body) => Some(body),
+        Files::At(files) => files.get(&path),
+    };
+    let (Some(body), None) = (body, status) else {
+        let status = status.unwrap_or(404);
         return write!(stream, "HTTP/1.1 {status} Refused\r\ncontent-length: 0\r\nconnection: close\r\n\r\n");
-    }
+    };
     let range = head.lines().find_map(|l| l.strip_prefix("range: bytes=")).and_then(|r| {
         let (start, end) = r.trim().split_once('-')?;
         Some((start.parse::<usize>().ok()?, end.parse::<usize>().ok()))
@@ -102,6 +131,7 @@ fn serve(
     response.push_str("\r\n");
     stream.write_all(response.as_bytes())?;
 
+    let first = cut.lock().unwrap().insert(path);
     let limit = if first { behaviour.cut_first_after.unwrap_or(usize::MAX) } else { usize::MAX };
     let mut sent = 0;
     for piece in body[start..end].chunks(16 * 1024) {

@@ -35,7 +35,7 @@ fn the_prepared_engine_starts_and_its_pieces_fit_together() {
 }
 
 #[tokio::test]
-async fn the_prepared_ffmpeg_joins_a_picture_and_its_sound() {
+async fn the_prepared_ffmpeg_joins_a_picture_and_its_sound_and_saves_a_stream() {
     use chaya_core::download::http::Outcome;
     use chaya_core::download::join::Joiner;
 
@@ -61,4 +61,12 @@ async fn the_prepared_ffmpeg_joins_a_picture_and_its_sound() {
     assert_eq!(&bytes[4..8], b"ftyp");
     let at = |name: &[u8]| bytes.windows(4).position(|w| w == name).unwrap();
     assert!(at(b"moov") < at(b"mdat"), "the index comes first, so players can start at once");
+
+    // A stream's pieces (MPEG-TS, H.264 and AAC) become an MP4 too.
+    let saved = out.path().join("Clip (720p).mp4.part");
+    let result = joiner.convert(&fixtures.join("stream.ts"), &saved, &stop).await;
+    assert_eq!(result, Ok(Outcome::Done));
+    let bytes = std::fs::read(&saved).unwrap();
+    let has = |name: &[u8]| bytes.windows(4).any(|w| w == name);
+    assert!(has(b"ftyp") && has(b"avcC") && has(b"mp4a"), "picture and sound from the stream");
 }

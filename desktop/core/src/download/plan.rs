@@ -15,13 +15,15 @@ use super::names;
 pub const WHOLE_POST: &str = "post";
 
 /// What saving `choice` from `media` takes, or `None` when there is no such choice (an answer that changed
-/// since the window showed it) or it is not one the app can save yet.
+/// since the window showed it) or it is not one the app can save yet. `can_join` and `streams` as for
+/// `Lookup::from_media`.
 pub fn plan(
     media: &Media,
     choice: &str,
     page_url: &str,
     folder: &Path,
     can_join: impl Fn(&Format) -> bool,
+    streams: bool,
 ) -> Option<Vec<NewDownload>> {
     let base = |choice: String, kind, file_name, source| NewDownload {
         title: media.title.clone(),
@@ -45,7 +47,8 @@ pub fn plan(
             let n = (i + 1).to_string();
             let (kind, word) = if item.is_video { (Kind::Video, "Video") } else { (Kind::Picture, "Picture") };
             let name = names::file_name(&media.title, several.then_some(n.as_str()), &item.ext);
-            let source = Source { url: item.url.clone(), headers: item.headers.clone(), expected_size: None };
+            let source =
+                Source { url: item.url.clone(), headers: item.headers.clone(), expected_size: None, stream: false };
             NewDownload {
                 thumbnail: if item.is_video { media.thumbnail_url.clone() } else { Some(item.url.clone()) },
                 group: Some(page_url.to_string()),
@@ -56,7 +59,7 @@ pub fn plan(
     }
 
     let found = formats::choices(media, can_join).into_iter().find(|c| c.label == choice)?;
-    if !can_save(&found) {
+    if !can_save(&found, streams) {
         return None;
     }
     let ext = found.file.ext.clone().unwrap_or_else(|| if found.is_audio_only { "m4a".into() } else { "mp4".into() });
@@ -65,10 +68,20 @@ pub fn plan(
         (false, Some(_)) => (Kind::Video, Some(found.label.as_str())),
         (false, None) => (Kind::Video, None),
     };
-    // Picture and sound joined are always an MP4: only MP4 pictures and M4A sound are paired (formats).
-    let ext = if found.needs_merge() { "mp4".to_string() } else { ext };
+    // Picture and sound joined are always an MP4: only MP4 pictures and M4A sound are paired (formats). A
+    // stream, whatever its pieces are, is saved as an MP4, or an M4A for sound only.
+    let ext = match (found.needs_merge() || found.file.is_hls(), found.is_audio_only) {
+        (true, true) => "m4a".to_string(),
+        (true, false) => "mp4".to_string(),
+        (false, _) => ext,
+    };
     let name = names::file_name(&media.title, label, &ext);
-    let source_of = |f: &Format| Source { url: f.url.clone(), headers: f.headers.clone(), expected_size: f.size_bytes };
+    let source_of = |f: &Format| Source {
+        url: f.url.clone(),
+        headers: f.headers.clone(),
+        expected_size: f.size_bytes,
+        stream: f.is_hls(),
+    };
     let mut download = base(found.label.clone(), kind, name, source_of(&found.file));
     download.sound = found.audio_to_merge.as_ref().map(source_of);
     Some(vec![download])
@@ -89,7 +102,7 @@ mod tests {
     #[test]
     fn the_sound_is_saved_under_the_title_with_the_sites_headers() {
         let folder = PathBuf::from("C:/Users/me/Downloads");
-        let plans = plan(&zoo(), "Audio only", "https://youtu.be/jNQXAC9IVRw", &folder, NEVER).unwrap();
+        let plans = plan(&zoo(), "Audio only", "https://youtu.be/jNQXAC9IVRw", &folder, NEVER, false).unwrap();
         assert_eq!(plans.len(), 1);
         let p = &plans[0];
         assert_eq!(p.file_name, "Me at the zoo.m4a");
@@ -117,22 +130,22 @@ mod tests {
             }],
             ..Media::default()
         };
-        let plans = plan(&media, "720p", "https://x.com/a/status/1", Path::new("D"), NEVER).unwrap();
+        let plans = plan(&media, "720p", "https://x.com/a/status/1", Path::new("D"), NEVER, false).unwrap();
         assert_eq!(plans[0].file_name, "Clip (720p).mp4");
         assert_eq!(plans[0].kind, Kind::Video);
     }
 
     #[test]
     fn a_choice_that_is_not_offered_or_needs_joining_plans_nothing() {
-        assert!(plan(&zoo(), "1080p", "u", Path::new("D"), NEVER).is_none());
+        assert!(plan(&zoo(), "1080p", "u", Path::new("D"), NEVER, false).is_none());
         // Without joining, the 240p that needs it is not offered.
-        assert!(plan(&zoo(), "240p", "u", Path::new("D"), NEVER).is_none());
-        assert!(plan(&zoo(), WHOLE_POST, "u", Path::new("D"), NEVER).is_none());
+        assert!(plan(&zoo(), "240p", "u", Path::new("D"), NEVER, false).is_none());
+        assert!(plan(&zoo(), WHOLE_POST, "u", Path::new("D"), NEVER, false).is_none());
     }
 
     #[test]
     fn a_quality_whose_picture_and_sound_come_apart_fetches_both_for_joining() {
-        let plans = plan(&zoo(), "240p", "https://youtu.be/jNQXAC9IVRw", Path::new("D"), |_| true).unwrap();
+        let plans = plan(&zoo(), "240p", "https://youtu.be/jNQXAC9IVRw", Path::new("D"), |_| true, true).unwrap();
         let p = &plans[0];
         assert_eq!(p.file_name, "Me at the zoo (240p).mp4");
         assert_eq!(p.kind, Kind::Video);
@@ -141,6 +154,28 @@ mod tests {
         assert!(sound.url.ends_with("/140"));
         assert_eq!(sound.expected_size, Some(309_288));
         assert!(p.source.expected_size.is_some(), "sizes known, so progress counts both");
+    }
+
+    #[test]
+    fn a_stream_is_saved_as_an_mp4_from_its_playlist() {
+        let media = Media {
+            title: "Clip".into(),
+            formats: vec![Format {
+                id: "hls-1080".into(),
+                url: "https://video.example/1080/index.m3u8".into(),
+                ext: Some("ts".into()),
+                protocol: Some("m3u8_native".into()),
+                height: Some(1080),
+                ..Format::default()
+            }],
+            ..Media::default()
+        };
+        assert!(plan(&media, "1080p", "u", Path::new("D"), |_| true, false).is_none(), "not without streams");
+        let plans = plan(&media, "1080p", "u", Path::new("D"), |_| true, true).unwrap();
+        assert_eq!(plans[0].file_name, "Clip (1080p).mp4");
+        assert!(plans[0].source.stream);
+        assert!(plans[0].source.url.ends_with("/index.m3u8"));
+        assert_eq!(plans[0].sound, None);
     }
 
     #[test]
@@ -162,7 +197,7 @@ mod tests {
             ],
             ..Media::default()
         };
-        let plans = plan(&media, WHOLE_POST, "https://www.instagram.com/p/C1/", Path::new("D"), NEVER).unwrap();
+        let plans = plan(&media, WHOLE_POST, "https://www.instagram.com/p/C1/", Path::new("D"), NEVER, false).unwrap();
         let names: Vec<&str> = plans.iter().map(|p| p.file_name.as_str()).collect();
         assert_eq!(names, ["Monsoon trip (1).jpg", "Monsoon trip (2).mp4"]);
         assert_eq!(plans.iter().map(|p| p.choice.as_str()).collect::<Vec<_>>(), ["Picture 1", "Video 2"]);
@@ -172,6 +207,9 @@ mod tests {
         assert_eq!(plans[1].source.headers.get("Referer").map(String::as_str), Some("https://www.instagram.com/"));
 
         let single = Media { items: vec![item("https://cdn.example/1.jpg", false, "jpg")], ..media };
-        assert_eq!(plan(&single, WHOLE_POST, "u", Path::new("D"), NEVER).unwrap()[0].file_name, "Monsoon trip.jpg");
+        assert_eq!(
+            plan(&single, WHOLE_POST, "u", Path::new("D"), NEVER, false).unwrap()[0].file_name,
+            "Monsoon trip.jpg"
+        );
     }
 }

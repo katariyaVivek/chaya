@@ -63,6 +63,12 @@ impl Format {
         !address.contains(".m3u8") && !address.contains(".mpd")
     }
 
+    /// An HLS stream: a playlist of pieces, which the app can save (`download::stream`). DASH it cannot yet.
+    pub fn is_hls(&self) -> bool {
+        let protocol = self.protocol.as_deref().unwrap_or("").to_ascii_lowercase();
+        protocol.contains("m3u") || (!protocol.contains("dash") && self.url.to_ascii_lowercase().contains(".m3u8"))
+    }
+
     /// A single file with both picture and sound.
     pub fn is_complete_file(&self) -> bool {
         self.is_direct_file() && self.has_video() && self.has_audio()
@@ -408,9 +414,13 @@ mod tests {
         assert!(!f(Some("none"), Some("none")).is_audio_only(), "a storyboard is neither");
 
         let manifest = Format { protocol: Some("m3u8_native".into()), ..f(None, None) };
-        assert!(!manifest.is_direct_file());
+        assert!(!manifest.is_direct_file() && manifest.is_hls());
         let mpd = Format { url: "https://cdn.example/a.MPD".into(), ..f(None, None) };
-        assert!(!mpd.is_direct_file());
+        assert!(!mpd.is_direct_file() && !mpd.is_hls());
+        let dash = Format { protocol: Some("http_dash_segments".into()), ..f(None, None) };
+        assert!(!dash.is_direct_file() && !dash.is_hls());
+        let by_address = Format { url: "https://cdn.example/v/index.m3u8?t=1".into(), ..f(None, None) };
+        assert!(by_address.is_hls() && !f(None, None).is_hls());
 
         let drc = Format { id: "251-drc".into(), ..f(None, None) };
         assert!(drc.is_loudness_compressed());

@@ -1,7 +1,9 @@
 //! Turns what yt-dlp found into choices a person can read, best first, ending with "Audio only".
 //!
 //! Ported from the phone's `FormatSelector` (`app/src/main/java/com/chaya/app/platform/FormatSelector.kt`),
-//! with its tests: only what the app can really save is offered.
+//! with its tests: only what the app can really save is offered. Beyond the phone's, a picture-only HLS stream
+//! is paired with sound when nothing better reaches its quality, and a sound-only stream is the audio when
+//! there is no sound file.
 
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
@@ -93,9 +95,13 @@ pub fn choices(media: &Media, can_join: impl Fn(&Format) -> bool) -> Vec<Choice>
         return Vec::new();
     }
     let audio_only: Vec<&Format> = media.formats.iter().filter(|f| f.is_audio_only() && f.is_direct_file()).collect();
-    let best_audio = best(audio_only.iter().copied(), by_audio_preference);
+    let audio_streams = || media.formats.iter().filter(|f| f.is_audio_only() && f.is_hls());
+    let best_audio =
+        best(audio_only.iter().copied(), by_audio_preference).or_else(|| best(audio_streams(), by_audio_preference));
     let merge_audio =
         best(audio_only.iter().copied().filter(|f| is_ext(f, "m4a") || is_ext(f, "mp4")), by_audio_preference);
+    // A picture-only stream takes the sound file when there is one, else the best sound-only stream.
+    let stream_sound = merge_audio.or_else(|| best(audio_streams(), by_audio_preference));
 
     let mut by_quality: BTreeMap<i64, Vec<&Format>> = BTreeMap::new();
     for format in media.formats.iter().filter(|f| f.has_video() && !f.is_audio_only()) {
@@ -106,7 +112,7 @@ pub fn choices(media: &Media, can_join: impl Fn(&Format) -> bool) -> Vec<Choice>
     let mut choices: Vec<Choice> = by_quality
         .iter()
         .rev()
-        .filter_map(|(quality, candidates)| choice_for(*quality, candidates, merge_audio, &can_join))
+        .filter_map(|(quality, candidates)| choice_for(*quality, candidates, (merge_audio, stream_sound), &can_join))
         .collect();
 
     if choices.is_empty() {
@@ -124,11 +130,12 @@ pub fn choices(media: &Media, can_join: impl Fn(&Format) -> bool) -> Vec<Choice>
 }
 
 /// One choice per quality. A ready-made file wins; then, when joining is possible, a separate picture and sound;
-/// a streaming manifest is the last resort.
+/// then an HLS stream with picture and sound; then a picture-only HLS stream and sound; a DASH stream, which the
+/// app cannot save yet, is the last resort.
 fn choice_for(
     quality: i64,
     candidates: &[&Format],
-    merge_audio: Option<&Format>,
+    (merge_audio, stream_sound): (Option<&Format>, Option<&Format>),
     can_join: &impl Fn(&Format) -> bool,
 ) -> Option<Choice> {
     let complete_file = best(candidates.iter().copied().filter(|f| f.is_complete_file()), by_preference);
@@ -138,14 +145,24 @@ fn choice_for(
         }),
         by_merge_compatibility,
     );
-    let complete_stream =
-        best(candidates.iter().copied().filter(|f| !f.is_direct_file() && f.has_audio()), by_preference);
+    let streams = || candidates.iter().copied().filter(|f| !f.is_direct_file());
+    let complete_stream = best(streams().filter(|f| f.is_hls() && f.has_audio()), by_preference);
+    let picture_stream = best(
+        streams().filter(|f| f.is_hls() && f.audio_codec.as_deref() == Some("none") && can_join(f)),
+        by_merge_compatibility,
+    );
+    let other_stream = best(streams().filter(|f| !f.is_hls() && f.has_audio()), by_preference);
 
-    let (file, audio) = match (complete_file, picture_only, merge_audio, complete_stream) {
-        (Some(file), ..) => (file, None),
-        (None, Some(picture), Some(audio), _) => (picture, Some(audio)),
-        (None, _, _, Some(stream)) => (stream, None),
-        _ => return None,
+    let (file, audio) = if let Some(file) = complete_file {
+        (file, None)
+    } else if let (Some(picture), Some(audio)) = (picture_only, merge_audio) {
+        (picture, Some(audio))
+    } else if let Some(stream) = complete_stream {
+        (stream, None)
+    } else if let (Some(picture), Some(audio)) = (picture_stream, stream_sound) {
+        (picture, Some(audio))
+    } else {
+        (other_stream?, None)
     };
     let fps = file.fps.filter(|fps| *fps > 30.0).map(|fps| (fps as i64).to_string()).unwrap_or_default();
     Some(choice(format!("{quality}p{fps}"), Some(quality), file.clone(), audio.cloned(), false))
@@ -159,7 +176,13 @@ fn choice(
     is_audio_only: bool,
 ) -> Choice {
     let mut choice = Choice { label, detail: String::new(), quality, file, audio_to_merge, is_audio_only };
-    let mut facts: Vec<String> = choice.file.ext.iter().map(|e| e.to_uppercase()).collect();
+    // A stream is saved as an MP4, or an M4A for sound only, whatever its pieces are.
+    let saved_as = match (choice.file.is_hls(), is_audio_only) {
+        (true, true) => Some("m4a"),
+        (true, false) => Some("mp4"),
+        (false, _) => choice.file.ext.as_deref(),
+    };
+    let mut facts: Vec<String> = saved_as.iter().map(|e| e.to_uppercase()).collect();
     if let Some(size) = choice.size_bytes().filter(|s| *s > 0) {
         facts.push(format!("≈ {}", file_size(size)));
     }
@@ -237,6 +260,10 @@ mod tests {
             url: format!("https://cdn.example/{id}/index.m3u8"),
             ..complete(id, Some(width), Some(height))
         }
+    }
+
+    fn dash(id: &str, width: i64, height: i64) -> Format {
+        Format { protocol: Some("http_dash_segments".into()), ..complete(id, Some(width), Some(height)) }
     }
 
     fn labels(choices: &[Choice]) -> Vec<&str> {
@@ -401,6 +428,40 @@ mod tests {
 
         let silent = media(vec![Format { audio_codec: Some("none".into()), ..stream("hls-v", 1280, 720) }]);
         assert!(choices(&silent, ALWAYS).is_empty());
+    }
+
+    #[test]
+    fn a_picture_only_stream_is_paired_with_sound_when_nothing_better_reaches_its_quality() {
+        let picture = |id: &str, h: i64| Format { audio_codec: Some("none".into()), ..stream(id, h * 16 / 9, h) };
+        let sound_stream =
+            Format { width: None, height: None, video_codec: Some("none".into()), ..stream("hls-audio", 0, 0) };
+        // As X answers: picture-only streams, a sound-only stream, and one ready-made file.
+        let m = media(vec![
+            picture("hls-1080", 1080),
+            picture("hls-720", 720),
+            complete("http-720", Some(1280), Some(720)),
+            sound_stream.clone(),
+        ]);
+        let c = choices(&m, ALWAYS);
+        assert_eq!(labels(&c), ["1080p", "720p", "Audio only"]);
+        assert_eq!(c[0].file.id, "hls-1080");
+        assert_eq!(c[0].audio_to_merge.as_ref().unwrap().id, "hls-audio");
+        assert_eq!(c[1].file.id, "http-720", "the ready-made file wins");
+        assert_eq!(c[2].file.id, "hls-audio", "the sound-only stream is the audio when there is no sound file");
+        assert_eq!(c[2].detail, "M4A", "what it is saved as");
+
+        // A sound file is preferred to a sound stream, and nothing is paired without joining.
+        let with_file = media(vec![picture("hls-1080", 1080), sound_stream, audio("140", "m4a")]);
+        assert_eq!(choices(&with_file, ALWAYS)[0].audio_to_merge.as_ref().unwrap().id, "140");
+        assert_eq!(labels(&choices(&with_file, NEVER)), ["Audio only"]);
+    }
+
+    #[test]
+    fn an_hls_stream_is_preferred_to_dash_which_is_the_last_resort() {
+        let m = media(vec![dash("dash-1080", 1920, 1080), stream("hls-1080", 1920, 1080)]);
+        assert_eq!(choices(&m, ALWAYS)[0].file.id, "hls-1080");
+        let only_dash = media(vec![dash("dash-1080", 1920, 1080)]);
+        assert_eq!(choices(&only_dash, ALWAYS)[0].file.id, "dash-1080");
     }
 
     #[test]

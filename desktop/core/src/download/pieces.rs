@@ -242,12 +242,13 @@ mod tests {
     }
 
     fn source(server: &TestServer) -> Source {
-        Source { url: server.url("/videoplayback"), headers: Default::default(), expected_size: None }
+        Source { url: server.url("/videoplayback"), headers: Default::default(), expected_size: None, stream: false }
     }
 
     #[test]
     fn only_youtubes_file_servers_are_fetched_in_pieces() {
-        let at = |url: &str| Source { url: url.into(), headers: Default::default(), expected_size: None };
+        let at =
+            |url: &str| Source { url: url.into(), headers: Default::default(), expected_size: None, stream: false };
         assert!(wanted(&at("https://rr3---sn-abc.googlevideo.com/videoplayback?id=1")));
         assert!(!wanted(&at("https://www.youtube.com/watch?v=x")));
         assert!(!wanted(&at("https://googlevideo.com.example/videoplayback")));
