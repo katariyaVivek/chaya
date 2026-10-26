@@ -137,7 +137,17 @@ export class DownloadButton {
     const { el, state } = this;
     el.dataset.state = state;
     if (this.labelEl && this.labels[state]) this.labelEl.textContent = this.labels[state];
-    el.style.width = `${this.widthFor(state)}px`;
+    if (el.isConnected) {
+      // From its natural width the first time, so even the first change of shape animates.
+      if (!el.style.width) {
+        el.style.width = `${el.offsetWidth}px`;
+        void el.offsetWidth;
+      }
+      el.style.width = `${this.widthFor(state)}px`;
+    } else {
+      // Not on screen yet: nothing to measure, so the pill keeps the width of its label.
+      el.style.width = '';
+    }
     this.renderProgress();
   }
 

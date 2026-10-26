@@ -1,5 +1,5 @@
-// The Chaya window: the address bar, what it recognises, and the appearance settings.
-import { setTheme, setMotion } from './design/chaya-motion.js';
+// The Chaya window: the address bar, what it recognises, downloads, and the appearance settings.
+import { DownloadButton, setTheme, setMotion, stagger } from './design/chaya-motion.js';
 
 const tauri = window.__TAURI__;
 
@@ -145,11 +145,11 @@ async function lookUp(link) {
     answer = { kind: 'failed', reason: 'engine', message: "The video finder couldn't start. Try again in a moment." };
   }
   if (ask !== looking) return;
-  if (answer.kind === 'found') showFound(card, answer);
+  if (answer.kind === 'found') showFound(card, link, answer);
   else showFailed(card, link, answer);
 }
 
-function showFound(card, found) {
+function showFound(card, link, found) {
   card.querySelector('.card__title').textContent = found.title;
   card.querySelector('.card__meta').textContent = [found.author, found.duration].filter(Boolean).join(' · ');
   const poster = card.querySelector('.poster img');
@@ -163,7 +163,11 @@ function showFound(card, found) {
   if (found.post) {
     const { pictures, videos } = found.post;
     const counted = [count(pictures, 'picture'), count(videos, 'video')].filter(Boolean).join(' and ');
-    parts.push(paragraph(`${counted}, each saved as it is.`));
+    const row = document.createElement('div');
+    row.className = 'choice';
+    row.append(span('choice__label', counted), span('choice__detail', 'each saved as it is'));
+    row.append(downloadButton(link.url, 'post', 'Save all', state));
+    parts.push(row);
   } else {
     const list = document.createElement('ul');
     list.className = 'choices stagger';
@@ -171,11 +175,14 @@ function showFound(card, found) {
       const row = document.createElement('li');
       row.className = 'choice';
       row.append(span('choice__label', choice.label), span('choice__detail num', choice.detail));
+      row.append(downloadButton(link.url, choice.label, 'Download', state));
       list.append(row);
     }
     parts.push(list);
+    if (found.moreLater) {
+      parts.push(paragraph('Higher qualities, where picture and sound come apart, are coming to Chaya for Windows.', 'card__note'));
+    }
   }
-  parts.push(paragraph('Downloading comes in the next build.', 'card__note'));
   state.replaceChildren(...parts);
 }
 
@@ -217,6 +224,221 @@ function paragraph(text, className = '') {
 function count(n, word) {
   return n === 0 ? '' : `${n} ${word}${n === 1 ? '' : 's'}`;
 }
+
+// ── Downloading ─────────────────────────────────────────────────────────────────────────────
+
+const dlTemplate = document.getElementById('dl-template');
+const rowTemplate = document.getElementById('row-template');
+const downloadList = document.getElementById('download-list');
+const downloadsEmpty = document.getElementById('downloads-empty');
+
+/** Every download the window knows, by id, as the app last described it. */
+const tasks = new Map();
+/** The Download buttons on show, each with the downloads it started (a post's "Save all" starts several). */
+const buttons = new Set();
+/** Set while a button follows the app's events, so it does not send them back as clicks. */
+let following = false;
+
+/**
+ * A Download button for `choice` of the link at `url`. It starts the download, pauses and resumes it, and
+ * follows it as it runs: the pill becomes a ring with the percentage, then a check.
+ */
+function downloadButton(url, choice, label, state) {
+  const el = dlTemplate.content.firstElementChild.cloneNode(true);
+  const entry = { ids: [], button: null };
+  entry.button = new DownloadButton(el, {
+    label,
+    onEvent: async (event) => {
+      if (following) return;
+      if (event === 'start') {
+        state.querySelector('.card__error')?.remove();
+        try {
+          const started = await tauri.core.invoke('download', { url, choice });
+          entry.ids = started.map((t) => t.id);
+          started.forEach(taskChanged);
+          follow(entry);
+        } catch (message) {
+          entry.button.send('fail');
+          state.append(paragraph(String(message), 'card__error'));
+        }
+      } else if (event === 'pause') {
+        entry.ids.forEach((id) => tauri.core.invoke('pause_download', { id }));
+      } else if (event === 'resume') {
+        entry.ids.forEach((id) => tauri.core.invoke('resume_download', { id }));
+      } else if (event === 'reset') {
+        entry.ids = [];
+      }
+    },
+  });
+  buttons.add(entry);
+  return el;
+}
+
+/** Brings a button in line with its downloads: their total progress, paused, failed or all saved. */
+function follow(entry) {
+  const mine = entry.ids.map((id) => tasks.get(id)).filter(Boolean);
+  if (!mine.length) return;
+  following = true;
+  const { button } = entry;
+  const states = new Set(mine.map((t) => t.state));
+  if (states.has('failed')) button.send('fail');
+  else if (mine.every((t) => t.state === 'completed')) button.send('complete');
+  else if (mine.every((t) => t.state === 'paused')) button.send('pause');
+  else {
+    // Started again from the list (Try again) while the button had gone back to its pill.
+    if (button.state === 'idle') button.send('start');
+    button.send('resume');
+    const total = mine.reduce((sum, t) => sum + (t.total ?? 0), 0);
+    const done = mine.reduce((sum, t) => sum + t.done, 0);
+    if (total > 0) button.setProgress(done / total);
+  }
+  following = false;
+}
+
+function taskChanged(task) {
+  const known = tasks.get(task.id);
+  tasks.set(task.id, { ...task, speed: known?.speed ?? 0 });
+  renderRow(task.id);
+  for (const entry of buttons) {
+    if (!entry.button.el.isConnected) buttons.delete(entry);
+    else if (entry.ids.includes(task.id)) follow(entry);
+  }
+}
+
+function taskProgress({ id, done, total, bytesPerSecond }) {
+  const task = tasks.get(id);
+  if (!task) return;
+  Object.assign(task, { done, total, speed: bytesPerSecond });
+  renderRow(id);
+  for (const entry of buttons) if (entry.ids.includes(id)) follow(entry);
+}
+
+function taskRemoved(id) {
+  tasks.delete(id);
+  downloadList.querySelector(`[data-id="${id}"]`)?.remove();
+  showEmpty();
+}
+
+const ROW_ICON = { video: 'i-video', audio: 'i-audio', picture: 'i-post' };
+
+function renderRow(id) {
+  const task = tasks.get(id);
+  let row = downloadList.querySelector(`[data-id="${id}"]`);
+  if (!row) {
+    row = rowTemplate.content.firstElementChild.cloneNode(true);
+    row.dataset.id = id;
+    row.querySelector('.row__thumb use').setAttribute('href', `#${ROW_ICON[task.kind] ?? 'i-video'}`);
+    const img = row.querySelector('.row__thumb img');
+    if (task.thumbnail?.startsWith('https://')) {
+      img.addEventListener('error', () => img.removeAttribute('src'), { once: true });
+      img.src = task.thumbnail;
+    }
+    row.querySelector('.row__title').addEventListener('click', () => {
+      if (tasks.get(id)?.state === 'completed') tauri.core.invoke('open_download', { id });
+    });
+    row.querySelector('.row__main').addEventListener('click', () => mainAction(id));
+    row.querySelector('.row__close').addEventListener('click', () => {
+      const state = tasks.get(id)?.state;
+      tauri.core.invoke(state === 'completed' ? 'remove_download' : 'cancel_download', { id });
+    });
+    // Newest first, as the app lists them.
+    const newer = [...downloadList.children].find((r) => Number(r.dataset.id) < id);
+    downloadList.insertBefore(row, newer ?? null);
+  }
+
+  row.dataset.state = task.state;
+  row.querySelector('.row__title').textContent = task.fileName;
+  row.querySelector('.row__meta').textContent = metaOf(task);
+  const percent = task.total ? Math.min(99, Math.floor((task.done / task.total) * 100)) : null;
+  row.querySelector('.row__pct').textContent =
+    (task.state === 'downloading' || task.state === 'paused') && percent !== null ? `${percent}%` : '';
+  row.querySelector('.row__bar > span').style.setProperty('--p', String(percent ?? 0));
+
+  const main = row.querySelector('.row__main');
+  const action = {
+    downloading: ['i-pause', 'Pause'],
+    queued: ['i-pause', 'Pause'],
+    paused: ['i-play', 'Resume'],
+    completed: ['i-folder', 'Show in folder'],
+    failed: task.retryable ? ['i-retry', 'Try again'] : null,
+  }[task.state];
+  main.hidden = !action;
+  if (action) {
+    main.querySelector('use').setAttribute('href', `#${action[0]}`);
+    main.setAttribute('aria-label', action[1]);
+    main.title = action[1];
+  }
+  const close = row.querySelector('.row__close');
+  const closeLabel = task.state === 'completed' ? 'Remove from the list (the file stays)' : 'Cancel and delete what arrived';
+  close.setAttribute('aria-label', closeLabel);
+  close.title = closeLabel;
+  showEmpty();
+}
+
+function mainAction(id) {
+  const command = {
+    downloading: 'pause_download',
+    queued: 'pause_download',
+    paused: 'resume_download',
+    completed: 'show_download',
+    failed: 'retry_download',
+  }[tasks.get(id)?.state];
+  if (command) tauri.core.invoke(command, { id });
+}
+
+function metaOf(task) {
+  const sizes = task.total ? `${fileSize(task.done)} of ${fileSize(task.total)}` : fileSize(task.done);
+  switch (task.state) {
+    case 'queued':
+      return 'Waiting for another download to finish';
+    case 'downloading': {
+      const parts = [sizes];
+      if (task.speed > 0) {
+        parts.push(`${fileSize(task.speed)}/s`);
+        if (task.total) parts.push(`${timeLeft((task.total - task.done) / task.speed)} left`);
+      }
+      return parts.join(' · ');
+    }
+    case 'paused':
+      return `Paused · ${sizes}`;
+    case 'completed':
+      return `Saved · ${fileSize(task.total ?? task.done)} · ${task.folder.split(/[\\/]/).pop()}`;
+    case 'failed':
+      return task.error ?? 'The download failed.';
+    default:
+      return '';
+  }
+}
+
+/** "48.0 MB", as the app writes sizes everywhere. */
+function fileSize(bytes) {
+  const units = [['GB', 1024 ** 3], ['MB', 1024 ** 2], ['KB', 1024]];
+  for (const [unit, size] of units) if (bytes >= size) return `${(bytes / size).toFixed(1)} ${unit}`;
+  return `${Math.round(bytes)} B`;
+}
+
+function timeLeft(seconds) {
+  const s = Math.max(1, Math.round(seconds));
+  if (s < 60) return `${s} s`;
+  if (s < 3600) return `${Math.floor(s / 60)} min ${s % 60} s`;
+  return `${Math.floor(s / 3600)} h ${Math.floor((s % 3600) / 60)} min`;
+}
+
+function showEmpty() {
+  downloadsEmpty.hidden = tasks.size > 0;
+}
+
+tauri?.event.listen('download', ({ payload }) => {
+  if (payload.type === 'changed') taskChanged(payload.task);
+  else if (payload.type === 'progress') taskProgress(payload);
+  else if (payload.type === 'removed') taskRemoved(payload.id);
+});
+
+tauri?.core.invoke('list_downloads').then((list) => {
+  list.forEach(taskChanged);
+  stagger(downloadList);
+  downloadList.classList.add('stagger');
+});
 
 // ── Reading the address bar ─────────────────────────────────────────────────────────────────
 

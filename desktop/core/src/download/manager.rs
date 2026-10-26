@@ -1,0 +1,746 @@
+//! Every download and its state, as on the phone (`DownloadManager`):
+//!
+//!   Queued → Downloading ⇄ Paused → Completed | Failed
+//!
+//! Up to three run at once; the rest wait their turn. The list is kept in a JSON file and written on every
+//! change of state (progress stays in memory). A download that was running when the app closed comes back
+//! paused, its `.part` file ready to continue. Cancelling deletes what arrived; removing a finished download
+//! from the list keeps its file.
+
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+use reqwest::Client;
+use serde::{Deserialize, Serialize};
+use tokio::runtime::Handle;
+use tokio::sync::watch;
+
+use super::error::DownloadError;
+use super::http::{self, Outcome, Progress, Source};
+use super::names;
+
+pub const AT_ONCE: usize = 3;
+/// How often progress reaches the window.
+const PROGRESS_EVERY: Duration = Duration::from_millis(250);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Kind {
+    Video,
+    Audio,
+    Picture,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "state", content = "error", rename_all = "lowercase")]
+pub enum State {
+    Queued,
+    Downloading,
+    Paused,
+    Completed,
+    Failed(DownloadError),
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Task {
+    pub id: u64,
+    pub title: String,
+    /// The link that was looked up, so Retry can look it up again for a fresh address.
+    pub page_url: String,
+    /// The choice it was saved as: "720p", "Audio only", or a post's "Picture 3".
+    pub choice: String,
+    pub kind: Kind,
+    pub path: PathBuf,
+    pub source: Source,
+    pub thumbnail: Option<String>,
+    /// The post it came from, so a post's files stay together.
+    pub group: Option<String>,
+    #[serde(flatten)]
+    pub state: State,
+    pub done: u64,
+    pub total: Option<u64>,
+    /// Seconds since 1970, when it was added.
+    pub added: u64,
+}
+
+impl Task {
+    pub fn part_path(&self) -> PathBuf {
+        let mut name = self.path.file_name().unwrap_or_default().to_os_string();
+        name.push(".part");
+        self.path.with_file_name(name)
+    }
+}
+
+/// A download as the window shows it.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskView {
+    pub id: u64,
+    pub title: String,
+    pub choice: String,
+    pub kind: Kind,
+    pub file_name: String,
+    pub folder: String,
+    pub thumbnail: Option<String>,
+    pub group: Option<String>,
+    /// "queued", "downloading", "paused", "completed" or "failed".
+    pub state: &'static str,
+    /// Why it failed, in words.
+    pub error: Option<String>,
+    pub retryable: bool,
+    pub done: u64,
+    pub total: Option<u64>,
+}
+
+impl From<&Task> for TaskView {
+    fn from(task: &Task) -> TaskView {
+        let (state, error) = match task.state {
+            State::Queued => ("queued", None),
+            State::Downloading => ("downloading", None),
+            State::Paused => ("paused", None),
+            State::Completed => ("completed", None),
+            State::Failed(error) => ("failed", Some(error)),
+        };
+        TaskView {
+            id: task.id,
+            title: task.title.clone(),
+            choice: task.choice.clone(),
+            kind: task.kind,
+            file_name: task.path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
+            folder: task.path.parent().map(|f| f.display().to_string()).unwrap_or_default(),
+            thumbnail: task.thumbnail.clone(),
+            group: task.group.clone(),
+            state,
+            error: error.map(DownloadError::message),
+            retryable: error.is_some_and(DownloadError::retryable),
+            done: task.done,
+            total: task.total,
+        }
+    }
+}
+
+/// What the window asked to save.
+#[derive(Clone, Debug)]
+pub struct NewDownload {
+    pub title: String,
+    pub page_url: String,
+    pub choice: String,
+    pub kind: Kind,
+    /// The name it is saved as; made unique in `folder`.
+    pub file_name: String,
+    pub folder: PathBuf,
+    pub source: Source,
+    pub thumbnail: Option<String>,
+    pub group: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Event {
+    /// Boxed: a task is large next to the other events, which come many times a second.
+    Changed(Box<Task>),
+    Progress {
+        id: u64,
+        done: u64,
+        total: Option<u64>,
+        bytes_per_second: u64,
+    },
+    Removed(u64),
+}
+
+type Listener = Box<dyn Fn(Event) + Send + Sync>;
+
+#[derive(Clone)]
+pub struct Manager {
+    inner: Arc<Inner>,
+}
+
+struct Inner {
+    client: Client,
+    runtime: Handle,
+    store: PathBuf,
+    at_once: usize,
+    listener: Listener,
+    tasks: Mutex<Vec<Task>>,
+    /// The stop signal of each download that is running.
+    running: Mutex<HashMap<u64, watch::Sender<bool>>>,
+}
+
+fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+impl Manager {
+    /// The downloads kept in `store`, those that were running brought back paused.
+    pub fn open(store: PathBuf, client: Client, runtime: Handle, listener: Listener) -> Manager {
+        Manager::with_limit(store, client, runtime, listener, AT_ONCE)
+    }
+
+    pub fn with_limit(store: PathBuf, client: Client, runtime: Handle, listener: Listener, at_once: usize) -> Manager {
+        let mut tasks: Vec<Task> =
+            std::fs::read(&store).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
+        for task in &mut tasks {
+            if matches!(task.state, State::Downloading | State::Queued) {
+                task.state = State::Paused;
+            }
+        }
+        let manager = Manager {
+            inner: Arc::new(Inner {
+                client,
+                runtime,
+                store,
+                at_once,
+                listener,
+                tasks: Mutex::new(tasks),
+                running: Mutex::new(HashMap::new()),
+            }),
+        };
+        manager.save();
+        manager
+    }
+
+    /// Newest first.
+    pub fn list(&self) -> Vec<Task> {
+        let mut tasks = lock(&self.inner.tasks).clone();
+        tasks.sort_by(|a, b| b.added.cmp(&a.added).then(b.id.cmp(&a.id)));
+        tasks
+    }
+
+    pub fn get(&self, id: u64) -> Option<Task> {
+        lock(&self.inner.tasks).iter().find(|t| t.id == id).cloned()
+    }
+
+    pub fn add(&self, new: NewDownload) -> Task {
+        let task = {
+            let mut tasks = lock(&self.inner.tasks);
+            let taken: HashSet<String> = tasks
+                .iter()
+                .filter(|t| t.state != State::Completed)
+                .filter_map(|t| t.path.file_name()?.to_str().map(str::to_lowercase))
+                .collect();
+            let task = Task {
+                id: tasks.iter().map(|t| t.id).max().unwrap_or(0) + 1,
+                title: new.title,
+                page_url: new.page_url,
+                choice: new.choice,
+                kind: new.kind,
+                path: names::unique_path(&new.folder, &new.file_name, &taken),
+                source: new.source,
+                thumbnail: new.thumbnail,
+                group: new.group,
+                state: State::Queued,
+                done: 0,
+                total: None,
+                added: SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs()),
+            };
+            tasks.push(task.clone());
+            task
+        };
+        self.changed(task.id);
+        self.pump();
+        self.get(task.id).unwrap_or(task)
+    }
+
+    pub fn pause(&self, id: u64) {
+        if self.set_state(id, |s| matches!(s, State::Queued | State::Downloading), State::Paused) {
+            self.stop(id);
+        }
+    }
+
+    pub fn resume(&self, id: u64) {
+        if self.set_state(id, |s| *s == State::Paused, State::Queued) {
+            self.pump();
+        }
+    }
+
+    /// Tries a failed download again, from where it stopped, with `source` when the link was looked up
+    /// again for a fresh address.
+    pub fn retry(&self, id: u64, source: Option<Source>) {
+        {
+            let mut tasks = lock(&self.inner.tasks);
+            let Some(task) = tasks.iter_mut().find(|t| t.id == id && matches!(t.state, State::Failed(_))) else {
+                return;
+            };
+            if let Some(source) = source {
+                task.source = source;
+            }
+            task.state = State::Queued;
+        }
+        self.changed(id);
+        self.pump();
+    }
+
+    /// Stops a download and deletes what arrived.
+    pub fn cancel(&self, id: u64) {
+        let Some(task) = self.take(id) else { return };
+        self.stop(id);
+        let _ = std::fs::remove_file(task.part_path());
+    }
+
+    /// Takes a finished or failed download off the list. A finished file stays where it is.
+    pub fn remove(&self, id: u64) {
+        let Some(task) = self.get(id) else { return };
+        match task.state {
+            State::Completed => {
+                self.take(id);
+            }
+            _ => self.cancel(id),
+        }
+    }
+
+    fn take(&self, id: u64) -> Option<Task> {
+        let task = {
+            let mut tasks = lock(&self.inner.tasks);
+            let index = tasks.iter().position(|t| t.id == id)?;
+            tasks.remove(index)
+        };
+        self.save();
+        (self.inner.listener)(Event::Removed(id));
+        Some(task)
+    }
+
+    fn stop(&self, id: u64) {
+        if let Some(stop) = lock(&self.inner.running).remove(&id) {
+            let _ = stop.send(true);
+        }
+        self.pump();
+    }
+
+    /// Changes `id`'s state to `to` when `from` accepts its current one; true when it did.
+    fn set_state(&self, id: u64, from: impl Fn(&State) -> bool, to: State) -> bool {
+        {
+            let mut tasks = lock(&self.inner.tasks);
+            match tasks.iter_mut().find(|t| t.id == id && from(&t.state)) {
+                Some(task) => task.state = to,
+                None => return false,
+            }
+        }
+        self.changed(id);
+        true
+    }
+
+    /// Starts waiting downloads, oldest first, while fewer than `at_once` run.
+    fn pump(&self) {
+        loop {
+            let next = {
+                let running = lock(&self.inner.running);
+                if running.len() >= self.inner.at_once {
+                    return;
+                }
+                let mut tasks = lock(&self.inner.tasks);
+                let Some(task) = tasks
+                    .iter_mut()
+                    .filter(|t| t.state == State::Queued && !running.contains_key(&t.id))
+                    .min_by_key(|t| (t.added, t.id))
+                else {
+                    return;
+                };
+                task.state = State::Downloading;
+                task.clone()
+            };
+            let (stop_tx, stop_rx) = watch::channel(false);
+            lock(&self.inner.running).insert(next.id, stop_tx);
+            self.changed(next.id);
+            let manager = self.clone();
+            self.inner.runtime.spawn(async move { manager.run(next, stop_rx).await });
+        }
+    }
+
+    async fn run(&self, task: Task, stop: watch::Receiver<bool>) {
+        let part = task.part_path();
+        let result = match prepare_folder(&task.path).await {
+            Err(error) => Err(error),
+            Ok(()) => {
+                let mut meter = Meter::new(task.id);
+                let manager = self.clone();
+                http::fetch(&self.inner.client, &task.source, &part, &stop, &mut |progress| {
+                    manager.progress(&mut meter, progress)
+                })
+                .await
+            }
+        };
+        // Still registered means nobody paused or cancelled it while it ran.
+        let still_running = lock(&self.inner.running).remove(&task.id).is_some();
+        match result {
+            Ok(Outcome::Done) if self.get(task.id).is_none() => {
+                // Cancelled just as the last bytes arrived: cancelling deletes what arrived.
+                let _ = std::fs::remove_file(&part);
+            }
+            // Whole, even if a pause came at the last moment: a finished file is finished.
+            Ok(Outcome::Done) => {
+                let state = match finish(&part, &task.path) {
+                    Ok(path) => {
+                        if let Some(t) = lock(&self.inner.tasks).iter_mut().find(|t| t.id == task.id) {
+                            t.path = path;
+                            t.total = Some(t.done.max(t.total.unwrap_or(0)));
+                            t.done = t.total.unwrap_or(t.done);
+                        }
+                        State::Completed
+                    }
+                    Err(error) => State::Failed(error),
+                };
+                self.set_state(task.id, |s| matches!(s, State::Downloading | State::Paused), state);
+            }
+            // Paused or cancelled: whoever stopped it already changed its state.
+            Ok(Outcome::Stopped) => {}
+            Err(error) if still_running => {
+                self.set_state(task.id, |s| *s == State::Downloading, State::Failed(error));
+            }
+            Err(_) => {}
+        }
+        self.pump();
+    }
+
+    fn progress(&self, meter: &mut Meter, progress: Progress) {
+        if let Some(task) = lock(&self.inner.tasks).iter_mut().find(|t| t.id == meter.id) {
+            task.done = progress.done;
+            task.total = progress.total;
+        }
+        if let Some(bytes_per_second) = meter.tick(progress.done) {
+            (self.inner.listener)(Event::Progress {
+                id: meter.id,
+                done: progress.done,
+                total: progress.total,
+                bytes_per_second,
+            });
+        }
+    }
+
+    fn changed(&self, id: u64) {
+        self.save();
+        if let Some(task) = self.get(id) {
+            (self.inner.listener)(Event::Changed(Box::new(task)));
+        }
+    }
+
+    /// Written whole to a temporary file and moved into place, so a crash never leaves half a list.
+    fn save(&self) {
+        let tasks = lock(&self.inner.tasks).clone();
+        let Ok(json) = serde_json::to_vec_pretty(&tasks) else { return };
+        let temporary = self.inner.store.with_extension("json.saving");
+        if let Some(folder) = self.inner.store.parent() {
+            let _ = std::fs::create_dir_all(folder);
+        }
+        if std::fs::write(&temporary, json).is_ok() {
+            let _ = std::fs::rename(&temporary, &self.inner.store);
+        }
+    }
+}
+
+async fn prepare_folder(path: &Path) -> Result<(), DownloadError> {
+    match path.parent() {
+        Some(folder) => tokio::fs::create_dir_all(folder).await.map_err(|e| DownloadError::from_io(&e)),
+        None => Ok(()),
+    }
+}
+
+/// Moves the whole `.part` file to its name, or the next free one if a file of that name appeared meanwhile.
+fn finish(part: &Path, path: &Path) -> Result<PathBuf, DownloadError> {
+    let target = if path.exists() {
+        let folder = path.parent().unwrap_or(Path::new("."));
+        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("Download");
+        names::unique_path(folder, name, &HashSet::new())
+    } else {
+        path.to_path_buf()
+    };
+    std::fs::rename(part, &target).map_err(|e| DownloadError::from_io(&e))?;
+    Ok(target)
+}
+
+/// Speed over the last few seconds, reported at most every `PROGRESS_EVERY`.
+struct Meter {
+    id: u64,
+    samples: Vec<(Instant, u64)>,
+    last_report: Option<Instant>,
+}
+
+impl Meter {
+    fn new(id: u64) -> Meter {
+        Meter { id, samples: Vec::new(), last_report: None }
+    }
+
+    fn tick(&mut self, done: u64) -> Option<u64> {
+        let now = Instant::now();
+        self.samples.push((now, done));
+        self.samples.retain(|(at, _)| now.duration_since(*at) <= Duration::from_secs(3));
+        if self.last_report.is_some_and(|at| now.duration_since(at) < PROGRESS_EVERY) {
+            return None;
+        }
+        self.last_report = Some(now);
+        let (first_at, first_done) = self.samples[0];
+        let seconds = now.duration_since(first_at).as_secs_f64();
+        Some(if seconds > 0.2 { ((done.saturating_sub(first_done)) as f64 / seconds) as u64 } else { 0 })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::download::testserver::{Behaviour, TestServer};
+    use std::sync::Arc;
+
+    struct Setup {
+        manager: Manager,
+        events: Arc<Mutex<Vec<Event>>>,
+        folder: tempfile::TempDir,
+    }
+
+    fn setup(at_once: usize) -> Setup {
+        let folder = tempfile::tempdir().unwrap();
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let seen = events.clone();
+        let manager = Manager::with_limit(
+            folder.path().join("data").join("downloads.json"),
+            Client::new(),
+            Handle::current(),
+            Box::new(move |e| seen.lock().unwrap().push(e)),
+            at_once,
+        );
+        Setup { manager, events, folder }
+    }
+
+    fn new_download(setup: &Setup, server: &TestServer, name: &str) -> NewDownload {
+        NewDownload {
+            title: "Me at the zoo".into(),
+            page_url: "https://www.youtube.com/watch?v=jNQXAC9IVRw".into(),
+            choice: "Audio only".into(),
+            kind: Kind::Audio,
+            file_name: name.into(),
+            folder: setup.folder.path().join("Downloads"),
+            source: Source { url: server.url("/file"), headers: Default::default() },
+            thumbnail: None,
+            group: None,
+        }
+    }
+
+    fn body(len: usize) -> Vec<u8> {
+        (0..len).map(|i| (i % 253) as u8).collect()
+    }
+
+    async fn wait_for(manager: &Manager, id: u64, want: impl Fn(&State) -> bool) -> Task {
+        for _ in 0..400 {
+            if let Some(task) = manager.get(id).filter(|t| want(&t.state)) {
+                return task;
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+        panic!("download {id} never reached the state wanted: {:?}", manager.get(id));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_download_is_saved_under_its_name_and_remembered() {
+        let content = body(400_000);
+        let server = TestServer::start(content.clone(), Behaviour::default());
+        let s = setup(AT_ONCE);
+
+        let task = s.manager.add(new_download(&s, &server, "Me at the zoo.m4a"));
+        let done = wait_for(&s.manager, task.id, |st| *st == State::Completed).await;
+
+        assert_eq!(done.path, s.folder.path().join("Downloads").join("Me at the zoo.m4a"));
+        assert_eq!(std::fs::read(&done.path).unwrap(), content);
+        assert!(!done.part_path().exists());
+        assert_eq!((done.done, done.total), (400_000, Some(400_000)));
+
+        let states: Vec<State> = s
+            .events
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|e| match e {
+                Event::Changed(t) => Some(t.state),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(states.first(), Some(&State::Queued));
+        assert!(states.contains(&State::Downloading));
+        assert_eq!(states.last(), Some(&State::Completed));
+
+        // Opened again, the finished download is still listed.
+        let again = Manager::open(
+            s.folder.path().join("data").join("downloads.json"),
+            Client::new(),
+            Handle::current(),
+            Box::new(|_| {}),
+        );
+        assert_eq!(again.list(), vec![done]);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_paused_download_keeps_what_arrived_and_continues_from_it() {
+        let content = body(3_000_000);
+        let server = TestServer::start(
+            content.clone(),
+            Behaviour { chunk_delay: Duration::from_millis(5), ..Behaviour::default() },
+        );
+        let s = setup(AT_ONCE);
+
+        let task = s.manager.add(new_download(&s, &server, "Clip.mp4"));
+        wait_for(&s.manager, task.id, |_| s.manager.get(task.id).is_some_and(|t| t.done > 200_000)).await;
+        s.manager.pause(task.id);
+        let paused = wait_for(&s.manager, task.id, |st| *st == State::Paused).await;
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        let kept = std::fs::metadata(paused.part_path()).unwrap().len();
+        assert!(kept > 0 && kept < content.len() as u64);
+
+        s.manager.resume(task.id);
+        let done = wait_for(&s.manager, task.id, |st| *st == State::Completed).await;
+        assert_eq!(std::fs::read(&done.path).unwrap(), content);
+        assert!(server.requests().iter().any(|r| r.contains("range: bytes=")), "resumed with a range");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn cancelling_deletes_what_arrived_and_the_entry() {
+        let server = TestServer::start(
+            body(3_000_000),
+            Behaviour { chunk_delay: Duration::from_millis(5), ..Behaviour::default() },
+        );
+        let s = setup(AT_ONCE);
+
+        let task = s.manager.add(new_download(&s, &server, "Clip.mp4"));
+        wait_for(&s.manager, task.id, |_| s.manager.get(task.id).is_some_and(|t| t.done > 100_000)).await;
+        s.manager.cancel(task.id);
+        tokio::time::sleep(Duration::from_millis(300)).await;
+
+        assert!(s.manager.get(task.id).is_none());
+        assert!(!task.part_path().exists());
+        assert!(!task.path.exists());
+        assert!(s.events.lock().unwrap().contains(&Event::Removed(task.id)));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_refused_download_fails_and_retry_with_a_fresh_address_finishes_it() {
+        let refusing = TestServer::start(body(10), Behaviour { status: Some(403), ..Behaviour::default() });
+        let content = body(100_000);
+        let fresh = TestServer::start(content.clone(), Behaviour::default());
+        let s = setup(AT_ONCE);
+
+        let task = s.manager.add(new_download(&s, &refusing, "Clip.mp4"));
+        let failed = wait_for(&s.manager, task.id, |st| matches!(st, State::Failed(_))).await;
+        assert_eq!(failed.state, State::Failed(DownloadError::Http(403)));
+
+        s.manager.retry(task.id, Some(Source { url: fresh.url("/file"), headers: Default::default() }));
+        let done = wait_for(&s.manager, task.id, |st| *st == State::Completed).await;
+        assert_eq!(std::fs::read(&done.path).unwrap(), content);
+        assert_eq!(done.source.url, fresh.url("/file"));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn downloads_beyond_the_limit_wait_their_turn() {
+        let server = TestServer::start(
+            body(1_500_000),
+            Behaviour { chunk_delay: Duration::from_millis(5), ..Behaviour::default() },
+        );
+        let s = setup(2);
+
+        let ids: Vec<u64> =
+            ["a.mp4", "b.mp4", "c.mp4"].iter().map(|n| s.manager.add(new_download(&s, &server, n)).id).collect();
+        let states: Vec<State> = ids.iter().map(|id| s.manager.get(*id).unwrap().state).collect();
+        assert_eq!(states, [State::Downloading, State::Downloading, State::Queued]);
+
+        for id in ids {
+            wait_for(&s.manager, id, |st| *st == State::Completed).await;
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn two_downloads_of_one_name_get_two_files() {
+        let server = TestServer::start(body(1_000), Behaviour::default());
+        let s = setup(AT_ONCE);
+
+        let first = s.manager.add(new_download(&s, &server, "Clip.mp4"));
+        let second = s.manager.add(new_download(&s, &server, "Clip.mp4"));
+
+        assert_eq!(second.path.file_name().unwrap(), "Clip (2).mp4");
+        wait_for(&s.manager, first.id, |st| *st == State::Completed).await;
+        wait_for(&s.manager, second.id, |st| *st == State::Completed).await;
+        assert!(first.path.exists() && second.path.exists());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_download_running_when_the_app_closed_comes_back_paused() {
+        let folder = tempfile::tempdir().unwrap();
+        let store = folder.path().join("downloads.json");
+        let task = Task {
+            id: 7,
+            title: "Clip".into(),
+            page_url: "https://youtu.be/x".into(),
+            choice: "720p".into(),
+            kind: Kind::Video,
+            path: folder.path().join("Clip (720p).mp4"),
+            source: Source { url: "https://cdn.example/x".into(), headers: Default::default() },
+            thumbnail: None,
+            group: None,
+            state: State::Downloading,
+            done: 10,
+            total: Some(100),
+            added: 1,
+        };
+        std::fs::write(&store, serde_json::to_vec(&vec![task.clone()]).unwrap()).unwrap();
+
+        let manager = Manager::open(store, Client::new(), Handle::current(), Box::new(|_| {}));
+
+        assert_eq!(manager.list(), vec![Task { state: State::Paused, ..task }]);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn removing_a_finished_download_keeps_its_file() {
+        let server = TestServer::start(body(1_000), Behaviour::default());
+        let s = setup(AT_ONCE);
+        let task = s.manager.add(new_download(&s, &server, "Clip.mp4"));
+        let done = wait_for(&s.manager, task.id, |st| *st == State::Completed).await;
+
+        s.manager.remove(task.id);
+
+        assert!(s.manager.list().is_empty());
+        assert!(done.path.exists());
+    }
+
+    #[test]
+    fn the_window_sees_the_file_its_state_and_why_it_failed() {
+        let task = Task {
+            id: 3,
+            title: "Me at the zoo".into(),
+            page_url: "p".into(),
+            choice: "Audio only".into(),
+            kind: Kind::Audio,
+            path: PathBuf::from("Downloads").join("Me at the zoo.m4a"),
+            source: Source { url: "u".into(), headers: Default::default() },
+            thumbnail: None,
+            group: None,
+            state: State::Failed(DownloadError::Http(403)),
+            done: 10,
+            total: Some(100),
+            added: 0,
+        };
+        let view = serde_json::to_value(TaskView::from(&task)).unwrap();
+        assert_eq!(view["fileName"], "Me at the zoo.m4a");
+        assert_eq!(view["folder"], "Downloads");
+        assert_eq!(view["state"], "failed");
+        assert_eq!(view["error"], "The site refused the download. Its address may have expired.");
+        assert_eq!(view["retryable"], true);
+        assert_eq!(view["kind"], "audio");
+    }
+
+    #[test]
+    fn a_task_is_stored_with_its_state_alongside() {
+        let json = serde_json::to_value(Task {
+            id: 1,
+            title: "T".into(),
+            page_url: "p".into(),
+            choice: "720p".into(),
+            kind: Kind::Video,
+            path: "C:/Downloads/T (720p).mp4".into(),
+            source: Source { url: "u".into(), headers: Default::default() },
+            thumbnail: None,
+            group: None,
+            state: State::Failed(DownloadError::Http(403)),
+            done: 0,
+            total: None,
+            added: 0,
+        })
+        .unwrap();
+        assert_eq!(json["state"], "failed");
+        assert_eq!(json["error"], serde_json::json!({"kind": "http", "status": 403}));
+    }
+}

@@ -8,14 +8,16 @@ It is early. This build opens the window, follows Windows' light or dark setting
 choice), and tells what a pasted link is: a video or post on YouTube, Instagram, TikTok or X, an
 account, another page, or words. A video or post is looked up with yt-dlp, as on the phone, and the
 window shows its title, poster and the qualities it can be saved in (or what a post holds, or why it
-can't be). Downloading comes next ([`../docs/ROADMAP.md`](../docs/ROADMAP.md)).
+can't be). Each choice downloads into the Downloads folder, with pause, resume, cancel and retry, and
+the Downloads list keeps track across restarts. Qualities that arrive as separate picture and sound
+(most of YouTube's), and streams, come next ([`../docs/ROADMAP.md`](../docs/ROADMAP.md)).
 
 ## Layout
 
 | Path | What it is |
 |---|---|
 | `design/` | The design system: tokens, fonts, components, motion. Plain CSS and an ES module |
-| `core/` | `chaya-core`, plain Rust with no window or web view in it, so it builds and tests anywhere. `links` recognises links (the phone's `PlatformMatcher` and `ProfileMatcher`); `engine` runs the engine; `media` reads its answer (`PlatformMedia`); `formats` picks one choice per quality (`FormatSelector`); `lookup` is what the window is sent. Each is ported with the phone's tests |
+| `core/` | `chaya-core`, plain Rust with no window or web view in it, so it builds and tests anywhere. `links` recognises links (the phone's `PlatformMatcher` and `ProfileMatcher`); `engine` runs the engine; `media` reads its answer (`PlatformMedia`); `formats` picks one choice per quality (`FormatSelector`); `lookup` is what the window is sent. Each is ported with the phone's tests. `download` saves files: `http` fetches one with resume (`HttpDownloader`), `manager` keeps every download and its state (`DownloadManager`), `plan` turns a choice into downloads, `names` makes Windows-safe names, `error` explains failures (`DownloadError`) |
 | `engine/` | `prepare.py` puts together the engine the installer carries, in `app/src-tauri/engine/` (not in git); `run.py` starts it |
 | `app/ui/` | The window: `index.html`, `app.css`, `main.js` |
 | `app/scripts/assemble-ui.mjs` | Puts `ui/` and the design system together in `app/dist/`, which Tauri serves. Runs before every dev run and build |
@@ -74,6 +76,21 @@ passed to it. A change to `chaya_engine` must keep both apps working: pytest cov
 Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the computer's own Python (set
 `CHAYA_ENGINE_PYTHON` to it, or `python3` is used), without QuickJS, for running the app in development.
 
+## Downloads
+
+- A choice becomes one download; a post's "Save all" becomes one per picture and video, numbered.
+  Files are named "Title (720p).mp4" ("Title.m4a" for the sound), with what Windows forbids replaced,
+  and get "(2)" when the name is taken. They go to the person's Downloads folder.
+- Each is fetched into "name.part" with the site's own headers and renamed when whole. A paused or
+  interrupted download continues with a `Range` request; a server that ignores it starts the file
+  again; a dropped connection is tried twice more before the download fails.
+- Up to three run at once. The list is `downloads.json` in the app's data folder, written on every
+  change of state; downloads running when the app closed come back paused.
+- **Retry** looks the link up again first, because the sites' addresses expire, and carries on from
+  what arrived. Cancel deletes what arrived; removing a finished download from the list keeps the file.
+- Only what the app can save is offered: plain files. A quality that needs its picture and sound
+  joined, or a stream, is left out and the card says better qualities are coming.
+
 ## Tests
 
 ```sh
@@ -97,6 +114,7 @@ artifact. `desktop-design.yml` runs the design system's tests.
 
 The window's own files, fonts included, are packed into the app; nothing is fetched to draw it. The
 network is used only for what the person asks: a pasted link to a video or post is looked up with
-yt-dlp, which asks that site about it, and its poster is shown from the site's image server, without
-saying which page asked (`referrerpolicy="no-referrer"`). No sign-in is used; nothing is sent anywhere
-else. The phone app's privacy promises carry over as the desktop app gains downloads.
+yt-dlp, which asks that site about it; its poster is shown from the site's image server, without
+saying which page asked (`referrerpolicy="no-referrer"`); and a download fetches the file from the
+site's server with the headers yt-dlp names for it. No sign-in is used and nothing is sent anywhere
+else. The list of downloads stays on the PC.
