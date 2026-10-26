@@ -124,21 +124,44 @@ body {
 .choices { display: grid; gap: var(--space-half); width: 100%; margin: 0; padding: 0; list-style: none; }
 .choice {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
+  align-items: center;
   gap: var(--space-2);
-  padding: var(--space-1) var(--space-2);
+  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
   background: var(--wash);
 }
 .choice__label { font-weight: 600; }
-.choice__detail { color: var(--muted); font-size: var(--text-sm); }
+.choice__detail { margin-left: auto; color: var(--muted); font-size: var(--text-sm); }
+.choice .dl { flex: none; }
+.card__error { margin: 0; color: var(--text); font-size: var(--text-sm); }
 
 @media (max-width: 640px) {
   .card--media { grid-template-columns: minmax(0, 1fr); }
 }
 
 .downloads { display: grid; gap: var(--space-2); margin-top: var(--space-3); }
+.list { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
+.list:empty { display: none; }
+
+/* A download in the list (the row component, desktop/design) */
+.row__thumb { position: relative; overflow: hidden; }
+.row__thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.row__thumb img:not([src]) { display: none; }
+.row__title {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: default;
+}
+.row[data-state="completed"] .row__title { cursor: pointer; }
+.row[data-state="completed"] .row__title:hover { text-decoration: underline; text-underline-offset: 3px; }
+.row[data-state="failed"] .row__meta { color: var(--text); }
+.row:not([data-state="downloading"]):not([data-state="paused"]) .row__bar { display: none; }
+.row__actions { display: flex; gap: var(--space-half); }
+.row__main[hidden] { display: none; }
 
 .empty {
   display: flex;

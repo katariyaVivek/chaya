@@ -24,6 +24,9 @@ pub struct Found {
     pub choices: Vec<ChoiceView>,
     /// For a post of pictures (and maybe videos), what is in it; each is saved as it is.
     pub post: Option<PostView>,
+    /// Whether better qualities exist that the app cannot save yet (picture and sound apart, or a stream).
+    #[serde(rename = "moreLater")]
+    pub more_later: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -58,10 +61,17 @@ impl Lookup {
             pictures: media.items.iter().filter(|i| !i.is_video).count(),
             videos: media.items.iter().filter(|i| i.is_video).count(),
         });
-        let choices: Vec<ChoiceView> = if post.is_some() {
-            Vec::new()
+        let (choices, more_later) = if post.is_some() {
+            (Vec::new(), false)
         } else {
-            formats::choices(media, can_join).iter().map(ChoiceView::from).collect()
+            let offered: Vec<ChoiceView> =
+                formats::choices(media, can_join).iter().filter(|c| can_save(c)).map(ChoiceView::from).collect();
+            // Every choice there is, if the app could join and stream: anything beyond what is offered comes later.
+            let more = formats::choices(media, |_| true)
+                .iter()
+                .filter(|c| !c.is_audio_only)
+                .any(|c| !offered.iter().any(|o| o.label == c.label));
+            (offered, more)
         };
         if post.is_none() && choices.is_empty() {
             return Lookup::failed(FailureKind::NoFormat);
@@ -73,8 +83,15 @@ impl Lookup {
             thumbnail: media.thumbnail_url.clone(),
             choices,
             post,
+            more_later,
         })
     }
+}
+
+/// Whether the app can save `choice` yet: plain files, which it fetches as they are. A stream (HLS or DASH)
+/// is a list of pieces, which saving as one file needs more than fetching.
+pub fn can_save(choice: &Choice) -> bool {
+    choice.file.is_direct_file() && choice.audio_to_merge.as_ref().is_none_or(|a| a.is_direct_file())
 }
 
 impl From<&Choice> for ChoiceView {
@@ -104,6 +121,10 @@ mod tests {
     fn a_video_shows_its_facts_and_choices() {
         let zoo = parse(include_str!("../../../app/src/test/resources/platform/youtube_me_at_the_zoo.json")).unwrap();
         let Lookup::Found(found) = Lookup::from_media(&zoo, is_h264) else { panic!("not found") };
+        assert!(!found.more_later);
+        let Lookup::Found(without_joining) = Lookup::from_media(&zoo, |_| false) else { panic!("not found") };
+        assert_eq!(without_joining.choices.len(), 1, "only the sound");
+        assert!(without_joining.more_later, "240p and 144p come once joining does");
         assert_eq!(found.title, "Me at the zoo");
         assert_eq!(found.author.as_deref(), Some("jawed"));
         assert_eq!(found.duration.as_deref(), Some("0:19"));

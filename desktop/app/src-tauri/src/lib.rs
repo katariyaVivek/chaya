@@ -1,15 +1,27 @@
 //! Chaya for Windows: the Tauri app. The window is web content built from `desktop/design`; what
 //! the app knows lives in `chaya-core`, and this crate only hands it to the window.
 
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex, PoisonError};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
+use chaya_core::download::http::Source;
+use chaya_core::download::manager::{Event, Manager as DownloadManager, TaskView};
+use chaya_core::download::plan::plan;
 use chaya_core::engine::{AnswerCache, Engine};
-use chaya_core::formats::is_h264;
 use chaya_core::links::{self, Link};
 use chaya_core::lookup::Lookup;
-use chaya_core::media::FailureKind;
-use tauri::Manager;
+use chaya_core::media::{Failure, FailureKind, Format, Media};
+use serde::Serialize;
+use tauri::{AppHandle, Emitter, Manager, State};
+use tauri_plugin_opener::OpenerExt;
+
+/// Which picture-only tracks the app can join to sound. None yet: joining comes with the next part of
+/// downloads, so qualities that need it are not offered. Lookups and downloads both use this, so what the
+/// window offers is always what a download can save.
+fn can_join(_: &Format) -> bool {
+    false
+}
 
 /// What the address bar holds: a video or post, an account, another page, or words.
 #[tauri::command]
@@ -24,36 +36,156 @@ struct Lookups {
     answers: Arc<Mutex<AnswerCache>>,
 }
 
+impl Lookups {
+    /// What the engine found at `url`: a kept answer when there is one and `fresh` is false.
+    async fn media(&self, url: String, fresh: bool) -> Result<Media, Failure> {
+        let (engine, turn, answers) = (self.engine.clone(), self.turn.clone(), self.answers.clone());
+        // The engine blocks while it runs, so it gets a thread of its own and the window stays responsive.
+        tauri::async_runtime::spawn_blocking(move || {
+            let _turn = turn.lock().unwrap_or_else(PoisonError::into_inner);
+            // Inside the turn, so asking twice for one link waits for the first answer instead of looking twice.
+            if !fresh {
+                if let Some(media) = answers.lock().unwrap_or_else(PoisonError::into_inner).get(&url, Instant::now()) {
+                    return Ok(media);
+                }
+            }
+            let media = engine.look_up(&url)?;
+            answers.lock().unwrap_or_else(PoisonError::into_inner).put(&url, media.clone(), Instant::now());
+            Ok(media)
+        })
+        .await
+        .unwrap_or(Err(Failure { kind: FailureKind::Engine, detail: None }))
+    }
+}
+
 /// Looks up a link to a video or post on YouTube, Instagram, TikTok or X with the bundled engine. Only such
 /// links are looked up: anything else never reaches yt-dlp.
 #[tauri::command]
-async fn look_up(url: String, state: tauri::State<'_, Lookups>) -> Result<Lookup, ()> {
+async fn look_up(url: String, lookups: State<'_, Lookups>) -> Result<Lookup, ()> {
     let Some(link) = links::match_media(&url) else {
         return Ok(Lookup::failed(FailureKind::Unsupported));
     };
-    let (engine, turn, answers) = (state.engine.clone(), state.turn.clone(), state.answers.clone());
-    // The engine blocks while it runs, so it gets a thread of its own and the window stays responsive.
-    let found = tauri::async_runtime::spawn_blocking(move || {
-        let _turn = turn.lock().unwrap_or_else(PoisonError::into_inner);
-        // Inside the turn, so asking twice for one link waits for the first answer instead of a second lookup.
-        if let Some(media) = answers.lock().unwrap_or_else(PoisonError::into_inner).get(&link.url, Instant::now()) {
-            return Ok(media);
+    Ok(match lookups.media(link.url, false).await {
+        Ok(media) => Lookup::from_media(&media, can_join),
+        Err(failure) => Lookup::from_failure(&failure),
+    })
+}
+
+struct Downloads {
+    manager: DownloadManager,
+    /// Where files are saved: the person's Downloads folder.
+    folder: PathBuf,
+}
+
+/// Saves `choice` ("720p", "Audio only", or "post" for every picture and video in a post) from the link at
+/// `url`, which the window looked up a moment ago.
+#[tauri::command]
+async fn download(
+    url: String,
+    choice: String,
+    lookups: State<'_, Lookups>,
+    downloads: State<'_, Downloads>,
+) -> Result<Vec<TaskView>, String> {
+    let link = links::match_media(&url).ok_or_else(|| FailureKind::Unsupported.message().to_string())?;
+    let media = lookups.media(link.url.clone(), false).await.map_err(|f| f.kind.message().to_string())?;
+    let plans = plan(&media, &choice, &link.url, &downloads.folder, can_join)
+        .ok_or_else(|| "This choice can't be saved any more. Look the link up again.".to_string())?;
+    Ok(plans.into_iter().map(|p| TaskView::from(&downloads.manager.add(p))).collect())
+}
+
+#[tauri::command]
+fn list_downloads(downloads: State<'_, Downloads>) -> Vec<TaskView> {
+    downloads.manager.list().iter().map(TaskView::from).collect()
+}
+
+#[tauri::command]
+fn pause_download(id: u64, downloads: State<'_, Downloads>) {
+    downloads.manager.pause(id);
+}
+
+#[tauri::command]
+fn resume_download(id: u64, downloads: State<'_, Downloads>) {
+    downloads.manager.resume(id);
+}
+
+#[tauri::command]
+fn cancel_download(id: u64, downloads: State<'_, Downloads>) {
+    downloads.manager.cancel(id);
+}
+
+#[tauri::command]
+fn remove_download(id: u64, downloads: State<'_, Downloads>) {
+    downloads.manager.remove(id);
+}
+
+/// Tries a failed download again. The sites' addresses expire, so the link is looked up again first for a
+/// fresh one; if that lookup fails, the old address is tried.
+#[tauri::command]
+async fn retry_download(id: u64, lookups: State<'_, Lookups>, downloads: State<'_, Downloads>) -> Result<(), ()> {
+    let Some(task) = downloads.manager.get(id) else { return Ok(()) };
+    let fresh: Option<Source> = match lookups.media(task.page_url.clone(), true).await {
+        Ok(media) => {
+            let choice = if task.group.is_some() { chaya_core::download::plan::WHOLE_POST } else { &task.choice };
+            plan(&media, choice, &task.page_url, &downloads.folder, can_join)
+                .and_then(|plans| plans.into_iter().find(|p| p.choice == task.choice))
+                .map(|p| p.source)
         }
-        let media = engine.look_up(&link.url)?;
-        answers.lock().unwrap_or_else(PoisonError::into_inner).put(&link.url, media.clone(), Instant::now());
-        Ok(media)
-    })
-    .await;
-    Ok(match found {
-        // Joining picture and sound comes with downloads; until then, what the phone can join (H.264).
-        Ok(Ok(media)) => Lookup::from_media(&media, is_h264),
-        Ok(Err(failure)) => Lookup::from_failure(&failure),
-        Err(_) => Lookup::failed(FailureKind::Engine),
-    })
+        Err(_) => None,
+    };
+    downloads.manager.retry(id, fresh);
+    Ok(())
+}
+
+/// Opens a finished file in the app Windows uses for it.
+#[tauri::command]
+fn open_download(id: u64, app: AppHandle, downloads: State<'_, Downloads>) -> Result<(), String> {
+    let task = downloads.manager.get(id).ok_or("This download is gone.")?;
+    app.opener()
+        .open_path(task.path.to_string_lossy(), None::<&str>)
+        .map_err(|_| "Windows couldn't open the file.".into())
+}
+
+/// Shows a finished file in its folder in File Explorer.
+#[tauri::command]
+fn show_download(id: u64, app: AppHandle, downloads: State<'_, Downloads>) -> Result<(), String> {
+    let task = downloads.manager.get(id).ok_or("This download is gone.")?;
+    app.opener().reveal_item_in_dir(&task.path).map_err(|_| "Windows couldn't show the folder.".into())
+}
+
+/// What the window hears about downloads, as `download` events.
+#[derive(Clone, Serialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
+enum DownloadEvent {
+    Changed {
+        task: TaskView,
+    },
+    #[serde(rename_all = "camelCase")]
+    Progress {
+        id: u64,
+        done: u64,
+        total: Option<u64>,
+        bytes_per_second: u64,
+    },
+    Removed {
+        id: u64,
+    },
+}
+
+impl From<Event> for DownloadEvent {
+    fn from(event: Event) -> DownloadEvent {
+        match event {
+            Event::Changed(task) => DownloadEvent::Changed { task: TaskView::from(&task) },
+            Event::Progress { id, done, total, bytes_per_second } => {
+                DownloadEvent::Progress { id, done, total, bytes_per_second }
+            }
+            Event::Removed(id) => DownloadEvent::Removed { id },
+        }
+    }
 }
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let engine_dir = app.path().resource_dir()?.join("engine");
             let cache_dir = app.path().app_cache_dir()?.join("yt-dlp");
@@ -63,9 +195,39 @@ pub fn run() {
                 turn: Arc::new(Mutex::new(())),
                 answers: Arc::new(Mutex::new(AnswerCache::default())),
             });
+
+            let client = chaya_core::reqwest::Client::builder()
+                .connect_timeout(Duration::from_secs(20))
+                .read_timeout(Duration::from_secs(30))
+                .build()?;
+            let handle = app.handle().clone();
+            let manager = DownloadManager::open(
+                app.path().app_data_dir()?.join("downloads.json"),
+                client,
+                tauri::async_runtime::handle().inner().clone(),
+                Box::new(move |event| {
+                    let _ = handle.emit("download", DownloadEvent::from(event));
+                }),
+            );
+            // Windows names a Downloads folder for everyone; elsewhere it may be unset, so fall back to the usual one.
+            let folder =
+                app.path().download_dir().or_else(|_| app.path().home_dir().map(|home| home.join("Downloads")))?;
+            app.manage(Downloads { manager, folder });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![recognise_link, look_up])
+        .invoke_handler(tauri::generate_handler![
+            recognise_link,
+            look_up,
+            download,
+            list_downloads,
+            pause_download,
+            resume_download,
+            cancel_download,
+            remove_download,
+            retry_download,
+            open_download,
+            show_download,
+        ])
         .run(tauri::generate_context!())
         .expect("the window could not be opened");
 }

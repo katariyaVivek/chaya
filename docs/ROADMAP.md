@@ -61,8 +61,10 @@ The six-part plan after v0.4.0 has shipped (#34 to #39); it is in
   on WebView2 ([`desktop/`](../desktop/README.md)): its window follows Windows' theme or the
   person's, and recognises a pasted link with the phone's rules (#50). A video or post is looked up
   with the phone's engine, which the installer carries with its own Python and QuickJS, and its
-  qualities are shown. Next: download them (picture and sound joined into one MP4), then the
-  Downloads list; a built-in browser comes after. The lookups have not run on a real Windows PC yet.
+  qualities are shown (#51). What can be saved as plain files downloads, with pause, resume, cancel,
+  and a Retry that looks the link up again, into a Downloads list kept across restarts. Next: join
+  picture and sound (most of YouTube's qualities), YouTube's faster download in pieces, and streams;
+  a built-in browser comes after. Lookups and downloads have not run on a real Windows PC yet.
 
 0. **First: check #48 on the phone.** #47's name search kept its first look for 3 seconds, so a page
    that drew its name late and then went quiet (7movies) kept no name; #48 looks again when the kept
