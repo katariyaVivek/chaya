@@ -26,7 +26,7 @@ body {
   padding: var(--space-2) var(--space-3);
 }
 
-.settings { position: relative; }
+.settings, .shield { position: relative; }
 
 .settings__panel {
   position: absolute;
@@ -42,6 +42,7 @@ body {
 }
 .settings__label { margin: 0; color: var(--muted); font-size: var(--text-sm); }
 .settings__label:not(:first-child) { margin-top: var(--space-1); }
+.shield__status { max-width: 32ch; margin: 0; font-size: var(--text-md); line-height: var(--leading-md); }
 .settings__credit { max-width: 32ch; margin: var(--space-1) 0 0; color: var(--muted); font-size: var(--text-sm); line-height: var(--leading-sm); }
 
 .seg { display: flex; gap: 2px; padding: var(--space-half); border-radius: var(--radius-pill); background: var(--wash); }
@@ -196,14 +197,17 @@ body.browsing .downloads { margin-top: 0; overflow-y: auto; }
 body.browsing:not(.showing-downloads) .downloads { display: none; }
 body.browsing.showing-downloads .page-frame { display: none; }
 
-body.browsing .urlbar { display: flex; align-items: center; gap: var(--space-1); }
+/* Above what follows it, so the ad blocker's panel, drawn inside the bar's own layer, is too. */
+body.browsing .urlbar { z-index: 5; display: flex; align-items: center; gap: var(--space-1); }
 body.browsing .urlbar__field { flex: 1; min-width: 0; }
 body.browsing .urlbar__icon { display: none; }
 .page-nav { display: flex; gap: var(--space-half); }
 
-.page-downloads { position: relative; }
-.page-downloads[aria-pressed="true"] { background: var(--wash-strong); color: var(--text); }
-.page-downloads__count {
+.page-downloads, .page-shield { position: relative; }
+.page-downloads[aria-pressed="true"], .page-shield[aria-expanded="true"] { background: var(--wash-strong); color: var(--text); }
+/* Ads shown here: the shield stays, quieter, so the person can find the switch again. */
+.page-shield--off svg { opacity: 0.45; }
+.page-count {
   position: absolute;
   top: 2px;
   right: 0;

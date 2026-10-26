@@ -325,6 +325,12 @@ a built-in browser. [`../desktop/README.md`](../desktop/README.md) has the layou
   handing the page a bridge; `chaya-core`'s `found` ports the classifier, the ad hosts and the core of
   the ranker and namer. A stream found on a page is looked up by the engine for its qualities, with the
   page as referrer (`--referer`); a video site's page is looked up as its link is.
+- **Ad blocking** (`chaya-core`'s `adblock`, `desktop/app/src-tauri/src/ads.rs`) is the phone's
+  `adblock/` ported to Rust, with its tests and the same lists. On Windows the page's WebView2 hands
+  each request to the app (`WebResourceRequested`), where the phone uses `shouldInterceptRequest`.
+  Where the phone's page script asks `ChayaCosmetic` for the CSS of the classes and ids it found, the
+  desktop's `hider.js` keeps them until the app asks, under a random name, and the app evaluates the CSS
+  back into the document: again no bridge.
 - `desktop/app/src-tauri` hands `chaya-core` to the window as commands (`recognise_link`, `look_up`,
   `download` and the download controls) and sends it `download` events. The window
   may call only those and set its title bar's theme (`capabilities/default.json`). Its content

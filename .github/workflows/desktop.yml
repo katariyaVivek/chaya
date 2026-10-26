@@ -1,6 +1,6 @@
 name: Desktop app
 
-# Chaya for Windows (desktop/): the core crate's tests on Linux, then the Tauri app built on Windows
+# Chaya for Windows (desktop/): the core crate's tests on Linux (the ad blocker's read the phone's lists), then the Tauri app built on Windows
 # into an NSIS installer, kept as a run artifact. On Windows the engine the installer carries (a Python,
 # yt-dlp, gallery-dl, chaya_engine, QuickJS and ffmpeg: desktop/engine/prepare.py) is put together first and
 # checked without the network. The cut-down ffmpeg that joins picture and sound is built once per version of
@@ -12,6 +12,7 @@ on:
     paths:
       - 'desktop/**'
       - 'app/src/main/python/**'
+      - 'app/src/main/assets/adblock/**'
       - 'app/build.gradle.kts'
       - '.github/workflows/desktop.yml'
   push:
@@ -19,6 +20,7 @@ on:
     paths:
       - 'desktop/**'
       - 'app/src/main/python/**'
+      - 'app/src/main/assets/adblock/**'
   workflow_dispatch:
 
 concurrency:

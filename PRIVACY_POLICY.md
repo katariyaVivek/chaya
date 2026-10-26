@@ -91,6 +91,10 @@ differences:
 - **Links to YouTube, Instagram, TikTok and X** are looked up with yt-dlp on your PC, without any
   sign-in. So is a stream found on a page when you ask for its qualities: yt-dlp reads that stream's
   playlist from its server, naming the page as the referrer, as its player would.
+- **The ad blocker** works as the phone's: it decides on your PC, its settings (whether it is on, and
+  the sites you let show ads) stay on your PC, and about once a week it fetches fresh EasyList and
+  EasyPrivacy lists from easylist.to, sending nothing about you. To hide a page's ad boxes, a script of
+  Chaya's in the page notes the names of the page's elements for Chaya to read; they go nowhere else.
 
 ## What Chaya never does
 

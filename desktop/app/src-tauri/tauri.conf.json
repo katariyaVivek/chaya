@@ -48,7 +48,9 @@
       }
     },
     "resources": {
-      "engine/": "engine/"
+      "engine/": "engine/",
+      "../../../app/src/main/assets/adblock/easylist.txt": "adblock/easylist.txt",
+      "../../../app/src/main/assets/adblock/easyprivacy.txt": "adblock/easyprivacy.txt"
     }
   }
 }
