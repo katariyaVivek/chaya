@@ -64,9 +64,9 @@ The six-part plan after v0.4.0 has shipped (#34 to #39); it is in
   qualities are shown (#51). What can be saved as plain files downloads, with pause, resume, cancel,
   and a Retry that looks the link up again, into a Downloads list kept across restarts (#52).
   Qualities whose picture and sound come apart are joined by a cut-down ffmpeg the app carries, and
-  YouTube's files come in pieces, three at a time (#53). HLS streams are fetched piece by piece and
-  saved as MP4s. Next: DASH streams; a built-in browser comes after. Lookups and downloads have not
-  run on a real Windows PC yet.
+  YouTube's files come in pieces, three at a time (#53). HLS streams (#54) and DASH streams are fetched
+  piece by piece and saved as MP4s. Next: a built-in browser. Lookups and downloads have not run on a
+  real Windows PC yet.
 
 0. **First: check #48 on the phone.** #47's name search kept its first look for 3 seconds, so a page
    that drew its name late and then went quiet (7movies) kept no name; #48 looks again when the kept

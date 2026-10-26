@@ -671,7 +671,7 @@ mod tests {
                 url: server.url("/file"),
                 headers: Default::default(),
                 expected_size: None,
-                stream: false,
+                ..Source::default()
             },
             sound: None,
             thumbnail: None,
@@ -785,7 +785,7 @@ mod tests {
         assert_eq!(failed.state, State::Failed(DownloadError::Http(403)));
 
         let source =
-            Source { url: fresh.url("/file"), headers: Default::default(), expected_size: None, stream: false };
+            Source { url: fresh.url("/file"), headers: Default::default(), expected_size: None, ..Source::default() };
         s.manager.retry(task.id, Some(Fresh { source, sound: None }));
         let done = wait_for(&s.manager, task.id, |st| *st == State::Completed).await;
         assert_eq!(std::fs::read(&done.path).unwrap(), content);
@@ -839,7 +839,7 @@ mod tests {
                 url: "https://cdn.example/x".into(),
                 headers: Default::default(),
                 expected_size: None,
-                stream: false,
+                ..Source::default()
             },
             thumbnail: None,
             group: None,
@@ -879,7 +879,7 @@ mod tests {
             choice: "Audio only".into(),
             kind: Kind::Audio,
             path: PathBuf::from("Downloads").join("Me at the zoo.m4a"),
-            source: Source { url: "u".into(), headers: Default::default(), expected_size: None, stream: false },
+            source: Source { url: "u".into(), headers: Default::default(), expected_size: None, ..Source::default() },
             thumbnail: None,
             group: None,
             state: State::Failed(DownloadError::Http(403)),
@@ -919,13 +919,13 @@ mod tests {
                 url: picture.url("/133"),
                 headers: Default::default(),
                 expected_size: Some(PICTURE.len() as u64),
-                stream: false,
+                ..Source::default()
             },
             sound: Some(Source {
                 url: sound.url("/140"),
                 headers: Default::default(),
                 expected_size: Some(SOUND.len() as u64),
-                stream: false,
+                ..Source::default()
             }),
             ..new_download(s, picture, "unused.mp4")
         }
@@ -1051,6 +1051,7 @@ mod tests {
                 headers: Default::default(),
                 expected_size: None,
                 stream: true,
+                ..Source::default()
             },
             ..new_download(s, server, "unused.mp4")
         }
@@ -1100,7 +1101,7 @@ mod tests {
                 url: sound.url("/audio.m4a"),
                 headers: Default::default(),
                 expected_size: None,
-                stream: false,
+                ..Source::default()
             }),
             ..stream_download(&s, &picture)
         };
@@ -1111,6 +1112,41 @@ mod tests {
         assert_eq!(&file[4..8], b"ftyp");
         assert!(done.leftovers().iter().all(|f| !f.exists()));
         assert_eq!(steps_seen(&s), [Step::Picture, Step::Sound, Step::Joining]);
+    }
+
+    const FRAGMENTED: &[u8] = include_bytes!("../../tests/fixtures/picture-fragmented.mp4");
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_dash_picture_from_its_listed_pieces_is_joined_to_its_sound() {
+        let Some(joiner) = joiner() else { return };
+        // As a DASH representation comes: its initialization section (ftyp and moov), then pieces of fragmented
+        // MP4, here the rest of the file in two.
+        let cuts = [0, 805, 805 + (FRAGMENTED.len() - 805) / 2, FRAGMENTED.len()];
+        let files: Vec<(String, Vec<u8>)> =
+            (0..3).map(|i| (format!("/v/{i}.m4s"), FRAGMENTED[cuts[i]..cuts[i + 1]].to_vec())).collect();
+        let picture = TestServer::with_files(files, Behaviour::default());
+        let sound = TestServer::start(SOUND.to_vec(), Behaviour::default());
+        let s = setup(AT_ONCE);
+        s.manager.set_joiner(Some(joiner));
+
+        let new = NewDownload {
+            source: Source {
+                url: "https://cdn.example/manifest.mpd".into(),
+                stream: true,
+                fragments: (0..3).map(|i| picture.url(&format!("/v/{i}.m4s"))).collect(),
+                ..Source::default()
+            },
+            sound: Some(Source { url: sound.url("/audio.m4a"), ..Source::default() }),
+            ..stream_download(&s, &picture)
+        };
+        let task = s.manager.add(new);
+        let done = wait_for(&s.manager, task.id, |st| *st == State::Completed).await;
+
+        let file = std::fs::read(&done.path).unwrap();
+        let has = |name: &[u8]| file.windows(4).any(|w| w == name);
+        assert!(has(b"ftyp") && has(b"avcC") && has(b"mp4a"));
+        assert!(!has(b"moof"), "one plain MP4, not fragments");
+        assert_eq!(picture.requests().len(), 3, "the listed pieces, and no manifest");
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -1127,7 +1163,7 @@ mod tests {
             url: sound.url("/audio.m4a"),
             headers: Default::default(),
             expected_size: Some(SOUND.len() as u64),
-            stream: false,
+            ..Source::default()
         });
         let task = s.manager.add(new);
         wait_for(&s.manager, task.id, |st| *st == State::Completed).await;
@@ -1157,7 +1193,7 @@ mod tests {
                 url: sound.url("/audio.m4a"),
                 headers: Default::default(),
                 expected_size: None,
-                stream: false,
+                ..Source::default()
             }),
             ..stream_download(&s, &picture)
         };
@@ -1232,7 +1268,7 @@ mod tests {
             choice: "720p".into(),
             kind: Kind::Video,
             path: "C:/Downloads/T (720p).mp4".into(),
-            source: Source { url: "u".into(), headers: Default::default(), expected_size: None, stream: false },
+            source: Source { url: "u".into(), headers: Default::default(), expected_size: None, ..Source::default() },
             thumbnail: None,
             group: None,
             state: State::Failed(DownloadError::Http(403)),

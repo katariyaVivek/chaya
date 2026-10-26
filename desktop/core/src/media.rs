@@ -32,6 +32,9 @@ pub struct Format {
     pub language_preference: Option<i64>,
     /// "SDR", "HDR10", "HLG" and so on.
     pub dynamic_range: Option<String>,
+    /// A DASH format's pieces in order (its initialization section first), as yt-dlp found them in the
+    /// manifest; empty for anything else.
+    pub fragments: Vec<String>,
 }
 
 impl Format {
@@ -63,10 +66,16 @@ impl Format {
         !address.contains(".m3u8") && !address.contains(".mpd")
     }
 
-    /// An HLS stream: a playlist of pieces, which the app can save (`download::stream`). DASH it cannot yet.
+    /// An HLS stream: a playlist of pieces.
     pub fn is_hls(&self) -> bool {
         let protocol = self.protocol.as_deref().unwrap_or("").to_ascii_lowercase();
         protocol.contains("m3u") || (!protocol.contains("dash") && self.url.to_ascii_lowercase().contains(".m3u8"))
+    }
+
+    /// A stream the app can save (`download::stream`): HLS, whose playlist lists its pieces, or DASH, whose pieces
+    /// yt-dlp listed. A DASH stream without them it cannot.
+    pub fn is_savable_stream(&self) -> bool {
+        !self.is_direct_file() && (self.is_hls() || !self.fragments.is_empty())
     }
 
     /// A single file with both picture and sound.
@@ -240,6 +249,11 @@ fn format(f: &Map<String, Value>) -> Option<Format> {
         headers: headers(f),
         language_preference: integer(f, "language_preference"),
         dynamic_range: text(f, "dynamic_range"),
+        fragments: f
+            .get("fragments")
+            .and_then(Value::as_array)
+            .map(|pieces| pieces.iter().filter_map(|p| p.as_str().map(String::from)).collect())
+            .unwrap_or_default(),
         url,
     })
 }
@@ -349,6 +363,20 @@ mod tests {
     }
 
     #[test]
+    fn a_dash_formats_pieces_are_read_in_order() {
+        let media = parse(
+            r#"{"media": {"title": "T", "formats": [
+            {"format_id": "v720", "url": "https://cdn.example/manifest.mpd", "protocol": "http_dash_segments",
+             "fragments": ["https://cdn.example/init.mp4", "https://cdn.example/1.m4s"]},
+            {"format_id": "18", "url": "https://cdn.example/18"}
+        ]}}"#,
+        )
+        .unwrap();
+        assert_eq!(media.formats[0].fragments, ["https://cdn.example/init.mp4", "https://cdn.example/1.m4s"]);
+        assert!(media.formats[1].fragments.is_empty());
+    }
+
+    #[test]
     fn a_live_stream_is_flagged() {
         assert!(parse(r#"{"media": {"title": "Live", "is_live": true}}"#).unwrap().is_live);
     }
@@ -421,6 +449,9 @@ mod tests {
         assert!(!dash.is_direct_file() && !dash.is_hls());
         let by_address = Format { url: "https://cdn.example/v/index.m3u8?t=1".into(), ..f(None, None) };
         assert!(by_address.is_hls() && !f(None, None).is_hls());
+        assert!(manifest.is_savable_stream() && !dash.is_savable_stream(), "DASH only with its pieces");
+        let listed = Format { fragments: vec!["https://cdn.example/init.mp4".into()], ..dash };
+        assert!(listed.is_savable_stream() && !f(None, None).is_savable_stream());
 
         let drc = Format { id: "251-drc".into(), ..f(None, None) };
         assert!(drc.is_loudness_compressed());

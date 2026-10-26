@@ -3,7 +3,7 @@
 The phone calls `extract` through Chaquopy. The desktop app has no Python inside it, so it runs a bundled
 Python with this module instead, and reads one line of JSON from what it prints:
 
-    python -I run.py extract URL --cache DIR [--cookies FILE] [--js-runtime QJS]
+    python -I run.py extract URL --cache DIR [--cookies FILE] [--js-runtime QJS] [--fragments]
     python -I run.py selftest [--js-runtime QJS]
 
 `extract` prints what `extract.extract` returns. `selftest` prints `selftest.status`, plus what yt-dlp makes
@@ -28,6 +28,8 @@ def main(argv=None):
     extract_command.add_argument('--cache', required=True, help="yt-dlp's cache folder")
     extract_command.add_argument('--cookies', help='a Netscape cookie file, only when the person chose a sign-in')
     extract_command.add_argument('--js-runtime', help="a QuickJS program for YouTube's challenges")
+    extract_command.add_argument('--fragments', action='store_true',
+                                 help="list each DASH format's pieces, for an app that fetches them itself")
 
     selftest_command = commands.add_parser('selftest', help='Check the engine without using the network.')
     selftest_command.add_argument('--js-runtime', help='a QuickJS program to check as well')
@@ -36,7 +38,7 @@ def main(argv=None):
     if args.command == 'extract':
         from .extract import extract
 
-        print(extract(args.url, args.cache, args.cookies, js_runtime=args.js_runtime))
+        print(extract(args.url, args.cache, args.cookies, js_runtime=args.js_runtime, fragments=args.fragments))
     else:
         print(selftest(args.js_runtime))
     sys.stdout.flush()
