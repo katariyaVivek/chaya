@@ -13,6 +13,7 @@ import {
   nextDownloadState,
   clickEvent,
   ringPercent,
+  DownloadButton,
 } from '../chaya-motion.js';
 
 const read = (name) => readFileSync(fileURLToPath(new URL(`../${name}`, import.meta.url)), 'utf8');
@@ -237,4 +238,56 @@ test('the ring never shows 100% before the download completes', () => {
   assert.equal(ringPercent(1.4), 99);
   assert.equal(ringPercent(-0.2), 0);
   assert.equal(ringPercent(Number.NaN), 0);
+});
+
+/**
+ * Just enough of a `.dl` button for DownloadButton: its label measures by its text (8px a letter) when the
+ * button is on screen, and as nothing at all when it is hidden, as a browser's does.
+ */
+function fakeButton() {
+  const listeners = {};
+  const button = {
+    shown: true,
+    isConnected: true,
+    dataset: {},
+    style: { width: '', setProperty() {} },
+    get offsetWidth() { return this.shown ? 120 : 0; },
+    getClientRects() { return this.shown ? [{}] : []; },
+    setAttribute() {},
+    addEventListener(type, fn) { listeners[type] = fn; },
+    append() {},
+    querySelector(selector) { return selector === '.dl__label' ? label : null; },
+  };
+  const label = {
+    textContent: 'Download',
+    style: {},
+    cloneNode() {
+      return {
+        textContent: '',
+        style: {},
+        getBoundingClientRect() { return { width: button.shown ? this.textContent.length * 8 : 0 }; },
+        remove() {},
+      };
+    },
+  };
+  return button;
+}
+
+test('a download cancelled while its button is hidden gets its whole pill back, not a sliver', () => {
+  globalThis.getComputedStyle = () => ({ getPropertyValue: () => '16px' });
+  const el = fakeButton();
+  const button = new DownloadButton(el);
+  assert.equal(el.style.width, '96px', '8 letters of label and 16px each side');
+  button.send('start');
+  assert.equal(el.style.width, '40px', 'the ring');
+  // The owner cancelled from the Downloads list, with the card's button out of sight.
+  el.shown = false;
+  button.send('cancel');
+  assert.equal(button.state, 'idle');
+  assert.notEqual(el.style.width, '32px', 'measured hidden, the label was nothing wide');
+  assert.equal(el.style.width, '', 'the pill takes the width of its label');
+  // Shown again, it measures as usual from then on.
+  el.shown = true;
+  button.send('start');
+  assert.equal(el.style.width, '40px');
 });

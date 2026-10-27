@@ -172,7 +172,7 @@ mod webview2 {
     use chaya_core::adblock::{kind, AdBlocker};
     use webview2_com::Microsoft::Web::WebView2::Win32::*;
     use webview2_com::{take_pwstr, WebResourceRequestedEventHandler};
-    use windows_core::{w, PWSTR};
+    use windows_core::{w, Interface, PWSTR};
 
     /// Answers each request the page makes: an empty 204 for an ad or a tracker, nothing (so it loads) for the
     /// rest. Set up before the page loads anything: the page opens on about:blank, and is sent on after this.
@@ -210,7 +210,16 @@ mod webview2 {
         // SAFETY: called on the window's thread (`with_webview`), on the page's own live webview.
         unsafe {
             let webview = controller.CoreWebView2()?;
-            webview.AddWebResourceRequestedFilter(w!("*"), COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL)?;
+            // The plain filter sees only the page's own document's requests. Ads come in frames from their networks'
+            // sites, and those frames' requests (and workers') are watched only when asked for by source.
+            match webview.cast::<ICoreWebView2_22>() {
+                Ok(webview) => webview.AddWebResourceRequestedFilterWithRequestSourceKinds(
+                    w!("*"),
+                    COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL,
+                    COREWEBVIEW2_WEB_RESOURCE_REQUEST_SOURCE_KINDS_ALL,
+                )?,
+                Err(_) => webview.AddWebResourceRequestedFilter(w!("*"), COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL)?,
+            }
             webview.add_WebResourceRequested(&handler, &mut token)
         }
     }
@@ -276,7 +285,10 @@ mod webview_tests {
     use super::block_requests;
 
     const PAGE: &str = "<!doctype html><title>News</title><p>Story</p>\
-        <script src=\"/ads/banner.js\"></script><img src=\"/ads/banner.gif\"><img src=\"/photo.png\">";
+        <script src=\"/ads/banner.js\"></script><img src=\"/ads/banner.gif\"><img src=\"/photo.png\">\
+        <iframe src=\"http://localhost:PORT/frame.html\"></iframe>";
+    /// A frame from another site, as an ad network's is: what it loads is asked for from inside the frame.
+    const FRAME: &str = "<!doctype html><img src=\"/ads/inframe.gif\"><img src=\"/frame-photo.png\">";
 
     /// Serves the page at any path, and notes each path asked for.
     fn serve(asked: Arc<Mutex<Vec<String>>>) -> u16 {
@@ -297,7 +309,12 @@ mod webview_tests {
                     }
                 }
                 asked.lock().unwrap().push(path.clone());
-                let (kind, body) = if path.ends_with(".html") { ("text/html", PAGE) } else { ("text/plain", "") };
+                let page = PAGE.replace("PORT", &port.to_string());
+                let (kind, body) = match path.as_str() {
+                    "/frame.html" => ("text/html", FRAME.to_string()),
+                    p if p.ends_with(".html") => ("text/html", page),
+                    _ => ("text/plain", String::new()),
+                };
                 let mut stream = stream;
                 let _ = write!(
                     stream,
@@ -310,12 +327,13 @@ mod webview_tests {
     }
 
     #[test]
-    fn a_pages_ads_are_never_fetched_and_the_rest_of_it_is() {
+    fn a_pages_ads_are_never_fetched_and_the_rest_of_it_is_frames_from_other_sites_included() {
         let asked = Arc::new(Mutex::new(Vec::new()));
         let url: Url = format!("http://127.0.0.1:{}/story.html", serve(asked.clone())).parse().unwrap();
         let blocker = Arc::new(AdBlocker::new(Settings::in_memory(), public_suffix_site));
         let mut rules = Builder::new(public_suffix_site);
         rules.add("/ads/banner.");
+        rules.add("/ads/inframe.");
         blocker.use_engine(rules.build());
 
         let (pages, watched, page_url) = (blocker.clone(), asked.clone(), url.clone());
@@ -337,7 +355,9 @@ mod webview_tests {
                 std::thread::spawn(move || {
                     let start = Instant::now();
                     while start.elapsed() < Duration::from_secs(60)
-                        && !watched.lock().unwrap().iter().any(|p| p == "/photo.png")
+                        && !["/photo.png", "/frame-photo.png"]
+                            .iter()
+                            .all(|want| watched.lock().unwrap().iter().any(|p| p == want))
                     {
                         std::thread::sleep(Duration::from_millis(100));
                     }
@@ -354,7 +374,11 @@ mod webview_tests {
         let asked = asked.lock().unwrap().clone();
         assert!(asked.iter().any(|p| p == "/story.html"), "{asked:?}");
         assert!(asked.iter().any(|p| p == "/photo.png"), "the rest of the page loads: {asked:?}");
-        assert!(!asked.iter().any(|p| p.starts_with("/ads/")), "the ads are never fetched: {asked:?}");
-        assert_eq!(blocker.shield().blocked, 2);
+        assert!(asked.iter().any(|p| p == "/frame-photo.png"), "and the frame's: {asked:?}");
+        assert!(
+            !asked.iter().any(|p| p.starts_with("/ads/")),
+            "the ads are never fetched, in a frame either: {asked:?}"
+        );
+        assert_eq!(blocker.shield().blocked, 3);
     }
 }
