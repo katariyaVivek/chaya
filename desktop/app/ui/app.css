@@ -19,10 +19,11 @@ body {
 
 .sprite { position: absolute; }
 
+/* Windows' title bar already names the app, so the bar holds only the settings */
 .top {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   padding: var(--space-2) var(--space-3);
 }
 
@@ -190,9 +191,18 @@ body.browsing .main {
   display: flex;
   flex-direction: column;
   max-width: none;
-  padding: 0 var(--space-3) var(--space-3);
+  padding: var(--space-2) var(--space-3) var(--space-3);
   overflow: hidden;
 }
+/* While browsing, the settings sit at the end of the bar's row instead of on a row of their own */
+body.browsing .top {
+  position: absolute;
+  top: calc(var(--space-2) + (var(--space-6) - var(--control-height)) / 2);
+  right: var(--space-3);
+  z-index: 6;
+  padding: 0;
+}
+body.browsing .urlbar { margin-right: calc(var(--control-height) + var(--space-half)); }
 body.browsing .main > * { flex: none; }
 body.browsing .downloads { margin-top: 0; overflow-y: auto; }
 body.browsing:not(.showing-downloads) .downloads { display: none; }
@@ -224,15 +234,21 @@ body.browsing .urlbar__icon { display: none; }
   line-height: 14px;
 }
 
+/*
+ * The page runs edge to edge under the bar, as in any browser. A webview is drawn as a plain rectangle over the
+ * window, so it is given none of the window's rounded glass to cover: only a hairline above it, and the
+ * window's own corners (Windows rounds them) below.
+ */
 .page-frame {
   display: flex;
   flex: 1 !important;
   flex-direction: column;
-  gap: var(--space-half);
   min-height: 0;
+  margin: 0 calc(var(--space-3) * -1) calc(var(--space-3) * -1);
+  border-top: 1px solid var(--border);
 }
-/* The page's webview covers .page exactly; until it does, the glass shows */
-.page { flex: 1; min-height: 0; border-radius: var(--radius-md); }
+/* The page's webview covers .page exactly; until it does, the ground shows */
+.page { flex: 1; min-height: 0; background: var(--bg); }
 
 /* While the page loads: a thin light runs along the top of it */
 .page-load {

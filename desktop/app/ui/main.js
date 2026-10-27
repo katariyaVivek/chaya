@@ -342,6 +342,18 @@ function taskRemoved(id) {
   downloadList.querySelector(`[data-id="${id}"]`)?.remove();
   showEmpty();
   countRunning();
+  // A button whose downloads were all cancelled goes back to its pill; a saved one stays saved, as the file does.
+  for (const entry of buttons) {
+    if (!entry.ids.includes(id)) continue;
+    entry.ids = entry.ids.filter((other) => other !== id);
+    if (entry.ids.length) {
+      follow(entry);
+    } else {
+      following = true;
+      entry.button.send('cancel');
+      following = false;
+    }
+  }
 }
 
 /** While a page is open, the Downloads button says how many downloads are under way. */
