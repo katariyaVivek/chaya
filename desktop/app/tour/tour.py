@@ -2,14 +2,20 @@
 
 CI installs the app from its installer and runs this on a Windows machine (`desktop.yml`, job `tour`), so what
 the app looks like there can be seen rather than guessed: where the page sits, fonts, the title bar, a real
-lookup. It drives the window's own content through WebDriver (`tauri-driver`, which starts the app), and
-photographs the screen, the browser's page and Windows' own frame included.
+lookup. It drives the window's own content by running script in it, and photographs the screen, the browser's
+page and Windows' own frame included.
+
+Two ways in:
+- `--via devtools` (Windows): starts the app with WebView2's DevTools port open and speaks the DevTools
+  protocol to the window. msedgedriver cannot be used: Tauri gives WebView2 its own data folder, where
+  msedgedriver never finds the port it waits for.
+- `--via webdriver` (Linux): `tauri-driver` with WebKitWebDriver starts the app, for trying the tour here.
 
 A step that cannot be done (a site that refuses a data centre, a lookup that times out) is noted and the tour
 goes on; only a tour that cannot start the app fails. What each step saw goes into `steps.json` beside the
 pictures.
 
-    python tour.py --app PATH --out FOLDER [--driver http://127.0.0.1:4444] [--sites sites.json]
+    python tour.py --app PATH --out FOLDER [--via devtools|webdriver] [--sites sites.json]
 
 `--sites` swaps the internet's addresses for others (a local test site, when trying the tour off Windows).
 """
@@ -20,13 +26,8 @@ import os
 import subprocess
 import sys
 import time
+import urllib.request
 from pathlib import Path
-
-from selenium import webdriver
-from selenium.common.exceptions import WebDriverException
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.common.options import ArgOptions
 
 SITES = {
     # A short, old, public video: the first one uploaded to YouTube.
@@ -50,9 +51,91 @@ def screenshot(path):
     subprocess.run(['import', '-window', 'root', str(path)], check=True)
 
 
+class WebDriverWindow:
+    """The window's content through WebDriver (`tauri-driver`, which starts the app)."""
+
+    def __init__(self, app, address='http://127.0.0.1:4444'):
+        from selenium import webdriver
+        from selenium.common.exceptions import WebDriverException
+        from selenium.webdriver.common.options import ArgOptions
+
+        options = ArgOptions()
+        options.set_capability('browserName', 'wry')
+        options.set_capability('tauri:options', {'application': os.path.abspath(app)})
+        self.driver = None
+        last = None
+        for _ in range(10):
+            try:
+                self.driver = webdriver.Remote(command_executor=address, options=options)
+                break
+            except WebDriverException as e:
+                last = e
+                time.sleep(3)
+        if self.driver is None:
+            raise RuntimeError(f'The app could not be started: {last}')
+
+    def run(self, script):
+        return self.driver.execute_script(script)
+
+    def close(self):
+        self.driver.quit()
+
+
+class DevToolsWindow:
+    """The window's content through WebView2's DevTools port, opened by starting the app with it."""
+
+    PORT = 9333
+
+    def __init__(self, app):
+        import websocket  # websocket-client
+
+        env = dict(os.environ, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=f'--remote-debugging-port={self.PORT}')
+        self.process = subprocess.Popen([app], env=env)
+        target = None
+        for _ in range(60):
+            try:
+                with urllib.request.urlopen(f'http://127.0.0.1:{self.PORT}/json/list', timeout=2) as answer:
+                    targets = json.load(answer)
+                # The window's own content; the browser's page, when one is open, is another target.
+                target = next((t for t in targets if t.get('type') == 'page' and 'tauri.localhost' in t.get('url', '')), None)
+                if target:
+                    break
+            except OSError:
+                pass
+            time.sleep(1)
+        if not target:
+            self.process.kill()
+            raise RuntimeError('The app started, but its window never opened its DevTools port.')
+        self.socket = websocket.create_connection(target['webSocketDebuggerUrl'], timeout=30, suppress_origin=True)
+        self.next_id = 0
+
+    def run(self, script):
+        self.next_id += 1
+        message = {
+            'id': self.next_id,
+            'method': 'Runtime.evaluate',
+            'params': {'expression': f'(function () {{ {script} }})()', 'returnByValue': True},
+        }
+        self.socket.send(json.dumps(message))
+        while True:
+            answer = json.loads(self.socket.recv())
+            if answer.get('id') == self.next_id:
+                break
+        result = answer.get('result', {})
+        if 'exceptionDetails' in result:
+            raise RuntimeError(result['exceptionDetails'].get('exception', {}).get('description', 'script failed'))
+        return result.get('result', {}).get('value')
+
+    def close(self):
+        try:
+            self.socket.close()
+        finally:
+            self.process.kill()
+
+
 class Tour:
-    def __init__(self, driver, out):
-        self.driver = driver
+    def __init__(self, window, out):
+        self.window = window
         self.out = out
         self.steps = []
 
@@ -71,8 +154,12 @@ class Tour:
         except Exception:
             pass
 
-    def js(self, script, *args):
-        return self.driver.execute_script(script, *args)
+    def js(self, script):
+        return self.window.run(script)
+
+    def click(self, selector, index=0):
+        """Clicks what `selector` finds (the `index`th); false when there is nothing there."""
+        return self.js(f"const e = document.querySelectorAll({json.dumps(selector)})[{index}]; if (!e) return false; e.click(); return true;")
 
     def wait(self, condition, seconds, every=0.5):
         """Waits until `condition()` is truthy; returns its last value."""
@@ -81,7 +168,7 @@ class Tour:
         while time.time() < end:
             try:
                 value = condition()
-            except WebDriverException:
+            except Exception:
                 value = None
             if value:
                 return value
@@ -89,20 +176,20 @@ class Tour:
         return value
 
     def type_address(self, text):
-        field = self.driver.find_element(By.ID, 'address')
-        field.click()
-        field.send_keys(Keys.CONTROL, 'a')
-        field.send_keys(text)
-        field.send_keys(Keys.ENTER)
+        """What typing an address and pressing Enter does: the bar's form is submitted with it."""
+        self.js(
+            "const field = document.getElementById('address'); field.focus(); "
+            f"field.value = {json.dumps(text)}; field.dispatchEvent(new Event('input')); "
+            "document.getElementById('address-form').requestSubmit(); return true;"
+        )
 
     def card_text(self):
         return self.js("const c = document.querySelector('#result .card'); return c ? c.innerText : '';")
 
 
 def run(tour, sites):
-    d = tour.driver
-    tour.wait(lambda: d.find_element(By.ID, 'address').is_displayed(), 30)
-    tour.shot('home', title=d.title)
+    tour.wait(lambda: tour.js("return !!document.getElementById('address')?.offsetParent"), 30)
+    tour.shot('home', title=tour.js('return document.title'))
 
     # A link: looked up by the bundled engine, its qualities offered.
     try:
@@ -118,18 +205,18 @@ def run(tour, sites):
 
     # Download its smallest choice, then cancel it from the list: the card's button goes back to its pill.
     try:
-        buttons = d.find_elements(By.CSS_SELECTOR, '#result .choice .dl')
-        if buttons:
-            buttons[-1].click()
-            tour.wait(lambda: d.find_elements(By.CSS_SELECTOR, '#download-list .row'), 20)
+        choices = tour.js("return document.querySelectorAll('#result .choice .dl').length")
+        if choices:
+            tour.click('#result .choice .dl', choices - 1)
+            tour.wait(lambda: tour.js("return document.querySelectorAll('#download-list .row').length"), 20)
             time.sleep(3)
             tour.shot('downloading', row=tour.js("return document.querySelector('#download-list .row')?.innerText ?? ''"))
-            rows = d.find_elements(By.CSS_SELECTOR, '#download-list .row')
-            state = rows[0].get_attribute('data-state') if rows else None
+            state = tour.js("return document.querySelector('#download-list .row')?.dataset.state ?? null")
             if state not in ('completed', None):
-                rows[0].find_element(By.CSS_SELECTOR, '.row__close').click()
+                tour.click('#download-list .row .row__close')
                 time.sleep(1.5)
-                tour.shot('cancelled', button=buttons[-1].get_attribute('data-state'))
+                button = tour.js(f"return document.querySelectorAll('#result .choice .dl')[{choices - 1}]?.dataset.state ?? null")
+                tour.shot('cancelled', button=button)
     except Exception as e:
         tour.failed('download', e)
 
@@ -141,33 +228,34 @@ def run(tour, sites):
             time.sleep(wait)
             found = tour.js("return [...document.querySelectorAll('.found__item')].map(e => e.innerText.replace(/\\s+/g, ' '))")
             shield = tour.js("return document.querySelector('#page-shield')?.getAttribute('aria-label') ?? ''")
-            tour.shot(name, address=d.find_element(By.ID, 'address').get_attribute('value'), found=found, shield=shield)
+            address = tour.js("return document.getElementById('address').value")
+            tour.shot(name, address=address, found=found, shield=shield)
         except Exception as e:
             tour.failed(name, e)
 
     # The ad blocker's panel, on the news page.
     try:
-        d.find_element(By.ID, 'page-shield').click()
+        tour.click('#page-shield')
         time.sleep(1)
         tour.shot('shield', panel=tour.js("return document.getElementById('shield-panel').innerText"))
-        d.find_element(By.ID, 'page-shield').click()
+        tour.click('#page-shield')
     except Exception as e:
         tour.failed('shield', e)
 
     # Night, then back to the theme Windows has.
     try:
-        d.find_element(By.ID, 'settings-button').click()
+        tour.click('#settings-button')
         time.sleep(0.5)
-        d.find_element(By.CSS_SELECTOR, '[data-theme-choice="night"]').click()
+        tour.click('[data-theme-choice="night"]')
         tour.shot('night')
-        d.find_element(By.CSS_SELECTOR, '[data-theme-choice="system"]').click()
-        d.find_element(By.ID, 'settings-button').click()
+        tour.click('[data-theme-choice="system"]')
+        tour.click('#settings-button')
     except Exception as e:
         tour.failed('night', e)
 
     # Close the page: the window's own content again.
     try:
-        d.find_element(By.ID, 'page-close').click()
+        tour.click('#page-close')
         time.sleep(1)
         tour.shot('closed', downloads=tour.js("return document.getElementById('download-list').innerText"))
     except Exception as e:
@@ -178,7 +266,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--app', required=True, help='the installed Chaya program')
     parser.add_argument('--out', required=True, help='where the pictures go')
-    parser.add_argument('--driver', default='http://127.0.0.1:4444')
+    parser.add_argument('--via', choices=('devtools', 'webdriver'), default='devtools' if os.name == 'nt' else 'webdriver')
+    parser.add_argument('--driver', default='http://127.0.0.1:4444', help='tauri-driver, for --via webdriver')
     parser.add_argument('--sites', help='a JSON file of addresses to use instead of the internet\'s')
     args = parser.parse_args()
 
@@ -188,28 +277,19 @@ def main():
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
 
-    options = ArgOptions()
-    options.set_capability('browserName', 'wry')
-    options.set_capability('tauri:options', {'application': os.path.abspath(args.app)})
-    driver = None
-    for _ in range(10):
-        try:
-            driver = webdriver.Remote(command_executor=args.driver, options=options)
-            break
-        except WebDriverException as e:
-            last = e
-            time.sleep(3)
-    if driver is None:
-        print(f'The app could not be started: {last}', file=sys.stderr)
+    try:
+        window = DevToolsWindow(args.app) if args.via == 'devtools' else WebDriverWindow(args.app, args.driver)
+    except Exception as e:
+        print(f'The app could not be started: {e}', file=sys.stderr)
         return 1
 
-    tour = Tour(driver, out)
+    tour = Tour(window, out)
     try:
         run(tour, sites)
     finally:
         (out / 'steps.json').write_text(json.dumps(tour.steps, indent=2, ensure_ascii=False))
         try:
-            driver.quit()
+            window.close()
         except Exception:
             pass
     return 0

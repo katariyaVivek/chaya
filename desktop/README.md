@@ -232,11 +232,12 @@ On Linux, building `app/src-tauri` needs WebKitGTK (`libwebkit2gtk-4.1-dev`), th
 there. `core` needs nothing beyond Rust.
 
 **The Windows tour** (`app/tour/tour.py`, CI job `tour`) installs the installer on a Windows machine and
-drives the app through WebDriver (`tauri-driver` with the msedgedriver that matches the machine's WebView2):
-a real link looked up and a download cancelled, three pages in the built-in browser, the ad blocker's panel,
+starts the app with WebView2's DevTools port open (`WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`), driving the
+window through it; msedgedriver never attaches, since Tauri gives WebView2 its own data folder. It takes a
+real link looked up and a download cancelled, three pages in the built-in browser, the ad blocker's panel,
 Night. At each step it photographs the whole screen, so the page's place in the window, Windows' fonts and
 frame are seen; the pictures and `steps.json` (what each step found) are the run's `chaya-windows-tour`
-artifact. A site that refuses the machine is noted, not failed on. Off Windows it runs the same way with
+artifact. A site that refuses the machine is noted, not failed on. Off Windows it runs with `--via webdriver`:
 `tauri-driver` and WebKitWebDriver (`webkit2gtk-driver`) on a virtual display, and `--sites` pointing at
 local pages.
 
