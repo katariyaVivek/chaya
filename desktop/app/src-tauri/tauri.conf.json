@@ -16,6 +16,7 @@
         "title": "Chaya",
         "width": 1100,
         "height": 760,
+        "visible": false,
         "minWidth": 720,
         "minHeight": 520,
         "center": true,

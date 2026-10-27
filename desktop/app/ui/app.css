@@ -188,18 +188,24 @@ body.browsing .settings__panel { background: var(--bg); }
 
 /* ── Browsing: the page in its own webview, where .page leaves room for it ───────────────── */
 
-/* The window gives the page its whole width, and keeps the bar and the page on one screen */
+/*
+ * The window gives the page its whole width, and keeps the bar and the page on one screen. The bar is one row of
+ * controls (56px with its spacing), and nothing ever sits between it and the page: what the page holds opens from
+ * the bar, so the page never moves once it shows.
+ */
 body.browsing .main {
   display: flex;
   flex-direction: column;
+  gap: var(--space-1);
   max-width: none;
-  padding: var(--space-2) var(--space-3) var(--space-3);
+  padding: var(--space-1) var(--space-3) var(--space-3);
   overflow: hidden;
 }
+body.browsing .urlbar__field { height: var(--control-height); }
 /* While browsing, the settings sit at the end of the bar's row instead of on a row of their own */
 body.browsing .top {
   position: absolute;
-  top: calc(var(--space-2) + (var(--space-6) - var(--control-height)) / 2);
+  top: var(--space-1);
   right: var(--space-3);
   z-index: 6;
   padding: 0;
@@ -295,6 +301,25 @@ body.browsing .urlbar__icon { display: none; }
   cursor: pointer;
 }
 .notice__action:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+/* What the page holds, from the bar: a pill naming it, and a panel with each thing and its Download */
+.media { position: relative; }
+.page-media { gap: var(--space-half); padding: 0 var(--space-2) 0 var(--space-1); white-space: nowrap; }
+.page-media svg { width: 20px; height: 20px; color: var(--muted); }
+/* Something new on the page that the person hasn't opened yet: the accent edge, as on the one primary control */
+.page-media--new { border-color: var(--accent-edge); animation: var(--anim-enter) var(--dur-enter) var(--ease-out) both; }
+.page-media[aria-expanded="true"] { background-image: linear-gradient(var(--wash-strong), var(--wash-strong)); }
+.media__panel {
+  width: min(480px, calc(100vw - var(--space-3) * 2));
+  max-height: 70vh;
+  overflow-y: auto;
+  gap: var(--space-2);
+}
+/* Inside the panel a card is its content, not another sheet of glass on the panel's */
+.media__panel .card { padding: 0; border: 0; background: none; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+.media__panel .found__list { max-height: none; }
+.media__panel .found__item--main { background: var(--wash); box-shadow: none; }
+.media__panel .found__more { display: none !important; }
 
 /* What the page holds: the main video on a line of its own, the rest under it when asked for */
 .found { display: grid; gap: var(--space-half); }
