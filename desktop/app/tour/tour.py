@@ -135,22 +135,42 @@ class DevToolsWindow:
         except Exception:
             pass
 
-    def run(self, script):
+    def send(self, method, params, socket=None):
+        """Sends one DevTools command (to the window, unless another target's `socket` is given); its result."""
+        socket = socket or self.socket
         self.next_id += 1
-        message = {
-            'id': self.next_id,
-            'method': 'Runtime.evaluate',
-            'params': {'expression': f'(function () {{ {script} }})()', 'returnByValue': True},
-        }
-        self.socket.send(json.dumps(message))
+        socket.send(json.dumps({'id': self.next_id, 'method': method, 'params': params}))
         while True:
-            answer = json.loads(self.socket.recv())
+            answer = json.loads(socket.recv())
             if answer.get('id') == self.next_id:
-                break
-        result = answer.get('result', {})
+                return answer.get('result', {})
+
+    def run(self, script, socket=None):
+        expression = f'(function () {{ {script} }})()'
+        result = self.send('Runtime.evaluate', {'expression': expression, 'returnByValue': True}, socket)
         if 'exceptionDetails' in result:
             raise RuntimeError(result['exceptionDetails'].get('exception', {}).get('description', 'script failed'))
         return result.get('result', {}).get('value')
+
+    def run_in_page(self, script):
+        """Runs `script` in the browser's page, which is a DevTools target of its own; None with no page open."""
+        import websocket
+
+        with urllib.request.urlopen(f'http://127.0.0.1:{self.PORT}/json/list', timeout=2) as answer:
+            targets = json.load(answer)
+        target = next((t for t in targets if t.get('type') == 'page' and 'tauri.localhost' not in t.get('url', '')), None)
+        if not target:
+            return None
+        socket = websocket.create_connection(target['webSocketDebuggerUrl'], timeout=10, suppress_origin=True)
+        try:
+            return self.run(script, socket)
+        finally:
+            socket.close()
+
+    def press(self, key, code):
+        """Presses `key` in the window as the keyboard would, so WebView2's own keys see it too."""
+        for kind in ('rawKeyDown', 'keyUp'):
+            self.send('Input.dispatchKeyEvent', {'type': kind, 'key': key, 'code': key, 'windowsVirtualKeyCode': code})
 
     def close(self):
         try:
@@ -259,6 +279,22 @@ def run(tour, sites):
             tour.shot(name, address=address, found=found, shield=shield)
         except Exception as e:
             tour.failed(name, e)
+
+    # Reload, by its button and by F5: the page loads again (a new time origin), and the window stays as it was.
+    if hasattr(tour.window, 'run_in_page'):
+        try:
+            loaded = lambda: tour.window.run_in_page('return performance.timeOrigin')
+            first = loaded()
+            tour.click('#page-reload')
+            by_button = tour.wait(lambda: (loaded() or first) != first and loaded(), 15)
+            tour.window.press('F5', 116)
+            by_key = tour.wait(lambda: (loaded() or by_button) != by_button and loaded(), 15)
+            still_browsing = tour.js("return document.body.classList.contains('browsing')")
+            tour.steps.append({'step': 'reload', 'button': bool(by_button), 'f5': bool(by_key), 'window kept': still_browsing})
+            print(f"reload: button {bool(by_button)}, F5 {bool(by_key)}, window kept {still_browsing}", flush=True)
+            time.sleep(4)
+        except Exception as e:
+            tour.failed('reload', e)
 
     # The ad blocker's panel, on the news page.
     try:

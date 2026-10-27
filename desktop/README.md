@@ -142,7 +142,11 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
 - The page is a WebView2 webview of its own (Tauri's multiwebview, the `unstable` feature), drawn over
   the window where the window's `.page` leaves room for it. The window draws the bar around it (back,
   forward, reload or stop, Downloads, close), tells the app where the page goes whenever its layout
-  changes, and hides the page while it shows the downloads or the settings in its place.
+  changes, and hides the page while it shows the downloads or a panel in its place. Under a panel (the
+  settings, the ad blocker's) a still picture of the page stands in for it (`page_picture`: WebView2's
+  `CapturePreview`, held only in the window while the panel is open).
+- F5 and Ctrl+R reload the page wherever the focus is. Left to WebView2, pressed outside the page they
+  reloaded Chaya's own window instead.
 - **A page gets nothing of the app.** The app's commands are granted to the window's own webview only
   (`capabilities/default.json`: `webviews: ["main"]`, not the whole window), and a page from the web is
   never local, so a page asking for a command is refused. A page can go only to the web (`http`, `https`,

@@ -41,6 +41,8 @@ body {
   border-radius: var(--radius-md);
   animation: var(--anim-enter) var(--dur-enter) var(--ease-out) both;
 }
+/* Over the page's picture, which can be anything, glass can't keep a panel's words readable: it gets the ground */
+body.browsing .settings__panel { background: var(--bg); }
 .settings__label { margin: 0; color: var(--muted); font-size: var(--text-sm); }
 .settings__label:not(:first-child) { margin-top: var(--space-1); }
 .shield__status { max-width: 32ch; margin: 0; font-size: var(--text-md); line-height: var(--leading-md); }
@@ -248,7 +250,13 @@ body.browsing .urlbar__icon { display: none; }
   border-top: 1px solid var(--border);
 }
 /* The page's webview covers .page exactly; until it does, the ground shows */
-.page { flex: 1; min-height: 0; background: var(--bg); }
+.page { position: relative; flex: 1; min-height: 0; background: var(--bg); }
+/* While a panel lies over the page, a still picture of the page stands in for it (the webview is hidden) */
+.page__still { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: top left; }
+
+/* A link that couldn't be looked up has no picture to show: the card is its words alone */
+.card--failed { grid-template-columns: minmax(0, 1fr); }
+.card--failed .poster { display: none; }
 
 /* While the page loads: a thin light runs along the top of it */
 .page-load {

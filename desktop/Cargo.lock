@@ -503,6 +503,7 @@ dependencies = [
 name = "chaya-desktop"
 version = "0.1.0"
 dependencies = [
+ "base64 0.23.1",
  "chaya-core",
  "serde",
  "serde_json",
@@ -511,6 +512,7 @@ dependencies = [
  "tauri-plugin-opener",
  "tokio",
  "webview2-com",
+ "windows",
  "windows-core",
 ]
 

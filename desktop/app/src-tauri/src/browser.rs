@@ -341,6 +341,79 @@ pub fn show_page(visible: bool, app: AppHandle) {
     }
 }
 
+/// A still picture of the page as it is, as a `data:` address (a JPEG), for the window to show in the page's place
+/// while a panel lies over it: the page is drawn over the window, so nothing the window draws can lie over the page
+/// itself. None when there is no page, or off Windows.
+#[tauri::command]
+pub async fn page_picture(app: AppHandle) -> Option<String> {
+    let page = app.get_webview(PAGE)?;
+    picture::take(&page).await
+}
+
+#[cfg(windows)]
+mod picture {
+    use std::time::Duration;
+
+    use base64::Engine;
+    use tokio::sync::oneshot;
+    use webview2_com::CapturePreviewCompletedHandler;
+    use webview2_com::Microsoft::Web::WebView2::Win32::*;
+    use windows::Win32::Foundation::E_OUTOFMEMORY;
+    use windows::Win32::System::Com::{IStream, STATFLAG_NONAME, STATSTG, STREAM_SEEK_SET};
+    use windows::Win32::UI::Shell::SHCreateMemStream;
+
+    pub async fn take(page: &tauri::Webview) -> Option<String> {
+        let (tx, rx) = oneshot::channel();
+        page.with_webview(move |webview| {
+            if let Err(e) = capture(&webview.controller(), tx) {
+                eprintln!("Chaya: the page's picture could not be taken: {e}");
+            }
+        })
+        .ok()?;
+        let jpeg = tokio::time::timeout(Duration::from_secs(2), rx).await.ok()?.ok()??;
+        Some(format!("data:image/jpeg;base64,{}", base64::engine::general_purpose::STANDARD.encode(jpeg)))
+    }
+
+    fn capture(controller: &ICoreWebView2Controller, tx: oneshot::Sender<Option<Vec<u8>>>) -> windows_core::Result<()> {
+        // SAFETY: called on the window's thread (`with_webview`), on the page's own live webview; the stream is kept
+        // alive by the handler until WebView2 has written the picture into it.
+        unsafe {
+            let stream = SHCreateMemStream(None).ok_or_else(|| windows_core::Error::from(E_OUTOFMEMORY))?;
+            let written = stream.clone();
+            let handler = CapturePreviewCompletedHandler::create(Box::new(move |result| {
+                let _ = tx.send(result.ok().and_then(|()| read_all(&written).ok()));
+                Ok(())
+            }));
+            controller.CoreWebView2()?.CapturePreview(COREWEBVIEW2_CAPTURE_PREVIEW_IMAGE_FORMAT_JPEG, &stream, &handler)
+        }
+    }
+
+    /// Everything written into `stream`.
+    unsafe fn read_all(stream: &IStream) -> windows_core::Result<Vec<u8>> {
+        // SAFETY: `stream` is a live memory stream; the buffer is as long as the length given with it.
+        unsafe {
+            let mut stat = STATSTG::default();
+            stream.Stat(&mut stat, STATFLAG_NONAME)?;
+            stream.Seek(0, STREAM_SEEK_SET, None)?;
+            let mut bytes = vec![0u8; usize::try_from(stat.cbSize).unwrap_or(0)];
+            let mut read = 0u32;
+            stream
+                .Read(bytes.as_mut_ptr().cast(), u32::try_from(bytes.len()).unwrap_or(u32::MAX), Some(&mut read))
+                .ok()?;
+            bytes.truncate(read as usize);
+            Ok(bytes)
+        }
+    }
+}
+
+#[cfg(not(windows))]
+mod picture {
+    /// WebKitGTK's page is not pictured; the window shows its ground in the page's place instead.
+    pub async fn take(_page: &tauri::Webview) -> Option<String> {
+        None
+    }
+}
+
 /// "back", "forward", "reload" or "stop".
 #[tauri::command]
 pub fn page_action(action: String, app: AppHandle) -> Result<(), String> {
