@@ -37,6 +37,36 @@ def test_a_sign_in_is_passed_only_when_given(monkeypatch, capsys):
     assert seen == {'c': '/tmp/cookies.txt', 'f': False}
 
 
+def test_profile_lists_the_account_with_its_arguments_and_prints_the_summary(monkeypatch, capsys):
+    seen = {}
+
+    def fake_list(platform, username, cache_dir, cookie_file, out_path, stop_path, find=None):
+        seen.update(platform=platform, username=username, cache_dir=cache_dir, cookie_file=cookie_file,
+                    out_path=out_path, stop_path=stop_path)
+        return json.dumps({'count': 3})
+
+    monkeypatch.setattr('chaya_engine.profiles.list_profile', fake_list)
+
+    code = cli.main(['profile', 'instagram', 'some.one', '--cache', '/cache', '--out', '/tmp/list.jsonl',
+                     '--stop', '/tmp/stop'])
+
+    assert code == 0
+    assert seen == {'platform': 'instagram', 'username': 'some.one', 'cache_dir': '/cache', 'cookie_file': None,
+                    'out_path': '/tmp/list.jsonl', 'stop_path': '/tmp/stop'}
+    assert json.loads(capsys.readouterr().out.strip().splitlines()[-1]) == {'count': 3}
+
+
+def test_a_profile_is_listed_with_a_sign_in_only_when_given(monkeypatch, capsys):
+    seen = {}
+    monkeypatch.setattr('chaya_engine.profiles.list_profile',
+                        lambda p, u, cache, cookies, out, stop, find=None: seen.update(c=cookies) or '{}')
+
+    cli.main(['profile', 'twitter', 'someone', '--cache', '/c', '--out', '/o', '--stop', '/s',
+              '--cookies', '/tmp/cookies.txt'])
+
+    assert seen == {'c': '/tmp/cookies.txt'}
+
+
 def test_selftest_reports_the_engines_versions(capsys):
     assert cli.main(['selftest']) == 0
 

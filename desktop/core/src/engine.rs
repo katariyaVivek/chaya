@@ -15,11 +15,17 @@ use std::time::{Duration, Instant};
 
 use serde_json::Value;
 
+use crate::download::archive::{ListRequest, Listed};
+use crate::download::error::DownloadError;
+use crate::links::Platform;
 use crate::media::{self, Failure, FailureKind, Media};
 
 /// How long one lookup may take. yt-dlp gives up on a silent server after 20 s and tries twice more, and a
 /// YouTube page with a challenge to solve takes several seconds on its own.
 pub const LOOKUP_TIMEOUT: Duration = Duration::from_secs(120);
+/// How long listing an account may take. gallery-dl goes at the site's pace, and a big account takes many minutes;
+/// a pause stops it sooner (`ListRequest::stop`).
+pub const LISTING_TIMEOUT: Duration = Duration::from_secs(4 * 60 * 60);
 
 #[derive(Clone, Debug)]
 pub struct Engine {
@@ -86,6 +92,32 @@ impl Engine {
         media::parse(&self.run(&args)?)
     }
 
+    /// Lists everything `request.account` has posted into `request.list`, for its ZIP (`profiles.list_profile`), with
+    /// `cookies` (the person's sign-in, `session::CookieFile`) only when they chose it. Stops when `request.stop`
+    /// appears.
+    pub fn list_profile(&self, request: &ListRequest, cookies: Option<&Path>) -> Result<Listed, DownloadError> {
+        let account = &request.account;
+        let mut args: Vec<OsString> = vec![
+            "profile".into(),
+            account.site().into(),
+            account.username.clone().into(),
+            "--cache".into(),
+            self.cache_dir.clone().into(),
+            "--out".into(),
+            request.list.clone().into(),
+            "--stop".into(),
+            request.stop.clone().into(),
+        ];
+        if let Some(cookies) = cookies {
+            args.extend(["--cookies".into(), cookies.into()]);
+        }
+        let line = self.run_for(&args, LISTING_TIMEOUT).map_err(|failure| match failure.kind {
+            FailureKind::Network => DownloadError::Network,
+            _ => DownloadError::CouldNotList,
+        })?;
+        listing_summary(&line, account.platform, cookies.is_some())
+    }
+
     /// The engine's versions and whether its pieces fit together, without using the network.
     pub fn selftest(&self) -> Result<Value, Failure> {
         let mut args: Vec<OsString> = vec!["selftest".into()];
@@ -98,6 +130,10 @@ impl Engine {
 
     /// Runs the engine with `args` and returns the last line it printed.
     fn run(&self, args: &[OsString]) -> Result<String, Failure> {
+        self.run_for(args, self.timeout)
+    }
+
+    fn run_for(&self, args: &[OsString], timeout: Duration) -> Result<String, Failure> {
         let mut command = Command::new(&self.python);
         command
             .arg("-I")
@@ -116,14 +152,14 @@ impl Engine {
 
         let stdout = read_in_background(child.stdout.take());
         let stderr = read_in_background(child.stderr.take());
-        let status = wait_at_most(&mut child, self.timeout);
+        let status = wait_at_most(&mut child, timeout);
         let out = stdout.join().unwrap_or_default();
         let err = stderr.join().unwrap_or_default();
 
         let Some(status) = status else {
             return Err(Failure::new(
                 FailureKind::Network,
-                format!("The lookup took longer than {} s and was stopped.", self.timeout.as_secs()),
+                format!("The lookup took longer than {} s and was stopped.", timeout.as_secs()),
             ));
         };
         if !status.success() {
@@ -135,6 +171,29 @@ impl Engine {
             .find(|line| !line.is_empty())
             .map(str::to_string)
             .ok_or_else(|| Failure::new(FailureKind::Engine, format!("The engine printed nothing: {}", tail(&err))))
+    }
+}
+
+/// What the engine's listing summary says: {"count": n}, {"stopped": true}, or {"error": {"kind": ...}}, the kinds
+/// explained as the phone's `ProfileLister` explains them.
+fn listing_summary(line: &str, platform: Platform, signed_in: bool) -> Result<Listed, DownloadError> {
+    let summary: Value = serde_json::from_str(line).map_err(|_| DownloadError::CouldNotList)?;
+    if let Some(kind) = summary.get("error").and_then(|e| e.get("kind")).and_then(Value::as_str) {
+        return Err(match kind {
+            "needs_login" | "bot_check" if signed_in => DownloadError::SignInAgain(platform),
+            "needs_login" | "bot_check" => DownloadError::SignInNeeded(platform),
+            "private" => DownloadError::PrivateAccount,
+            "unavailable" => DownloadError::NoSuchAccount,
+            "network" => DownloadError::Network,
+            _ => DownloadError::CouldNotList,
+        });
+    }
+    if summary.get("stopped").and_then(Value::as_bool) == Some(true) {
+        return Ok(Listed::Stopped);
+    }
+    match summary.get("count") {
+        Some(_) => Ok(Listed::Whole),
+        None => Err(DownloadError::CouldNotList),
     }
 }
 
@@ -258,6 +317,61 @@ print(json.dumps({"media": {"title": " ".join(sys.argv[1:]), "formats": []}}))
             engine.js_runtime.as_ref().unwrap().display()
         );
         assert_eq!(media.title, expected);
+    }
+
+    #[test]
+    fn an_account_is_listed_with_its_folders_and_a_sign_in_only_when_chosen() {
+        use crate::download::archive::Account;
+        let Some((engine, dir)) = fake_engine(
+            r#"
+import json, sys
+args = sys.argv[1:]
+out = args[args.index("--out") + 1]
+with open(out, "w") as f:
+    f.write(json.dumps({"args": args}))
+print(json.dumps({"count": 1}))
+"#,
+            LOOKUP_TIMEOUT,
+        ) else {
+            return;
+        };
+        let request = ListRequest {
+            account: Account { platform: Platform::X, username: "someone".into(), sign_in: true },
+            list: dir.path().join("list.jsonl"),
+            stop: dir.path().join("stop"),
+        };
+        let cookies = dir.path().join("cookies.txt");
+        assert_eq!(engine.list_profile(&request, Some(&cookies)), Ok(Listed::Whole));
+        let written: Value = serde_json::from_str(&fs::read_to_string(&request.list).unwrap()).unwrap();
+        let expected: Vec<String> = vec![
+            "profile".into(),
+            "twitter".into(),
+            "someone".into(),
+            "--cache".into(),
+            engine.cache_dir.display().to_string(),
+            "--out".into(),
+            request.list.display().to_string(),
+            "--stop".into(),
+            request.stop.display().to_string(),
+            "--cookies".into(),
+            cookies.display().to_string(),
+        ];
+        assert_eq!(written["args"], serde_json::json!(expected));
+    }
+
+    #[test]
+    fn a_listings_summary_is_explained_as_on_the_phone() {
+        let ig = Platform::Instagram;
+        assert_eq!(listing_summary(r#"{"count": 12}"#, ig, false), Ok(Listed::Whole));
+        assert_eq!(listing_summary(r#"{"stopped": true, "count": 3}"#, ig, false), Ok(Listed::Stopped));
+        let error = |kind: &str| format!(r#"{{"error": {{"kind": "{kind}", "detail": "x"}}}}"#);
+        assert_eq!(listing_summary(&error("needs_login"), ig, false), Err(DownloadError::SignInNeeded(ig)));
+        assert_eq!(listing_summary(&error("needs_login"), ig, true), Err(DownloadError::SignInAgain(ig)));
+        assert_eq!(listing_summary(&error("private"), ig, true), Err(DownloadError::PrivateAccount));
+        assert_eq!(listing_summary(&error("unavailable"), ig, true), Err(DownloadError::NoSuchAccount));
+        assert_eq!(listing_summary(&error("network"), ig, false), Err(DownloadError::Network));
+        assert_eq!(listing_summary(&error("something"), ig, false), Err(DownloadError::CouldNotList));
+        assert_eq!(listing_summary("not json", ig, false), Err(DownloadError::CouldNotList));
     }
 
     #[test]

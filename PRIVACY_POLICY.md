@@ -105,6 +105,12 @@ differences:
   If the browser holds cookies for the stream's address, they are written to a temporary file for
   yt-dlp in Chaya's own folder, and the file is deleted as soon as the lookup ends, whether it worked or
   not.
+- **Saving an Instagram or X account** as one ZIP works as on the phone: Chaya's engine lists the account
+  from the site, without any sign-in unless you choose *Save all posts with my sign-in*. Only then are the
+  site's cookies (never your password) written to a temporary file in Chaya's own folder for the listing,
+  which sends them only to that site; the file is deleted as soon as the listing ends. The account's files
+  are then fetched from the site's servers without your cookies. A private account you don't follow can't
+  be saved: Chaya sees only what your account can see.
 - **The ad blocker** works as the phone's: it decides on your PC, its settings (whether it is on, and
   the sites you let show ads) stay on your PC, and about once a week it fetches fresh EasyList and
   EasyPrivacy lists from easylist.to, sending nothing about you. To hide a page's ad boxes, a script of

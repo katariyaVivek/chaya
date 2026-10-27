@@ -1,5 +1,6 @@
 //! Downloading what a lookup found: fetching files, naming them, and keeping track of every download.
 
+pub mod archive;
 pub mod error;
 pub mod http;
 pub mod join;

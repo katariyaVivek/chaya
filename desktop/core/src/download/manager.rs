@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 use tokio::runtime::Handle;
 use tokio::sync::watch;
 
+use super::archive::{self, Account, ArchiveProgress, ListRequest, Listed, Lister};
 use super::error::DownloadError;
 use super::http::{self, Outcome, Progress, Source};
 use super::join::Joiner;
@@ -34,6 +35,8 @@ pub enum Kind {
     Video,
     Audio,
     Picture,
+    /// Everything an account has posted, as one ZIP.
+    Archive,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -73,6 +76,12 @@ pub struct Task {
     /// Where a joined download has got to.
     #[serde(default)]
     pub step: Option<Step>,
+    /// For a ZIP of an account's posts: the account (`archive`). Its `source` is then unused.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account: Option<Account>,
+    /// How far a ZIP has got while it runs; worked out again from its folder, so never stored.
+    #[serde(skip)]
+    pub archive: Option<ArchiveProgress>,
 }
 
 /// The steps of a download whose picture and sound come apart, or that is a stream. What is left is decided
@@ -140,6 +149,8 @@ pub struct TaskView {
     /// "picture", "sound" or "joining", for a download whose picture and sound come apart; "saving" for a
     /// stream being copied into an MP4.
     pub step: Option<Step>,
+    /// For a ZIP of an account's posts, while it runs: files found, and saved so far.
+    pub archive: Option<ArchiveProgress>,
 }
 
 impl From<&Task> for TaskView {
@@ -166,6 +177,7 @@ impl From<&Task> for TaskView {
             done: task.done,
             total: task.total,
             step: task.step.filter(|_| task.state == State::Downloading),
+            archive: task.archive.filter(|_| task.state == State::Downloading),
         }
     }
 }
@@ -185,6 +197,18 @@ pub struct NewDownload {
     pub sound: Option<Source>,
     pub thumbnail: Option<String>,
     pub group: Option<String>,
+}
+
+/// An account to save as one ZIP.
+#[derive(Clone, Debug)]
+pub struct NewArchive {
+    pub account: Account,
+    pub title: String,
+    /// The account's page.
+    pub page_url: String,
+    /// The name it is saved as ("someone (Instagram).zip"); made unique in `folder`.
+    pub file_name: String,
+    pub folder: PathBuf,
 }
 
 /// A download's addresses, from looking its link up again: the sites' addresses expire.
@@ -232,6 +256,8 @@ struct Inner {
     joiner: Mutex<Option<Joiner>>,
     /// The browser's sign-in, for sources saved from a page; without it, they are fetched without one.
     session: Mutex<Option<Session>>,
+    /// What lists an account for its ZIP; without it, such downloads fail.
+    lister: Mutex<Option<Lister>>,
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -263,6 +289,7 @@ impl Manager {
                 running: Mutex::new(HashMap::new()),
                 joiner: Mutex::new(None),
                 session: Mutex::new(None),
+                lister: Mutex::new(None),
             }),
         };
         manager.save();
@@ -279,6 +306,11 @@ impl Manager {
         *lock(&self.inner.joiner) = joiner;
     }
 
+    /// Sets what lists an account's files for its ZIP (the engine's `profile` command).
+    pub fn set_lister(&self, lister: Option<Lister>) {
+        *lock(&self.inner.lister) = lister;
+    }
+
     /// Newest first.
     pub fn list(&self) -> Vec<Task> {
         let mut tasks = lock(&self.inner.tasks).clone();
@@ -290,7 +322,31 @@ impl Manager {
         lock(&self.inner.tasks).iter().find(|t| t.id == id).cloned()
     }
 
+    /// Starts a ZIP of everything `new.account` has posted.
+    pub fn add_archive(&self, new: NewArchive) -> Task {
+        let source = Source { url: new.page_url.clone(), ..Source::default() };
+        self.add_task(
+            NewDownload {
+                title: new.title,
+                page_url: new.page_url,
+                choice: "All posts".into(),
+                kind: Kind::Archive,
+                file_name: new.file_name,
+                folder: new.folder,
+                source,
+                sound: None,
+                thumbnail: None,
+                group: None,
+            },
+            Some(new.account),
+        )
+    }
+
     pub fn add(&self, new: NewDownload) -> Task {
+        self.add_task(new, None)
+    }
+
+    fn add_task(&self, new: NewDownload, account: Option<Account>) -> Task {
         let task = {
             let mut tasks = lock(&self.inner.tasks);
             let taken: HashSet<String> = tasks
@@ -314,6 +370,8 @@ impl Manager {
                 added: SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs()),
                 sound: new.sound,
                 step: None,
+                account,
+                archive: None,
             };
             tasks.push(task.clone());
             task
@@ -358,9 +416,7 @@ impl Manager {
     pub fn cancel(&self, id: u64) {
         let Some(task) = self.take(id) else { return };
         self.stop(id);
-        for file in task.leftovers() {
-            let _ = std::fs::remove_file(file);
-        }
+        delete_leftovers(&task);
     }
 
     /// Takes a finished or failed download off the list. A finished file stays where it is.
@@ -436,6 +492,7 @@ impl Manager {
         let part = task.part_path();
         let result = match prepare_folder(&task.path).await {
             Err(error) => Err(error),
+            Ok(()) if task.account.is_some() => self.make_archive(&task, &stop).await,
             // A file as it is.
             Ok(()) if task.sound.is_none() && !task.source.stream => {
                 self.fetch_into(&task, &task.source, &part, (0, Some(0)), &stop).await
@@ -449,9 +506,7 @@ impl Manager {
         if self.get(task.id).is_none() {
             // Cancelled while it ran. Cancelling deleted what had arrived, but a file opened since (the `.part`
             // as the server answered, a half renamed into place) is deleted here, now that nothing writes.
-            for file in task.leftovers() {
-                let _ = std::fs::remove_file(file);
-            }
+            delete_leftovers(&task);
             self.pump();
             return;
         }
@@ -465,6 +520,7 @@ impl Manager {
                             let size = file_size(&path);
                             t.path = path;
                             t.step = None;
+                            t.archive = None;
                             t.done = size;
                             t.total = Some(size);
                         }
@@ -573,6 +629,149 @@ impl Manager {
         Ok(outcome)
     }
 
+    /// A ZIP of an account's posts: its list (made once, by the lister), each file not yet fetched, then the ZIP
+    /// packed into the `.part` file. What is done is read from the archive's folder, so it carries on from there.
+    async fn make_archive(&self, task: &Task, stop: &watch::Receiver<bool>) -> Result<Outcome, DownloadError> {
+        let account = task.account.clone().ok_or(DownloadError::CouldNotList)?;
+        let folder = archive::folder_of(&task.path);
+        tokio::fs::create_dir_all(&folder).await.map_err(|e| DownloadError::from_io(&e))?;
+        let list = folder.join(archive::LIST);
+        if !list.exists() && self.list_account(task, account, &folder, stop).await? == Listed::Stopped {
+            return Ok(Outcome::Stopped);
+        }
+        let entries = archive::read_entries(&list).map_err(|e| DownloadError::from_io(&e))?;
+        if entries.is_empty() {
+            return Err(DownloadError::NothingToSave);
+        }
+        let mut before: u64 = entries.iter().map(|e| file_size(&folder.join(&e.name))).sum();
+        for entry in &entries {
+            if archive::is_done(&folder, entry) {
+                continue;
+            }
+            let saved = entries.iter().filter(|e| archive::is_done(&folder, e)).count();
+            self.set_archive(task.id, ArchiveProgress { found: entries.len(), saved, listing: false });
+            if self.fetch_entry(task, &folder, entry, before, stop).await? == Outcome::Stopped {
+                return Ok(Outcome::Stopped);
+            }
+            before += file_size(&folder.join(&entry.name));
+        }
+        self.set_archive(task.id, ArchiveProgress { found: entries.len(), saved: entries.len(), listing: false });
+        let (out, packed_from) = (task.part_path(), folder.clone());
+        let packed = self
+            .inner
+            .runtime
+            .spawn_blocking(move || archive::pack(&packed_from, &entries, &out))
+            .await
+            .unwrap_or(Err(DownloadError::CantWrite));
+        if let Err(error) = packed {
+            // The fetched files stay, so Retry only packs them again.
+            let _ = std::fs::remove_file(task.part_path());
+            return Err(error);
+        }
+        let _ = tokio::fs::remove_dir_all(&folder).await;
+        Ok(Outcome::Done)
+    }
+
+    /// Lists `account` into the archive's folder, telling the window how many files it has found as it goes. A
+    /// pause or cancel asks the listing to stop at its next file.
+    async fn list_account(
+        &self,
+        task: &Task,
+        account: Account,
+        folder: &Path,
+        stop: &watch::Receiver<bool>,
+    ) -> Result<Listed, DownloadError> {
+        let lister = lock(&self.inner.lister).clone().ok_or(DownloadError::CouldNotList)?;
+        let request = ListRequest { account, list: folder.join(archive::LIST), stop: folder.join(archive::STOP) };
+        let _ = std::fs::remove_file(&request.stop);
+        let partial = archive::partial_of(&request.list);
+        let stop_file = request.stop.clone();
+        self.set_archive(task.id, ArchiveProgress { found: 0, saved: 0, listing: true });
+        let mut listing = self.inner.runtime.spawn_blocking(move || lister(&request));
+        let mut stop = stop.clone();
+        let mut every_second = tokio::time::interval(Duration::from_secs(1));
+        let listed = loop {
+            tokio::select! {
+                result = &mut listing => break result.unwrap_or(Err(DownloadError::CouldNotList))?,
+                _ = every_second.tick() => {
+                    let found = archive::count_lines(&partial);
+                    self.set_archive(task.id, ArchiveProgress { found, saved: 0, listing: true });
+                }
+                changed = stop.changed() => {
+                    if changed.is_err() || *stop.borrow() {
+                        let _ = std::fs::write(&stop_file, b"");
+                    }
+                }
+            }
+        };
+        let _ = std::fs::remove_file(&stop_file);
+        Ok(listed)
+    }
+
+    /// Fetches one file of an archive into "name.part", then renames it whole. A file the site no longer has (or
+    /// refuses) is left out at once. Anything else that may pass is asked for again after a wait, a few times; after
+    /// that, a connection or a site that is still failing stops the archive so the person can retry later, and a
+    /// file that keeps failing on its own is left out, so one bad file never holds up the rest.
+    async fn fetch_entry(
+        &self,
+        task: &Task,
+        folder: &Path,
+        entry: &archive::Entry,
+        before: u64,
+        stop: &watch::Receiver<bool>,
+    ) -> Result<Outcome, DownloadError> {
+        let whole = folder.join(&entry.name);
+        let part = folder.join(format!("{}.part", entry.name));
+        // Never the browser's cookies: an archive uses the person's sign-in only to list, and only if chosen.
+        let source =
+            Source { url: entry.url.clone(), headers: entry.headers.iter().cloned().collect(), ..Source::default() };
+        let mut waits = archive::RETRY_WAITS.iter();
+        loop {
+            match self.fetch_into(task, &source, &part, (before, None), stop).await {
+                Ok(Outcome::Done) => {
+                    std::fs::rename(&part, &whole).map_err(|e| DownloadError::from_io(&e))?;
+                    return Ok(Outcome::Done);
+                }
+                Ok(Outcome::Stopped) => return Ok(Outcome::Stopped),
+                Err(error @ (DownloadError::StorageFull | DownloadError::CantWrite)) => return Err(error),
+                Err(DownloadError::Http(403 | 404 | 410)) => break,
+                Err(error) => match waits.next() {
+                    Some(wait) => {
+                        let mut stop = stop.clone();
+                        tokio::select! {
+                            _ = tokio::time::sleep(*wait) => {}
+                            _ = stop.wait_for(|stopped| *stopped) => return Ok(Outcome::Stopped),
+                        }
+                    }
+                    None if matches!(error, DownloadError::Network | DownloadError::Http(429 | 500..=599)) => {
+                        return Err(error);
+                    }
+                    None => break,
+                },
+            }
+        }
+        let _ = std::fs::remove_file(&part);
+        std::fs::write(folder.join(format!("{}{}", entry.name, archive::LEFT_OUT)), b"")
+            .map_err(|e| DownloadError::from_io(&e))?;
+        Ok(Outcome::Done)
+    }
+
+    fn set_archive(&self, id: u64, progress: ArchiveProgress) {
+        let changed = {
+            let mut tasks = lock(&self.inner.tasks);
+            match tasks.iter_mut().find(|t| t.id == id) {
+                Some(task) if task.archive != Some(progress) => {
+                    task.archive = Some(progress);
+                    true
+                }
+                _ => false,
+            }
+        };
+        if changed {
+            self.changed(id);
+        }
+    }
+
     fn set_step(&self, id: u64, step: Step) {
         if let Some(task) = lock(&self.inner.tasks).iter_mut().find(|t| t.id == id) {
             task.step = Some(step);
@@ -613,6 +812,16 @@ impl Manager {
         if std::fs::write(&temporary, json).is_ok() {
             let _ = std::fs::rename(&temporary, &self.inner.store);
         }
+    }
+}
+
+/// Deletes what a cancelled download left on the way to its file: its `.part` and halves, or an archive's folder.
+fn delete_leftovers(task: &Task) {
+    for file in task.leftovers() {
+        let _ = std::fs::remove_file(file);
+    }
+    if task.account.is_some() {
+        let _ = std::fs::remove_dir_all(archive::folder_of(&task.path));
     }
 }
 
@@ -957,6 +1166,8 @@ mod tests {
             added: 1,
             sound: None,
             step: None,
+            account: None,
+            archive: None,
         };
         std::fs::write(&store, serde_json::to_vec(&vec![task.clone()]).unwrap()).unwrap();
 
@@ -996,6 +1207,8 @@ mod tests {
             added: 0,
             sound: None,
             step: None,
+            account: None,
+            archive: None,
         };
         let view = serde_json::to_value(TaskView::from(&task)).unwrap();
         assert_eq!(view["fileName"], "Me at the zoo.m4a");
@@ -1385,9 +1598,224 @@ mod tests {
             added: 0,
             sound: None,
             step: None,
+            account: None,
+            archive: None,
         })
         .unwrap();
         assert_eq!(json["state"], "failed");
         assert_eq!(json["error"], serde_json::json!({"kind": "http", "status": 403}));
+    }
+
+    // ── ZIPs of an account's posts ──────────────────────────────────────────────────────────
+
+    use crate::download::archive::{self as zip_archive, Account, ListRequest, Listed};
+    use crate::links::Platform;
+    use std::io::Read;
+
+    fn new_archive(s: &Setup) -> NewArchive {
+        NewArchive {
+            account: Account { platform: Platform::Instagram, username: "someone".into(), sign_in: false },
+            title: "@someone · Instagram posts".into(),
+            page_url: "https://www.instagram.com/someone/".into(),
+            file_name: "someone (Instagram).zip".into(),
+            folder: s.folder.path().join("Downloads"),
+        }
+    }
+
+    /// A lister that writes `entries` (name, path on `server`) as the engine would, and counts its calls.
+    fn listing(server: &TestServer, entries: &[(&str, &str)], calls: Arc<Mutex<Vec<Account>>>) -> Lister {
+        let lines: Vec<String> = entries
+            .iter()
+            .map(|(name, path)| serde_json::json!({"name": name, "url": server.url(path), "http_headers": {"Referer": "https://www.instagram.com/"}}).to_string())
+            .collect();
+        Arc::new(move |request: &ListRequest| {
+            calls.lock().unwrap().push(request.account.clone());
+            std::fs::write(&request.list, lines.join("\n")).unwrap();
+            Ok(Listed::Whole)
+        })
+    }
+
+    fn zip_names(path: &Path) -> Vec<String> {
+        let mut zip = zip::ZipArchive::new(std::fs::File::open(path).unwrap()).unwrap();
+        (0..zip.len()).map(|i| zip.by_index(i).unwrap().name().unwrap().to_string()).collect()
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn an_accounts_posts_are_saved_as_one_zip_and_a_file_the_site_no_longer_has_is_named() {
+        let server = TestServer::with_files(
+            vec![("/a.jpg".into(), b"picture".to_vec()), ("/b.mp4".into(), body(300_000))],
+            Behaviour::default(),
+        );
+        let s = setup(AT_ONCE);
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        s.manager.set_lister(Some(listing(
+            &server,
+            &[
+                ("2024-05-01 Cabc 1.jpg", "/a.jpg"),
+                ("2024-05-01 Cabc 2.mp4", "/b.mp4"),
+                ("2024-04-01 Cgone 1.jpg", "/gone.jpg"),
+            ],
+            calls.clone(),
+        )));
+
+        let task = s.manager.add_archive(new_archive(&s));
+        assert_eq!(task.kind, Kind::Archive);
+        let done = wait_for(&s.manager, task.id, |st| *st == State::Completed).await;
+
+        assert_eq!(done.path, s.folder.path().join("Downloads").join("someone (Instagram).zip"));
+        assert_eq!(
+            zip_names(&done.path),
+            ["2024-05-01 Cabc 1.jpg", "2024-05-01 Cabc 2.mp4", zip_archive::NOT_SAVED_NOTE]
+        );
+        let mut zip = zip::ZipArchive::new(std::fs::File::open(&done.path).unwrap()).unwrap();
+        let mut video = Vec::new();
+        zip.by_name("2024-05-01 Cabc 2.mp4").unwrap().read_to_end(&mut video).unwrap();
+        assert_eq!(video, body(300_000));
+        assert!(!zip_archive::folder_of(&done.path).exists(), "its folder is gone once packed");
+        assert_eq!(calls.lock().unwrap().len(), 1);
+        assert!(!calls.lock().unwrap()[0].sign_in, "listed as a visitor, as asked");
+        // The list's headers went with each file, and nothing of the browser's.
+        assert!(server
+            .requests()
+            .iter()
+            .all(|r| r.contains("referer: https://www.instagram.com/") && !r.contains("cookie")));
+        // The window saw it list, then save file by file.
+        let seen: Vec<ArchiveProgress> = s
+            .events
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|e| match e {
+                Event::Changed(t) => t.archive,
+                _ => None,
+            })
+            .collect();
+        assert!(seen.first().is_some_and(|p| p.listing), "{seen:?}");
+        assert!(seen.iter().any(|p| !p.listing && p.found == 3 && p.saved == 3), "{seen:?}");
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn pausing_while_an_account_is_listed_stops_the_listing_and_resuming_lists_it_again() {
+        let server = TestServer::with_files(vec![("/a.jpg".into(), b"picture".to_vec())], Behaviour::default());
+        let s = setup(AT_ONCE);
+        let calls = Arc::new(Mutex::new(0));
+        let (counted, url) = (calls.clone(), server.url("/a.jpg"));
+        s.manager.set_lister(Some(Arc::new(move |request: &ListRequest| {
+            let call = {
+                let mut calls = counted.lock().unwrap();
+                *calls += 1;
+                *calls
+            };
+            if call == 1 {
+                // A long account: one file found, then the listing waits on the site until asked to stop.
+                std::fs::write(zip_archive::partial_of(&request.list), "{}\n").unwrap();
+                while !request.stop.exists() {
+                    std::thread::sleep(Duration::from_millis(20));
+                }
+                return Ok(Listed::Stopped);
+            }
+            std::fs::write(&request.list, serde_json::json!({"name": "a.jpg", "url": url}).to_string()).unwrap();
+            Ok(Listed::Whole)
+        })));
+
+        let task = s.manager.add_archive(new_archive(&s));
+        for _ in 0..200 {
+            if s.manager.get(task.id).and_then(|t| t.archive).is_some_and(|p| p.found == 1) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+        assert_eq!(s.manager.get(task.id).unwrap().archive.map(|p| (p.found, p.listing)), Some((1, true)));
+        s.manager.pause(task.id);
+        wait_for(&s.manager, task.id, |st| *st == State::Paused).await;
+        for _ in 0..200 {
+            if !lock(&s.manager.inner.running).contains_key(&task.id) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+        assert!(!lock(&s.manager.inner.running).contains_key(&task.id), "the listing stopped when asked");
+
+        s.manager.resume(task.id);
+        let done = wait_for(&s.manager, task.id, |st| *st == State::Completed).await;
+        assert_eq!(*calls.lock().unwrap(), 2);
+        assert_eq!(zip_names(&done.path), ["a.jpg"]);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn an_account_that_cannot_be_listed_fails_with_why() {
+        let s = setup(AT_ONCE);
+        s.manager.set_lister(Some(Arc::new(|_: &ListRequest| Err(DownloadError::PrivateAccount))));
+        let task = s.manager.add_archive(new_archive(&s));
+        let failed = wait_for(&s.manager, task.id, |st| matches!(st, State::Failed(_))).await;
+        assert_eq!(failed.state, State::Failed(DownloadError::PrivateAccount));
+        assert!(!TaskView::from(&failed).retryable);
+
+        // Nothing posted that can be saved.
+        s.manager.set_lister(Some(Arc::new(|request: &ListRequest| {
+            std::fs::write(&request.list, "").unwrap();
+            Ok(Listed::Whole)
+        })));
+        let empty = s.manager.add_archive(new_archive(&s));
+        let failed = wait_for(&s.manager, empty.id, |st| matches!(st, State::Failed(_))).await;
+        assert_eq!(failed.state, State::Failed(DownloadError::NothingToSave));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn cancelling_an_archive_deletes_its_folder() {
+        let server = TestServer::with_files(
+            vec![("/slow.mp4".into(), body(2_000_000))],
+            Behaviour { chunk_delay: Duration::from_millis(20), ..Behaviour::default() },
+        );
+        let s = setup(AT_ONCE);
+        s.manager.set_lister(Some(listing(&server, &[("slow.mp4", "/slow.mp4")], Arc::new(Mutex::new(Vec::new())))));
+        let task = s.manager.add_archive(new_archive(&s));
+        let folder = zip_archive::folder_of(&task.path);
+        for _ in 0..200 {
+            if folder.join("slow.mp4.part").exists() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+        assert!(folder.join("slow.mp4.part").exists());
+        s.manager.cancel(task.id);
+        for _ in 0..200 {
+            if !folder.exists() && !lock(&s.manager.inner.running).contains_key(&task.id) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+        assert!(!folder.exists(), "what arrived is deleted");
+        assert!(s.manager.get(task.id).is_none());
+    }
+
+    #[test]
+    fn an_archive_is_stored_with_its_account_and_never_its_progress() {
+        let task = Task {
+            id: 7,
+            title: "@someone · Instagram posts".into(),
+            page_url: "https://www.instagram.com/someone/".into(),
+            choice: "All posts".into(),
+            kind: Kind::Archive,
+            path: PathBuf::from("/d/someone (Instagram).zip"),
+            source: Source::default(),
+            thumbnail: None,
+            group: None,
+            state: State::Paused,
+            done: 0,
+            total: None,
+            added: 1,
+            sound: None,
+            step: None,
+            account: Some(Account { platform: Platform::X, username: "someone".into(), sign_in: true }),
+            archive: Some(ArchiveProgress { found: 3, saved: 1, listing: false }),
+        };
+        let json = serde_json::to_value(&task).unwrap();
+        assert_eq!(json["kind"], "archive");
+        assert_eq!(json["account"], serde_json::json!({"platform": "x", "username": "someone", "sign_in": true}));
+        assert!(json.get("archive").is_none());
+        let back: Task = serde_json::from_value(json).unwrap();
+        assert_eq!(back.account, task.account);
+        assert_eq!(back.archive, None);
     }
 }

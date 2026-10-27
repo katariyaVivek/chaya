@@ -5,11 +5,11 @@
 //! (`app/src/main/java/com/chaya/app/platform/`), with the same test table, so both apps agree on
 //! which links count.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use url::Url;
 
 /// The sites Chaya can fetch a video or post from when given a link to it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Platform {
     YouTube,
