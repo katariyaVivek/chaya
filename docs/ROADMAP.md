@@ -74,7 +74,8 @@ The six-part plan after v0.4.0 has shipped (#34 to #39); it is in
   boxes, with a shield that counts them and lets the person show a site's ads (#59). What is saved
   from a page carries the browser's sign-in, as on the phone, so content behind the person's own login
   saves (#60). A link that needs a sign-in offers *Sign in to* the site, then *Use my sign-in*, as on the
-  phone. Lookups, downloads and the browser have not run on a real Windows PC yet; CI opens a real
+  phone (#61). The first test on a Windows PC brought fixes: a cancelled download's button resets, and
+  the browser's page runs edge to edge under the bar (#62). Lookups, downloads and the browser have not run on a real Windows PC yet; CI opens a real
   WebView2 page to check the blocking.
 
 0. **First: check #48 on the phone.** #47's name search kept its first look for 3 seconds, so a page
@@ -100,6 +101,29 @@ The six-part plan after v0.4.0 has shipped (#34 to #39); it is in
    on mobile data, so nothing may ever wait for Wi-Fi unless the person turns this on.
 7. Ads inside YouTube's own videos need uBlock Origin's scriptlets, which the blocker does not run.
    Revisit only if a safe, narrow way appears.
+
+## Later: watch, understand and clip
+
+An idea for after the Windows app holds up on a real PC, from [Vimpo](https://vimpo.app/) (a Mac app that
+downloads a video, then transcribes, translates and clips it on the Mac). Chaya already does its first step,
+getting the video; these would let the person work with it inside Chaya, still with nothing uploaded. In order,
+each useful on its own:
+
+1. **A player for what was saved.** A finished download opens in Chaya itself, with its subtitles when the site
+   had any (yt-dlp can fetch them).
+2. **Subtitles made on the PC.** Speech to text with [whisper.cpp](https://github.com/ggml-org/whisper.cpp), on
+   the PC, offline. Its models are 75 MB to 1.5 GB, so one would be fetched the first time the person asks for
+   subtitles, not carried in the installer. Short lines that follow the speech, not one line held for ten
+   seconds.
+3. **Translation, side by side.** The subtitles in the person's language beside the original, and a transcript
+   that follows the video and jumps to a line when clicked. A model on the PC, or the person's own key for one;
+   either way their choice, and said plainly in `PRIVACY_POLICY.md`.
+4. **Highlights and clips.** The moments worth watching marked on the progress bar, each with a title and a
+   reason; lines picked in the transcript cut into short clips, with the subtitles burnt in. The ffmpeg Chaya
+   carries only copies tracks, so burning subtitles in needs one built with an encoder (its size and licence to
+   weigh first).
+
+Not before the Windows app is solid: this is a second product on top of the first.
 
 ## Known rough edges
 
