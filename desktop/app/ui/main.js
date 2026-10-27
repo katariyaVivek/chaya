@@ -777,7 +777,10 @@ function showPageMedia(list) {
   // The page's order: the main video first, ads last.
   const order = list.map((item) => shownFound.get(item.url));
   order.forEach((el, i) => el.classList.toggle('found__item--main', i === 0 && list[0].main));
-  listEl.replaceChildren(...order);
+  // Only when the list changed: putting an item back in starts its entrance again, so an unchanged list,
+  // asked for every 1.5 s, would fade in over and over.
+  const unchanged = order.length === listEl.children.length && order.every((el, i) => listEl.children[i] === el);
+  if (!unchanged) listEl.replaceChildren(...order);
   const others = order.length - 1;
   const more = foundBox.querySelector('.found__more');
   more.hidden = others < 1;
