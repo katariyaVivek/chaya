@@ -186,6 +186,7 @@ function showFound(card, lookup, found) {
 }
 
 function showFailed(card, lookup, failed) {
+  card.classList.add('card--failed');
   card.querySelector('.card__meta').textContent = failed.message;
   const state = card.querySelector('.card__state');
   state.replaceChildren();
@@ -524,6 +525,7 @@ function setBrowsing(on) {
     pageLookedAt = '';
     setLoading(false);
     pageUrl = '';
+    hidePageStill();
   }
 }
 
@@ -553,12 +555,34 @@ function closePage() {
   address.focus();
 }
 
-/** Shows the page unless something is shown in its place. */
-function showPageView() {
+const pageStill = document.getElementById('page-still');
+/** Counts the calls to showPageView, so a slow picture of the page is not shown after the panel has closed. */
+let pageViews = 0;
+
+/**
+ * Shows the page unless something is shown in its place. The page is drawn over the window, so a panel can't lie
+ * over it: while one is open the page is hidden, and a still picture of it stands in its place.
+ */
+async function showPageView() {
   if (!browsing) return;
-  const covered =
-    !settingsPanel.hidden || !shieldPanel.hidden || document.body.classList.contains('showing-downloads');
-  tauri.core.invoke('show_page', { visible: !covered });
+  const view = ++pageViews;
+  const panel = !settingsPanel.hidden || !shieldPanel.hidden;
+  const downloads = document.body.classList.contains('showing-downloads');
+  if (panel && !downloads && pageStill.hidden) {
+    const picture = await tauri.core.invoke('page_picture').catch(() => null);
+    if (view !== pageViews) return;
+    if (picture) {
+      pageStill.src = picture;
+      pageStill.hidden = false;
+    }
+  }
+  if (!panel) hidePageStill();
+  tauri.core.invoke('show_page', { visible: !(panel || downloads) });
+}
+
+function hidePageStill() {
+  pageStill.hidden = true;
+  pageStill.removeAttribute('src');
 }
 
 function showDownloads(on) {
@@ -883,6 +907,10 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     address.focus();
     address.select();
+  } else if (e.key === 'F5' || (e.ctrlKey && e.key.toLowerCase() === 'r')) {
+    // A browser's reload keys reload the page. Left to WebView2 they would reload Chaya's own window instead.
+    e.preventDefault();
+    if (browsing) tauri.core.invoke('page_action', { action: 'reload' });
   } else if (e.key === 'Escape') {
     if (!settingsPanel.hidden) showSettings(false);
     else if (!shieldPanel.hidden) openShield(false);

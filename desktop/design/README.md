@@ -233,6 +233,13 @@ the 160 ms exit and then removes the element.
   around it. A webview is drawn by Windows as a plain rectangle over the window, so inside a rounded
   card it looked pasted on: its square corners over the card's round ones. Below it, the window's own
   corners (Windows rounds them) finish it, as in any browser.
+- **A panel over the page lies over a still picture of it.** The page's webview is drawn over the
+  window, so nothing the window draws can cover it. While the settings or the ad blocker's panel is
+  open, the page is hidden and a still of it, taken as the panel opens, stands in its place. Before
+  this, the page went blank behind a panel, which read as broken. (Windows only: Linux, a development
+  platform, shows the ground.)
+- **A link that couldn't be looked up has no poster box.** The empty box only made sense while
+  waiting for a picture.
 - **No wordmark in the window.** Windows' title bar already names the app; the top of the window holds
   only the settings, which join the bar's row while a page is open.
 - **Glass and the shimmer** are the desktop's own choices. `PRODUCT.md` lists glassmorphism and

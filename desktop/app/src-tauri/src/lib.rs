@@ -312,6 +312,7 @@ pub fn run() {
             browser::open_page,
             browser::place_page,
             browser::show_page,
+            browser::page_picture,
             browser::page_action,
             browser::close_page,
             browser::page_media,
