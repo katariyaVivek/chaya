@@ -179,3 +179,65 @@ jobs:
           name: chaya-windows-installer
           path: desktop/target/release/bundle/nsis/*.exe
           if-no-files-found: error
+
+  # The installer installed on a Windows machine and the app toured, with a picture of the whole screen at each
+  # step (desktop/app/tour/tour.py): a link looked up for real, a download cancelled, pages in the built-in
+  # browser, the ad blocker's panel, Night. The pictures are kept as the run's `chaya-windows-tour` artifact, so
+  # what the app looks like on Windows is seen, not guessed. A site that refuses this machine is noted in
+  # steps.json, not failed on; the job fails only when the app does not start.
+  tour:
+    name: Windows tour
+    needs: windows
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get the installer
+        uses: actions/download-artifact@v4
+        with:
+          name: chaya-windows-installer
+          path: installer
+
+      - name: A screen big enough for the window
+        continue-on-error: true
+        run: Set-DisplayResolution -Width 1920 -Height 1080 -Force
+
+      - name: Install Chaya, as a person would
+        run: |
+          $setup = (Get-ChildItem installer -Filter *.exe | Select-Object -First 1).FullName
+          Start-Process -Wait -FilePath $setup -ArgumentList '/S'
+          $app = Get-ChildItem "$env:LOCALAPPDATA\Chaya" -Filter *.exe -Recurse |
+            Where-Object { $_.Name -notlike 'uninstall*' } | Select-Object -First 1
+          if (-not $app) { throw 'The installer put no Chaya program in place.' }
+          "CHAYA_APP=$($app.FullName)" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          Write-Host "Installed: $($app.FullName)"
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      # The tour drives the window through WebView2's DevTools port. The runner runs elevated, and WebView2
+      # (from 150) ignores WEBVIEW2_* variables in an elevated app; the machine's policy is still read.
+      - name: Open WebView2's DevTools port for Chaya
+        run: |
+          $key = 'HKLM:\SOFTWARE\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments'
+          New-Item -Path $key -Force | Out-Null
+          $name = Split-Path $env:CHAYA_APP -Leaf
+          New-ItemProperty -Path $key -Name $name -Value '--remote-debugging-port=9333' -PropertyType String -Force | Out-Null
+          Get-ItemProperty -Path $key
+
+      - name: Take the tour
+        run: |
+          python -m pip install --quiet websocket-client pillow
+          python desktop/app/tour/tour.py --app $env:CHAYA_APP --out tour --via devtools
+
+      - name: Keep the pictures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chaya-windows-tour
+          path: tour
+          if-no-files-found: warn

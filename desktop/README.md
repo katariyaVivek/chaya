@@ -231,6 +231,16 @@ that its ads are never fetched and the rest of it is.
 On Linux, building `app/src-tauri` needs WebKitGTK (`libwebkit2gtk-4.1-dev`), the same as Tauri
 there. `core` needs nothing beyond Rust.
 
+**The Windows tour** (`app/tour/tour.py`, CI job `tour`) installs the installer on a Windows machine and
+starts the app with WebView2's DevTools port open, driving the window through it. CI runs elevated, where
+WebView2 ignores `WEBVIEW2_*` variables (and so msedgedriver never attaches), so the job opens the port with
+the machine's WebView2 policy for `chaya-desktop.exe`. It takes a real link looked up and a download cancelled, three pages in the built-in browser, the ad blocker's panel,
+Night. At each step it photographs the whole screen, so the page's place in the window, Windows' fonts and
+frame are seen; the pictures and `steps.json` (what each step found) are the run's `chaya-windows-tour`
+artifact. A site that refuses the machine is noted, not failed on. Off Windows it runs with `--via webdriver`:
+`tauri-driver` and WebKitWebDriver (`webkit2gtk-driver`) on a virtual display, and `--sites` pointing at
+local pages.
+
 CI: `desktop.yml` builds the cut-down ffmpeg for Windows and Linux (once per version of
 `build_ffmpeg.sh`, kept in the Actions cache); tests `core` and the packaging on Linux with it; and on
 Windows puts the engine together, checks it, lints, tests and builds the installer, kept as the run's
