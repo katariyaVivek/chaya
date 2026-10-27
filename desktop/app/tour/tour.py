@@ -6,9 +6,10 @@ lookup. It drives the window's own content by running script in it, and photogra
 page and Windows' own frame included.
 
 Two ways in:
-- `--via devtools` (Windows): starts the app with WebView2's DevTools port open and speaks the DevTools
-  protocol to the window. msedgedriver cannot be used: Tauri gives WebView2 its own data folder, where
-  msedgedriver never finds the port it waits for.
+- `--via devtools` (Windows): starts the app with WebView2's DevTools port (9333) open and speaks the DevTools
+  protocol to the window. The port is opened by `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`, or, for an app run
+  elevated as on CI, where WebView2 ignores that variable, by the machine's WebView2 policy (`desktop.yml`).
+  msedgedriver cannot be used: it opens the port through those variables.
 - `--via webdriver` (Linux): `tauri-driver` with WebKitWebDriver starts the app, for trying the tour here.
 
 A step that cannot be done (a site that refuses a data centre, a lookup that times out) is noted and the tour
@@ -86,13 +87,16 @@ class DevToolsWindow:
 
     PORT = 9333
 
-    def __init__(self, app):
+    def __init__(self, app, out):
         import websocket  # websocket-client
 
         env = dict(os.environ, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=f'--remote-debugging-port={self.PORT}')
-        self.process = subprocess.Popen([app], env=env)
-        target = None
-        for _ in range(60):
+        self.log = open(out / 'app.log', 'w')
+        self.process = subprocess.Popen([app], env=env, stdout=self.log, stderr=subprocess.STDOUT)
+        target, targets = None, []
+        for _ in range(45):
+            if self.process.poll() is not None:
+                break
             try:
                 with urllib.request.urlopen(f'http://127.0.0.1:{self.PORT}/json/list', timeout=2) as answer:
                     targets = json.load(answer)
@@ -104,10 +108,28 @@ class DevToolsWindow:
                 pass
             time.sleep(1)
         if not target:
+            self.why_not(out, targets)
             self.process.kill()
-            raise RuntimeError('The app started, but its window never opened its DevTools port.')
+            raise RuntimeError('The app never opened its DevTools port; see app.log, processes.txt and no-port.png.')
         self.socket = websocket.create_connection(target['webSocketDebuggerUrl'], timeout=30, suppress_origin=True)
         self.next_id = 0
+
+    def why_not(self, out, targets):
+        """What there is to see when the port never opens: the app, the browser processes it started and their
+        command lines, the screen."""
+        lines = [f'app: {"still running" if self.process.poll() is None else f"ended with {self.process.returncode}"}',
+                 f'targets: {json.dumps(targets)}']
+        if os.name == 'nt':
+            query = ("Get-CimInstance Win32_Process | Where-Object { $_.Name -match 'chaya|msedgewebview2' } | "
+                     "ForEach-Object { \"$($_.ProcessId) $($_.Name) $($_.CommandLine)\" }")
+            done = subprocess.run(['powershell', '-NoProfile', '-Command', query], capture_output=True, text=True)
+            lines.append(done.stdout + done.stderr)
+        (out / 'processes.txt').write_text('\n'.join(lines))
+        print('\n'.join(lines)[:4000], flush=True)
+        try:
+            screenshot(out / 'no-port.png')
+        except Exception:
+            pass
 
     def run(self, script):
         self.next_id += 1
@@ -131,6 +153,7 @@ class DevToolsWindow:
             self.socket.close()
         finally:
             self.process.kill()
+            self.log.close()
 
 
 class Tour:
@@ -278,7 +301,7 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
 
     try:
-        window = DevToolsWindow(args.app) if args.via == 'devtools' else WebDriverWindow(args.app, args.driver)
+        window = DevToolsWindow(args.app, out) if args.via == 'devtools' else WebDriverWindow(args.app, args.driver)
     except Exception as e:
         print(f'The app could not be started: {e}', file=sys.stderr)
         return 1

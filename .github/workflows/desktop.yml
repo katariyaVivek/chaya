@@ -219,7 +219,16 @@ jobs:
         with:
           python-version: '3.13'
 
-      # The tour starts the app with WebView2's DevTools port open and drives the window through it.
+      # The tour drives the window through WebView2's DevTools port. The runner runs elevated, and WebView2
+      # (from 150) ignores WEBVIEW2_* variables in an elevated app; the machine's policy is still read.
+      - name: Open WebView2's DevTools port for Chaya
+        run: |
+          $key = 'HKLM:\SOFTWARE\Policies\Microsoft\Edge\WebView2\AdditionalBrowserArguments'
+          New-Item -Path $key -Force | Out-Null
+          $name = Split-Path $env:CHAYA_APP -Leaf
+          New-ItemProperty -Path $key -Name $name -Value '--remote-debugging-port=9333' -PropertyType String -Force | Out-Null
+          Get-ItemProperty -Path $key
+
       - name: Take the tour
         run: |
           python -m pip install --quiet websocket-client pillow
