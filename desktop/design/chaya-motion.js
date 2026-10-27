@@ -54,7 +54,7 @@ export const PRESS_SPRING = { stiffness: 400, damping: 30 };
 // The button is a pill that becomes a progress ring, then a check, then a pill again:
 //
 //   idle ──start──► progress ⇄ paused        progress ──complete──► done ──(settle)──► saved
-//                       └──────fail──────► idle
+//                       └──fail, cancel──► idle
 //
 // nextDownloadState() is the whole state machine, kept free of the DOM so it can be tested on
 // its own; DownloadButton applies it to an element.
@@ -63,15 +63,15 @@ export const PRESS_SPRING = { stiffness: 400, damping: 30 };
 
 const TRANSITIONS = {
   idle: { start: 'progress' },
-  progress: { pause: 'paused', complete: 'done', fail: 'idle' },
-  paused: { resume: 'progress', complete: 'done', fail: 'idle' },
+  progress: { pause: 'paused', complete: 'done', fail: 'idle', cancel: 'idle' },
+  paused: { resume: 'progress', complete: 'done', fail: 'idle', cancel: 'idle' },
   done: { settle: 'saved' },
   saved: { reset: 'idle' },
 };
 
 /**
  * @param {DownloadButtonState} state
- * @param {'start' | 'pause' | 'resume' | 'complete' | 'fail' | 'settle' | 'reset'} event
+ * @param {'start' | 'pause' | 'resume' | 'complete' | 'fail' | 'cancel' | 'settle' | 'reset'} event
  * @returns {DownloadButtonState} the same state when the event does not apply
  */
 export function nextDownloadState(state, event) {
@@ -123,7 +123,7 @@ export class DownloadButton {
     const next = nextDownloadState(this.state, event);
     if (next === this.state) return;
     this.state = next;
-    if (event === 'start' || event === 'reset' || event === 'fail') this.fraction = 0;
+    if (event === 'start' || event === 'reset' || event === 'fail' || event === 'cancel') this.fraction = 0;
     if (event === 'complete') {
       this.fraction = 1;
       clearTimeout(this.settleTimer);

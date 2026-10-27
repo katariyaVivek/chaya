@@ -153,11 +153,12 @@ once, then settles back to a pill reading *Saved*.
 import { DownloadButton } from './chaya-motion.js';
 const button = new DownloadButton(el, { onEvent: (event, state) => { /* start, pause, resume… */ } });
 button.setProgress(0.42);   // while downloading
-button.send('complete');    // or 'fail'
+button.send('complete');    // or 'fail', or 'cancel'
 ```
 
-- States (`data-state`): `idle` → `progress` ⇄ `paused` → `done` → `saved` → `idle`. A failure
-  goes back to `idle`. `nextDownloadState()` is the whole machine.
+- States (`data-state`): `idle` → `progress` ⇄ `paused` → `done` → `saved` → `idle`. A failure or
+  a cancel goes back to `idle`, the pill ready to start again. `nextDownloadState()` is the whole
+  machine.
 - A click starts, pauses and resumes. While the check shows, clicks wait.
 - **Paused:** the ring stops where it is and dims to 50%. Its light stops breathing.
 - The ring shows at most 99% until the download really completes.
@@ -228,6 +229,12 @@ the 160 ms exit and then removes the element.
   again would invite a second copy.
 - **"Static when idle"** is read as: a paused row's light stops where it is, and rows that are not
   downloading have no light.
+- **The browser's page runs edge to edge under the bar**, with a hairline above it and no glass card
+  around it. A webview is drawn by Windows as a plain rectangle over the window, so inside a rounded
+  card it looked pasted on: its square corners over the card's round ones. Below it, the window's own
+  corners (Windows rounds them) finish it, as in any browser.
+- **No wordmark in the window.** Windows' title bar already names the app; the top of the window holds
+  only the settings, which join the bar's row while a page is open.
 - **Glass and the shimmer** are the desktop's own choices. `PRODUCT.md` lists glassmorphism and
   gradient text among the phone app's anti-references. On desktop, glass is the one surface
   material, used consistently, and the shimmer is used on exactly one loading label. The phone's

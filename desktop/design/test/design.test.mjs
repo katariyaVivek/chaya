@@ -208,6 +208,10 @@ test('a download goes pill, ring, check, pill', () => {
 test('a download that fails goes back to the pill, from running or paused', () => {
   assert.equal(nextDownloadState('progress', 'fail'), 'idle');
   assert.equal(nextDownloadState('paused', 'fail'), 'idle');
+  // Cancelled, from the button's ring or from the list: back to a pill to start again.
+  assert.equal(nextDownloadState('progress', 'cancel'), 'idle');
+  assert.equal(nextDownloadState('paused', 'cancel'), 'idle');
+  assert.equal(nextDownloadState('saved', 'cancel'), 'saved', 'a saved file stays saved');
 });
 
 test('events that do not apply leave the button as it is', () => {
