@@ -90,6 +90,10 @@ class DevToolsWindow:
     def __init__(self, app, out):
         import websocket  # websocket-client
 
+        if os.name == 'nt':
+            # The runner's own console stays open on the desktop; out of the pictures with it.
+            subprocess.run(['powershell', '-NoProfile', '-Command', '(New-Object -ComObject Shell.Application).MinimizeAll()'])
+            time.sleep(1)
         env = dict(os.environ, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=f'--remote-debugging-port={self.PORT}')
         self.log = open(out / 'app.log', 'w')
         self.process = subprocess.Popen([app], env=env, stdout=self.log, stderr=subprocess.STDOUT)
