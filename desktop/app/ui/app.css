@@ -41,6 +41,8 @@ body {
   border-radius: var(--radius-md);
   animation: var(--anim-enter) var(--dur-enter) var(--ease-out) both;
 }
+/* Over the page's picture, which can be anything, glass can't keep a panel's words readable: it gets the ground */
+body.browsing .settings__panel { background: var(--bg); }
 .settings__label { margin: 0; color: var(--muted); font-size: var(--text-sm); }
 .settings__label:not(:first-child) { margin-top: var(--space-1); }
 .shield__status { max-width: 32ch; margin: 0; font-size: var(--text-md); line-height: var(--leading-md); }

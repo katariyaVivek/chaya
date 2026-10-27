@@ -236,7 +236,8 @@ the 160 ms exit and then removes the element.
 - **A panel over the page lies over a still picture of it.** The page's webview is drawn over the
   window, so nothing the window draws can cover it. While the settings or the ad blocker's panel is
   open, the page is hidden and a still of it, taken as the panel opens, stands in its place. Before
-  this, the page went blank behind a panel, which read as broken. (Windows only: Linux, a development
+  this, the page went blank behind a panel, which read as broken. Over a page, a panel is the ground
+  colour, not glass: a page can be anything, and Night's glass let a white page wash out its words. (Windows only: Linux, a development
   platform, shows the ground.)
 - **A link that couldn't be looked up has no poster box.** The empty box only made sense while
   waiting for a picture.
