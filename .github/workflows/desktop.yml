@@ -179,3 +179,79 @@ jobs:
           name: chaya-windows-installer
           path: desktop/target/release/bundle/nsis/*.exe
           if-no-files-found: error
+
+  # The installer installed on a Windows machine and the app toured, with a picture of the whole screen at each
+  # step (desktop/app/tour/tour.py): a link looked up for real, a download cancelled, pages in the built-in
+  # browser, the ad blocker's panel, Night. The pictures are kept as the run's `chaya-windows-tour` artifact, so
+  # what the app looks like on Windows is seen, not guessed. A site that refuses this machine is noted in
+  # steps.json, not failed on; the job fails only when the app does not start.
+  tour:
+    name: Windows tour
+    needs: windows
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get the installer
+        uses: actions/download-artifact@v4
+        with:
+          name: chaya-windows-installer
+          path: installer
+
+      - name: A screen big enough for the window
+        continue-on-error: true
+        run: Set-DisplayResolution -Width 1920 -Height 1080 -Force
+
+      - name: Install Chaya, as a person would
+        run: |
+          $setup = (Get-ChildItem installer -Filter *.exe | Select-Object -First 1).FullName
+          Start-Process -Wait -FilePath $setup -ArgumentList '/S'
+          $app = Get-ChildItem "$env:LOCALAPPDATA\Chaya" -Filter *.exe -Recurse |
+            Where-Object { $_.Name -notlike 'uninstall*' } | Select-Object -First 1
+          if (-not $app) { throw 'The installer put no Chaya program in place.' }
+          "CHAYA_APP=$($app.FullName)" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          Write-Host "Installed: $($app.FullName)"
+
+      # WebDriver for WebView2 has to match the WebView2 the app runs on.
+      - name: Get the WebView2 driver
+        run: |
+          $key = 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
+          $version = (Get-ItemProperty -Path $key -ErrorAction SilentlyContinue).pv
+          if (-not $version) {
+            $version = (Get-Item 'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe').VersionInfo.ProductVersion
+          }
+          Write-Host "WebView2 $version"
+          Invoke-WebRequest "https://msedgedriver.microsoft.com/$version/edgedriver_win64.zip" -OutFile edgedriver.zip
+          Expand-Archive edgedriver.zip -DestinationPath edgedriver
+          "EDGE_DRIVER=$PWD\edgedriver\msedgedriver.exe" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install tauri-driver
+        run: cargo install tauri-driver --locked
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Take the tour
+        run: |
+          python -m pip install --quiet selenium pillow
+          Start-Process -FilePath tauri-driver -ArgumentList '--native-driver', $env:EDGE_DRIVER -RedirectStandardOutput tauri-driver.log -RedirectStandardError tauri-driver.err
+          Start-Sleep -Seconds 3
+          python desktop/app/tour/tour.py --app $env:CHAYA_APP --out tour
+
+      - name: Keep the pictures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chaya-windows-tour
+          path: |
+            tour
+            tauri-driver.log
+            tauri-driver.err
+          if-no-files-found: warn
