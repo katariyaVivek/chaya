@@ -172,7 +172,7 @@ mod webview2 {
     use chaya_core::adblock::{kind, AdBlocker};
     use webview2_com::Microsoft::Web::WebView2::Win32::*;
     use webview2_com::{take_pwstr, WebResourceRequestedEventHandler};
-    use windows_core::{w, PWSTR};
+    use windows_core::{w, Interface, PWSTR};
 
     /// Answers each request the page makes: an empty 204 for an ad or a tracker, nothing (so it loads) for the
     /// rest. Set up before the page loads anything: the page opens on about:blank, and is sent on after this.
@@ -210,7 +210,16 @@ mod webview2 {
         // SAFETY: called on the window's thread (`with_webview`), on the page's own live webview.
         unsafe {
             let webview = controller.CoreWebView2()?;
-            webview.AddWebResourceRequestedFilter(w!("*"), COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL)?;
+            // The plain filter sees only the page's own document's requests. Ads come in frames from their networks'
+            // sites, and those frames' requests (and workers') are watched only when asked for by source.
+            match webview.cast::<ICoreWebView2_22>() {
+                Ok(webview) => webview.AddWebResourceRequestedFilterWithRequestSourceKinds(
+                    w!("*"),
+                    COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL,
+                    COREWEBVIEW2_WEB_RESOURCE_REQUEST_SOURCE_KINDS_ALL,
+                )?,
+                Err(_) => webview.AddWebResourceRequestedFilter(w!("*"), COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL)?,
+            }
             webview.add_WebResourceRequested(&handler, &mut token)
         }
     }

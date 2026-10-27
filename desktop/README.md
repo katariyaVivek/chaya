@@ -148,7 +148,9 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
 - The window opens where it was left, maximized if it was (`window.json` in the app's data folder,
   `core::placement`), or, the first time, at 85% of the screen (at most 1600×1000) in its middle. It starts
   hidden, so it is never seen jumping there; a window left on a screen that is gone opens as the first time.
-- F5 and Ctrl+R reload the page wherever the focus is. Left to WebView2, pressed outside the page they
+- F5 and Ctrl+R reload the page wherever the focus is, and Alt+Left and Alt+Right go back and forward.
+  Back (the button, Alt+Left or Escape) from the Downloads list goes back to the page it covers. Home, in
+  the bar beside Reload, closes the page for Chaya's own start. Left to WebView2, pressed outside the page they
   reloaded Chaya's own window instead.
 - **A page gets nothing of the app.** The app's commands are granted to the window's own webview only
   (`capabilities/default.json`: `webviews: ["main"]`, not the whole window), and a page from the web is
@@ -193,7 +195,10 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
   first opens (pages load unblocked until then), and fresh copies are fetched from easylist.to about once
   a week; all are fetched before any is replaced, and a copy that does not look like a list is thrown away.
   - *Requests* (Windows): the page's WebView2 hands the app every request it makes
-    (`WebResourceRequested`), and an ad's or a tracker's gets an empty 204. The page's own document is
+    (`WebResourceRequested`), and an ad's or a tracker's gets an empty 204. That includes the requests of
+    its frames and workers, which WebView2 raises only when asked for by source
+    (`AddWebResourceRequestedFilterWithRequestSourceKinds`): ads come in frames from their networks' sites,
+    and with the plain filter everything those frames loaded got through. The page's own document is
     never blocked. The page opens on `about:blank` and is sent on once this is in place, so its first
     files are judged too.
   - *Pop-ups*: a window the lists name as an ad is refused without asking.
