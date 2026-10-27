@@ -90,6 +90,7 @@ export function ringPercent(fraction) {
 }
 
 const RING_SIZE = 40; // px, the pill's height, so the morph changes width only
+const RING_STATES = new Set(['progress', 'paused', 'done']);
 const SETTLE_AFTER = 900; // ms the check stays before the button settles back to a pill
 
 export class DownloadButton {
@@ -137,7 +138,7 @@ export class DownloadButton {
     const { el, state } = this;
     el.dataset.state = state;
     if (this.labelEl && this.labels[state]) this.labelEl.textContent = this.labels[state];
-    if (el.isConnected) {
+    if (el.isConnected && el.getClientRects().length > 0) {
       // From its natural width the first time, so even the first change of shape animates.
       if (!el.style.width) {
         el.style.width = `${el.offsetWidth}px`;
@@ -145,8 +146,9 @@ export class DownloadButton {
       }
       el.style.width = `${this.widthFor(state)}px`;
     } else {
-      // Not on screen yet: nothing to measure, so the pill keeps the width of its label.
-      el.style.width = '';
+      // Not on screen (not yet, or hidden, as a card's button is while the Downloads list shows): a label measures
+      // as nothing there, so the pill keeps the width of its label, and the ring its own.
+      el.style.width = RING_STATES.has(state) ? `${RING_SIZE}px` : '';
     }
     this.renderProgress();
   }
@@ -170,7 +172,7 @@ export class DownloadButton {
 
   /** The pill's width comes from its label, measured, so width can animate between real values. */
   widthFor(state) {
-    if (state === 'progress' || state === 'paused' || state === 'done') return RING_SIZE;
+    if (RING_STATES.has(state)) return RING_SIZE;
     const probe = this.labelEl.cloneNode(true);
     probe.textContent = this.labels[state];
     Object.assign(probe.style, { position: 'absolute', visibility: 'hidden', width: 'auto' });

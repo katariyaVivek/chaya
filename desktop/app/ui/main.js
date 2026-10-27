@@ -647,7 +647,12 @@ new ResizeObserver(() => {
   if (browsing) tauri.core.invoke('place_page', { bounds: boundsOf(pageEl) });
 }).observe(document.querySelector('.main'));
 
-document.getElementById('page-back').addEventListener('click', () => tauri.core.invoke('page_action', { action: 'back' }));
+/** Back from the Downloads list is back to the page it covers; from the page, the page's own history. */
+function goBack() {
+  if (document.body.classList.contains('showing-downloads')) showDownloads(false);
+  else tauri.core.invoke('page_action', { action: 'back' });
+}
+document.getElementById('page-back').addEventListener('click', goBack);
 document.getElementById('page-forward').addEventListener('click', () => tauri.core.invoke('page_action', { action: 'forward' }));
 pageReload.addEventListener('click', () =>
   tauri.core.invoke('page_action', { action: pageLoad.hasAttribute('data-loading') ? 'stop' : 'reload' }),
@@ -983,6 +988,11 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     address.focus();
     address.select();
+  } else if (browsing && e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+    // A browser's history keys, which WebView2 would otherwise spend on Chaya's own window.
+    e.preventDefault();
+    if (e.key === 'ArrowLeft') goBack();
+    else tauri.core.invoke('page_action', { action: 'forward' });
   } else if (e.key === 'F5' || (e.ctrlKey && e.key.toLowerCase() === 'r')) {
     // A browser's reload keys reload the page. Left to WebView2 they would reload Chaya's own window instead.
     e.preventDefault();
@@ -991,6 +1001,7 @@ document.addEventListener('keydown', (e) => {
     if (!settingsPanel.hidden) showSettings(false);
     else if (!shieldPanel.hidden) openShield(false);
     else if (!mediaPanel.hidden) openMedia(false);
+    else if (document.body.classList.contains('showing-downloads')) showDownloads(false);
     else if (document.activeElement === address && browsing) {
       // Back to the page's own address.
       address.value = pageUrl;

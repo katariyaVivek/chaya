@@ -304,6 +304,19 @@ def run(tour, sites):
         except Exception as e:
             tour.failed('reload', e)
 
+    # The Downloads list in the page's place, and Back from it to the page.
+    try:
+        tour.click('#page-downloads')
+        time.sleep(1)
+        tour.shot('downloads-over-page')
+        tour.click('#page-back')
+        time.sleep(1)
+        back = not tour.js("return document.body.classList.contains('showing-downloads')")
+        tour.steps.append({'step': 'back-from-downloads', 'to the page': back})
+        print(f'back from downloads: to the page {back}', flush=True)
+    except Exception as e:
+        tour.failed('back-from-downloads', e)
+
     # The ad blocker's panel, on the news page.
     try:
         tour.click('#page-shield')
