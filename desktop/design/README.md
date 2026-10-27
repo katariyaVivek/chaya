@@ -241,6 +241,9 @@ the 160 ms exit and then removes the element.
   platform, shows the ground.)
 - **A link that couldn't be looked up has no poster box.** The empty box only made sense while
   waiting for a picture.
+- **Nothing sits between the bar and the page, and the bar is one 56px row.** What a page holds is
+  named by a pill in the bar (accent-edged while new) and listed in its panel. Shown above the page, it
+  pushed the page down about 100px after the page had loaded, and the bar and its spacing took 90px.
 - **No wordmark in the window.** Windows' title bar already names the app; the top of the window holds
   only the settings, which join the bar's row while a page is open.
 - **Glass and the shimmer** are the desktop's own choices. `PRODUCT.md` lists glassmorphism and

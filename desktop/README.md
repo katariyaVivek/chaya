@@ -15,7 +15,7 @@ YouTube's files come in pieces, three at a time. Qualities that come as streams,
 link) or DASH (Vimeo's, Reddit's), are fetched piece by piece and saved as an MP4. Anything else typed in
 the address bar (a page, a site, an account, words to search for) opens in the built-in browser, and a
 video, sound or picture a page downloads is saved in the Downloads list. What a page's players load is
-found and listed above the page, its main video first, each with a Download button
+found and named in a pill in the bar; its panel lists them, the main video first, each with a Download button
 ([`../docs/ROADMAP.md`](../docs/ROADMAP.md)).
 
 ## Layout
@@ -145,6 +145,9 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
   changes, and hides the page while it shows the downloads or a panel in its place. Under a panel (the
   settings, the ad blocker's) a still picture of the page stands in for it (`page_picture`: WebView2's
   `CapturePreview`, held only in the window while the panel is open).
+- The window opens where it was left, maximized if it was (`window.json` in the app's data folder,
+  `core::placement`), or, the first time, at 85% of the screen (at most 1600×1000) in its middle. It starts
+  hidden, so it is never seen jumping there; a window left on a screen that is gone opens as the first time.
 - F5 and Ctrl+R reload the page wherever the focus is. Left to WebView2, pressed outside the page they
   reloaded Chaya's own window instead.
 - **A page gets nothing of the app.** The app's commands are granted to the window's own webview only
@@ -178,7 +181,8 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
   reads its playlist or manifest with the page as referrer (`look_up_found`), and its qualities show in
   the same card as a link's, saved by `download_found`.
 - **A video site's page.** When the page is a video or post on YouTube, Instagram, TikTok or X, it is
-  looked up as its link is, and its card shows above the page. Those sites change their address without
+  looked up as its link is, and its card is in the same panel, from the bar's pill. Nothing is ever shown
+  between the bar and the page, so the page does not move once it shows. Those sites change their address without
   loading a new page, so the window follows the address the page reports each time it asks.
 - **Ads are blocked**, as on the phone, with the phone's copies of EasyList and EasyPrivacy (the lists
   uBlock Origin starts with; the installer carries them from `app/src/main/assets/adblock`). `chaya-core`'s

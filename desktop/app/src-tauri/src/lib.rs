@@ -3,6 +3,7 @@
 
 mod ads;
 mod browser;
+mod window;
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, PoisonError};
@@ -295,6 +296,9 @@ pub fn run() {
             app.manage(Downloads { manager, folder, joins });
             app.manage(browser::PageState::default());
             app.manage(browser::Agent::default());
+            if let Some(main) = app.get_webview_window("main") {
+                window::place(&main, app.path().app_data_dir()?.join("window.json"));
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

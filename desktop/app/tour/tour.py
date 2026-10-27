@@ -95,7 +95,7 @@ class DevToolsWindow:
             subprocess.run(['powershell', '-NoProfile', '-Command', '(New-Object -ComObject Shell.Application).MinimizeAll()'])
             time.sleep(1)
         env = dict(os.environ, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=f'--remote-debugging-port={self.PORT}')
-        self.log = open(out / 'app.log', 'w')
+        self.log = open(out / 'app.log', 'w', encoding='utf-8')
         self.process = subprocess.Popen([app], env=env, stdout=self.log, stderr=subprocess.STDOUT)
         target, targets = None, []
         for _ in range(45):
@@ -128,7 +128,7 @@ class DevToolsWindow:
                      "ForEach-Object { \"$($_.ProcessId) $($_.Name) $($_.CommandLine)\" }")
             done = subprocess.run(['powershell', '-NoProfile', '-Command', query], capture_output=True, text=True)
             lines.append(done.stdout + done.stderr)
-        (out / 'processes.txt').write_text('\n'.join(lines))
+        (out / 'processes.txt').write_text('\n'.join(lines), encoding='utf-8')
         print('\n'.join(lines)[:4000], flush=True)
         try:
             screenshot(out / 'no-port.png')
@@ -273,10 +273,18 @@ def run(tour, sites):
             tour.type_address(sites[key])
             tour.wait(lambda: tour.js("return document.body.classList.contains('browsing')"), 20)
             time.sleep(wait)
-            found = tour.js("return [...document.querySelectorAll('.found__item')].map(e => e.innerText.replace(/\\s+/g, ' '))")
+            found = tour.js("return [...document.querySelectorAll('.found__item')].map(e => e.textContent.replace(/\\s+/g, ' ').trim())")
             shield = tour.js("return document.querySelector('#page-shield')?.getAttribute('aria-label') ?? ''")
             address = tour.js("return document.getElementById('address').value")
-            tour.shot(name, address=address, found=found, shield=shield)
+            page_top = tour.js("return Math.round(document.getElementById('page').getBoundingClientRect().top)")
+            pill = tour.js("const b = document.getElementById('page-media'); return b.hidden ? '' : b.textContent")
+            tour.shot(name, address=address, found=found, shield=shield, page_top=page_top, pill=pill)
+            # What the page holds, in its panel from the bar's pill, over a picture of the page.
+            if pill:
+                tour.click('#page-media')
+                time.sleep(1)
+                tour.shot(f'{name}-found', panel=tour.js("return document.getElementById('media-panel').innerText"))
+                tour.click('#page-media')
         except Exception as e:
             tour.failed(name, e)
 
@@ -334,6 +342,9 @@ def main():
     parser.add_argument('--sites', help='a JSON file of addresses to use instead of the internet\'s')
     args = parser.parse_args()
 
+    # Windows' console and files default to its code page, which has no room for a page's '·' or 'é'.
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
     sites = dict(SITES)
     if args.sites:
         sites.update(json.loads(Path(args.sites).read_text()))
@@ -350,7 +361,7 @@ def main():
     try:
         run(tour, sites)
     finally:
-        (out / 'steps.json').write_text(json.dumps(tour.steps, indent=2, ensure_ascii=False))
+        (out / 'steps.json').write_text(json.dumps(tour.steps, indent=2, ensure_ascii=False), encoding='utf-8')
         try:
             window.close()
         except Exception:

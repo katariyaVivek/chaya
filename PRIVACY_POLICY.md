@@ -83,6 +83,8 @@ differences:
 
 - **Pages you open** in its built-in browser load as in any browser (Microsoft Edge WebView2), and keep
   their cookies in Chaya's own WebView2 folder on your PC. A page cannot reach the app.
+- **A picture of the page.** While one of Chaya's panels is open over a page, a still picture of the page
+  stands in for it. The picture is held only in Chaya's window while the panel is open and is never saved.
 - **Finding media on a page.** A small script of Chaya's runs in the pages you open, frames included. It
   only looks at what the page's players already loaded, makes no request of its own and sends nothing
   anywhere; Chaya reads its list to show you what can be saved.

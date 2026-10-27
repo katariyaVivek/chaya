@@ -79,8 +79,11 @@ function hostOf(url) {
 
 /** A video or post is looked up; anything else (a page, an account, words to search for) opens in the page. */
 function show(link, text) {
-  if (link.kind === 'media') lookUp(link);
-  else openPage(text);
+  if (link.kind === 'media') {
+    lookUp(link);
+    // While a page is open the card is in the bar's panel, opened since the person asked for it.
+    if (browsing) openMedia(true);
+  } else openPage(text);
 }
 
 /** A card saying why `text` could not be opened. */
@@ -113,6 +116,7 @@ function lookUp(link, useSignIn = false) {
     title: `${link.site} ${link.lookingFor}`,
     meta: link.url,
     finding: useSignIn ? `Finding the ${link.lookingFor} with your sign-in…` : `Finding the ${link.lookingFor}…`,
+    noun: link.lookingFor,
     ask: () => tauri.core.invoke('look_up', { url: link.url, useSignIn }),
     save: (choice) => tauri.core.invoke('download', { url: link.url, choice }),
     again: () => lookUp(link),
@@ -130,6 +134,7 @@ function lookUp(link, useSignIn = false) {
  */
 async function showLookup(lookup) {
   const ask = ++looking;
+  resultNoun = lookup.noun ?? '';
   const card = lookupTemplate.content.firstElementChild.cloneNode(true);
   card.querySelector('.card__title').textContent = lookup.title;
   card.querySelector('.card__meta').textContent = lookup.meta;
@@ -517,6 +522,16 @@ function setBrowsing(on) {
   browsing = on;
   document.body.classList.toggle('browsing', on);
   document.querySelectorAll('[data-browsing]').forEach((el) => (el.hidden = !on));
+  // Over a page, what is looked up and what the page holds open from the bar, so the page never moves for them.
+  if (on) {
+    mediaPanel.append(result, foundBox);
+    foundBox.classList.add('found--open');
+  } else {
+    openMedia(false);
+    addressForm.after(result);
+    notice.after(foundBox);
+    foundBox.classList.remove('found--open');
+  }
   if (!on) {
     openShield(false);
     showDownloads(false);
@@ -544,7 +559,9 @@ async function openPage(text, signIn = false) {
     address.blur();
   } catch (message) {
     if (first) setBrowsing(false);
-    showProblem(text, String(message));
+    // Over a page, a line above it rather than a card: the page is still the one shown.
+    if (browsing) showNotice(String(message));
+    else showProblem(text, String(message));
   }
 }
 
@@ -566,7 +583,7 @@ let pageViews = 0;
 async function showPageView() {
   if (!browsing) return;
   const view = ++pageViews;
-  const panel = !settingsPanel.hidden || !shieldPanel.hidden;
+  const panel = !settingsPanel.hidden || !shieldPanel.hidden || !mediaPanel.hidden;
   const downloads = document.body.classList.contains('showing-downloads');
   if (panel && !downloads && pageStill.hidden) {
     const picture = await tauri.core.invoke('page_picture').catch(() => null);
@@ -586,6 +603,7 @@ function hidePageStill() {
 }
 
 function showDownloads(on) {
+  if (on) openMedia(false);
   document.body.classList.toggle('showing-downloads', on);
   pageDownloads.setAttribute('aria-pressed', String(on));
   showPageView();
@@ -686,6 +704,7 @@ function lookUpFound(item) {
     title: item.name,
     meta: item.host,
     finding: 'Finding its qualities…',
+    noun: FOUND_NOUN[item.kind],
     ask: () => tauri.core.invoke('look_up_found', { url: item.url }),
     save: (choice) => tauri.core.invoke('download_found', { url: item.url, choice }),
     again: () => lookUpFound(item),
@@ -758,7 +777,10 @@ function showPageMedia(list) {
   // The page's order: the main video first, ads last.
   const order = list.map((item) => shownFound.get(item.url));
   order.forEach((el, i) => el.classList.toggle('found__item--main', i === 0 && list[0].main));
-  listEl.replaceChildren(...order);
+  // Only when the list changed: putting an item back in starts its entrance again, so an unchanged list,
+  // asked for every 1.5 s, would fade in over and over.
+  const unchanged = order.length === listEl.children.length && order.every((el, i) => listEl.children[i] === el);
+  if (!unchanged) listEl.replaceChildren(...order);
   const others = order.length - 1;
   const more = foundBox.querySelector('.found__more');
   more.hidden = others < 1;
@@ -773,6 +795,60 @@ foundBox.querySelector('.found__more').addEventListener('click', () => {
 });
 
 setInterval(askPage, 1500);
+
+// ── What the page holds, from the bar ───────────────────────────────────────────────────────
+//
+// A pill in the bar names what was found on the page (or the video the page is, on YouTube and the other sites);
+// its panel lists each with its Download, over a picture of the page.
+
+const addressForm = document.getElementById('address-form');
+const mediaWrap = document.querySelector('.media');
+const mediaButton = document.getElementById('page-media');
+const mediaPanel = document.getElementById('media-panel');
+/** What the pill counted last, so it lights up only when something new is found. */
+let mediaCount = 0;
+/** What the card on show is a lookup of ("video", "post"), for the pill to name it. */
+let resultNoun = '';
+
+function openMedia(open) {
+  if (open === !mediaPanel.hidden) return;
+  mediaPanel.hidden = !open;
+  mediaButton.setAttribute('aria-expanded', String(open));
+  if (open) mediaButton.classList.remove('page-media--new');
+  showPageView();
+}
+
+function capitalised(word) {
+  return word ? word[0].toUpperCase() + word.slice(1) : '';
+}
+
+/** The pill: hidden while the page holds nothing; otherwise what it holds, lit when there is something new. */
+function showMediaButton() {
+  if (!browsing) return;
+  const card = result.childElementCount > 0;
+  const items = foundBox.querySelectorAll('.found__item');
+  const count = (card ? 1 : 0) + items.length;
+  let label = `${count} found`;
+  if (count === 1) label = card ? capitalised(resultNoun) || 'Video' : items[0].querySelector('.found__meta').textContent.split(' · ').find((f) => f !== 'Ad');
+  mediaButton.querySelector('.page-media__label').textContent = label;
+  mediaButton.setAttribute('aria-label', `On this page: ${label}`);
+  mediaButton.hidden = count === 0;
+  if (count > mediaCount && mediaPanel.hidden) mediaButton.classList.add('page-media--new');
+  if (count === 0) {
+    mediaButton.classList.remove('page-media--new');
+    openMedia(false);
+  }
+  mediaCount = count;
+}
+
+new MutationObserver(showMediaButton).observe(result, { childList: true });
+new MutationObserver(showMediaButton).observe(foundBox.querySelector('.found__list'), { childList: true });
+
+mediaButton.addEventListener('click', () => openMedia(mediaPanel.hidden));
+document.addEventListener('click', (e) => {
+  // The path as the click found it: a card's button may have replaced the card by the time this runs.
+  if (!mediaPanel.hidden && !e.composedPath().includes(mediaWrap)) openMedia(false);
+});
 
 // ── The ad blocker ──────────────────────────────────────────────────────────────────────────
 //
@@ -914,6 +990,7 @@ document.addEventListener('keydown', (e) => {
   } else if (e.key === 'Escape') {
     if (!settingsPanel.hidden) showSettings(false);
     else if (!shieldPanel.hidden) openShield(false);
+    else if (!mediaPanel.hidden) openMedia(false);
     else if (document.activeElement === address && browsing) {
       // Back to the page's own address.
       address.value = pageUrl;
