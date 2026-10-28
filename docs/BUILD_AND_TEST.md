@@ -84,7 +84,9 @@ Releases are `windows-v*` tags; the phone's stay `v*`, and stay the repository's
    `tauri.conf.json`.
 2. **A release:** set the version in `desktop/app/src-tauri/tauri.conf.json` and `desktop/Cargo.toml`, write what
    changed in `docs/releases/windows-VERSION.md`, merge, then tag main:
-   `git tag windows-v0.1.0 origin/main && git push origin windows-v0.1.0`. The Desktop workflow builds and
+   `git tag windows-v0.1.0 origin/main && git push origin windows-v0.1.0`. Without git, publish a release on
+   GitHub's website with the new tag `windows-v0.1.0` on `main` (leave *Set as the latest release* off; the
+   workflow puts it back on the phone's release if it was left on). The Desktop workflow builds and
    tours it, publishes the installer on the tag's release page, and refreshes `latest.json` on the
    `windows-latest` release, which every copy of Chaya for Windows reads at most once a day.
 3. **Signing the installer** (optional): with the secret `WINDOWS_SIGN_COMMAND` set, every build signs the
