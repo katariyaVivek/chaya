@@ -415,6 +415,27 @@ def run(tour, sites):
     except Exception as e:
         tour.failed('closed', e)
 
+    # The Downloads list narrowed, as the phone's library is: by a chip, then by words in the name.
+    try:
+        shown = "return [...document.querySelectorAll('#download-list .row')].filter(r => !r.hidden).length"
+        chips = tour.js("return [...document.querySelectorAll('#downloads-narrow .chip')].map(c => c.textContent)")
+        everything = tour.js(shown)
+        if chips:
+            tour.click('#downloads-narrow .chip')
+            time.sleep(0.5)
+            tour.shot('downloads-narrowed', chips=chips, chosen=chips[0], shown=tour.js(shown), of=everything)
+            tour.click('#downloads-narrow .chip[aria-pressed="true"]')
+        words = tour.js("return document.querySelector('#download-list .row__title')?.textContent.split(/[ .]/)[0] ?? ''")
+        if words and not tour.js("return document.getElementById('downloads-find-field').hidden"):
+            tour.js(f"const f = document.getElementById('downloads-find'); f.value = {json.dumps(words)};"
+                    " f.dispatchEvent(new Event('input')); return 1")
+            time.sleep(0.5)
+            tour.steps.append({'step': 'downloads-found', 'words': words, 'shown': tour.js(shown), 'of': everything})
+            print(f'downloads found by "{words}": {tour.js(shown)} of {everything}', flush=True)
+            tour.click('#narrow-clear')
+    except Exception as e:
+        tour.failed('downloads-narrowed', e)
+
 
 def main():
     parser = argparse.ArgumentParser()

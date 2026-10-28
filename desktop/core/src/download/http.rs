@@ -370,10 +370,10 @@ mod tests {
     async fn an_unreachable_site_is_a_network_failure() {
         let dir = tempfile::tempdir().unwrap();
         let (_tx, stop) = watch::channel(false);
-        // A port nothing listens on: bind one, then close it.
-        let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+        // Port 1: nothing listens there, and no other test can take it (binding it needs root), as a port bound
+        // and closed here could be, by a test's own server started meanwhile.
         let source = Source {
-            url: format!("http://127.0.0.1:{port}/file"),
+            url: "http://127.0.0.1:1/file".to_string(),
             headers: BTreeMap::new(),
             expected_size: None,
             ..Source::default()

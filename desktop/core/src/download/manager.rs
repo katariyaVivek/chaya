@@ -17,6 +17,8 @@ use serde::{Deserialize, Serialize};
 use tokio::runtime::Handle;
 use tokio::sync::watch;
 
+use crate::library::{site_of, Site};
+
 use super::archive::{self, Account, ArchiveProgress, ListRequest, Listed, Lister};
 use super::error::DownloadError;
 use super::http::{self, Outcome, Progress, Source};
@@ -135,6 +137,8 @@ pub struct TaskView {
     pub title: String,
     pub choice: String,
     pub kind: Kind,
+    /// The site it came from, for the list's site filter.
+    pub site: Site,
     pub file_name: String,
     pub folder: String,
     pub thumbnail: Option<String>,
@@ -167,6 +171,7 @@ impl From<&Task> for TaskView {
             title: task.title.clone(),
             choice: task.choice.clone(),
             kind: task.kind,
+            site: site_of(&task.page_url, &task.source.url),
             file_name: task.path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
             folder: task.path.parent().map(|f| f.display().to_string()).unwrap_or_default(),
             thumbnail: task.thumbnail.clone(),

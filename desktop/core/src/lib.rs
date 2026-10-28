@@ -6,6 +6,7 @@ pub mod download;
 pub mod engine;
 pub mod formats;
 pub mod found;
+pub mod library;
 pub mod links;
 pub mod lookup;
 pub mod media;

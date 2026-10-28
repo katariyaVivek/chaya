@@ -175,7 +175,7 @@ pub fn match_media(input: &str) -> Option<MediaLink> {
 
 /// pinterest.com, its country sites (pinterest.co.uk, de.pinterest.com, pinterest.com.au...), and pin.it short
 /// links: the phone's `(?:[a-z0-9-]+\.)*pinterest\.(?:com|[a-z]{2}|co\.[a-z]{2}|com\.[a-z]{2})|pin\.it`.
-fn is_pinterest_host(host: &str) -> bool {
+pub(crate) fn is_pinterest_host(host: &str) -> bool {
     if host == "pin.it" {
         return true;
     }

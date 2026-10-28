@@ -407,6 +407,7 @@ function taskChanged(task) {
   const known = tasks.get(task.id);
   tasks.set(task.id, { ...task, speed: known?.speed ?? 0 });
   renderRow(task.id);
+  showNarrowing();
   countRunning();
   for (const entry of buttons) {
     if (!entry.button.el.isConnected) buttons.delete(entry);
@@ -425,6 +426,7 @@ function taskProgress({ id, done, total, bytesPerSecond }) {
 function taskRemoved(id) {
   tasks.delete(id);
   downloadList.querySelector(`[data-id="${id}"]`)?.remove();
+  showNarrowing();
   showEmpty();
   countRunning();
   // A button whose downloads were all cancelled goes back to its pill; a saved one stays saved, as the file does.
@@ -503,6 +505,7 @@ function renderRow(id) {
   const closeLabel = task.state === 'completed' ? 'Remove from the list (the file stays)' : 'Cancel and delete what arrived';
   close.setAttribute('aria-label', closeLabel);
   close.title = closeLabel;
+  row.hidden = !keeps(task);
   showEmpty();
 }
 
@@ -575,6 +578,81 @@ function timeLeft(seconds) {
 function showEmpty() {
   downloadsEmpty.hidden = tasks.size > 0;
 }
+
+// ── Narrowing the list ──────────────────────────────────────────────────────────────────────
+//
+// As the phone's library: a kind, a site (`core::library`) and words in the name, each optional, all together.
+
+const KINDS = [['video', 'Videos'], ['picture', 'Pictures'], ['audio', 'Audio'], ['archive', 'ZIPs']];
+const SITES = [['youtube', 'YouTube'], ['instagram', 'Instagram'], ['tiktok', 'TikTok'], ['x', 'X'], ['pinterest', 'Pinterest'], ['other', 'Other']];
+const narrowing = { kind: null, site: null, words: '' };
+const narrowEl = document.getElementById('downloads-narrow');
+const findField = document.getElementById('downloads-find-field');
+const findInput = document.getElementById('downloads-find');
+const downloadsNone = document.getElementById('downloads-none');
+
+function keeps(task) {
+  if (narrowing.kind && task.kind !== narrowing.kind) return false;
+  if (narrowing.site && task.site !== narrowing.site) return false;
+  const words = narrowing.words.trim().toLowerCase();
+  return !words || task.title.toLowerCase().includes(words) || task.fileName.toLowerCase().includes(words);
+}
+
+/** One group of chips: only the values the downloads have (and the one chosen), and only when that is two or more. */
+function chips(group, field, options) {
+  const present = new Set([...tasks.values()].map((t) => t[field]));
+  const shown = options.filter(([value]) => present.has(value) || narrowing[field] === value);
+  group.hidden = shown.length < 2;
+  const key = shown.map(([value]) => value + (narrowing[field] === value ? '*' : '')).join(' ');
+  if (group.dataset.key === key) return;
+  group.dataset.key = key;
+  group.replaceChildren(
+    ...shown.map(([value, label]) => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'chip pressable';
+      chip.textContent = label;
+      chip.setAttribute('aria-pressed', String(narrowing[field] === value));
+      // Pressed again, it lets go.
+      chip.addEventListener('click', () => narrow({ [field]: narrowing[field] === value ? null : value }));
+      return chip;
+    }),
+  );
+}
+
+function showNarrowing() {
+  const kinds = document.getElementById('narrow-kind');
+  const sites = document.getElementById('narrow-site');
+  chips(kinds, 'kind', KINDS);
+  chips(sites, 'site', SITES);
+  narrowEl.querySelector('.narrow__rule').hidden = kinds.hidden || sites.hidden;
+  narrowEl.hidden = kinds.hidden && sites.hidden;
+  findField.hidden = tasks.size < 2 && !narrowing.words;
+  const kept = [...tasks.values()].filter(keeps).length;
+  downloadsNone.hidden = tasks.size === 0 || kept > 0;
+}
+
+function narrow(change) {
+  Object.assign(narrowing, change);
+  for (const row of downloadList.children) {
+    const task = tasks.get(Number(row.dataset.id));
+    row.hidden = !task || !keeps(task);
+  }
+  showNarrowing();
+}
+
+findInput.addEventListener('input', () => narrow({ words: findInput.value }));
+findInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && findInput.value) {
+    e.stopPropagation();
+    findInput.value = '';
+    narrow({ words: '' });
+  }
+});
+document.getElementById('narrow-clear').addEventListener('click', () => {
+  findInput.value = '';
+  narrow({ kind: null, site: null, words: '' });
+});
 
 tauri?.event.listen('download', ({ payload }) => {
   if (payload.type === 'changed') taskChanged(payload.task);
