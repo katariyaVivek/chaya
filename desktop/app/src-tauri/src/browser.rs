@@ -43,7 +43,7 @@ use crate::{Downloads, Lookups};
 pub const MAX_TABS: usize = 10;
 
 /// Where the page goes in the window, in the window's own (logical) pixels.
-#[derive(Clone, Copy, Debug, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Deserialize)]
 pub struct Bounds {
     x: f64,
     y: f64,
@@ -128,6 +128,16 @@ struct TabsInner {
     bounds: Option<Bounds>,
     /// Where the tabs are kept for the next run.
     store: Option<PathBuf>,
+    fullscreen: Option<Fullscreen>,
+}
+
+/// A page showing something fullscreen (a video's own fullscreen button): the window is fullscreen, and that tab's
+/// page covers all of it, until the page leaves fullscreen (Esc, or its own button) or another tab or the home is
+/// shown.
+struct Fullscreen {
+    tab: u64,
+    /// Whether the window was fullscreen already, so leaving gives it back as it was.
+    window_was: bool,
 }
 
 /// A tab as it is kept for the next run: where it was, and what it was called.
@@ -150,7 +160,7 @@ impl Tabs {
             .map(|(i, k)| Tab::new(i as u64 + 1, k.url, k.title, blocker))
             .collect();
         let next = tabs.len() as u64 + 1;
-        Tabs(Mutex::new(TabsInner { tabs, active: None, next, bounds: None, store: Some(store) }))
+        Tabs(Mutex::new(TabsInner { tabs, active: None, next, bounds: None, store: Some(store), fullscreen: None }))
     }
 }
 
@@ -356,6 +366,9 @@ fn new_tab_at(app: &AppHandle, url: Url) -> Result<u64, String> {
 
 /// Shows the tab `id` in the page's place, hiding the one shown before; its page is made the first time.
 fn show_tab(app: &AppHandle, id: u64) -> Result<(), String> {
+    if tabs(app).fullscreen.as_ref().is_some_and(|f| f.tab != id) {
+        leave_fullscreen(app);
+    }
     let (previous, opened, url, bounds) = {
         let mut inner = tabs(app);
         let previous = inner.active.replace(id).filter(|p| *p != id);
@@ -448,7 +461,7 @@ fn make_page(app: &AppHandle, id: u64, url: &str, bounds: Option<Bounds>) -> Res
         .add_child(builder, position(bounds), size(bounds))
         .map_err(|_| "The page couldn't be opened.".to_string())?;
     let _ = ads::block_requests(&page, blocker);
-    let _ = page_input::attach(&page, app.clone());
+    let _ = page_input::attach(&page, app.clone(), id);
     page.navigate(url).map_err(|_| "The page couldn't be opened.".to_string())?;
     tauri::async_runtime::spawn(learn_agent(app.clone()));
     tauri::async_runtime::spawn(ads::hide_ads(app.clone(), hide_key, id));
@@ -465,6 +478,9 @@ pub fn switch_tab(id: u64, bounds: Bounds, app: AppHandle) -> Result<(), String>
 /// Closes the tab `id`. Closing the tab shown shows the one beside it, or the window's home when it was the last.
 #[tauri::command]
 pub fn close_tab(id: u64, app: AppHandle) -> Result<(), String> {
+    if tabs(&app).fullscreen.as_ref().is_some_and(|f| f.tab == id) {
+        leave_fullscreen(&app);
+    }
     let next = {
         let mut inner = tabs(&app);
         let Some(at) = inner.tabs.iter().position(|t| t.id == id) else { return Ok(()) };
@@ -491,6 +507,7 @@ pub fn close_tab(id: u64, app: AppHandle) -> Result<(), String> {
 /// The window's own home: every tab stays open behind it, hidden.
 #[tauri::command]
 pub fn go_home(app: AppHandle) {
+    leave_fullscreen(&app);
     let previous = tabs(&app).active.take();
     if let Some(page) = previous.and_then(|id| app.get_webview(&label(id))) {
         let _ = page.hide();
@@ -610,14 +627,80 @@ fn page_download(page: Webview, event: DownloadEvent<'_>) -> bool {
 /// Moves the pages to where the window now leaves room for them: every open tab's, so a tab shown later is in place.
 #[tauri::command]
 pub fn place_page(bounds: Bounds, app: AppHandle) {
-    let open: Vec<u64> = {
+    let (open, fullscreen) = {
         let mut inner = tabs(&app);
         inner.bounds = Some(bounds);
-        inner.tabs.iter().filter(|t| t.opened).map(|t| t.id).collect()
+        let open: Vec<u64> = inner.tabs.iter().filter(|t| t.opened).map(|t| t.id).collect();
+        (open, inner.fullscreen.as_ref().map(|f| f.tab))
     };
-    for page in open.into_iter().filter_map(|id| app.get_webview(&label(id))) {
+    // The window's layout changes as it goes fullscreen; the fullscreen page keeps covering all of it.
+    let window = window_bounds(&app);
+    for id in open {
+        if let Some(page) = app.get_webview(&label(id)) {
+            let bounds = page_bounds(id, fullscreen, bounds, window);
+            let _ = page.set_position(position(bounds));
+            let _ = page.set_size(size(bounds));
+        }
+    }
+}
+
+/// Where the tab `id`'s page goes: where the window leaves room for it (`bounds`), or, while it shows something
+/// fullscreen, the whole `window`.
+fn page_bounds(id: u64, fullscreen: Option<u64>, bounds: Bounds, window: Option<Bounds>) -> Bounds {
+    match window {
+        Some(window) if fullscreen == Some(id) => window,
+        _ => bounds,
+    }
+}
+
+/// The window's inside, from its top left corner, in the logical points the page is placed in.
+fn window_bounds(app: &AppHandle) -> Option<Bounds> {
+    let window = app.get_window("main")?;
+    let inner = window.inner_size().ok()?.to_logical::<f64>(window.scale_factor().ok()?);
+    Some(Bounds { x: 0.0, y: 0.0, width: inner.width, height: inner.height })
+}
+
+/// The tab `tab`'s page shows something fullscreen (`on`), or no longer does. Only the tab shown may take the window.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn page_fullscreen(app: &AppHandle, tab: u64, on: bool) {
+    if !on {
+        if tabs(app).fullscreen.as_ref().is_some_and(|f| f.tab == tab) {
+            leave_fullscreen(app);
+        }
+        return;
+    }
+    let Some(window) = app.get_window("main") else { return };
+    if !is_active(app, tab) {
+        return;
+    }
+    let window_was = window.is_fullscreen().unwrap_or(false);
+    tabs(app).fullscreen.get_or_insert(Fullscreen { tab, window_was });
+    let _ = window.set_fullscreen(true);
+    if let (Some(page), Some(bounds)) = (app.get_webview(&label(tab)), window_bounds(app)) {
         let _ = page.set_position(position(bounds));
         let _ = page.set_size(size(bounds));
+    }
+}
+
+/// The window and the page as they were before a page went fullscreen; the page is asked to leave fullscreen too,
+/// for when it is shown again.
+fn leave_fullscreen(app: &AppHandle) {
+    let (left, bounds) = {
+        let mut inner = tabs(app);
+        (inner.fullscreen.take(), inner.bounds)
+    };
+    let Some(left) = left else { return };
+    if let Some(window) = app.get_window("main") {
+        if !left.window_was {
+            let _ = window.set_fullscreen(false);
+        }
+    }
+    if let Some(page) = app.get_webview(&label(left.tab)) {
+        let _ = page.eval("document.fullscreenElement && document.exitFullscreen()");
+        if let Some(bounds) = bounds {
+            let _ = page.set_position(position(bounds));
+            let _ = page.set_size(size(bounds));
+        }
     }
 }
 
@@ -729,21 +812,42 @@ fn tab_key(key: u32, ctrl: bool, shift: bool, alt: bool) -> Option<String> {
 #[cfg(windows)]
 mod page_input {
     use tauri::{AppHandle, Emitter, Manager};
-    use webview2_com::AcceleratorKeyPressedEventHandler;
     use webview2_com::Microsoft::Web::WebView2::Win32::*;
+    use webview2_com::{AcceleratorKeyPressedEventHandler, ContainsFullScreenElementChangedEventHandler};
     use windows::Win32::UI::Input::KeyboardAndMouse::{GetKeyState, VIRTUAL_KEY, VK_CONTROL, VK_MENU, VK_SHIFT};
     use windows_core::Interface;
 
-    pub fn attach(page: &tauri::Webview, app: AppHandle) -> tauri::Result<()> {
+    pub fn attach(page: &tauri::Webview, app: AppHandle, tab: u64) -> tauri::Result<()> {
         page.with_webview(move |webview| {
             let controller = webview.controller();
             if let Err(e) = no_drag(&controller) {
                 eprintln!("Chaya: a page could still drag the window: {e}");
             }
+            if let Err(e) = watch_fullscreen(&controller, app.clone(), tab) {
+                eprintln!("Chaya: a page's fullscreen could not be followed: {e}");
+            }
             if let Err(e) = forward_keys(&controller, app) {
                 eprintln!("Chaya: the page's tab keys could not be set up: {e}");
             }
         })
+    }
+
+    /// A page's fullscreen (a video's own button) takes the whole window, as in any browser; left to WebView2, it
+    /// would fill only the page's place under the bar.
+    fn watch_fullscreen(controller: &ICoreWebView2Controller, app: AppHandle, tab: u64) -> windows_core::Result<()> {
+        let handler = ContainsFullScreenElementChangedEventHandler::create(Box::new(move |sender, _| {
+            let Some(webview) = sender else { return Ok(()) };
+            let mut on = windows_core::BOOL::default();
+            // SAFETY: WebView2 calls this on the window's thread with the page's live webview.
+            unsafe { webview.ContainsFullScreenElement(&mut on)? };
+            let (app, on) = (app.clone(), on.as_bool());
+            // Off the window's thread: the window's size is asked for, which that thread answers.
+            tauri::async_runtime::spawn(async move { super::page_fullscreen(&app, tab, on) });
+            Ok(())
+        }));
+        let mut token = 0i64;
+        // SAFETY: called on the window's thread (`with_webview`), on the page's own live webview.
+        unsafe { controller.CoreWebView2()?.add_ContainsFullScreenElementChanged(&handler, &mut token) }
     }
 
     /// Takes effect from the page's next navigation: the page is made on about:blank and sent on after this.
@@ -798,7 +902,7 @@ mod page_input {
 #[cfg(not(windows))]
 mod page_input {
     /// WebKitGTK passes the keys a page leaves alone on to the window, which has its own, and has no `app-region`.
-    pub fn attach(_page: &tauri::Webview, _app: tauri::AppHandle) -> tauri::Result<()> {
+    pub fn attach(_page: &tauri::Webview, _app: tauri::AppHandle, _tab: u64) -> tauri::Result<()> {
         Ok(())
     }
 }
@@ -970,6 +1074,16 @@ mod tests {
         assert_eq!(a.len(), 32);
         assert!(a.chars().all(|c| c.is_ascii_hexdigit()));
         assert_ne!(a, b);
+    }
+
+    #[test]
+    fn a_page_showing_something_fullscreen_covers_the_window_and_the_others_keep_their_place() {
+        let bar = Bounds { x: 0.0, y: 99.0, width: 1200.0, height: 700.0 };
+        let window = Bounds { x: 0.0, y: 0.0, width: 1920.0, height: 1080.0 };
+        assert_eq!(page_bounds(2, Some(2), bar, Some(window)), window);
+        assert_eq!(page_bounds(1, Some(2), bar, Some(window)), bar, "another tab, hidden behind it");
+        assert_eq!(page_bounds(2, None, bar, Some(window)), bar, "left fullscreen");
+        assert_eq!(page_bounds(2, Some(2), bar, None), bar, "the window's size unknown");
     }
 
     #[test]
