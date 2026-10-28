@@ -119,6 +119,11 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
   change of state; downloads running when the app closed come back paused.
 - **Retry** looks the link up again first, because the sites' addresses expire, and carries on from
   what arrived. Cancel deletes what arrived; removing a finished download from the list keeps the file.
+- **The list is in sections**, as the phone's: *In progress* (newest started first), *Needs attention* (what
+  failed), then what was saved, by day: *Today*, *Yesterday*, *26 Oct* (`core::library::sections`, the phone's
+  `groupDownloads`). A download keeps when it was saved or failed (`ended` in `downloads.json`; those kept before
+  count from when they were added); the window passes its time zone, so a day is the person's own, and asks
+  again as the day turns.
 - **The list narrows** as the phone's library does: by kind (Videos, Pictures, Audio, ZIPs), by the site it came
   from (`core::library::site_of`, the phone's `siteOf`, from the page it was found on or the file's own address),
   and by words in its name, all three together. A group of chips shows only once the downloads span two or more

@@ -177,6 +177,9 @@ body.browsing .settings__panel { background: var(--bg); }
 .downloads { display: grid; gap: var(--space-2); margin-top: var(--space-3); }
 .list { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
 .list:empty { display: none; }
+/* A section's heading: what runs, what needs attention, the day things were saved on */
+.list__head { margin-top: var(--space-1); color: var(--muted); font: 500 var(--text-sm) / var(--leading-sm) var(--font-ui); }
+.list__head:first-child { margin-top: 0; }
 
 /*
  * Narrowing the list, as the phone's library does: by kind, by site, by words in the name. Each group of chips
