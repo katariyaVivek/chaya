@@ -143,6 +143,19 @@ jobs:
           gradle-version: '8.14.3'
           cache-read-only: false
 
+      # The tag names the version the phone shows (versionName), so a release is never labelled with another one.
+      - name: Check the tag names the app's version
+        run: |
+          version=$(sed -n 's/^ *versionName = "\(.*\)"$/\1/p' app/build.gradle.kts)
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match versionName $version in app/build.gradle.kts."
+            exit 1
+          fi
+          # What changed, written for the person, when there is a file for this version; GitHub's list of
+          # pull requests otherwise.
+          notes="docs/releases/android-$version.md"
+          if [ -f "$notes" ]; then echo "NOTES=$notes" >> "$GITHUB_ENV"; fi
+
       - name: Decode keystore
         run: |
           if [ -z "${{ secrets.KEYSTORE_BASE64 }}" ]; then
@@ -162,11 +175,15 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: gradle assembleRelease --stacktrace
 
+      # The release may already exist: GitHub's website makes a tag only by publishing a release with it. Then
+      # the APK and the notes go onto that release. The phone's release is always the repository's latest.
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: app/build/outputs/apk/release/app-release.apk
-          generate_release_notes: true
+          body_path: ${{ env.NOTES }}
+          generate_release_notes: ${{ env.NOTES == '' }}
+          make_latest: true
 
   # Instrumented Compose tests on an emulator (Phase 1.4). Emulator boot is
   # slow (2-5 min), so this never blocks PRs: manual dispatch only (there is
