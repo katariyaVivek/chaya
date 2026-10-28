@@ -5,8 +5,10 @@ Python with this module instead, and reads one line of JSON from what it prints:
 
     python -I run.py extract URL --cache DIR [--cookies FILE] [--js-runtime QJS] [--fragments] [--referer PAGE]
     python -I run.py selftest [--js-runtime QJS]
+    python -I run.py profile SITE USERNAME --cache DIR --out LIST --stop FILE [--cookies FILE]
 
-`extract` prints what `extract.extract` returns. `selftest` prints `selftest.status`, plus what yt-dlp makes
+`extract` prints what `extract.extract` returns. `profile` lists an account's pictures and videos into LIST for a ZIP
+(`profiles.list_profile`, one JSON object a line) and prints its summary; creating FILE stops it. `selftest` prints `selftest.status`, plus what yt-dlp makes
 of the QuickJS program when one is given. Both exit 0 with an answer; any other exit, or a last line that is
 not JSON, means the engine itself is broken.
 """
@@ -32,6 +34,14 @@ def main(argv=None):
                                  help="list each DASH format's pieces, for an app that fetches them itself")
     extract_command.add_argument('--referer', help='the page a stream was found on, sent as its referrer')
 
+    profile_command = commands.add_parser('profile', help="List an account's posts for a ZIP.")
+    profile_command.add_argument('site', choices=('instagram', 'twitter'))
+    profile_command.add_argument('username')
+    profile_command.add_argument('--cache', required=True, help="gallery-dl's cache folder")
+    profile_command.add_argument('--out', required=True, help='the list, written as LIST.partial until complete')
+    profile_command.add_argument('--stop', required=True, help='a file whose appearance stops the listing')
+    profile_command.add_argument('--cookies', help='a Netscape cookie file, only when the person chose a sign-in')
+
     selftest_command = commands.add_parser('selftest', help='Check the engine without using the network.')
     selftest_command.add_argument('--js-runtime', help='a QuickJS program to check as well')
 
@@ -41,6 +51,10 @@ def main(argv=None):
 
         print(extract(args.url, args.cache, args.cookies, js_runtime=args.js_runtime, fragments=args.fragments,
                       referer=args.referer))
+    elif args.command == 'profile':
+        from .profiles import list_profile
+
+        print(list_profile(args.site, args.username, args.cache, args.cookies, args.out, args.stop))
     else:
         print(selftest(args.js_runtime))
     sys.stdout.flush()

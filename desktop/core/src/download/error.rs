@@ -3,6 +3,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::links::Platform;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "status", rename_all = "snake_case")]
 pub enum DownloadError {
@@ -24,6 +26,18 @@ pub enum DownloadError {
     UnreadableStream,
     /// A stream protected with DRM, which only the site's own player can open.
     Protected,
+    /// An account the site shows only to signed-in people, listed without the person's sign-in.
+    SignInNeeded(Platform),
+    /// An account listed with the person's sign-in, which the site no longer accepts.
+    SignInAgain(Platform),
+    /// A private account the person does not follow.
+    PrivateAccount,
+    /// An account that does not exist, or was removed.
+    NoSuchAccount,
+    /// An account with nothing posted that Chaya can save.
+    NothingToSave,
+    /// An account that could not be listed, for no reason the engine could tell.
+    CouldNotList,
 }
 
 impl DownloadError {
@@ -44,6 +58,20 @@ impl DownloadError {
             DownloadError::CouldNotConvert => "Chaya couldn't save the stream as a file.".into(),
             DownloadError::UnreadableStream => "Chaya couldn't read this stream.".into(),
             DownloadError::Protected => "This stream is protected, so it can't be saved.".into(),
+            DownloadError::SignInNeeded(site) => {
+                let site = site.display_name();
+                format!(
+                    "{site} shows this account only to signed-in people. Sign in to {site} in Chaya's browser, then save \
+                     it with your sign-in."
+                )
+            }
+            DownloadError::SignInAgain(site) => {
+                format!("{} wants you to sign in again in Chaya's browser.", site.display_name())
+            }
+            DownloadError::PrivateAccount => "This account is private, and you don't follow it.".into(),
+            DownloadError::NoSuchAccount => "This account doesn't exist, or was removed.".into(),
+            DownloadError::NothingToSave => "There was nothing to save.".into(),
+            DownloadError::CouldNotList => "Chaya couldn't list this account.".into(),
         }
     }
 
@@ -51,7 +79,14 @@ impl DownloadError {
     pub fn retryable(self) -> bool {
         !matches!(
             self,
-            DownloadError::StorageFull | DownloadError::CantWrite | DownloadError::Http(404) | DownloadError::Protected
+            DownloadError::StorageFull
+                | DownloadError::CantWrite
+                | DownloadError::Http(404)
+                | DownloadError::Protected
+                | DownloadError::SignInNeeded(_)
+                | DownloadError::PrivateAccount
+                | DownloadError::NoSuchAccount
+                | DownloadError::NothingToSave
         )
     }
 
@@ -90,6 +125,9 @@ mod tests {
         assert!(!DownloadError::StorageFull.retryable());
         assert!(DownloadError::Network.retryable());
         assert!(!DownloadError::Protected.retryable(), "a protected stream stays protected");
+        assert!(!DownloadError::SignInNeeded(Platform::Instagram).retryable(), "the same listing finds the same");
+        assert!(DownloadError::SignInAgain(Platform::Instagram).retryable(), "once signed in again, it lists");
+        assert!(!DownloadError::PrivateAccount.retryable() && DownloadError::CouldNotList.retryable());
     }
 
     #[test]
@@ -115,6 +153,12 @@ mod tests {
             DownloadError::CouldNotConvert,
             DownloadError::UnreadableStream,
             DownloadError::Protected,
+            DownloadError::SignInNeeded(Platform::Instagram),
+            DownloadError::SignInAgain(Platform::X),
+            DownloadError::PrivateAccount,
+            DownloadError::NoSuchAccount,
+            DownloadError::NothingToSave,
+            DownloadError::CouldNotList,
         ] {
             let message = error.message();
             assert!(message.ends_with('.') && !message.contains('—'), "{error:?}: {message}");

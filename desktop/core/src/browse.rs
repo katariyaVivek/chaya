@@ -102,6 +102,7 @@ pub fn page_download(url: &str, page_url: &str, page_title: &str, folder: &Path,
             Kind::Video => "Video",
             Kind::Audio => "Audio",
             Kind::Picture => "Picture",
+            Kind::Archive => "Archive",
         }
         .to_string(),
         kind,

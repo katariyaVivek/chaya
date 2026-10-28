@@ -75,7 +75,11 @@ The six-part plan after v0.4.0 has shipped (#34 to #39); it is in
   from a page carries the browser's sign-in, as on the phone, so content behind the person's own login
   saves (#60). A link that needs a sign-in offers *Sign in to* the site, then *Use my sign-in*, as on the
   phone (#61). The first test on a Windows PC brought fixes: a cancelled download's button resets, and
-  the browser's page runs edge to edge under the bar (#62). Lookups, downloads and the browser have not run on a real Windows PC yet; CI opens a real
+  the browser's page runs edge to edge under the bar (#62). CI tours the installed app on Windows and keeps
+  pictures of each step (#64); panels lie over a picture of the page, and F5 reloads it (#65); the page never
+  moves, the bar is one row, and the window opens big and where it was left (#66); ads inside frames from
+  other sites are blocked, and Home replaces the bar's close (#67). An Instagram or X account saves as one
+  ZIP, as on the phone (#68). Lookups, downloads and the browser have not run on a real Windows PC yet; CI opens a real
   WebView2 page to check the blocking.
 
 0. **First: check #48 on the phone.** #47's name search kept its first look for 3 seconds, so a page

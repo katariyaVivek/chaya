@@ -241,3 +241,41 @@ jobs:
           name: chaya-windows-tour
           path: tour
           if-no-files-found: warn
+
+  # The newest build of main at one address that never changes, for the owner to install or update from without
+  # digging through runs or unzipping: the `windows-preview` pre-release, its installer replaced after every merge
+  # that changes the Windows app, once the tour has seen the app start.
+  # https://github.com/<owner>/<repo>/releases/download/windows-preview/Chaya-Windows-preview-setup.exe
+  # A pre-release is never the repository's "latest", so the phone's releases (v* tags) are untouched.
+  preview:
+    name: Windows preview
+    needs: [windows, tour]
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Get the installer
+        uses: actions/download-artifact@v4
+        with:
+          name: chaya-windows-installer
+          path: installer
+
+      - name: Publish it as the preview
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          setup=$(ls installer/*.exe | head -n 1)
+          cp "$setup" Chaya-Windows-preview-setup.exe
+          title="Chaya for Windows (preview)"
+          notes="The newest Chaya for Windows, built from ${GITHUB_SHA::7} on main on $(date -u '+%Y-%m-%d at %H:%M UTC').
+          It is replaced after every merge that changes the Windows app; it is not a release.
+          Run Chaya-Windows-preview-setup.exe to install, or to update the Chaya you have: your downloads, settings and sign-ins stay."
+          if gh release view windows-preview >/dev/null 2>&1; then
+            gh release edit windows-preview --prerelease --title "$title" --notes "$notes"
+          else
+            gh release create windows-preview --prerelease --latest=false --target "$GITHUB_SHA" --title "$title" --notes "$notes"
+          fi
+          gh release upload windows-preview Chaya-Windows-preview-setup.exe --clobber

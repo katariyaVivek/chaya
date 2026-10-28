@@ -79,11 +79,53 @@ function hostOf(url) {
 
 /** A video or post is looked up; anything else (a page, an account, words to search for) opens in the page. */
 function show(link, text) {
-  if (link.kind === 'media') {
-    lookUp(link);
+  if (link.kind === 'media' || link.kind === 'account') {
+    if (link.kind === 'media') lookUp(link);
+    else showAccount(link);
     // While a page is open the card is in the bar's panel, opened since the person asked for it.
     if (browsing) openMedia(true);
   } else openPage(text);
+}
+
+/**
+ * An Instagram or X account: everything it has posted can be saved as one ZIP, as on the phone. With the person's
+ * sign-in only when they choose it; without one, the sites show a visitor little or nothing.
+ */
+async function showAccount(link) {
+  const ask = ++looking;
+  resultNoun = 'account';
+  const card = template.content.firstElementChild.cloneNode(true);
+  card.classList.add('card--account');
+  card.querySelector('use').setAttribute('href', '#i-zip');
+  card.querySelector('.card__title').textContent = `@${link.username}`;
+  card.querySelector('.card__url').textContent = `${link.site} account`;
+  card.querySelector('.card__note').textContent =
+    `Save every photo and video @${link.username} has posted, as one ZIP in your Downloads.`;
+  const state = document.createElement('div');
+  state.className = 'card__state';
+  card.querySelector('.card__body').append(state);
+  result.replaceChildren(card);
+
+  const signedIn = await tauri.core.invoke('account_signed_in', { url: link.url }).catch(() => false);
+  if (ask !== looking) return;
+  const save = (useSignIn) => tauri.core.invoke('save_account', { url: link.url, useSignIn });
+  const actions = document.createElement('div');
+  actions.className = 'card__actions';
+  let note;
+  if (signedIn) {
+    actions.append(downloadButton(() => save(true), 'Save all posts with my sign-in', state));
+    actions.append(pill('Try without signing in', () => save(false)));
+    note = `Your sign-in lets ${link.site} show everything you can see there. Sites can limit accounts that download ` +
+      "a lot, so Chaya goes at the site's own pace; a big account takes a while.";
+  } else {
+    actions.append(downloadButton(() => save(false), 'Try without signing in', state));
+    actions.append(pill(`Sign in to ${link.site} first`, () => openPage(link.url, true)));
+    note = link.site === 'X'
+      ? "X shows an account's posts only to signed-in people, so without a sign-in this usually finds nothing. Sign in, then come back to this account."
+      : `Without a sign-in, ${link.site} shows a visitor a few recent posts at most. Sign in, then come back to this account to save all of them.`;
+  }
+  if (!browsing) actions.append(pill('Open the page', () => openPage(link.url)));
+  state.replaceChildren(actions, paragraph(note, 'card__note'));
 }
 
 /** A card saying why `text` could not be opened. */
@@ -317,9 +359,12 @@ function follow(entry) {
     // Started again from the list (Try again) while the button had gone back to its pill.
     if (button.state === 'idle') button.send('start');
     button.send('resume');
+    const archive = mine.length === 1 ? mine[0].archive : null;
     const total = mine.reduce((sum, t) => sum + (t.total ?? 0), 0);
     const done = mine.reduce((sum, t) => sum + t.done, 0);
-    if (total > 0) button.setProgress(done / total);
+    // An account's ZIP counts in files: its size is not known until the end.
+    if (archive) button.setProgress(archive.found ? archive.saved / archive.found : 0);
+    else if (total > 0) button.setProgress(done / total);
   }
   following = false;
 }
@@ -370,7 +415,7 @@ function countRunning() {
   badge.hidden = running === 0;
 }
 
-const ROW_ICON = { video: 'i-video', audio: 'i-audio', picture: 'i-post' };
+const ROW_ICON = { video: 'i-video', audio: 'i-audio', picture: 'i-post', archive: 'i-zip' };
 
 function renderRow(id) {
   const task = tasks.get(id);
@@ -400,7 +445,8 @@ function renderRow(id) {
   row.dataset.state = task.state;
   row.querySelector('.row__title').textContent = task.fileName;
   row.querySelector('.row__meta').textContent = metaOf(task);
-  const percent = task.total ? Math.min(99, Math.floor((task.done / task.total) * 100)) : null;
+  const share = task.archive ? (task.archive.found ? task.archive.saved / task.archive.found : null) : task.total ? task.done / task.total : null;
+  const percent = share === null ? null : Math.min(99, Math.floor(share * 100));
   row.querySelector('.row__pct').textContent =
     (task.state === 'downloading' || task.state === 'paused') && percent !== null ? `${percent}%` : '';
   row.querySelector('.row__bar > span').style.setProperty('--p', String(percent ?? 0));
@@ -443,6 +489,17 @@ function metaOf(task) {
     case 'queued':
       return 'Waiting for another download to finish';
     case 'downloading': {
+      // An account's ZIP: first its posts are found, then saved one by one, then packed.
+      if (task.archive?.listing) {
+        return task.archive.found ? `Finding posts · ${count(task.archive.found, 'file')} so far` : 'Finding posts';
+      }
+      if (task.archive) {
+        const { found, saved } = task.archive;
+        if (saved >= found) return 'Making the ZIP';
+        const parts = [`${saved} of ${count(found, 'file')}`, fileSize(task.done)];
+        if (task.speed > 0) parts.push(`${fileSize(task.speed)}/s`);
+        return parts.join(' · ');
+      }
       if (task.step === 'joining') return 'Joining picture and sound';
       // A stream arrives as pieces, then becomes one file.
       if (task.step === 'saving') return task.kind === 'audio' ? 'Saving as M4A' : 'Saving as MP4';
@@ -730,6 +787,7 @@ async function followPage(url) {
     const link = await tauri.core.invoke('recognise_link', { text: url });
     if (url !== pageLookedAt || !browsing) return;
     if (link.kind === 'media') lookUp(link);
+    else if (link.kind === 'account') showAccount(link);
     else forget();
   } catch {
     // Not recognised this time; the next address is.

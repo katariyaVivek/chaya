@@ -1,5 +1,9 @@
 # Chaya for Windows
 
+**Try the newest build:** [Chaya-Windows-preview-setup.exe](https://github.com/katariyaVivek/chaya/releases/download/windows-preview/Chaya-Windows-preview-setup.exe),
+replaced after every merge to main that changes the app. Run it to install, or to update the Chaya you have;
+downloads, settings and sign-ins stay. A pull request's own build is its CI run's `chaya-windows-installer`.
+
 The desktop version of Chaya, built with [Tauri 2](https://v2.tauri.app/). The window is web content
 drawn with the design system in [`design/`](design/README.md), shown by Windows' own WebView2
 (Chromium). The work is done in Rust.
@@ -12,8 +16,9 @@ can't be). Each choice downloads into the Downloads folder, with pause, resume, 
 the Downloads list keeps track across restarts. Qualities whose picture and sound come apart (most of
 YouTube's) are fetched as two files and joined into one MP4 by a cut-down ffmpeg the app carries, and
 YouTube's files come in pieces, three at a time. Qualities that come as streams, HLS (X's, a plain `.m3u8`
-link) or DASH (Vimeo's, Reddit's), are fetched piece by piece and saved as an MP4. Anything else typed in
-the address bar (a page, a site, an account, words to search for) opens in the built-in browser, and a
+link) or DASH (Vimeo's, Reddit's), are fetched piece by piece and saved as an MP4. An Instagram or X account
+is saved whole, as one ZIP of everything it has posted, as on the phone. Anything else typed in
+the address bar (a page, a site, words to search for) opens in the built-in browser, and a
 video, sound or picture a page downloads is saved in the Downloads list. What a page's players load is
 found and named in a pill in the bar; its panel lists them, the main video first, each with a Download button
 ([`../docs/ROADMAP.md`](../docs/ROADMAP.md)).
@@ -133,12 +138,23 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
   offered: MP4 must be told that picture's settings, which only a decoder could read, and the app's
   ffmpeg has none for pictures. The card says some qualities can't be saved yet when a link has some the
   app cannot save.
+- **An account as one ZIP** (`download::archive`), as on the phone: an Instagram or X account's card offers
+  *Save all posts with my sign-in* when the browser holds one, and *Try without signing in*. The bundled
+  engine lists the account (`chaya_engine profile`, gallery-dl, at the site's pace) into
+  "name.zip.files/list.jsonl", one file a line; the row counts what it has found so far. Each file is then
+  fetched with the headers gallery-dl names for it (never the browser's cookies) into that folder, then
+  everything is packed as it is (stored, ZIP64 for the very large) into the ZIP, with `not-saved.txt` naming
+  any file the site no longer had or would not send. A file is asked for again after 3 s, 15 s and a
+  minute; a connection or site still failing after that stops the ZIP for Retry, and a file that keeps
+  failing on its own is left out. What is done is read from the folder, so a pause (which asks the listing
+  to stop at its next file), a closed app and Retry carry on from there. A private account the person does
+  not follow, an account that is gone, or one a site shows only to signed-in people fails saying so.
 
 ## The built-in browser
 
-- Typing a page's address, a bare site (`example.com`), an account's address, or words opens the page
-  inside the window; words search Google, as on the phone. A link to a video or post on the four sites
-  is looked up instead, as before.
+- Typing a page's address, a bare site (`example.com`), or words opens the page inside the window; words
+  search Google, as on the phone. A link to a video or post on the four sites is looked up instead, and an
+  account's shows its card (*Open the page* opens it). On an account's page, its card is in the bar's panel.
 - The page is a WebView2 webview of its own (Tauri's multiwebview, the `unstable` feature), drawn over
   the window where the window's `.page` leaves room for it. The window draws the bar around it (back,
   forward, reload or stop, Downloads, close), tells the app where the page goes whenever its layout
@@ -257,7 +273,10 @@ local pages.
 CI: `desktop.yml` builds the cut-down ffmpeg for Windows and Linux (once per version of
 `build_ffmpeg.sh`, kept in the Actions cache); tests `core` and the packaging on Linux with it; and on
 Windows puts the engine together, checks it, lints, tests and builds the installer, kept as the run's
-`chaya-windows-installer` artifact. `desktop-design.yml` runs the design system's tests.
+`chaya-windows-installer` artifact. After a merge to main that changes the app, once the tour has seen it
+start, the installer replaces the one on the `windows-preview` pre-release, so the newest build is always at
+[one address](https://github.com/katariyaVivek/chaya/releases/download/windows-preview/Chaya-Windows-preview-setup.exe).
+`desktop-design.yml` runs the design system's tests.
 
 ## Privacy
 
@@ -270,6 +289,8 @@ anywhere else. The list of downloads stays on the PC. Pages the person opens in 
 as in any browser, and keep their cookies in the app's own WebView2 folder on the PC; they cannot reach
 the app. What is saved from a page is fetched with the browser's cookies for that file's own address, read
 from that folder each time the download starts and never kept elsewhere; a stream's lookup gets them in a
-file that is deleted as soon as it ends. The ad blocker decides on the PC; about once a
+file that is deleted as soon as it ends. An account's ZIP is listed with the person's sign-in only when they
+choose *Save all posts with my sign-in*: the site's cookies are written to a file for the engine, deleted as soon
+as the listing ends, and its files are fetched without them. The ad blocker decides on the PC; about once a
 week it fetches fresh lists from easylist.to, sending nothing about the person, and its settings (on or
 off, the sites allowed ads) stay on the PC.

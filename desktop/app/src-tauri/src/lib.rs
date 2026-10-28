@@ -9,8 +9,10 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
+use chaya_core::download::archive::{Account, ListRequest, Lister};
+use chaya_core::download::error::DownloadError;
 use chaya_core::download::join::Joiner;
-use chaya_core::download::manager::{Event, Fresh, Manager as DownloadManager, TaskView};
+use chaya_core::download::manager::{Event, Fresh, Manager as DownloadManager, NewArchive, TaskView};
 use chaya_core::download::plan::plan;
 use chaya_core::engine::{AnswerCache, Engine};
 use chaya_core::links::{self, Link};
@@ -167,6 +169,53 @@ async fn download(
     Ok(plans.into_iter().map(|p| TaskView::from(&downloads.manager.add(p))).collect())
 }
 
+/// Whether the browser holds the person's sign-in for the account's site at `url`, for the account card to offer
+/// saving with it.
+#[tauri::command]
+async fn account_signed_in(url: String, app: AppHandle) -> bool {
+    let Some(link) = links::match_account(&url) else { return false };
+    session::is_signed_in(link.platform, &browser::site_sign_in(&app, link.platform).await)
+}
+
+/// Saves everything the account at `url` has posted as one ZIP in Downloads, listed with the person's sign-in only
+/// when they chose it (`use_sign_in`).
+#[tauri::command]
+fn save_account(url: String, use_sign_in: bool, downloads: State<'_, Downloads>) -> Result<Vec<TaskView>, String> {
+    let link = links::match_account(&url).ok_or("This isn't an account Chaya can save.")?;
+    let site = link.platform.display_name();
+    let task = downloads.manager.add_archive(NewArchive {
+        title: format!("@{} · {site} posts", link.username),
+        file_name: format!("{} ({site}).zip", link.username),
+        account: Account { platform: link.platform, username: link.username, sign_in: use_sign_in },
+        page_url: link.url,
+        folder: downloads.folder.clone(),
+    });
+    Ok(vec![TaskView::from(&task)])
+}
+
+/// Lists an account with the engine's `profile` command. The person's sign-in, when they chose it, is read from the
+/// browser as it is now and written to a cookie file that is deleted as soon as the listing ends.
+fn account_lister(app: AppHandle, engine: Engine) -> Lister {
+    Arc::new(move |request: &ListRequest| {
+        let cookies = if request.account.sign_in {
+            let platform = request.account.platform;
+            // Called off the runtime's threads, so it may wait for the browser here.
+            let cookies = tauri::async_runtime::block_on(browser::site_sign_in(&app, platform));
+            if !session::is_signed_in(platform, &cookies) {
+                return Err(DownloadError::SignInAgain(platform));
+            }
+            let dir = app.path().app_cache_dir().map_err(|_| DownloadError::CantWrite)?.join("sign-in");
+            let file = CookieFile::write(&dir, &cookies, "").map_err(|e| DownloadError::from_io(&e))?;
+            Some(file.ok_or(DownloadError::SignInAgain(platform))?)
+        } else {
+            None
+        };
+        let listed = engine.list_profile(request, cookies.as_ref().map(CookieFile::path));
+        drop(cookies);
+        listed
+    })
+}
+
 #[tauri::command]
 fn list_downloads(downloads: State<'_, Downloads>) -> Vec<TaskView> {
     downloads.manager.list().iter().map(TaskView::from).collect()
@@ -197,6 +246,11 @@ fn remove_download(id: u64, downloads: State<'_, Downloads>) {
 #[tauri::command]
 async fn retry_download(id: u64, lookups: State<'_, Lookups>, downloads: State<'_, Downloads>) -> Result<(), ()> {
     let Some(task) = downloads.manager.get(id) else { return Ok(()) };
+    // An account's ZIP carries on from its folder; there is no link to look up again.
+    if task.account.is_some() {
+        downloads.manager.retry(id, None);
+        return Ok(());
+    }
     let fresh: Option<Fresh> = match lookups.media(task.page_url.clone(), true).await {
         Ok(media) => {
             let choice = if task.group.is_some() { chaya_core::download::plan::WHOLE_POST } else { &task.choice };
@@ -231,7 +285,7 @@ fn show_download(id: u64, app: AppHandle, downloads: State<'_, Downloads>) -> Re
 #[serde(tag = "type", rename_all = "camelCase")]
 enum DownloadEvent {
     Changed {
-        task: TaskView,
+        task: Box<TaskView>,
     },
     #[serde(rename_all = "camelCase")]
     Progress {
@@ -248,7 +302,7 @@ enum DownloadEvent {
 impl From<Event> for DownloadEvent {
     fn from(event: Event) -> DownloadEvent {
         match event {
-            Event::Changed(task) => DownloadEvent::Changed { task: TaskView::from(&*task) },
+            Event::Changed(task) => DownloadEvent::Changed { task: Box::new(TaskView::from(&*task)) },
             Event::Progress { id, done, total, bytes_per_second } => {
                 DownloadEvent::Progress { id, done, total, bytes_per_second }
             }
@@ -290,6 +344,11 @@ pub fn run() {
             let joiner = Joiner::find(&engine_dir);
             let joins = joiner.is_some();
             manager.set_joiner(joiner);
+            // gallery-dl keeps its own cache, apart from yt-dlp's.
+            let gallery_cache = app.path().app_cache_dir()?.join("gallery-dl");
+            std::fs::create_dir_all(&gallery_cache)?;
+            let lister_engine = Engine { cache_dir: gallery_cache, ..app.state::<Lookups>().engine.clone() };
+            manager.set_lister(Some(account_lister(app.handle().clone(), lister_engine)));
             // Windows names a Downloads folder for everyone; elsewhere it may be unset, so fall back to the usual one.
             let folder =
                 app.path().download_dir().or_else(|_| app.path().home_dir().map(|home| home.join("Downloads")))?;
@@ -320,6 +379,8 @@ pub fn run() {
             browser::page_action,
             browser::close_page,
             browser::page_media,
+            account_signed_in,
+            save_account,
             browser::save_found,
             browser::look_up_found,
             browser::download_found,
