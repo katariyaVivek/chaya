@@ -904,7 +904,7 @@ function lookUpFound(item) {
 let pageLookedAt = '';
 
 /**
- * A page that is a video or post on YouTube, Instagram, TikTok or X is looked up as its link is. Such sites
+ * A page that is a video or post on YouTube, Instagram, TikTok or X, or a Pinterest pin, is looked up as its link is. Such sites
  * change their address without loading a new page, so the address is followed as the window asks the page.
  */
 async function followPage(url) {

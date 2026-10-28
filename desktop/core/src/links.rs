@@ -17,6 +17,7 @@ pub enum Platform {
     TikTok,
     /// X, formerly Twitter.
     X,
+    Pinterest,
 }
 
 impl Platform {
@@ -26,6 +27,7 @@ impl Platform {
             Platform::Instagram => "Instagram",
             Platform::TikTok => "TikTok",
             Platform::X => "X",
+            Platform::Pinterest => "Pinterest",
         }
     }
 }
@@ -40,10 +42,11 @@ pub struct MediaLink {
 
 impl MediaLink {
     /// What a lookup is finding. An Instagram post or a tweet may hold only pictures, so for those
-    /// it is the post; a reel, a YouTube video or a TikTok is a video.
+    /// it is the post, and a Pinterest pin is a pin; a reel, a YouTube video or a TikTok is a video.
     pub fn looking_for(&self) -> &'static str {
         match self.platform {
             Platform::X => "post",
+            Platform::Pinterest => "pin",
             Platform::Instagram if self.id.split('/').next() == Some("p") => "post",
             _ => "video",
         }
@@ -156,7 +159,37 @@ pub fn match_media(input: &str) -> Option<MediaLink> {
         }
         return None;
     }
+    if is_pinterest_host(&host) {
+        if host == "pin.it" {
+            return parts.first().and_then(|id| found(Platform::Pinterest, id));
+        }
+        // "/pin/123/", or "/pin/some-title--123/" as newer links have it.
+        if parts.len() >= 2 && parts[0] == "pin" {
+            let id = parts[1].rsplit("--").next().unwrap_or(parts[1]);
+            return found(Platform::Pinterest, id);
+        }
+        return None;
+    }
     None
+}
+
+/// pinterest.com, its country sites (pinterest.co.uk, de.pinterest.com, pinterest.com.au...), and pin.it short
+/// links: the phone's `(?:[a-z0-9-]+\.)*pinterest\.(?:com|[a-z]{2}|co\.[a-z]{2}|com\.[a-z]{2})|pin\.it`.
+fn is_pinterest_host(host: &str) -> bool {
+    if host == "pin.it" {
+        return true;
+    }
+    let labels: Vec<&str> = host.split('.').collect();
+    let Some(at) = labels.iter().position(|l| *l == "pinterest") else { return false };
+    let label = |l: &str| !l.is_empty() && l.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+    let country = |l: &str| l.len() == 2 && l.chars().all(|c| c.is_ascii_lowercase());
+    labels[..at].iter().all(|l| label(l))
+        && match labels[at + 1..] {
+            ["com"] => true,
+            [code] => country(code),
+            ["co" | "com", code] => country(code),
+            _ => false,
+        }
 }
 
 const ACCOUNT_INSTAGRAM_HOSTS: &[&str] = &["instagram.com", "www.instagram.com", "m.instagram.com"];
@@ -302,6 +335,40 @@ mod tests {
         assert_media("https://twitter.com/user/status/1234567890", Platform::X, "1234567890");
         assert_media("https://x.com/user/status/1234567890", Platform::X, "1234567890");
         assert_media("https://t.co/abc123", Platform::X, "abc123");
+    }
+
+    #[test]
+    fn pins_match_on_every_pinterest_site_and_as_short_links() {
+        assert_media("https://www.pinterest.com/pin/664281013778109217/", Platform::Pinterest, "664281013778109217");
+        assert_media("https://pinterest.com/pin/1084663891475263837", Platform::Pinterest, "1084663891475263837");
+        assert_media("https://www.pinterest.co.uk/pin/123/sent/?invite_code=abc", Platform::Pinterest, "123");
+        assert_media("https://de.pinterest.com/pin/456/", Platform::Pinterest, "456");
+        assert_media("https://www.pinterest.com.au/pin/789/", Platform::Pinterest, "789");
+        assert_media("https://www.pinterest.fr/pin/42/", Platform::Pinterest, "42");
+        assert_media(
+            "https://pinterest.com/pin/blue-lagoon-nails-video--2885187256207927",
+            Platform::Pinterest,
+            "2885187256207927",
+        );
+        assert_media("https://pin.it/4aBcDeF", Platform::Pinterest, "4aBcDeF");
+        assert_eq!(match_media("https://www.pinterest.com/pin/123/").unwrap().looking_for(), "pin");
+    }
+
+    #[test]
+    fn pinterests_other_pages_and_look_alike_sites_do_not_match() {
+        for url in [
+            "https://www.pinterest.com/",
+            "https://www.pinterest.com/someone/recipes/",
+            "https://www.pinterest.com/search/pins/?q=cats",
+            "https://notpinterest.com/pin/123/",
+            "https://pinterest.com.evil.example/pin/123/",
+            "https://pinterest.example/pin/123/",
+            "https://pin.it/",
+        ] {
+            assert_eq!(match_media(url), None, "{url}");
+        }
+        // A board or a profile on Pinterest is a web page, not an account Chaya saves.
+        assert_eq!(match_account("https://www.pinterest.com/someone/"), None);
     }
 
     #[test]

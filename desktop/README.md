@@ -9,8 +9,8 @@ drawn with the design system in [`design/`](design/README.md), shown by Windows'
 (Chromium). The work is done in Rust.
 
 It is early. This build opens the window, follows Windows' light or dark setting (or the person's
-choice), and tells what a pasted link is: a video or post on YouTube, Instagram, TikTok or X, an
-account, another page, or words. A video or post is looked up with yt-dlp, as on the phone, and the
+choice), and tells what a pasted link is: a video or post on YouTube, Instagram, TikTok or X, a
+Pinterest pin, an account, another page, or words. A video or post is looked up with yt-dlp, as on the phone, and the
 window shows its title, poster and the qualities it can be saved in (or what a post holds, or why it
 can't be). Each choice downloads into the Downloads folder, with pause, resume, cancel and retry, and
 the Downloads list keeps track across restarts. Qualities whose picture and sound come apart (most of
@@ -106,6 +106,10 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
 ## Downloads
 
 - A choice becomes one download; a post's "Save all" becomes one per picture and video, numbered.
+- **Pinterest pins** (any of its country sites, and `pin.it` links) are recognised as on the phone (`links`), and the
+  shared engine looks them up: a picture or GIF saves the original, a video offers its qualities, a story pin is a
+  post of its pages' pictures and videos. As on the phone, a pin is never looked up with a sign-in, and none is
+  offered (`SignIn::after`).
   Files are named "Title (720p).mp4" ("Title.m4a" for the sound), with what Windows forbids replaced,
   and get "(2)" when the name is taken. They go to the person's Downloads folder.
 - Each is fetched into "name.part" with the site's own headers and renamed when whole. A paused or
@@ -206,7 +210,7 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
   the player's frame as referrer. A stream (HLS or DASH) offers *Choose quality*: the bundled yt-dlp
   reads its playlist or manifest with the page as referrer (`look_up_found`), and its qualities show in
   the same card as a link's, saved by `download_found`.
-- **A video site's page.** When the page is a video or post on YouTube, Instagram, TikTok or X, it is
+- **A video site's page.** When the page is a video or post on YouTube, Instagram, TikTok or X, or a pin, it is
   looked up as its link is, and its card is in the same panel, from the bar's pill. Nothing is ever shown
   between the bar and the page, so the page does not move once it shows. Those sites change their address without
   loading a new page, so the window follows the address the page reports each time it asks.
@@ -271,7 +275,7 @@ there. `core` needs nothing beyond Rust.
 **The Windows tour** (`app/tour/tour.py`, CI job `tour`) installs the installer on a Windows machine and
 starts the app with WebView2's DevTools port open, driving the window through it. CI runs elevated, where
 WebView2 ignores `WEBVIEW2_*` variables (and so msedgedriver never attaches), so the job opens the port with
-the machine's WebView2 policy for `chaya-desktop.exe`. It takes a real link looked up and a download cancelled, three pages in the built-in browser, two tabs switched and one closed, the ad blocker's panel,
+the machine's WebView2 policy for `chaya-desktop.exe`. It takes a real link looked up and a download cancelled, a real Pinterest pin looked up, three pages in the built-in browser, two tabs switched and one closed, the ad blocker's panel,
 Night. At each step it photographs the whole screen, so the page's place in the window, Windows' fonts and
 frame are seen; the pictures and `steps.json` (what each step found) are the run's `chaya-windows-tour`
 artifact. A site that refuses the machine is noted, not failed on. Off Windows it runs with `--via webdriver`:

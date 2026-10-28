@@ -33,6 +33,8 @@ from pathlib import Path
 SITES = {
     # A short, old, public video: the first one uploaded to YouTube.
     'youtube': 'https://www.youtube.com/watch?v=jNQXAC9IVRw',
+    # A public Pinterest pin, as the phone's link tests have it.
+    'pin': 'https://www.pinterest.com/pin/664281013778109217/',
     'page': 'https://en.wikipedia.org/wiki/Cat',
     # A page with a video in a <video> element, and ads.
     'video_page': 'https://www.w3schools.com/html/html5_video.asp',
@@ -266,6 +268,18 @@ def run(tour, sites):
                 tour.shot('cancelled', button=button)
     except Exception as e:
         tour.failed('download', e)
+
+    # A Pinterest pin: looked up by the same engine, a picture or GIF as a post, a video with its qualities.
+    try:
+        tour.type_address(sites['pin'])
+        found = tour.wait(
+            lambda: tour.js("return document.querySelectorAll('#result .choice .dl').length")
+            or ('finding' not in tour.js("return document.querySelector('#result .card__state')?.innerHTML ?? 'finding'")),
+            120,
+        )
+        tour.shot('pin-looked-up', card=tour.card_text()[:400], found=found)
+    except Exception as e:
+        tour.failed('pin-looked-up', e)
 
     # A page in the built-in browser: where it sits in the window.
     for name, key, wait in (('page', 'page', 8), ('page-with-video', 'video_page', 12), ('news', 'news', 12)):
