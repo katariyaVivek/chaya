@@ -61,18 +61,17 @@ pub fn plan(
     if !can_save(&found, streams) {
         return None;
     }
-    let ext = found.file.ext.clone().unwrap_or_else(|| if found.is_audio_only { "m4a".into() } else { "mp4".into() });
+    let ext = found.saved_as().map(str::to_string).unwrap_or_else(|| {
+        if found.is_audio_only {
+            "m4a".into()
+        } else {
+            "mp4".into()
+        }
+    });
     let (kind, label) = match (found.is_audio_only, found.quality) {
         (true, _) => (Kind::Audio, None),
         (false, Some(_)) => (Kind::Video, Some(found.label.as_str())),
         (false, None) => (Kind::Video, None),
-    };
-    // Picture and sound joined are always an MP4: only MP4 pictures and M4A sound are paired (formats). A
-    // stream, whatever its pieces are, is saved as an MP4, or an M4A for sound only.
-    let ext = match (found.needs_merge() || found.file.is_savable_stream(), found.is_audio_only) {
-        (true, true) => "m4a".to_string(),
-        (true, false) => "mp4".to_string(),
-        (false, _) => ext,
     };
     let name = names::file_name(&media.title, label, &ext);
     let source_of = |f: &Format| Source {
@@ -156,6 +155,31 @@ mod tests {
         assert!(sound.url.ends_with("/140"));
         assert_eq!(sound.expected_size, Some(309_288));
         assert!(p.source.expected_size.is_some(), "sizes known, so progress counts both");
+    }
+
+    #[test]
+    fn a_quality_only_in_vp9_is_saved_as_a_webm_from_its_picture_and_opus_sound() {
+        let file = |id: &str, height, vcodec: &str, acodec: &str| Format {
+            id: id.into(),
+            url: format!("https://cdn.example/{id}"),
+            ext: Some("webm".into()),
+            height,
+            width: height.map(|h| h * 16 / 9),
+            video_codec: Some(vcodec.into()),
+            audio_codec: Some(acodec.into()),
+            protocol: Some("https".into()),
+            ..Format::default()
+        };
+        let media = Media {
+            title: "Clip".into(),
+            formats: vec![file("313", Some(2160), "vp9", "none"), file("251", None, "none", "opus")],
+            ..Media::default()
+        };
+        let plans = plan(&media, "2160p", "https://youtu.be/x", Path::new("D"), |_| true, true).unwrap();
+        let p = &plans[0];
+        assert_eq!(p.file_name, "Clip (2160p).webm");
+        assert!(p.source.url.ends_with("/313"));
+        assert!(p.sound.as_ref().is_some_and(|s| s.url.ends_with("/251")));
     }
 
     #[test]
