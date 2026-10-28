@@ -565,8 +565,9 @@ def main():
         fixture_error = traceback.format_exc(limit=2).strip().splitlines()[-1]
         record("build the local test page", False, fixture_error)
 
-    for name, scenario in (("hls", scenario_hls), ("local", scenario_local), ("tabs", scenario_tabs),
-                           ("history", scenario_history), ("engine", scenario_engine)):
+    # The engine runs early: on the release build it is the check that matters most, and it needs no video page.
+    for name, scenario in (("hls", scenario_hls), ("engine", scenario_engine), ("local", scenario_local),
+                           ("tabs", scenario_tabs), ("history", scenario_history)):
         for attempt in (1, 2):
             first_result = len(results)
             try:

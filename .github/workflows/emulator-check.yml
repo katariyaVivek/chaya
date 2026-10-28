@@ -87,10 +87,11 @@ jobs:
           ram-size: 6144M
           cores: 3
           disable-animations: true
-          # The emulator decodes a guest's H.264 on the host by default, and on emulator 37.2 that crashed the whole
-          # emulator (adb's port refused, no app crash, no out-of-memory kill) as the local test page started its
-          # three videos, on both builds of #79 at the same step. Android decodes in software instead.
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -feature -HardwareDecoder
+          # Emulator 37.2 vanished (adb's port refused, no app crash, no out-of-memory kill) as the local test page
+          # started its three videos, on both builds of #79, after host-side GL errors ("context was preempted") and
+          # its host H.264 decoder's "no frame". Android decodes video in software and draws the screen itself, so
+          # none of it goes through the host's renderer.
+          emulator-options: -no-window -gpu guest -no-snapshot -noaudio -no-boot-anim -feature -HardwareDecoder
           script: BUILD=${{ matrix.build }} python3 .github/scripts/walkthrough.py
 
       - name: Look for the out-of-memory killer
