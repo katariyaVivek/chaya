@@ -236,6 +236,15 @@ class Tour:
         return self.js("const c = document.querySelector('#result .card'); return c ? c.innerText : '';")
 
 
+def looked_up(tour):
+    """Whether the card's lookup has ended: its state holds an answer, not the "Finding…" pill, and is not still empty
+    from the moment before the lookup began."""
+    return tour.js(
+        "const s = document.querySelector('#result .card__state');"
+        " return !!s && s.children.length > 0 && !s.querySelector('.finding')"
+    )
+
+
 def run(tour, sites):
     tour.wait(lambda: tour.js("return !!document.getElementById('address')?.offsetParent"), 30)
     tour.shot('home', title=tour.js('return document.title'))
@@ -243,11 +252,7 @@ def run(tour, sites):
     # A link: looked up by the bundled engine, its qualities offered.
     try:
         tour.type_address(sites['youtube'])
-        answer = tour.wait(
-            lambda: tour.js("return document.querySelectorAll('#result .choice .dl').length")
-            or ('finding' not in tour.js("return document.querySelector('#result .card__state')?.innerHTML.toLowerCase() ?? 'finding'")),
-            120,
-        )
+        answer = tour.wait(lambda: looked_up(tour), 120)
         tour.shot('link-looked-up', card=tour.card_text()[:400], choices=answer)
     except Exception as e:
         tour.failed('link-looked-up', e)
@@ -272,11 +277,7 @@ def run(tour, sites):
     # A Pinterest pin: looked up by the same engine, a picture or GIF as a post, a video with its qualities.
     try:
         tour.type_address(sites['pin'])
-        found = tour.wait(
-            lambda: tour.js("return document.querySelectorAll('#result .choice .dl').length")
-            or ('finding' not in tour.js("return document.querySelector('#result .card__state')?.innerHTML.toLowerCase() ?? 'finding'")),
-            120,
-        )
+        found = tour.wait(lambda: looked_up(tour), 120)
         tour.shot('pin-looked-up', card=tour.card_text()[:400], found=found)
     except Exception as e:
         tour.failed('pin-looked-up', e)
