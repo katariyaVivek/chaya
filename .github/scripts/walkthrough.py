@@ -274,13 +274,27 @@ def open_url(url):
     record(f"opened {url}", True)
 
 
+# run-as reads the app's own files only in a debuggable build; a release build's are read from the screen instead.
+READS_FILES = BUILD == "debug"
+
+
 def cache_kb():
+    if not READS_FILES:
+        return "not readable in a release build"
     out = sh(f"run-as {PKG} du -sk cache/media3-cache 2>&1")
     match = re.match(r"\s*(\d+)", out)
     return int(match.group(1)) if match else out.strip()[:60]
 
 
 def saved_kb():
+    if not READS_FILES:
+        # "Saved · 19.0 MB · 184p · hlsjs.video-dev.org" on the Downloads screen.
+        nodes, _ = ui_dump()
+        for text in visible_texts(nodes):
+            match = re.search(r"Saved · ([\d.]+) MB", text)
+            if match:
+                return int(float(match.group(1)) * 1024)
+        return "no saved size on the screen"
     out = sh(f"run-as {PKG} du -sk files/downloads 2>&1")
     match = re.match(r"\s*(\d+)", out)
     return int(match.group(1)) if match else out.strip()[:60]
@@ -361,9 +375,10 @@ def scenario_hls():
     saved = saved_kb()
     record("hls: saved as an MP4 of only the chosen rendition", isinstance(saved, int) and 5_000 < saved < 60_000,
            f"{saved // 1024 if isinstance(saved, int) else saved} MB saved; 184p is about 20 MB")
-    size = cache_kb()
-    record("hls: the stream cache is emptied once it is saved", isinstance(size, int) and size < 5_000,
-           f"{size // 1024 if isinstance(size, int) else size} MB left in the stream cache")
+    if READS_FILES:
+        size = cache_kb()
+        record("hls: the stream cache is emptied once it is saved", isinstance(size, int) and size < 5_000,
+               f"{size // 1024 if isinstance(size, int) else size} MB left in the stream cache")
 
 
 def scenario_engine():
@@ -455,7 +470,8 @@ def scenario_local():
     time.sleep(5)
     tap_when("local: open Downloads", 20, FALLBACK["downloads_button"], desc_contains="Downloads")
     monitor_download("local", 90)
-    log("saved files: " + sh(f"run-as {PKG} ls -la files/downloads 2>&1").strip())
+    if READS_FILES:
+        log("saved files: " + sh(f"run-as {PKG} ls -la files/downloads 2>&1").strip())
     # The same downloads as a library grid: the finished video as a tile, its frame taken from the file.
     if tap_when("local: show the downloads as a grid", 20, desc_contains="Show as grid"):
         time.sleep(3)
