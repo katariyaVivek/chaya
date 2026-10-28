@@ -27,7 +27,7 @@ function saveAppearance(appearance) {
 function applyAppearance({ theme, motion }) {
   setTheme(theme);
   setMotion(motion);
-  // The title bar is Windows' own; tell it which theme to draw. null follows Windows.
+  // The window's frame and its menu are Windows' own; tell them which theme to draw. null follows Windows.
   tauri?.window
     .getCurrentWindow()
     .setTheme({ day: 'light', night: 'dark' }[theme] ?? null)
@@ -38,6 +38,40 @@ function applyAppearance({ theme, motion }) {
 
 const appearance = loadAppearance();
 applyAppearance(appearance);
+
+// ── The title bar's buttons ────────────────────────────────────────────────────────────────────────────────────
+//
+// Chaya draws the window's title bar (`decorations: false`); these are Windows' three, doing what Windows' do.
+
+const appWindow = tauri?.window.getCurrentWindow();
+const captionMax = document.getElementById('caption-max');
+
+async function showMaximized() {
+  const maximized = await appWindow.isMaximized().catch(() => false);
+  document.body.classList.toggle('maximized', maximized);
+  captionMax.setAttribute('aria-label', maximized ? 'Restore' : 'Maximize');
+}
+
+if (appWindow) {
+  document.getElementById('caption-min').addEventListener('click', () => appWindow.minimize());
+  captionMax.addEventListener('click', () => appWindow.toggleMaximize());
+  document.getElementById('caption-close').addEventListener('click', () => appWindow.close());
+  appWindow.onResized(showMaximized);
+  showMaximized();
+
+  // Windows 11 offers its snap layouts when the pointer rests on a window's maximize button. It can't tell that this
+  // button is one, so the app asks Windows for them (Win+Z) after the same short rest, and only while Chaya is the
+  // window in front: Win+Z offers them for whichever window that is.
+  let resting = 0;
+  captionMax.addEventListener('mouseenter', () => {
+    clearTimeout(resting);
+    resting = setTimeout(() => {
+      if (document.hasFocus()) tauri.core.invoke('snap_layouts').catch(() => {});
+    }, 500);
+  });
+  captionMax.addEventListener('mouseleave', () => clearTimeout(resting));
+  captionMax.addEventListener('click', () => clearTimeout(resting));
+}
 
 for (const [attr, key] of [['themeChoice', 'theme'], ['motionChoice', 'motion']]) {
   document.querySelectorAll(`[data-${key}-choice]`).forEach((button) =>
@@ -635,8 +669,8 @@ function goHome() {
 
 // ── Tabs ────────────────────────────────────────────────────────────────────────────────────
 //
-// The app keeps the tabs (`browser.rs`) and says how they are after every change; the window draws them. The strip
-// shows once there are two, or behind the home while any is open, so a single page keeps a one-row bar.
+// The app keeps the tabs (`browser.rs`) and says how they are after every change; the window draws them, in the title
+// bar's row, whenever any is open.
 
 const tabstrip = document.getElementById('tabstrip');
 const tabList = tabstrip.querySelector('.tabstrip__tabs');
@@ -652,9 +686,7 @@ function tabName(tab) {
 
 function showTabs(view) {
   tabsNow = view;
-  const shown = view.tabs.length >= 2 || (view.tabs.length >= 1 && view.active === null);
-  tabstrip.hidden = !shown;
-  document.body.classList.toggle('has-tabs', shown);
+  tabstrip.hidden = view.tabs.length === 0;
   tabList.replaceChildren(
     ...view.tabs.map((tab) => {
       const el = tabTemplate.content.firstElementChild.cloneNode(true);

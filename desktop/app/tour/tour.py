@@ -376,6 +376,19 @@ def run(tour, sites):
     except Exception as e:
         tour.failed('tabs', e)
 
+    # The title bar is Chaya's: its maximize button maximizes the window, and restores it.
+    try:
+        tour.click('#caption-max')
+        tour.wait(lambda: tour.js("return document.body.classList.contains('maximized')"), 10)
+        time.sleep(1.5)
+        tour.shot('maximized', label=tour.js("return document.getElementById('caption-max').getAttribute('aria-label')"),
+                  page_top=tour.js("return Math.round(document.getElementById('page').getBoundingClientRect().top)"))
+        tour.click('#caption-max')
+        tour.wait(lambda: not tour.js("return document.body.classList.contains('maximized')"), 10)
+        tour.steps.append({'step': 'restored', 'restored': True})
+    except Exception as e:
+        tour.failed('maximize', e)
+
     # Home: the window's own content again, the tab still open behind it in the strip.
     try:
         tour.click('#page-home')

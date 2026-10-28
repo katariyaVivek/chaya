@@ -1,10 +1,16 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "What the window's own content may ask of the app: its own commands, and setting its title bar's theme. Granted to the window's own webview only, never to the built-in browser's page (webview \"page\"), which is also never local.",
+  "description": "What the window's own content may ask of the app: its own commands, setting the window frame's theme, and what its own title bar does (drag, minimize, maximize, close). Granted to the window's own webview only, never to the built-in browser's pages (webviews \"page-1\", \"page-2\"...), which are also never local.",
   "webviews": ["main"],
   "permissions": [
     "core:default",
-    "core:window:allow-set-theme"
+    "core:window:allow-set-theme",
+    "core:window:allow-start-dragging",
+    "core:window:allow-internal-toggle-maximize",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-is-maximized",
+    "core:window:allow-close"
   ]
 }

@@ -19,13 +19,43 @@ body {
 
 .sprite { position: absolute; }
 
-/* Windows' title bar already names the app, so the bar holds only the settings */
+/*
+ * The window's title bar is Chaya's own: this row, with the tabs, the settings and Windows' three buttons. Its empty
+ * space is the window's to drag, as Windows' own title bar is: snapping to a screen's edge, double-click to maximize,
+ * the window's menu on a right click (app-region, which WebView2 hands to Windows; Tauri's drag on Linux).
+ */
+:root { --titlebar-height: var(--space-5); }
 .top {
+  flex: none;
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  padding: var(--space-2) var(--space-3);
+  gap: var(--space-1);
+  height: var(--titlebar-height);
+  padding-left: var(--space-3);
+  app-region: drag;
+  -webkit-app-region: drag;
 }
+.top button, .top .settings__panel { app-region: no-drag; -webkit-app-region: no-drag; }
+.top .tabstrip { margin-right: auto; }
+
+.caption { display: flex; align-self: stretch; }
+.caption__btn {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  transition: background-color var(--dur-hover) var(--ease-out), color var(--dur-hover) var(--ease-out);
+}
+.caption__btn:hover { background: var(--wash-strong); }
+.caption__btn--close:hover { background: var(--caption-close); color: var(--caption-close-text); }
+.caption__btn svg { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 1; shape-rendering: crispEdges; }
+.caption__restore { display: none; }
+body.maximized .caption__max { display: none; }
+body.maximized .caption__restore { display: inline; }
 
 .settings, .shield { position: relative; }
 
@@ -202,13 +232,12 @@ body.browsing .main {
   overflow: hidden;
 }
 body.browsing .urlbar__field { height: var(--control-height); }
-/* While browsing, the settings sit at the end of the bar's row instead of on a row of their own */
-body.browsing .top {
+/* While browsing, the settings sit at the end of the bar's row, under the title bar's buttons */
+body.browsing .settings {
   position: absolute;
-  top: var(--space-1);
+  top: calc(var(--titlebar-height) + var(--space-1));
   right: var(--space-3);
   z-index: 6;
-  padding: 0;
 }
 body.browsing .urlbar { margin-right: calc(var(--control-height) + var(--space-half)); }
 body.browsing .main > * { flex: none; }
@@ -356,7 +385,7 @@ body.browsing .urlbar__icon { display: none; }
 .found__more:hover { color: var(--text); }
 body.showing-downloads .found { display: none !important; }
 
-/* ── Tabs: a strip above the bar, shown once there is more than one, or any behind the home ───────────────── */
+/* ── Tabs: the title bar's row, as in any browser, whenever a tab is open ───────────────────────────────────── */
 
 .tabstrip { display: flex; align-items: center; gap: var(--space-half); min-width: 0; }
 .tabstrip[hidden] { display: none; }
@@ -408,5 +437,4 @@ body.showing-downloads .found { display: none !important; }
 .tab__close svg { width: 14px; height: 14px; }
 .tabstrip__new { width: 32px; height: 32px; }
 .tabstrip__new svg { width: 18px; height: 18px; }
-/* With the strip above the bar, the settings go down to the bar's row */
-body.browsing.has-tabs .top { top: calc(var(--space-1) + 32px + var(--space-1)); }
+

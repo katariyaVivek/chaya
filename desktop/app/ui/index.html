@@ -34,12 +34,16 @@
   <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="16" cy="7" r="2" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="8" cy="17" r="2" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
 </svg>
 
-<header class="top">
+<header class="top" data-tauri-drag-region="deep">
+  <nav class="tabstrip" id="tabstrip" aria-label="Tabs" hidden>
+    <div class="tabstrip__tabs" role="tablist"></div>
+    <button class="icon-btn pressable tabstrip__new" type="button" id="tab-new" aria-label="New tab" title="New tab (Ctrl+T)"><svg><use href="#i-plus"/></svg></button>
+  </nav>
   <div class="settings">
     <button class="icon-btn pressable" type="button" id="settings-button" aria-label="Appearance" aria-expanded="false" aria-controls="settings-panel">
       <svg><use href="#i-settings"/></svg>
     </button>
-    <div class="settings__panel glass" id="settings-panel" hidden>
+    <div class="settings__panel glass" id="settings-panel" data-tauri-drag-region="false" hidden>
       <p class="settings__label">Theme</p>
       <div class="seg" role="group" aria-label="Theme">
         <button type="button" data-theme-choice="day">Day</button>
@@ -54,13 +58,15 @@
       <p class="settings__credit">Titles are set in Cabinet Grotesk by Indian Type Foundry.</p>
     </div>
   </div>
+  <!-- Chaya draws the window's title bar: this row. Its buttons are Windows' own three, drawn as Windows draws them. -->
+  <div class="caption" id="caption">
+    <button class="caption__btn" type="button" id="caption-min" aria-label="Minimize" title="Minimize"><svg viewBox="0 0 10 10"><path d="M0 5.5h10"/></svg></button>
+    <button class="caption__btn" type="button" id="caption-max" aria-label="Maximize"><svg viewBox="0 0 10 10"><rect class="caption__max" x="0.5" y="0.5" width="9" height="9"/><path class="caption__restore" d="M2.5 2.5V0.5h7v7h-2M0.5 2.5h7v7h-7z"/></svg></button>
+    <button class="caption__btn caption__btn--close" type="button" id="caption-close" aria-label="Close" title="Close"><svg viewBox="0 0 10 10"><path d="M0.5 0.5l9 9M9.5 0.5l-9 9"/></svg></button>
+  </div>
 </header>
 
 <main class="main">
-  <nav class="tabstrip" id="tabstrip" aria-label="Tabs" hidden>
-    <div class="tabstrip__tabs" role="tablist"></div>
-    <button class="icon-btn pressable tabstrip__new" type="button" id="tab-new" aria-label="New tab" title="New tab (Ctrl+T)"><svg><use href="#i-plus"/></svg></button>
-  </nav>
   <form class="urlbar" id="address-form" autocomplete="off">
     <div class="page-nav" data-browsing hidden>
       <button class="icon-btn pressable" type="button" id="page-back" aria-label="Back" title="Back"><svg><use href="#i-back"/></svg></button>
