@@ -91,9 +91,9 @@ impl Lookups {
     }
 }
 
-/// Looks up a link to a video or post on YouTube, Instagram, TikTok or X with the bundled engine. Only such
-/// links are looked up here; a stream found on a page is looked up by `browser::look_up_found`. Nothing else
-/// reaches yt-dlp.
+/// Looks up a link to a video or post on YouTube, Instagram, TikTok or X, or a Pinterest pin, with the bundled
+/// engine. Only such links are looked up here; a stream found on a page is looked up by `browser::look_up_found`.
+/// Nothing else reaches yt-dlp.
 ///
 /// `use_sign_in`: the person tapped *Use my sign-in*, so the engine gets the browser's sign-in for the site, in a
 /// file deleted when the lookup ends. Never without that tap: sites can limit accounts used to download. When a
@@ -130,7 +130,7 @@ async fn look_up(
             let wants_sign_in = matches!(failure.kind, FailureKind::NeedsLogin | FailureKind::BotCheck);
             let signed_in = wants_sign_in
                 && session::is_signed_in(link.platform, &browser::site_sign_in(&app, link.platform).await);
-            Lookup::failed_with(&failure, SignIn::after(failure.kind, use_sign_in, signed_in))
+            Lookup::failed_with(&failure, SignIn::after(link.platform, failure.kind, use_sign_in, signed_in))
         }
     })
 }

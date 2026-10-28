@@ -3,7 +3,9 @@
 use serde::Serialize;
 
 use crate::formats::{self, Choice};
+use crate::links::Platform;
 use crate::media::{Failure, FailureKind, Media};
+use crate::session::signs_in;
 
 /// A lookup's result as the window receives it.
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -30,10 +32,11 @@ pub enum SignIn {
 }
 
 impl SignIn {
-    /// What to offer after a lookup failed with `kind`: nothing unless the site wants a sign-in and this lookup
-    /// did not already use the person's. `signed_in`: whether the browser is signed in to the site.
-    pub fn after(kind: FailureKind, used_sign_in: bool, signed_in: bool) -> Option<SignIn> {
-        if !matches!(kind, FailureKind::NeedsLogin | FailureKind::BotCheck) || used_sign_in {
+    /// What to offer after a lookup of a link on `platform` failed with `kind`: nothing unless the site wants a
+    /// sign-in, Chaya offers one there (not on Pinterest, as on the phone), and this lookup did not already use
+    /// the person's. `signed_in`: whether the browser is signed in to the site.
+    pub fn after(platform: Platform, kind: FailureKind, used_sign_in: bool, signed_in: bool) -> Option<SignIn> {
+        if !matches!(kind, FailureKind::NeedsLogin | FailureKind::BotCheck) || used_sign_in || !signs_in(platform) {
             return None;
         }
         Some(if signed_in { SignIn::Use } else { SignIn::SignInFirst })
@@ -247,13 +250,16 @@ mod tests {
     #[test]
     fn a_sign_in_is_offered_only_when_the_site_wants_one_and_it_was_not_used() {
         use FailureKind::*;
-        assert_eq!(SignIn::after(NeedsLogin, false, true), Some(SignIn::Use));
-        assert_eq!(SignIn::after(BotCheck, false, true), Some(SignIn::Use));
-        assert_eq!(SignIn::after(NeedsLogin, false, false), Some(SignIn::SignInFirst));
-        assert_eq!(SignIn::after(NeedsLogin, true, true), None, "it was used, and was not enough");
+        use Platform::*;
+        assert_eq!(SignIn::after(YouTube, NeedsLogin, false, true), Some(SignIn::Use));
+        assert_eq!(SignIn::after(YouTube, BotCheck, false, true), Some(SignIn::Use));
+        assert_eq!(SignIn::after(Instagram, NeedsLogin, false, false), Some(SignIn::SignInFirst));
+        assert_eq!(SignIn::after(YouTube, NeedsLogin, true, true), None, "it was used, and was not enough");
         for kind in [Private, Geo, Unavailable, Network, Engine, Unknown] {
-            assert_eq!(SignIn::after(kind, false, true), None, "{kind:?}");
+            assert_eq!(SignIn::after(YouTube, kind, false, true), None, "{kind:?}");
         }
+        // Pinterest: a pin is looked up without a sign-in, and none is offered.
+        assert_eq!(SignIn::after(Pinterest, NeedsLogin, false, false), None);
     }
 
     #[test]

@@ -96,8 +96,8 @@ differences:
   cookies the built-in browser holds for that file's own address, and its user agent. They are read from
   the browser's cookie store each time the download starts or resumes, are sent only to that file's
   server, and are never written into Chaya's list of downloads.
-- **Links to YouTube, Instagram, TikTok and X** are looked up with yt-dlp on your PC, without any
-  sign-in, unless you choose it. When a link needs a sign-in, Chaya offers *Sign in to* the site, which
+- **Links to YouTube, Instagram, TikTok, X and Pinterest** are looked up with yt-dlp on your PC, without any
+  sign-in, unless you choose it (never on Pinterest). When a link needs a sign-in, Chaya offers *Sign in to* the site, which
   opens the link's page in its browser for you to sign in there, and once you are signed in, *Use my
   sign-in*. Only if you tap that are the site's cookies (never your password) written to a temporary file in
   Chaya's own folder for yt-dlp, which sends them only to that site; the file is deleted as soon as the

@@ -74,7 +74,14 @@ pub fn sign_in_sites(platform: Platform) -> &'static [&'static str] {
         Platform::Instagram => &["instagram.com"],
         Platform::TikTok => &["tiktok.com"],
         Platform::X => &["x.com", "twitter.com"],
+        // As on the phone: a pin is looked up without a sign-in, and none is offered.
+        Platform::Pinterest => &[],
     }
+}
+
+/// Whether Chaya offers the person's sign-in on `platform` at all.
+pub fn signs_in(platform: Platform) -> bool {
+    !sign_in_sites(platform).is_empty()
 }
 
 /// Whether `cookies` (the browser's for `platform`'s sites) hold a sign-in: cookies that exist only while signed in.
@@ -84,6 +91,7 @@ pub fn is_signed_in(platform: Platform, cookies: &[SessionCookie]) -> bool {
         Platform::Instagram => &["sessionid"],
         Platform::TikTok => &["sessionid", "sid_tt"],
         Platform::X => &["auth_token"],
+        Platform::Pinterest => &[],
     };
     cookies.iter().any(|c| markers.contains(&c.name.as_str()) && !c.value.is_empty())
 }
@@ -177,6 +185,7 @@ mod tests {
         assert!(is_signed_in(Platform::X, &[cookie("auth_token", "t")]));
         assert!(is_signed_in(Platform::YouTube, &[cookie("SAPISID", "s")]));
         assert_eq!(sign_in_sites(Platform::X), ["x.com", "twitter.com"]);
+        assert!(signs_in(Platform::X) && !signs_in(Platform::Pinterest));
     }
 
     #[test]

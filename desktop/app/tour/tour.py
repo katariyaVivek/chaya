@@ -33,6 +33,8 @@ from pathlib import Path
 SITES = {
     # A short, old, public video: the first one uploaded to YouTube.
     'youtube': 'https://www.youtube.com/watch?v=jNQXAC9IVRw',
+    # A public Pinterest pin, as the phone's link tests have it.
+    'pin': 'https://www.pinterest.com/pin/664281013778109217/',
     'page': 'https://en.wikipedia.org/wiki/Cat',
     # A page with a video in a <video> element, and ads.
     'video_page': 'https://www.w3schools.com/html/html5_video.asp',
@@ -234,6 +236,15 @@ class Tour:
         return self.js("const c = document.querySelector('#result .card'); return c ? c.innerText : '';")
 
 
+def looked_up(tour):
+    """Whether the card's lookup has ended: its state holds an answer, not the "Finding…" pill, and is not still empty
+    from the moment before the lookup began."""
+    return tour.js(
+        "const s = document.querySelector('#result .card__state');"
+        " return !!s && s.children.length > 0 && !s.querySelector('.finding')"
+    )
+
+
 def run(tour, sites):
     tour.wait(lambda: tour.js("return !!document.getElementById('address')?.offsetParent"), 30)
     tour.shot('home', title=tour.js('return document.title'))
@@ -241,11 +252,7 @@ def run(tour, sites):
     # A link: looked up by the bundled engine, its qualities offered.
     try:
         tour.type_address(sites['youtube'])
-        answer = tour.wait(
-            lambda: tour.js("return document.querySelectorAll('#result .choice .dl').length")
-            or ('finding' not in tour.js("return document.querySelector('#result .card__state')?.innerHTML ?? 'finding'")),
-            120,
-        )
+        answer = tour.wait(lambda: looked_up(tour), 120)
         tour.shot('link-looked-up', card=tour.card_text()[:400], choices=answer)
     except Exception as e:
         tour.failed('link-looked-up', e)
@@ -266,6 +273,16 @@ def run(tour, sites):
                 tour.shot('cancelled', button=button)
     except Exception as e:
         tour.failed('download', e)
+
+    # A Pinterest pin: looked up by the same engine, a picture or GIF as a post, a video with its qualities.
+    try:
+        # The link's card is still there; cleared, the only card is the pin's own.
+        tour.js("document.getElementById('result').replaceChildren(); return 1")
+        tour.type_address(sites['pin'])
+        found = tour.wait(lambda: looked_up(tour), 120)
+        tour.shot('pin-looked-up', card=tour.card_text()[:400], found=found)
+    except Exception as e:
+        tour.failed('pin-looked-up', e)
 
     # A page in the built-in browser: where it sits in the window.
     for name, key, wait in (('page', 'page', 8), ('page-with-video', 'video_page', 12), ('news', 'news', 12)):
