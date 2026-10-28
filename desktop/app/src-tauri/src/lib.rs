@@ -15,6 +15,7 @@ use chaya_core::download::join::Joiner;
 use chaya_core::download::manager::{Event, Fresh, Manager as DownloadManager, NewArchive, TaskView};
 use chaya_core::download::plan::plan;
 use chaya_core::engine::{AnswerCache, Engine};
+use chaya_core::library;
 use chaya_core::links::{self, Link};
 use chaya_core::lookup::{Lookup, SignIn};
 use chaya_core::media::{Failure, FailureKind, Format, Media};
@@ -221,6 +222,16 @@ fn list_downloads(downloads: State<'_, Downloads>) -> Vec<TaskView> {
     downloads.manager.list().iter().map(TaskView::from).collect()
 }
 
+/// The list's sections, as the phone's: what runs, what needs attention, then the days things were saved on, for a
+/// person `offset` minutes east of UTC (the window's own time zone).
+#[tauri::command]
+fn download_sections(offset: i32, downloads: State<'_, Downloads>) -> Vec<library::Section> {
+    let dated: Vec<library::Dated> =
+        downloads.manager.list().iter().map(|task| library::Dated::from(&TaskView::from(task))).collect();
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+    library::sections(&dated, now, offset)
+}
+
 #[tauri::command]
 fn pause_download(id: u64, downloads: State<'_, Downloads>) {
     downloads.manager.pause(id);
@@ -368,6 +379,7 @@ pub fn run() {
             look_up,
             download,
             list_downloads,
+            download_sections,
             pause_download,
             resume_download,
             cancel_download,

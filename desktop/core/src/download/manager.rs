@@ -71,6 +71,9 @@ pub struct Task {
     pub total: Option<u64>,
     /// Seconds since 1970, when it was added.
     pub added: u64,
+    /// Seconds since 1970, when it was saved or failed; None while it runs, and for downloads kept before this was.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ended: Option<u64>,
     /// For a quality whose picture and sound come apart: the sound, fetched after the picture (`source`) and
     /// joined to it.
     #[serde(default)]
@@ -139,6 +142,9 @@ pub struct TaskView {
     pub kind: Kind,
     /// The site it came from, for the list's site filter.
     pub site: Site,
+    /// When it was added, and when it was saved or failed (seconds since 1970), for the list's sections.
+    pub added: u64,
+    pub ended: Option<u64>,
     pub file_name: String,
     pub folder: String,
     pub thumbnail: Option<String>,
@@ -172,6 +178,8 @@ impl From<&Task> for TaskView {
             choice: task.choice.clone(),
             kind: task.kind,
             site: site_of(&task.page_url, &task.source.url),
+            added: task.added,
+            ended: task.ended,
             file_name: task.path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
             folder: task.path.parent().map(|f| f.display().to_string()).unwrap_or_default(),
             thumbnail: task.thumbnail.clone(),
@@ -372,7 +380,8 @@ impl Manager {
                 state: State::Queued,
                 done: 0,
                 total: None,
-                added: SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs()),
+                added: now(),
+                ended: None,
                 sound: new.sound,
                 step: None,
                 account,
@@ -457,7 +466,12 @@ impl Manager {
         {
             let mut tasks = lock(&self.inner.tasks);
             match tasks.iter_mut().find(|t| t.id == id && from(&t.state)) {
-                Some(task) => task.state = to,
+                Some(task) => {
+                    if matches!(to, State::Completed | State::Failed(_)) {
+                        task.ended = Some(now());
+                    }
+                    task.state = to;
+                }
                 None => return false,
             }
         }
@@ -842,6 +856,11 @@ async fn prepare_folder(path: &Path) -> Result<(), DownloadError> {
 }
 
 /// Moves the whole `.part` file to its name, or the next free one if a file of that name appeared meanwhile.
+/// Seconds since 1970.
+fn now() -> u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs())
+}
+
 fn finish(part: &Path, path: &Path) -> Result<PathBuf, DownloadError> {
     let target = if path.exists() {
         let folder = path.parent().unwrap_or(Path::new("."));
@@ -959,6 +978,8 @@ mod tests {
         }
 
         assert_eq!(done.path, s.folder.path().join("Downloads").join("Me at the zoo.m4a"));
+        // When it was saved, for the list's day; never before it was added.
+        assert!(done.ended.is_some_and(|ended| ended >= done.added), "{:?}", done.ended);
         assert_eq!(std::fs::read(&done.path).unwrap(), content);
         assert!(!done.part_path().exists());
         assert_eq!((done.done, done.total), (400_000, Some(400_000)));
@@ -1169,6 +1190,7 @@ mod tests {
             done: 10,
             total: Some(100),
             added: 1,
+            ended: None,
             sound: None,
             step: None,
             account: None,
@@ -1210,6 +1232,7 @@ mod tests {
             done: 10,
             total: Some(100),
             added: 0,
+            ended: None,
             sound: None,
             step: None,
             account: None,
@@ -1601,6 +1624,7 @@ mod tests {
             done: 0,
             total: None,
             added: 0,
+            ended: None,
             sound: None,
             step: None,
             account: None,
@@ -1810,6 +1834,7 @@ mod tests {
             done: 0,
             total: None,
             added: 1,
+            ended: None,
             sound: None,
             step: None,
             account: Some(Account { platform: Platform::X, username: "someone".into(), sign_in: true }),

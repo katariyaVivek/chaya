@@ -407,6 +407,7 @@ function taskChanged(task) {
   const known = tasks.get(task.id);
   tasks.set(task.id, { ...task, speed: known?.speed ?? 0 });
   renderRow(task.id);
+  if (known?.state !== task.state) arrange();
   showNarrowing();
   countRunning();
   for (const entry of buttons) {
@@ -426,6 +427,7 @@ function taskProgress({ id, done, total, bytesPerSecond }) {
 function taskRemoved(id) {
   tasks.delete(id);
   downloadList.querySelector(`[data-id="${id}"]`)?.remove();
+  arrange();
   showNarrowing();
   showEmpty();
   countRunning();
@@ -634,12 +636,65 @@ function showNarrowing() {
 
 function narrow(change) {
   Object.assign(narrowing, change);
-  for (const row of downloadList.children) {
+  for (const row of downloadList.querySelectorAll('.row')) {
     const task = tasks.get(Number(row.dataset.id));
     row.hidden = !task || !keeps(task);
   }
+  hideEmptySections();
   showNarrowing();
 }
+
+// ── Sections ────────────────────────────────────────────────────────────────────────────────
+//
+// As the phone's list: what runs, what needs attention, then the days things were saved on (`core::library`), in
+// this PC's time zone. Asked for again when a download changes state, and as the day turns.
+
+let arranging = 0;
+let arrangedDay = new Date().toDateString();
+
+function arrange() {
+  cancelAnimationFrame(arranging);
+  arranging = requestAnimationFrame(async () => {
+    arrangedDay = new Date().toDateString();
+    const sections = await tauri.core.invoke('download_sections', { offset: -new Date().getTimezoneOffset() }).catch(() => null);
+    if (!sections) return;
+    const heads = new Map([...downloadList.querySelectorAll('.list__head')].map((h) => [h.textContent, h]));
+    const order = [];
+    for (const section of sections) {
+      let head = heads.get(section.title);
+      if (!head) {
+        head = document.createElement('li');
+        head.className = 'list__head';
+        head.textContent = section.title;
+      }
+      order.push(head, ...section.ids.map((id) => downloadList.querySelector(`.row[data-id="${id}"]`)).filter(Boolean));
+    }
+    // Moved only when the order changed, so a row being pointed at stays where it is.
+    const now = [...downloadList.children];
+    if (order.length !== now.length || order.some((node, i) => node !== now[i])) downloadList.replaceChildren(...order);
+    hideEmptySections();
+  });
+}
+
+/** A section whose downloads are all narrowed away keeps no heading. */
+function hideEmptySections() {
+  let head = null;
+  let shown = false;
+  for (const node of [...downloadList.children, null]) {
+    if (!node || node.classList.contains('list__head')) {
+      if (head) head.hidden = !shown;
+      head = node;
+      shown = false;
+    } else if (!node.hidden) {
+      shown = true;
+    }
+  }
+}
+
+// "Today" becomes "Yesterday" at midnight, with the window left open.
+setInterval(() => {
+  if (new Date().toDateString() !== arrangedDay) arrange();
+}, 60_000);
 
 findInput.addEventListener('input', () => narrow({ words: findInput.value }));
 findInput.addEventListener('keydown', (e) => {
@@ -662,6 +717,7 @@ tauri?.event.listen('download', ({ payload }) => {
 
 tauri?.core.invoke('list_downloads').then((list) => {
   list.forEach(taskChanged);
+  arrange();
   stagger(downloadList);
   downloadList.classList.add('stagger');
 });
