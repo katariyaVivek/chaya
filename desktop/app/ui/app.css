@@ -226,6 +226,82 @@ body.browsing .settings__panel { background: var(--bg); }
 .chip:hover { color: var(--text); }
 .chip[aria-pressed="true"] { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
 .downloads__none { margin: 0; color: var(--muted); }
+.downloads__view { margin-left: auto; }
+.downloads__head .find { flex: none; }
+
+/* ── The grid: square tiles, as the phone's library ─────────────────────────────────────────── */
+.grid-wrap { display: grid; gap: var(--space-2); }
+.grid__running { justify-self: start; }
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.tile {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 1;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  color: var(--text);
+  cursor: pointer;
+}
+.tile img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.tile__name {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-half);
+  padding: var(--space-1);
+  color: var(--muted);
+  font: var(--text-sm) / var(--leading-sm) var(--font-ui);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.tile__name svg { width: 24px; height: 24px; }
+.tile__badge {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 6px;
+  border-radius: var(--radius-pill);
+  background: var(--scrim);
+  color: var(--scrim-text);
+  font: 600 var(--text-sm) / 1 var(--font-ui);
+}
+.tile__badge svg { width: 14px; height: 14px; }
+.tile__badge--play { left: var(--space-half); bottom: var(--space-half); }
+.tile__badge--count { right: var(--space-half); top: var(--space-half); }
+
+/* ── The viewer: one picture at a time over the window ──────────────────────────────────────── */
+.viewer {
+  position: fixed;
+  /* Under the title bar, so the window's own buttons stay where they are */
+  inset: var(--titlebar-height) 0 0;
+  z-index: 50;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  background: var(--bg);
+  animation: var(--anim-enter) var(--dur-enter) var(--ease-out) both;
+}
+.viewer__top { display: flex; align-items: center; gap: var(--space-1); height: var(--control-height); padding: 0 var(--space-2) 0 var(--space-3); }
+.viewer__title { flex: 1; min-width: 0; margin: 0; overflow: hidden; font: 500 var(--text-md) / 1 var(--font-ui); text-overflow: ellipsis; white-space: nowrap; }
+.viewer__count { color: var(--muted); font-size: var(--text-sm); }
+.viewer__stage { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--space-1); padding: 0 var(--space-2) var(--space-3); min-height: 0; }
+.viewer__frame { display: grid; place-items: center; height: 100%; min-height: 0; margin: 0; }
+.viewer__frame img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: var(--radius-sm); }
+.viewer__frame .tile__name { font-size: var(--text-md); }
+.viewer__play { display: grid; justify-items: center; gap: var(--space-2); }
+.viewer__step[disabled] { visibility: hidden; }
 .downloads__all {
   padding: 0;
   border: 0;

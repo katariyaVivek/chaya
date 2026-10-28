@@ -222,6 +222,46 @@ fn list_downloads(downloads: State<'_, Downloads>) -> Vec<TaskView> {
     downloads.manager.list().iter().map(TaskView::from).collect()
 }
 
+/// The grid's tiles, as the phone's library: the saved downloads among `kept` (what the window's narrowing keeps),
+/// newest first, a post's files on one tile.
+#[tauri::command]
+fn library_tiles(kept: Vec<u64>, downloads: State<'_, Downloads>) -> Vec<library::Tile> {
+    let dated: Vec<library::Dated> = downloads
+        .manager
+        .list()
+        .iter()
+        .filter(|task| kept.contains(&task.id))
+        .map(|task| library::Dated::from(&TaskView::from(task)))
+        .collect();
+    library::tiles(&dated)
+}
+
+/// `chaya-file://localhost/ID`: the saved picture of download ID, for the grid and the viewer. Only Chaya's own
+/// window may ask (never a page in the browser, whose webviews share the scheme), only by a download's number
+/// (never a path), and only for a saved picture.
+fn saved_picture(app: &AppHandle, from: &str, uri: &tauri::http::Uri) -> tauri::http::Response<Vec<u8>> {
+    let status = |code: u16| tauri::http::Response::builder().status(code).body(Vec::new()).unwrap_or_default();
+    if from != "main" {
+        return status(403);
+    }
+    let Some(task) = uri.path().trim_matches('/').parse().ok().and_then(|id| app.state::<Downloads>().manager.get(id))
+    else {
+        return status(404);
+    };
+    let name = task.path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    match (task.state == chaya_core::download::manager::State::Completed, library::picture_type(&name)) {
+        (true, Some(kind)) => match std::fs::read(&task.path) {
+            Ok(bytes) => tauri::http::Response::builder()
+                .header("Content-Type", kind)
+                .header("Cache-Control", "max-age=3600")
+                .body(bytes)
+                .unwrap_or_default(),
+            Err(_) => status(404),
+        },
+        _ => status(404),
+    }
+}
+
 /// The list's sections, as the phone's: what runs, what needs attention, then the days things were saved on, for a
 /// person `offset` minutes east of UTC (the window's own time zone).
 #[tauri::command]
@@ -325,6 +365,11 @@ impl From<Event> for DownloadEvent {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .register_asynchronous_uri_scheme_protocol("chaya-file", |ctx, request, responder| {
+            let (app, from) = (ctx.app_handle().clone(), ctx.webview_label().to_string());
+            // Read off the window's thread: a picture can be many megabytes.
+            std::thread::spawn(move || responder.respond(saved_picture(&app, &from, request.uri())));
+        })
         .setup(|app| {
             let engine_dir = app.path().resource_dir()?.join("engine");
             let cache_dir = app.path().app_cache_dir()?.join("yt-dlp");
@@ -380,6 +425,7 @@ pub fn run() {
             download,
             list_downloads,
             download_sections,
+            library_tiles,
             pause_download,
             resume_download,
             cancel_download,

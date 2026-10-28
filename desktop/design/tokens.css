@@ -32,6 +32,10 @@
   --caption-close: #C42B1C;
   --caption-close-text: #FFFFFF;
 
+  /* A badge over a picture, which can be anything: dark glass under white, the same in both themes */
+  --scrim: rgb(0 0 0 / 0.55);
+  --scrim-text: #FFFFFF;
+
   /* Type */
   --font-ui: "Geist", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
   --font-mono: "Geist Mono", "Cascadia Mono", Consolas, ui-monospace, monospace;

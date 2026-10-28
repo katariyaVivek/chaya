@@ -254,6 +254,9 @@ the 160 ms exit and then removes the element.
   empty space to drag the window by, then Windows' minimize, maximize and close buttons, 46px wide, drawn
   as 10px line glyphs as Windows draws them, the close red (`--caption-close`) under the pointer. On Home
   the settings sit beside them; while browsing they join the bar's row.
+- **The grid's tiles are surfaces, its badges dark glass.** A tile is the list's row made square (the surface,
+  its shadow, `--radius-md`); a badge over a picture uses `--scrim` under white, since a picture can be any
+  colour. The viewer is the ground itself under the title bar: a picture is shown on nothing but the window.
 - **No wordmark in the window.** The taskbar names the app; the top of the window holds only the tabs, the
   settings and the window's buttons.
 - **Glass and the shimmer** are the desktop's own choices. `PRODUCT.md` lists glassmorphism and

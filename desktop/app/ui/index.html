@@ -122,6 +122,10 @@
   <section class="downloads" aria-labelledby="downloads-title">
     <div class="downloads__head">
       <h1 class="title" id="downloads-title">Downloads</h1>
+      <div class="seg downloads__view" role="group" aria-label="Show downloads as" id="downloads-view" hidden>
+        <button type="button" data-view="list" aria-pressed="true">List</button>
+        <button type="button" data-view="grid" aria-pressed="false">Grid</button>
+      </div>
       <label class="find" id="downloads-find-field" hidden>
         <svg><use href="#i-search"/></svg>
         <input class="find__input" id="downloads-find" type="search" spellcheck="false" placeholder="Find in downloads" aria-label="Find in downloads">
@@ -133,6 +137,11 @@
       <div class="narrow__group" id="narrow-site"></div>
     </div>
     <ul class="list" id="download-list" aria-labelledby="downloads-title"></ul>
+    <!-- The grid, as the phone's library: what was saved, pictures showing themselves, a post's files on one tile -->
+    <div class="grid-wrap" id="download-grid-wrap" hidden>
+      <button class="pill glass pressable grid__running" type="button" id="grid-running" hidden></button>
+      <ul class="grid" id="download-grid" aria-labelledby="downloads-title"></ul>
+    </div>
     <p class="downloads__none" id="downloads-none" hidden>Nothing here matches. <button class="downloads__all" type="button" id="narrow-clear">Show everything</button></p>
     <div class="empty" id="downloads-empty">
       <span class="empty__icon"><svg><use href="#i-download"/></svg></span>
@@ -207,5 +216,19 @@
     </div>
   </article>
 </template>
+<!-- A saved picture, or a post's files, one at a time over the window -->
+<div class="viewer" id="viewer" role="dialog" aria-modal="true" aria-label="Pictures" hidden>
+  <div class="viewer__top">
+    <p class="viewer__title" id="viewer-title"></p>
+    <span class="viewer__count num" id="viewer-count"></span>
+    <button class="icon-btn pressable" type="button" id="viewer-folder" aria-label="Show in folder" title="Show in folder"><svg><use href="#i-folder"/></svg></button>
+    <button class="icon-btn pressable" type="button" id="viewer-close" aria-label="Close (Esc)" title="Close (Esc)"><svg><use href="#i-close"/></svg></button>
+  </div>
+  <div class="viewer__stage">
+    <button class="icon-btn pressable viewer__step" type="button" id="viewer-prev" aria-label="Previous" title="Previous (←)"><svg><use href="#i-back"/></svg></button>
+    <figure class="viewer__frame" id="viewer-frame"></figure>
+    <button class="icon-btn pressable viewer__step" type="button" id="viewer-next" aria-label="Next" title="Next (→)"><svg><use href="#i-forward"/></svg></button>
+  </div>
+</div>
 </body>
 </html>

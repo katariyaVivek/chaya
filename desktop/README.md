@@ -124,6 +124,16 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
   `groupDownloads`). A download keeps when it was saved or failed (`ended` in `downloads.json`; those kept before
   count from when they were added); the window passes its time zone, so a day is the person's own, and asks
   again as the day turns.
+- **The grid**, as the phone's library: *List* and *Grid* beside the Downloads heading (the choice is kept in the
+  window). The grid shows what was saved as square tiles, newest first, narrowed as the list is: a picture shows
+  itself, a video the poster its site gave with a play badge, a post's files one tile with their count
+  (`core::library::tiles`, the phone's `libraryItems`), a ZIP or a sound its icon and name. A picture or a post
+  opens in the viewer under the title bar (← and →, Esc, *Show in folder*; a video in a post plays in its own
+  program); anything else opens in its own program. What is still on its way is counted above the grid, which
+  goes to the list. Pictures reach the window by `chaya-file://localhost/ID` (`saved_picture`): only Chaya's own
+  window may ask, never a page in the browser (whose webviews share the scheme), only by a download's number,
+  never a path, and only for a saved picture. Tauri's asset protocol is not used: it would let any webview,
+  pages included, read from the folders it allows.
 - **The list narrows** as the phone's library does: by kind (Videos, Pictures, Audio, ZIPs), by the site it came
   from (`core::library::site_of`, the phone's `siteOf`, from the page it was found on or the file's own address),
   and by words in its name, all three together. A group of chips shows only once the downloads span two or more
