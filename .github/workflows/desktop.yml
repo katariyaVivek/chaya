@@ -360,8 +360,24 @@ jobs:
             echo "installs for you alone (no administrator needed), and an earlier Chaya is updated in place: your"
             echo "downloads, settings and sign-ins stay. From now on Chaya offers its own updates in its settings."
           } > release-notes.md
-          gh release create "$tag" --latest=false --verify-tag --title "Chaya for Windows $version" \
-            --notes-file release-notes.md "$name"
+          # The release may already exist: GitHub's website makes a tag only by publishing a release with it, and a
+          # failed run may be run again. Then the installer and notes go onto that release.
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release edit "$tag" --draft=false --prerelease=false --latest=false \
+              --title "Chaya for Windows $version" --notes-file release-notes.md
+            gh release upload "$tag" "$name" --clobber
+          else
+            gh release create "$tag" --latest=false --verify-tag --title "Chaya for Windows $version" \
+              --notes-file release-notes.md "$name"
+          fi
+          # The repository's "latest" stays the phone's newest release, even if the website made this one latest.
+          latest=$(gh release list --exclude-drafts --exclude-pre-releases --json tagName,isLatest \
+            --jq '.[] | select(.isLatest) | .tagName')
+          if [[ "$latest" == windows-v* ]]; then
+            phone=$(gh release list --exclude-drafts --exclude-pre-releases --limit 100 --json tagName \
+              --jq '[.[] | select(.tagName | startswith("v"))][0].tagName // empty')
+            if [ -n "$phone" ]; then gh release edit "$phone" --latest; fi
+          fi
 
           # What every Chaya for Windows reads to offer this release: its version, notes and signed installer.
           url="https://github.com/$GITHUB_REPOSITORY/releases/download/$tag/$name"
