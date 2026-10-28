@@ -1,5 +1,8 @@
 //! The window opens where the person last left it, maximized if it was, or large in the middle of the screen the
 //! first time (`chaya_core::placement`). It starts hidden (`tauri.conf.json`), so it is never seen jumping there.
+//!
+//! Its title bar is Chaya's own row (`decorations: false`): the window's content draws it, and Windows still
+//! resizes the window from its edges, outside it, as the window keeps Windows' shadow.
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -65,4 +68,39 @@ fn bounds_of(window: &WebviewWindow) -> Option<Bounds> {
 fn set_bounds(window: &WebviewWindow, bounds: Bounds) {
     let _ = window.set_size(PhysicalSize::new(bounds.width, bounds.height));
     let _ = window.set_position(PhysicalPosition::new(bounds.x, bounds.y));
+}
+
+/// Windows 11's snap layouts, as resting the pointer on a window's maximize button shows them. Windows can't tell
+/// that Chaya's own maximize button is one, so the window asks after the same rest, and this presses Win+Z, which
+/// offers them for the window in front: only when that is this one.
+#[tauri::command]
+pub fn snap_layouts(window: tauri::Window) {
+    if window.is_focused().unwrap_or(false) {
+        #[cfg(windows)]
+        press_win_z();
+    }
+}
+
+#[cfg(windows)]
+fn press_win_z() {
+    use windows::Win32::UI::Input::KeyboardAndMouse::{
+        SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP, VIRTUAL_KEY, VK_LWIN,
+    };
+    let key = |vk: VIRTUAL_KEY, up: bool| INPUT {
+        r#type: INPUT_KEYBOARD,
+        Anonymous: INPUT_0 {
+            ki: KEYBDINPUT {
+                wVk: vk,
+                wScan: 0,
+                dwFlags: if up { KEYEVENTF_KEYUP } else { KEYBD_EVENT_FLAGS(0) },
+                time: 0,
+                dwExtraInfo: 0,
+            },
+        },
+    };
+    let z = VIRTUAL_KEY(0x5A);
+    // All four at once, so no other key can come between them and Windows never sees Win held alone.
+    let inputs = [key(VK_LWIN, false), key(z, false), key(z, true), key(VK_LWIN, true)];
+    // SAFETY: plain input records, the size Windows expects.
+    unsafe { SendInput(&inputs, std::mem::size_of::<INPUT>() as i32) };
 }

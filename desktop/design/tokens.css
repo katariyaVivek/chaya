@@ -28,6 +28,10 @@
   --accent-glow: 0 0 24px rgb(var(--accent-rgb) / 0.35);
   --accent-edge: rgb(var(--accent-rgb) / 0.45); /* border of the one primary control */
 
+  /* The window's close button under the pointer, the same in both themes: Windows' own red, as every window has it */
+  --caption-close: #C42B1C;
+  --caption-close-text: #FFFFFF;
+
   /* Type */
   --font-ui: "Geist", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
   --font-mono: "Geist Mono", "Cascadia Mono", Consolas, ui-monospace, monospace;

@@ -137,6 +137,13 @@ for (const [name, theme] of [['Day', day], ['Night', nightPicked]]) {
   });
 }
 
+test("the window's close button is Windows' red under the pointer, its cross readable on it, in both themes", () => {
+  assert.equal(day.get('--caption-close'), '#C42B1C');
+  assert.ok(!nightPicked.has('--caption-close'), 'shared, as Windows draws it in both');
+  const ratio = contrast(hex(day.get('--caption-close-text')), hex(day.get('--caption-close')));
+  assert.ok(ratio >= 4.5, `close cross on red: ${ratio.toFixed(2)}`);
+});
+
 test('the accent is too pale for text on Day, so Day focuses with the text color', () => {
   assert.ok(contrast(hex(day.get('--accent')), hex(day.get('--bg'))) < 3);
   assert.equal(day.get('--focus'), 'var(--text)');

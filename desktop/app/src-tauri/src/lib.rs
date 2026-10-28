@@ -364,6 +364,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             recognise_link,
+            window::snap_layouts,
             look_up,
             download,
             list_downloads,

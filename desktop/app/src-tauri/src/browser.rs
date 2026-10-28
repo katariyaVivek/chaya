@@ -448,7 +448,7 @@ fn make_page(app: &AppHandle, id: u64, url: &str, bounds: Option<Bounds>) -> Res
         .add_child(builder, position(bounds), size(bounds))
         .map_err(|_| "The page couldn't be opened.".to_string())?;
     let _ = ads::block_requests(&page, blocker);
-    let _ = keys::forward(&page, app.clone());
+    let _ = page_input::attach(&page, app.clone());
     page.navigate(url).map_err(|_| "The page couldn't be opened.".to_string())?;
     tauri::async_runtime::spawn(learn_agent(app.clone()));
     tauri::async_runtime::spawn(ads::hide_ads(app.clone(), hide_key, id));
@@ -724,23 +724,41 @@ fn tab_key(key: u32, ctrl: bool, shift: bool, alt: bool) -> Option<String> {
 }
 
 /// The tab keys pressed in a page go to the window: WebView2 keeps the keys pressed in a page for the page, so
-/// otherwise Ctrl+W, Ctrl+T and Ctrl+Tab would work only while the focus is in Chaya's own bar.
+/// otherwise Ctrl+W, Ctrl+T and Ctrl+Tab would work only while the focus is in Chaya's own bar. And a page's
+/// `app-region: drag` is ignored (wry turns it on for every webview): only Chaya's own title bar moves the window.
 #[cfg(windows)]
-mod keys {
+mod page_input {
     use tauri::{AppHandle, Emitter, Manager};
     use webview2_com::AcceleratorKeyPressedEventHandler;
     use webview2_com::Microsoft::Web::WebView2::Win32::*;
     use windows::Win32::UI::Input::KeyboardAndMouse::{GetKeyState, VIRTUAL_KEY, VK_CONTROL, VK_MENU, VK_SHIFT};
+    use windows_core::Interface;
 
-    pub fn forward(page: &tauri::Webview, app: AppHandle) -> tauri::Result<()> {
+    pub fn attach(page: &tauri::Webview, app: AppHandle) -> tauri::Result<()> {
         page.with_webview(move |webview| {
-            if let Err(e) = attach(&webview.controller(), app) {
+            let controller = webview.controller();
+            if let Err(e) = no_drag(&controller) {
+                eprintln!("Chaya: a page could still drag the window: {e}");
+            }
+            if let Err(e) = forward_keys(&controller, app) {
                 eprintln!("Chaya: the page's tab keys could not be set up: {e}");
             }
         })
     }
 
-    fn attach(controller: &ICoreWebView2Controller, app: AppHandle) -> windows_core::Result<()> {
+    /// Takes effect from the page's next navigation: the page is made on about:blank and sent on after this.
+    fn no_drag(controller: &ICoreWebView2Controller) -> windows_core::Result<()> {
+        // SAFETY: called on the window's thread (`with_webview`), on the page's own live webview.
+        unsafe {
+            controller
+                .CoreWebView2()?
+                .Settings()?
+                .cast::<ICoreWebView2Settings9>()?
+                .SetIsNonClientRegionSupportEnabled(false)
+        }
+    }
+
+    fn forward_keys(controller: &ICoreWebView2Controller, app: AppHandle) -> windows_core::Result<()> {
         let handler = AcceleratorKeyPressedEventHandler::create(Box::new(move |_, args| {
             let Some(args) = args else { return Ok(()) };
             // SAFETY: WebView2 calls this on the window's thread with live arguments, as its documentation says.
@@ -778,9 +796,9 @@ mod keys {
 }
 
 #[cfg(not(windows))]
-mod keys {
-    /// WebKitGTK passes the keys a page leaves alone on to the window, which has its own.
-    pub fn forward(_page: &tauri::Webview, _app: tauri::AppHandle) -> tauri::Result<()> {
+mod page_input {
+    /// WebKitGTK passes the keys a page leaves alone on to the window, which has its own, and has no `app-region`.
+    pub fn attach(_page: &tauri::Webview, _app: tauri::AppHandle) -> tauri::Result<()> {
         Ok(())
     }
 }
