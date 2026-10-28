@@ -120,8 +120,20 @@
   </div>
 
   <section class="downloads" aria-labelledby="downloads-title">
-    <h1 class="title" id="downloads-title">Downloads</h1>
+    <div class="downloads__head">
+      <h1 class="title" id="downloads-title">Downloads</h1>
+      <label class="find" id="downloads-find-field" hidden>
+        <svg><use href="#i-search"/></svg>
+        <input class="find__input" id="downloads-find" type="search" spellcheck="false" placeholder="Find in downloads" aria-label="Find in downloads">
+      </label>
+    </div>
+    <div class="narrow" id="downloads-narrow" role="group" aria-label="Show only" hidden>
+      <div class="narrow__group" id="narrow-kind"></div>
+      <span class="narrow__rule" aria-hidden="true"></span>
+      <div class="narrow__group" id="narrow-site"></div>
+    </div>
     <ul class="list" id="download-list" aria-labelledby="downloads-title"></ul>
+    <p class="downloads__none" id="downloads-none" hidden>Nothing here matches. <button class="downloads__all" type="button" id="narrow-clear">Show everything</button></p>
     <div class="empty" id="downloads-empty">
       <span class="empty__icon"><svg><use href="#i-download"/></svg></span>
       <p>What you download appears here. Paste a link above to start.</p>

@@ -119,6 +119,10 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
   change of state; downloads running when the app closed come back paused.
 - **Retry** looks the link up again first, because the sites' addresses expire, and carries on from
   what arrived. Cancel deletes what arrived; removing a finished download from the list keeps the file.
+- **The list narrows** as the phone's library does: by kind (Videos, Pictures, Audio, ZIPs), by the site it came
+  from (`core::library::site_of`, the phone's `siteOf`, from the page it was found on or the file's own address),
+  and by words in its name, all three together. A group of chips shows only once the downloads span two or more
+  of its values, and the search once there are two downloads.
 - **Picture and sound apart** (most of YouTube's qualities): the picture is fetched into
   "name.picture", then the sound into "name.sound", then ffmpeg copies both into one MP4 (nothing is
   re-encoded, so it takes seconds and loses nothing) with its index at the front, and the halves are
@@ -287,7 +291,7 @@ there. `core` needs nothing beyond Rust.
 **The Windows tour** (`app/tour/tour.py`, CI job `tour`) installs the installer on a Windows machine and
 starts the app with WebView2's DevTools port open, driving the window through it. CI runs elevated, where
 WebView2 ignores `WEBVIEW2_*` variables (and so msedgedriver never attaches), so the job opens the port with
-the machine's WebView2 policy for `chaya-desktop.exe`. It takes a real link looked up and a download cancelled, a real Pinterest pin looked up, three pages in the built-in browser, two tabs switched and one closed, a page fullscreen and back, the window maximized and restored by its own button, the ad blocker's panel,
+the machine's WebView2 policy for `chaya-desktop.exe`. It takes a real link looked up and a download cancelled, a real Pinterest pin looked up, three pages in the built-in browser, two tabs switched and one closed, a page fullscreen and back, the window maximized and restored by its own button, the Downloads list narrowed by a chip and by a name, the ad blocker's panel,
 Night. At each step it photographs the whole screen, so the page's place in the window, Windows' fonts and
 frame are seen; the pictures and `steps.json` (what each step found) are the run's `chaya-windows-tour`
 artifact. A site that refuses the machine is noted, not failed on. Off Windows it runs with `--via webdriver`:
