@@ -180,6 +180,10 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
   Back (the button, Alt+Left or Escape) from the Downloads list goes back to the page it covers. Home, in
   the bar beside Reload, closes the page for Chaya's own start. Left to WebView2, pressed outside the page they
   reloaded Chaya's own window instead.
+- **Fullscreen video.** A page showing something fullscreen (a video's own fullscreen button) takes the whole
+  screen, as in any browser: the page's `ContainsFullScreenElementChanged` makes the window fullscreen and the
+  page cover all of it, where WebView2 alone would fill only the page's place under the bar. Esc or the video's
+  own button gives the window back as it was; showing another tab or Home leaves fullscreen too.
 - **Tabs**, up to ten, each its own webview (`page-1`, `page-2`, …) with its own history, made when the tab is
   first shown. Home is a new tab's start: an address typed there opens a new tab beside the one that was
   shown, and the strip's + goes there. A link that opens a new window opens a new tab. The strip is the title
@@ -283,7 +287,7 @@ there. `core` needs nothing beyond Rust.
 **The Windows tour** (`app/tour/tour.py`, CI job `tour`) installs the installer on a Windows machine and
 starts the app with WebView2's DevTools port open, driving the window through it. CI runs elevated, where
 WebView2 ignores `WEBVIEW2_*` variables (and so msedgedriver never attaches), so the job opens the port with
-the machine's WebView2 policy for `chaya-desktop.exe`. It takes a real link looked up and a download cancelled, a real Pinterest pin looked up, three pages in the built-in browser, two tabs switched and one closed, the window maximized and restored by its own button, the ad blocker's panel,
+the machine's WebView2 policy for `chaya-desktop.exe`. It takes a real link looked up and a download cancelled, a real Pinterest pin looked up, three pages in the built-in browser, two tabs switched and one closed, a page fullscreen and back, the window maximized and restored by its own button, the ad blocker's panel,
 Night. At each step it photographs the whole screen, so the page's place in the window, Windows' fonts and
 frame are seen; the pictures and `steps.json` (what each step found) are the run's `chaya-windows-tour`
 artifact. A site that refuses the machine is noted, not failed on. Off Windows it runs with `--via webdriver`:

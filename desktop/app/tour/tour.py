@@ -147,15 +147,17 @@ class DevToolsWindow:
             if answer.get('id') == self.next_id:
                 return answer.get('result', {})
 
-    def run(self, script, socket=None):
+    def run(self, script, socket=None, gesture=False):
         expression = f'(function () {{ {script} }})()'
-        result = self.send('Runtime.evaluate', {'expression': expression, 'returnByValue': True}, socket)
+        params = {'expression': expression, 'returnByValue': True, 'userGesture': gesture}
+        result = self.send('Runtime.evaluate', params, socket)
         if 'exceptionDetails' in result:
             raise RuntimeError(result['exceptionDetails'].get('exception', {}).get('description', 'script failed'))
         return result.get('result', {}).get('value')
 
-    def run_in_page(self, script):
-        """Runs `script` in the browser's page, which is a DevTools target of its own; None with no page open."""
+    def run_in_page(self, script, gesture=False):
+        """Runs `script` in the browser's page, which is a DevTools target of its own; None with no page open.
+        `gesture`: as if the person had just clicked, which fullscreen asks for."""
         import websocket
 
         with urllib.request.urlopen(f'http://127.0.0.1:{self.PORT}/json/list', timeout=2) as answer:
@@ -165,7 +167,7 @@ class DevToolsWindow:
             return None
         socket = websocket.create_connection(target['webSocketDebuggerUrl'], timeout=10, suppress_origin=True)
         try:
-            return self.run(script, socket)
+            return self.run(script, socket, gesture)
         finally:
             socket.close()
 
@@ -320,6 +322,22 @@ def run(tour, sites):
             time.sleep(4)
         except Exception as e:
             tour.failed('reload', e)
+
+        # A page's fullscreen (as a video's own button asks for it) takes the whole screen, and leaving gives the
+        # window back as it was, the page under the bar again.
+        try:
+            covers = "return innerWidth >= screen.width - 1 && innerHeight >= screen.height - 1"
+            tour.window.run_in_page("document.documentElement.requestFullscreen(); return 1", gesture=True)
+            full = tour.wait(lambda: tour.window.run_in_page(covers), 10)
+            time.sleep(1)
+            tour.shot('page-fullscreen', covers_the_screen=bool(full))
+            tour.window.run_in_page("document.exitFullscreen(); return 1")
+            left = tour.wait(lambda: tour.window.run_in_page(covers) is False, 10)
+            time.sleep(1.5)
+            page_top = tour.js("return Math.round(document.getElementById('page').getBoundingClientRect().top)")
+            tour.shot('fullscreen-left', left=bool(left), page_top=page_top)
+        except Exception as e:
+            tour.failed('page-fullscreen', e)
 
     # The Downloads list in the page's place, and Back from it to the page.
     try:
