@@ -9,9 +9,11 @@ planning documents live in [`history/`](history/README.md).
 with pause/resume/retry, classified errors, on-device diagnostics, signed APK on GitHub Releases.
 The PR-by-PR record is [`history/engineering-roadmap-v0.3.md`](history/engineering-roadmap-v0.3.md).
 
-**v0.4.0** (October 2026): a smarter media list (main video first, real names, ads folded away,
-one entry per quality), the redesigned UI, and links from YouTube, Instagram, TikTok and X looked
-up by yt-dlp on the phone, with picture and sound joined into one MP4. Merged as a stack:
+**v0.4.0** (October 2026, with everything below through #49; notes in
+[`releases/android-0.4.0.md`](releases/android-0.4.0.md)): a smarter media list (main video first,
+real names, ads folded away, one entry per quality), the redesigned UI, and links from YouTube,
+Instagram, TikTok and X looked up by yt-dlp on the phone, with picture and sound joined into one
+MP4. Merged as a stack:
 
 | PR | What it adds |
 |---|---|
@@ -23,7 +25,7 @@ up by yt-dlp on the phone, with picture and sound joined into one MP4. Merged as
 | [#22](https://github.com/katariyaVivek/chaya/pull/22) | Paste or share a YouTube, Instagram, TikTok or X link and pick a quality; optional use of the browser's sign-in |
 | [#23](https://github.com/katariyaVivek/chaya/pull/23) | Follow-up from review: a video-site answer is looked up again once its addresses may have expired; DASH told apart by protocol |
 
-## Merged since v0.4.0
+Also in v0.4.0, merged after that stack:
 
 | PR | What it adds |
 |---|---|
@@ -106,7 +108,7 @@ The six-part plan after v0.4.0 has shipped (#34 to #39); it is in
 3. **More picture formats for joining.** Only H.264 is joined today. HEVC and AV1 muxing depends on
    the Android version and has not been verified, so those qualities are not offered.
 4. **Time YouTube's three pieces at once on a phone** (#38). Compare a long YouTube download with
-   v0.4.0. If YouTube limits speed by address rather than by connection, change
+   one piece at a time. If YouTube limits speed by address rather than by connection, change
    `HttpDownloader.PIECES_AT_ONCE`.
 5. **A fresh address after a 403.** A YouTube download refused twice fails and keeps what it has,
    but Retry asks with the same, possibly expired, address. Asking the engine again first would

@@ -1,7 +1,10 @@
 name: Emulator check
 
-# Runs the debug app in a cloud emulator and uploads screenshots, on-screen text
-# and logs, so screens and downloads can be checked without a local emulator.
+# Runs the app in a cloud emulator and uploads screenshots, on-screen text and
+# logs, so screens and downloads can be checked without a local emulator. It runs
+# twice side by side: the debug build, and the release build, which R8 shrinks and
+# renames; only the release build shows what R8 broke (a class Python calls by
+# name, say). The release build here is signed with the debug key.
 #
 #   Pull request: add the `ui-check` label. It re-runs on every push while the label is on.
 #   Manually:     Actions > Emulator check > Run workflow (needs this file on the default branch).
@@ -20,6 +23,11 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ui-check')
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        build: [debug, release]
+    name: walkthrough (${{ matrix.build }})
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -42,8 +50,8 @@ jobs:
           gradle-version: '8.14.3'
           cache-read-only: false
 
-      - name: Build debug APK
-        run: gradle assembleDebug --stacktrace
+      - name: Build the ${{ matrix.build }} APK
+        run: gradle assemble${{ matrix.build == 'release' && 'Release' || 'Debug' }} --stacktrace
 
       # The walkthrough builds its own small test videos instead of depending on third-party hosts.
       - name: Install ffmpeg
@@ -79,7 +87,7 @@ jobs:
           ram-size: 6144M
           cores: 3
           disable-animations: true
-          script: python3 .github/scripts/walkthrough.py
+          script: BUILD=${{ matrix.build }} python3 .github/scripts/walkthrough.py
 
       - name: Look for the out-of-memory killer
         if: failure()
@@ -91,6 +99,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: emulator-evidence
+          name: emulator-evidence-${{ matrix.build }}
           path: evidence/
           if-no-files-found: warn

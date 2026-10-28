@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Cloud-emulator walkthrough for Chaya.
 
-Drives the debug build through two scenarios and saves evidence to ./evidence:
+Drives a build of the app (the debug one, or the release one when BUILD=release) through these scenarios
+and saves evidence to ./evidence:
 
   hls    A public hls.js demo page. The media sheet should list ONE main
          stream, the quality picker one entry per rendition, and the chosen
@@ -9,11 +10,15 @@ Drives the debug build through two scenarios and saves evidence to ./evidence:
   local  A page served from this runner with a pre-roll ad, a decorative
          background loop and the real video. The real video should be the main
          item and the ad should be folded away.
+  tabs, history  Tabs, and the History screen.
+  engine A Pinterest pin shared to the app is looked up by yt-dlp on the phone (Python through Chaquopy)
+         and offers a download. Run on the release build, it shows R8 left what the engine needs.
 
 Every step is best effort: a failed tap is recorded and the run continues, so
 one broken step never hides what happened after it. The visible UI text of each
 state is printed to the job log, so results can be read without screenshots.
 """
+import os
 import re
 import shlex
 import subprocess
@@ -24,12 +29,14 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 PKG = "com.chaya.app"
-APK = "app/build/outputs/apk/debug/app-debug.apk"
+BUILD = os.environ.get("BUILD", "debug")
+APK = f"app/build/outputs/apk/{BUILD}/app-{BUILD}.apk"
 EVIDENCE = Path("evidence")
 FIXTURE = Path("build/fixture")
 PORT = 8000
 HOST_URL = f"http://10.0.2.2:{PORT}"  # the emulator's alias for this runner
 HLS_DEMO = "https://hlsjs.video-dev.org/demo/"
+PIN = "https://www.pinterest.com/pin/664281013778109217/"  # a public video pin; Chaya for Windows' tour uses it too
 
 # Positions as fractions of the screen, used only when a node cannot be found by text.
 FALLBACK = {
@@ -359,6 +366,30 @@ def scenario_hls():
            f"{size // 1024 if isinstance(size, int) else size} MB left in the stream cache")
 
 
+def scenario_engine():
+    """A link shared from another app is looked up by the engine and offers a download."""
+    if not launch_fresh():
+        return
+    adb("shell", "am", "start", "-W", "-n", f"{PKG}/.MainActivity", "-a", "android.intent.action.SEND",
+        "-t", "text/plain", "--es", "android.intent.extra.TEXT", PIN, timeout=60)
+    time.sleep(3)
+    snapshot("engine-finding")
+    # The found sheet's button reads "Download 720p", "Download audio" or "Download"; the bottom bar's "Downloads"
+    # must not count.
+    deadline = time.time() + 150
+    while True:
+        require_app()
+        nodes, _ = ui_dump()
+        dismiss_not_responding(nodes)
+        button = find(nodes, text="Download") or find(nodes, text_prefix="Download ")
+        if button or time.time() > deadline:
+            break
+        time.sleep(2)
+    snapshot("engine-found")
+    record("engine: yt-dlp found the shared pin and offers a download", button is not None,
+           " · ".join(visible_texts(nodes))[:200])
+
+
 def make_fixture():
     media = FIXTURE / "media"
     (media / "vast").mkdir(parents=True, exist_ok=True)
@@ -501,7 +532,7 @@ def main():
     adb("wait-for-device")
     adb("logcat", "-G", "16M")
     install = run(["adb", "install", "-r", "-t", "-g", APK], timeout=300)
-    record("install the debug build", "Success" in install.stdout, install.stdout.strip()[-80:])
+    record(f"install the {BUILD} build", "Success" in install.stdout, install.stdout.strip()[-80:])
     size = re.search(r"(\d+)x(\d+)", sh("wm size").strip().splitlines()[-1])
     if size:
         screen_w, screen_h = int(size.group(1)), int(size.group(2))
@@ -519,7 +550,7 @@ def main():
         record("build the local test page", False, fixture_error)
 
     for name, scenario in (("hls", scenario_hls), ("local", scenario_local), ("tabs", scenario_tabs),
-                           ("history", scenario_history)):
+                           ("history", scenario_history), ("engine", scenario_engine)):
         for attempt in (1, 2):
             first_result = len(results)
             try:

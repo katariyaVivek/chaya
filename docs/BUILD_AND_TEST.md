@@ -47,7 +47,7 @@ curl -o app/src/main/assets/adblock/easyprivacy.txt https://easylist.to/easylist
 | `build.yml` (tag `v*`) | pushing a version tag | tests, signed release APK, GitHub Release |
 | `engine.yml` | PRs touching the Python engine | pytest with the versions pinned in `app/build.gradle.kts` (`enginePackages`) |
 | `device-tests.yml` | `ui-check` label on a PR, or manual | `connectedDebugAndroidTest` in a cloud emulator |
-| `emulator-check.yml` | `ui-check` label on a PR, or manual | `walkthrough.py` drives the app; screenshots, screen text and logs are uploaded as `emulator-evidence` |
+| `emulator-check.yml` | `ui-check` label on a PR, or manual | `walkthrough.py` drives the debug build and, beside it, the release build (R8-shrunk, debug-signed), including a link looked up by the engine; screenshots, screen text and logs are uploaded as `emulator-evidence-debug` and `-release` |
 | `desktop.yml` | PRs touching `desktop/` | Chaya for Windows: `chaya-core` tests on Linux, then lint, tests and the NSIS installer on Windows, uploaded as `chaya-windows-installer` |
 | `desktop-design.yml` | PRs touching `desktop/design/` | the desktop design system's tests (`npm test`) |
 
@@ -67,7 +67,10 @@ and what Windows needs are in [`../desktop/README.md`](../desktop/README.md).
    (gitignored) and fill it in. Without it, release builds fall back to debug signing, for
    checking only; never distribute that APK.
 3. **CI releases:** set the repository secrets `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`
-   and `KEY_PASSWORD`, then push a tag (`git tag v0.4.0 && git push origin v0.4.0`).
+   and `KEY_PASSWORD`, then push a tag (`git tag v0.4.0 && git push origin v0.4.0`). The tag must name
+   `versionName` (raise `versionCode` with it). What changed goes in `docs/releases/android-VERSION.md`, which
+   becomes the release's notes. Without git, publish a release on GitHub's website with the new tag on `main`;
+   the workflow adds the APK and the notes to it, and keeps it the repository's latest.
 
 ### Chaya for Windows
 
