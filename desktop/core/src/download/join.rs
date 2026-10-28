@@ -1,5 +1,5 @@
-//! Joining a picture-only file and a sound-only file into one MP4, and turning a saved stream into one, with the
-//! cut-down ffmpeg the app carries (`desktop/engine/build_ffmpeg.sh`). Tracks are copied as they are: nothing
+//! Joining a picture-only file and a sound-only file into one MP4 (a WebM for a VP8 or VP9 picture), and turning a
+//! saved stream into one, with the cut-down ffmpeg the app carries (`desktop/engine/build_ffmpeg.sh`). Tracks are copied as they are: nothing
 //! is re-encoded, so this takes seconds and loses nothing. As with the engine, Windows opens no console window
 //! for it.
 
@@ -68,10 +68,17 @@ impl Joiner {
         for input in inputs {
             command.arg("-i").arg(input);
         }
+        // A WebM for a VP8 or VP9 picture (`Choice::saved_as`), named so: "name.webm.part". Otherwise an MP4,
+        // with the index at the front, so players can start before reading the whole file.
+        let name = out.file_name().map(|n| n.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
+        let into: &[&str] = if name.trim_end_matches(".part").ends_with(".webm") {
+            &["-c", "copy", "-f", "webm"]
+        } else {
+            &["-c", "copy", "-movflags", "+faststart", "-f", "mp4"]
+        };
         command
             .args(maps)
-            // Copied, with the index at the front, so players can start before reading the whole file.
-            .args(["-c", "copy", "-movflags", "+faststart", "-f", "mp4"])
+            .args(into)
             .arg(out)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -108,6 +115,16 @@ mod tests {
     const PICTURE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/picture.mp4");
     const SOUND: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/sound.m4a");
     const STREAM: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/stream.ts");
+    /// VP9 picture, Opus sound, and the two together, one second each, as YouTube's and many players' WebM is.
+    const WEBM_PICTURE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/picture.webm");
+    const WEBM_SOUND: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/sound.webm");
+    const WEBM_STREAM: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/stream.webm");
+
+    /// A WebM file: Matroska's EBML header naming "webm", with a VP9 picture and Opus sound.
+    fn is_vp9_and_opus_webm(saved: &[u8]) -> bool {
+        let has = |text: &[u8]| saved.windows(text.len()).any(|w| w == text);
+        saved.starts_with(&[0x1A, 0x45, 0xDF, 0xA3]) && has(b"webm") && has(b"V_VP9") && has(b"A_OPUS")
+    }
 
     /// The ffmpeg to test with: `CHAYA_FFMPEG`, or one on the PATH. CI installs one; without it the joining
     /// tests say they were skipped.
@@ -137,6 +154,32 @@ mod tests {
         assert_eq!(&joined[4..8], b"ftyp");
         let at = |name: &[u8]| joined.windows(4).position(|w| w == name).unwrap();
         assert!(at(b"moov") < at(b"mdat"));
+    }
+
+    #[tokio::test]
+    async fn a_vp9_picture_and_its_opus_sound_become_one_webm() {
+        let Some(joiner) = joiner() else { return };
+        let folder = tempfile::tempdir().unwrap();
+        let out = folder.path().join("Clip (2160p).webm.part");
+        let (_tx, stop) = watch::channel(false);
+
+        let result = joiner.join(Path::new(WEBM_PICTURE), Path::new(WEBM_SOUND), &out, &stop).await;
+
+        assert_eq!(result, Ok(Outcome::Done));
+        assert!(is_vp9_and_opus_webm(&std::fs::read(&out).unwrap()));
+    }
+
+    #[tokio::test]
+    async fn a_saved_webm_stream_becomes_a_webm_with_its_picture_and_sound() {
+        let Some(joiner) = joiner() else { return };
+        let folder = tempfile::tempdir().unwrap();
+        let out = folder.path().join("Clip (1080p).webm.part");
+        let (_tx, stop) = watch::channel(false);
+
+        let result = joiner.convert(Path::new(WEBM_STREAM), &out, &stop).await;
+
+        assert_eq!(result, Ok(Outcome::Done));
+        assert!(is_vp9_and_opus_webm(&std::fs::read(&out).unwrap()));
     }
 
     #[tokio::test]

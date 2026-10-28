@@ -147,10 +147,14 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
   MP4"), or an M4A for sound only. A picture-only stream is joined to its sound like a picture file.
   The size shown is yt-dlp's estimate until a few pieces have arrived, then worked out from them.
 - What is chosen for a quality: a ready-made file, then picture and sound files joined, then a stream with
-  both, then a picture-only stream joined to sound. A stream whose picture is VP8 or VP9 in WebM is not
-  offered: MP4 must be told that picture's settings, which only a decoder could read, and the app's
-  ffmpeg has none for pictures. The card says some qualities can't be saved yet when a link has some the
-  app cannot save.
+  both, then a picture-only stream joined to sound, each as an MP4. A quality whose picture is only VP8 or
+  VP9 (YouTube's 1440p and 2160p for many videos, and many players' DASH streams) is saved the same ways as a
+  **WebM** instead (`Choice::saved_as`): its VP9 picture with Opus or Vorbis sound, copied as they are. MP4 would
+  need that picture's settings, which only a decoder could read, and the app's ffmpeg has none for pictures;
+  WebM takes them as they are, with the matroska and webm muxers and the VP9 parser the build already has. Such a
+  quality is offered only with WebM sound to pair (AAC cannot go in a WebM). The card names it "WebM", and the
+  row "Saving as WebM". Windows 10 and 11 play WebM in Media Player and every browser. The card says some
+  qualities can't be saved yet when a link has some the app cannot save.
 - **An account as one ZIP** (`download::archive`), as on the phone: an Instagram or X account's card offers
   *Save all posts with my sign-in* when the browser holds one, and *Try without signing in*. The bundled
   engine lists the account (`chaya_engine profile`, gallery-dl, at the site's pace) into

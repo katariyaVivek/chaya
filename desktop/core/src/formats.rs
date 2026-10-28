@@ -31,6 +31,22 @@ impl Choice {
         self.audio_to_merge.is_some()
     }
 
+    /// What the saved file is: a file as the site has it keeps its own kind; picture and sound joined, or a stream,
+    /// are copied into an MP4 (an M4A for sound only), or into a WebM when the picture is VP8 or VP9, which MP4
+    /// cannot be given without a decoder for pictures.
+    pub fn saved_as(&self) -> Option<&str> {
+        if !self.needs_merge() && !self.file.is_savable_stream() {
+            return self.file.ext.as_deref();
+        }
+        Some(if self.is_audio_only {
+            "m4a"
+        } else if picture_copies_into_mp4(&self.file) {
+            "mp4"
+        } else {
+            "webm"
+        })
+    }
+
     /// Total download size, when the sites said how big the pieces are.
     pub fn size_bytes(&self) -> Option<u64> {
         self.file.size_bytes.map(|size| size + self.audio_to_merge.as_ref().and_then(|a| a.size_bytes).unwrap_or(0))
@@ -79,6 +95,22 @@ fn picture_copies_into_mp4(f: &Format) -> bool {
     !is_ext(f, "webm") && !(vp && !is_ext(f, "mp4"))
 }
 
+/// A VP8 or VP9 picture (from WebM, as YouTube's and many players' streams have it), which a WebM holds as it is.
+fn picture_fits_webm(f: &Format) -> bool {
+    match f.video_codec.as_deref().map(str::to_ascii_lowercase) {
+        Some(codec) => codec.starts_with("vp8") || codec.starts_with("vp9") || codec.starts_with("vp09"),
+        None => is_ext(f, "webm"),
+    }
+}
+
+/// Sound a WebM holds as it is: Opus or Vorbis.
+fn sound_fits_webm(f: &Format) -> bool {
+    match f.audio_codec.as_deref().map(str::to_ascii_lowercase) {
+        Some(codec) => codec.starts_with("opus") || codec.starts_with("vorbis"),
+        None => is_ext(f, "webm"),
+    }
+}
+
 /// Whether a picture-only track is H.264, the one kind of picture the phone joins to sound.
 pub fn is_h264(f: &Format) -> bool {
     f.video_codec.as_deref().is_some_and(|c| c.starts_with("avc"))
@@ -110,6 +142,9 @@ pub fn choices(media: &Media, can_join: impl Fn(&Format) -> bool) -> Vec<Choice>
         best(audio_only.iter().copied().filter(|f| is_ext(f, "m4a") || is_ext(f, "mp4")), by_audio_preference);
     // A picture-only stream takes the sound file when there is one, else the best sound-only stream.
     let stream_sound = merge_audio.or_else(|| best(audio_streams(), by_audio_preference));
+    // A VP8 or VP9 picture is saved as a WebM, with sound a WebM holds: a file when there is one, else a stream.
+    let webm_sound = best(audio_only.iter().copied().filter(|f| sound_fits_webm(f)), by_audio_preference)
+        .or_else(|| best(audio_streams().filter(|f| sound_fits_webm(f)), by_audio_preference));
 
     let mut by_quality: BTreeMap<i64, Vec<&Format>> = BTreeMap::new();
     for format in media.formats.iter().filter(|f| f.has_video() && !f.is_audio_only()) {
@@ -120,7 +155,9 @@ pub fn choices(media: &Media, can_join: impl Fn(&Format) -> bool) -> Vec<Choice>
     let mut choices: Vec<Choice> = by_quality
         .iter()
         .rev()
-        .filter_map(|(quality, candidates)| choice_for(*quality, candidates, (merge_audio, stream_sound), &can_join))
+        .filter_map(|(quality, candidates)| {
+            choice_for(*quality, candidates, (merge_audio, stream_sound, webm_sound), &can_join)
+        })
         .collect();
 
     if choices.is_empty() {
@@ -138,12 +175,13 @@ pub fn choices(media: &Media, can_join: impl Fn(&Format) -> bool) -> Vec<Choice>
 }
 
 /// One choice per quality. A ready-made file wins; then, when joining is possible, a separate picture and sound;
-/// then a stream with picture and sound; then a picture-only stream and sound; a stream the app cannot save (DASH
-/// without its pieces listed) is the last resort.
+/// then a stream with picture and sound; then a picture-only stream and sound; then the same in WebM, for a
+/// quality whose picture is only VP8 or VP9; a stream the app cannot save (DASH without its pieces listed) is the
+/// last resort.
 fn choice_for(
     quality: i64,
     candidates: &[&Format],
-    (merge_audio, stream_sound): (Option<&Format>, Option<&Format>),
+    (merge_audio, stream_sound, webm_sound): (Option<&Format>, Option<&Format>, Option<&Format>),
     can_join: &impl Fn(&Format) -> bool,
 ) -> Option<Choice> {
     let complete_file = best(candidates.iter().copied().filter(|f| f.is_complete_file()), by_preference);
@@ -160,6 +198,17 @@ fn choice_for(
         by_merge_compatibility,
     );
     let other_stream = best(streams().filter(|f| !f.is_savable_stream() && f.has_audio()), by_preference);
+    // VP8 and VP9, as WebM: a file or a stream that can be saved, copied as it is (joined or saved by ffmpeg).
+    let webm = || {
+        candidates
+            .iter()
+            .copied()
+            .filter(|f| !picture_copies_into_mp4(f) && picture_fits_webm(f) && can_join(f))
+            .filter(|f| f.is_direct_file() || f.is_savable_stream())
+    };
+    let webm_complete_stream =
+        best(webm().filter(|f| f.is_savable_stream() && f.has_audio() && sound_fits_webm(f)), by_preference);
+    let webm_picture = best(webm().filter(|f| f.audio_codec.as_deref() == Some("none")), by_preference);
 
     let (file, audio) = if let Some(file) = complete_file {
         (file, None)
@@ -168,6 +217,10 @@ fn choice_for(
     } else if let Some(stream) = complete_stream {
         (stream, None)
     } else if let (Some(picture), Some(audio)) = (picture_stream, stream_sound) {
+        (picture, Some(audio))
+    } else if let Some(stream) = webm_complete_stream {
+        (stream, None)
+    } else if let (Some(picture), Some(audio)) = (webm_picture, webm_sound) {
         (picture, Some(audio))
     } else {
         (other_stream?, None)
@@ -184,13 +237,9 @@ fn choice(
     is_audio_only: bool,
 ) -> Choice {
     let mut choice = Choice { label, detail: String::new(), quality, file, audio_to_merge, is_audio_only };
-    // A stream is saved as an MP4, or an M4A for sound only, whatever its pieces are.
-    let saved_as = match (choice.file.is_savable_stream(), is_audio_only) {
-        (true, true) => Some("m4a"),
-        (true, false) => Some("mp4"),
-        (false, _) => choice.file.ext.as_deref(),
-    };
-    let mut facts: Vec<String> = saved_as.iter().map(|e| e.to_uppercase()).collect();
+    // "MP4", "M4A", and WebM as it writes itself.
+    let kind = |ext: &str| if ext.eq_ignore_ascii_case("webm") { "WebM".to_string() } else { ext.to_uppercase() };
+    let mut facts: Vec<String> = choice.saved_as().iter().map(|e| kind(e)).collect();
     if let Some(size) = choice.size_bytes().filter(|s| *s > 0) {
         facts.push(format!("≈ {}", file_size(size)));
     }
@@ -476,7 +525,7 @@ mod tests {
     }
 
     #[test]
-    fn a_webm_stream_is_not_offered_but_its_opus_sound_is() {
+    fn a_webm_stream_is_saved_as_a_webm_with_its_opus_sound() {
         let pieces = vec!["https://cdn.example/init.webm".to_string()];
         let vp9 = Format {
             ext: Some("webm".into()),
@@ -494,7 +543,49 @@ mod tests {
             fragments: pieces,
             ..dash("opus", 0, 0)
         };
-        assert_eq!(labels(&choices(&media(vec![vp9, opus]), ALWAYS)), ["Audio only"]);
+        let c = choices(&media(vec![vp9, opus]), ALWAYS);
+        assert_eq!(labels(&c), ["1080p", "Audio only"]);
+        assert_eq!((c[0].file.id.as_str(), c[0].audio_to_merge.as_ref().unwrap().id.as_str()), ("vp9-1080", "opus"));
+        assert_eq!(c[0].saved_as(), Some("webm"));
+        assert!(c[0].detail.starts_with("WebM"), "{}", c[0].detail);
+        // Nothing to join it with: no quality, as before.
+        assert!(choices(&media(vec![c[0].file.clone()]), ALWAYS).is_empty());
+    }
+
+    #[test]
+    fn a_quality_only_in_vp9_is_saved_as_a_webm_with_opus_sound_and_mp4_wins_where_there_is_one() {
+        let m = media(vec![
+            Format { ext: Some("webm".into()), ..picture_only("313", 3840, 2160, "vp9") },
+            Format { ext: Some("webm".into()), ..picture_only("248", 1920, 1080, "vp9") },
+            picture_only("137", 1920, 1080, "avc1.640028"),
+            Format { audio_bitrate_kbps: Some(160.0), audio_codec: Some("opus".into()), ..audio("251", "webm") },
+            Format { audio_bitrate_kbps: Some(129.0), ..audio("140", "m4a") },
+        ]);
+        let c = choices(&m, ALWAYS);
+        assert_eq!(labels(&c), ["2160p", "1080p", "Audio only"]);
+        // 2160p is only VP9: a WebM, with the Opus sound (MP4's AAC cannot go in a WebM).
+        assert_eq!((c[0].file.id.as_str(), c[0].audio_to_merge.as_ref().unwrap().id.as_str()), ("313", "251"));
+        assert_eq!(c[0].saved_as(), Some("webm"));
+        // 1080p has H.264: an MP4, as before.
+        assert_eq!((c[1].file.id.as_str(), c[1].audio_to_merge.as_ref().unwrap().id.as_str()), ("137", "140"));
+        assert_eq!(c[1].saved_as(), Some("mp4"));
+        // Without ffmpeg to join them, neither is offered.
+        assert_eq!(labels(&choices(&m, |_| false)), ["Audio only"]);
+    }
+
+    #[test]
+    fn a_complete_webm_stream_is_saved_as_a_webm() {
+        let both = Format {
+            ext: Some("webm".into()),
+            video_codec: Some("vp9".into()),
+            audio_codec: Some("opus".into()),
+            fragments: vec!["https://cdn.example/init.webm".to_string()],
+            ..dash("vp9-720", 1280, 720)
+        };
+        let c = choices(&media(vec![both]), ALWAYS);
+        assert_eq!(labels(&c), ["720p"]);
+        assert_eq!(c[0].saved_as(), Some("webm"));
+        assert!(!c[0].needs_merge());
     }
 
     #[test]

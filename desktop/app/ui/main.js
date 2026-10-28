@@ -541,7 +541,10 @@ function metaOf(task) {
       }
       if (task.step === 'joining') return 'Joining picture and sound';
       // A stream arrives as pieces, then becomes one file.
-      if (task.step === 'saving') return task.kind === 'audio' ? 'Saving as M4A' : 'Saving as MP4';
+      if (task.step === 'saving') {
+        if (task.kind === 'audio') return 'Saving as M4A';
+        return task.fileName.toLowerCase().endsWith('.webm') ? 'Saving as WebM' : 'Saving as MP4';
+      }
       const parts = [sizes];
       // A quality whose picture and sound come apart: which of the two is on its way.
       if (task.step === 'picture') parts.unshift('Picture');
