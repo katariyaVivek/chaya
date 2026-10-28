@@ -276,6 +276,8 @@ def run(tour, sites):
 
     # A Pinterest pin: looked up by the same engine, a picture or GIF as a post, a video with its qualities.
     try:
+        # The link's card is still there; cleared, the only card is the pin's own.
+        tour.js("document.getElementById('result').replaceChildren(); return 1")
         tour.type_address(sites['pin'])
         found = tour.wait(lambda: looked_up(tour), 120)
         tour.shot('pin-looked-up', card=tour.card_text()[:400], found=found)
