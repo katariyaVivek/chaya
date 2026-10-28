@@ -1,0 +1,1 @@
+Chaya for Windows: a file signed with the update key, to check tauri.conf.json holds its public half.

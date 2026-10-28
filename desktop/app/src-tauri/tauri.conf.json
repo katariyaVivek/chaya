@@ -54,5 +54,16 @@
       "../../../app/src/main/assets/adblock/easylist.txt": "adblock/easylist.txt",
       "../../../app/src/main/assets/adblock/easyprivacy.txt": "adblock/easyprivacy.txt"
     }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDJENjlBOERFNzQ0QzZBQUUKUldTdWFreDAzcWhwTFhlUk9NNzdWRVRheW54aE1vTGVMWW43WENKM0RHeTZJVnJ2YXJoYUt0bEoK",
+      "endpoints": [
+        "https://github.com/katariyaVivek/chaya/releases/download/windows-latest/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

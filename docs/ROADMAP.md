@@ -87,9 +87,10 @@ The six-part plan after v0.4.0 has shipped (#34 to #39); it is in
   build on a Windows PC (after #75) and found it working; CI installs and tours the app on Windows at every
   change, and the newest build is always at the `windows-preview` release.
 
-  Next for Windows: **a real release**: a version, a release page, a signed installer (so SmartScreen
-  names a publisher instead of warning), and updates from inside the app. Then the phone's last library
-  pieces: choosing several in the grid, and looking inside a saved ZIP.
+  Releases are `windows-v*` tags (#77): a release page each, and Chaya offers its own updates in its settings,
+  checked once a day and signed. The installer is not signed with a certificate yet, so SmartScreen asks before
+  it runs; a certificate can be added later without other changes (docs/BUILD_AND_TEST.md). Next: the phone's
+  last library pieces, choosing several in the grid and looking inside a saved ZIP.
 
 0. **First: check #48 on the phone.** #47's name search kept its first look for 3 seconds, so a page
    that drew its name late and then went quiet (7movies) kept no name; #48 looks again when the kept

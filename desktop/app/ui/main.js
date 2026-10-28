@@ -39,6 +39,35 @@ function applyAppearance({ theme, motion }) {
 const appearance = loadAppearance();
 applyAppearance(appearance);
 
+// ── Updates ─────────────────────────────────────────────────────────────────────────────────
+//
+// The app checks at most once a day (`update.rs`); one found is offered here, and installed only when clicked.
+
+const updateBox = document.getElementById('settings-update');
+const updateText = document.getElementById('update-text');
+const updateInstall = document.getElementById('update-install');
+
+function showUpdate(update) {
+  if (!update) return;
+  updateBox.hidden = false;
+  updateText.textContent = `Chaya ${update.version} is ready. It installs in a few seconds, and Chaya opens again.`;
+  document.getElementById('settings-button').classList.add('has-update');
+}
+
+tauri?.event.listen('update', ({ payload }) => showUpdate(payload));
+tauri?.core.invoke('update_waiting').then(showUpdate).catch(() => {});
+tauri?.app.getVersion().then((v) => {
+  document.getElementById('app-version').textContent = `Chaya for Windows ${v}.`;
+});
+updateInstall.addEventListener('click', () => {
+  updateInstall.disabled = true;
+  updateInstall.textContent = 'Updating…';
+  tauri.core.invoke('install_update').catch((message) => {
+    updateText.textContent = String(message);
+    updateInstall.hidden = true;
+  });
+});
+
 // ── The title bar's buttons ────────────────────────────────────────────────────────────────────────────────────
 //
 // Chaya draws the window's title bar (`decorations: false`); these are Windows' three, doing what Windows' do.

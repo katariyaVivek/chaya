@@ -76,6 +76,20 @@ body.browsing .settings__panel { background: var(--bg); }
 .settings__label { margin: 0; color: var(--muted); font-size: var(--text-sm); }
 .settings__label:not(:first-child) { margin-top: var(--space-1); }
 .shield__status { max-width: 32ch; margin: 0; font-size: var(--text-md); line-height: var(--leading-md); }
+.settings__update { display: grid; justify-items: start; gap: var(--space-1); }
+.settings__note { max-width: 32ch; margin: 0; font-size: var(--text-md); line-height: var(--leading-md); }
+/* An update waiting: a small accent dot on the settings button, the one place it is offered */
+#settings-button.has-update { position: relative; }
+#settings-button.has-update::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
 .settings__credit { max-width: 32ch; margin: var(--space-1) 0 0; color: var(--muted); font-size: var(--text-sm); line-height: var(--leading-sm); }
 
 .seg { display: flex; gap: 2px; padding: var(--space-half); border-radius: var(--radius-pill); background: var(--wash); }
