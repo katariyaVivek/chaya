@@ -55,20 +55,61 @@ pub struct Section {
     pub ids: Vec<u64>,
 }
 
-/// What the sections need of a download: its state ("queued", "downloading", "paused", "completed", "failed"), and
-/// when it was added and when it was saved or failed (seconds since 1970).
-#[derive(Clone, Copy, Debug)]
+/// What the sections and the grid need of a download: its state ("queued", "downloading", "paused", "completed",
+/// "failed"), when it was added and when it was saved or failed (seconds since 1970), and the post it came from.
+#[derive(Clone, Debug, Default)]
 pub struct Dated {
     pub id: u64,
     pub state: &'static str,
     pub added: u64,
     pub ended: Option<u64>,
+    pub group: Option<String>,
 }
 
 impl From<&TaskView> for Dated {
     fn from(task: &TaskView) -> Dated {
-        Dated { id: task.id, state: task.state, added: task.added, ended: task.ended }
+        Dated { id: task.id, state: task.state, added: task.added, ended: task.ended, group: task.group.clone() }
     }
+}
+
+/// One tile of the grid: a saved download, or the files of one post together (`key` "task:3" or "post:…").
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct Tile {
+    pub key: String,
+    pub ids: Vec<u64>,
+}
+
+/// The grid's tiles, as the phone's library (`libraryItems`): saved downloads only, newest first, a post's files on
+/// one tile in the order they were saved. A post with one file among `tasks` (the rest narrowed away) is an
+/// ordinary tile.
+pub fn tiles(tasks: &[Dated]) -> Vec<Tile> {
+    let saved: Vec<&Dated> = tasks.iter().filter(|t| t.state == "completed").collect();
+    let mut tiles: Vec<(u64, Tile)> = Vec::new();
+    let mut posts: Vec<(&str, usize)> = Vec::new();
+    for task in &saved {
+        let at = task.ended.unwrap_or(task.added);
+        let siblings = task.group.as_deref().map(|g| saved.iter().filter(|t| t.group.as_deref() == Some(g)).count());
+        match (task.group.as_deref(), siblings) {
+            (Some(group), Some(n)) if n >= 2 => match posts.iter().find(|(g, _)| *g == group) {
+                Some((_, i)) => {
+                    let (newest, tile) = &mut tiles[*i];
+                    *newest = (*newest).max(at);
+                    tile.ids.push(task.id);
+                }
+                None => {
+                    posts.push((group, tiles.len()));
+                    tiles.push((at, Tile { key: format!("post:{group}"), ids: vec![task.id] }));
+                }
+            },
+            _ => tiles.push((at, Tile { key: format!("task:{}", task.id), ids: vec![task.id] })),
+        }
+    }
+    for (_, tile) in &mut tiles {
+        tile.ids.sort_unstable();
+    }
+    // Newest first; among equals, the later download first, as the list has them.
+    tiles.sort_by(|(a, x), (b, y)| b.cmp(a).then(y.ids[0].cmp(&x.ids[0])));
+    tiles.into_iter().map(|(_, tile)| tile).collect()
 }
 
 const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -118,6 +159,20 @@ pub fn sections(tasks: &[Dated], now: u64, offset: i32) -> Vec<Section> {
     out
 }
 
+/// The type a picture named `file_name` is served as to the window, or None for anything that is not a picture.
+pub fn picture_type(file_name: &str) -> Option<&'static str> {
+    let ext = file_name.rsplit_once('.')?.1.to_ascii_lowercase();
+    Some(match ext.as_str() {
+        "jpg" | "jpeg" => "image/jpeg",
+        "png" => "image/png",
+        "webp" => "image/webp",
+        "gif" => "image/gif",
+        "avif" => "image/avif",
+        "bmp" => "image/bmp",
+        _ => return None,
+    })
+}
+
 /// The year, month (1–12) and day of the month `days` days after 1 January 1970 (Howard Hinnant's `civil_from_days`).
 fn civil(days: i64) -> (i64, u32, u32) {
     let z = days + 719_468;
@@ -141,7 +196,7 @@ mod tests {
 
     fn task(id: u64, state: &'static str, ended_days_ago: u64, added_days_ago: u64) -> Dated {
         let ended = (state == "completed" || state == "failed").then_some(NOW - ended_days_ago * DAY);
-        Dated { id, state, added: NOW - added_days_ago * DAY, ended }
+        Dated { id, state, added: NOW - added_days_ago * DAY, ended, group: None }
     }
 
     fn titles(sections: &[Section]) -> Vec<&str> {
@@ -178,15 +233,59 @@ mod tests {
     #[test]
     fn a_download_saved_late_in_the_evening_stays_on_its_own_day_in_the_persons_time_zone() {
         // 23:30 UTC on 7 Oct is already 8 Oct in UTC+2, so it counts as today there.
-        let late = Dated { id: 1, state: "completed", added: NOW - DAY, ended: Some(NOW - 12 * 3600 - 30 * 60) };
-        assert_eq!(titles(&sections(&[late], NOW, 0)), ["Yesterday"]);
+        let late =
+            Dated { id: 1, state: "completed", added: NOW - DAY, ended: Some(NOW - 12 * 3600 - 30 * 60), group: None };
+        assert_eq!(titles(&sections(std::slice::from_ref(&late), NOW, 0)), ["Yesterday"]);
         assert_eq!(titles(&sections(&[late], NOW, 120)), ["Today"]);
     }
 
     #[test]
     fn a_download_kept_before_its_save_time_was_counts_from_when_it_was_added() {
-        let old = Dated { id: 1, state: "completed", added: NOW - 40 * DAY, ended: None };
+        let old = Dated { id: 1, state: "completed", added: NOW - 40 * DAY, ended: None, group: None };
         assert_eq!(titles(&sections(&[old], NOW, 0)), ["29 Aug"]);
+    }
+
+    /// The phone's library table (`LibraryModelTest`): a video, a post of two pictures and a video, a song, one
+    /// still running, an account's ZIP, and a picture; each saved a second after the one before.
+    fn library() -> Vec<Dated> {
+        let post = Some("https://www.instagram.com/p/abc/".to_string());
+        (1..=8)
+            .map(|id| Dated {
+                id,
+                state: if id == 6 { "downloading" } else { "completed" },
+                added: id * 1000,
+                ended: Some(id * 1000),
+                group: (2..=4).contains(&id).then(|| post.clone()).flatten(),
+            })
+            .collect()
+    }
+
+    fn keys(tiles: &[Tile]) -> Vec<&str> {
+        tiles.iter().map(|t| t.key.as_str()).collect()
+    }
+
+    #[test]
+    fn saved_downloads_only_newest_first_a_posts_files_on_one_tile_in_the_order_they_were_saved() {
+        let tiles = tiles(&library());
+        assert_eq!(keys(&tiles), ["task:8", "task:7", "task:5", "post:https://www.instagram.com/p/abc/", "task:1"]);
+        assert_eq!(tiles[3].ids, [2, 3, 4]);
+    }
+
+    #[test]
+    fn a_post_with_one_file_left_after_narrowing_is_an_ordinary_tile() {
+        // Videos only: the post's video and the first download.
+        let videos: Vec<Dated> = library().into_iter().filter(|t| t.id == 4 || t.id == 1).collect();
+        assert_eq!(keys(&tiles(&videos)), ["task:4", "task:1"]);
+    }
+
+    #[test]
+    fn only_pictures_are_served_to_the_window_by_their_kind() {
+        assert_eq!(picture_type("Sunset (1).JPG"), Some("image/jpeg"));
+        assert_eq!(picture_type("Cat.webp"), Some("image/webp"));
+        assert_eq!(picture_type("Party.gif"), Some("image/gif"));
+        assert_eq!(picture_type("Clip.mp4"), None);
+        assert_eq!(picture_type("page.html"), None);
+        assert_eq!(picture_type("no extension"), None);
     }
 
     #[test]

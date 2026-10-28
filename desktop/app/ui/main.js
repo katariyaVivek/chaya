@@ -635,6 +635,9 @@ function showNarrowing() {
   findField.hidden = tasks.size < 2 && !narrowing.words;
   const kept = [...tasks.values()].filter(keeps).length;
   downloadsNone.hidden = tasks.size === 0 || kept > 0;
+  // The grid holds what was saved: offered once something has been.
+  viewSwitch.hidden = ![...tasks.values()].some((t) => t.state === 'completed');
+  showView(viewSwitch.hidden ? 'list' : view, false);
 }
 
 function narrow(change) {
@@ -645,6 +648,7 @@ function narrow(change) {
   }
   hideEmptySections();
   showNarrowing();
+  renderGrid();
 }
 
 // ── Sections ────────────────────────────────────────────────────────────────────────────────
@@ -676,8 +680,209 @@ function arrange() {
     const now = [...downloadList.children];
     if (order.length !== now.length || order.some((node, i) => node !== now[i])) downloadList.replaceChildren(...order);
     hideEmptySections();
+    renderGrid();
   });
 }
+
+// ── The grid ────────────────────────────────────────────────────────────────────────────────
+//
+// As the phone's library: what was saved, as square tiles. A picture shows itself (served to this window only, by
+// the download's number: `saved_picture` in lib.rs), a video the poster its site gave, a post's files one tile with
+// their count (`core::library::tiles`). A picture or a post opens in the viewer; anything else in its own program.
+
+const viewSwitch = document.getElementById('downloads-view');
+const gridWrap = document.getElementById('download-grid-wrap');
+const grid = document.getElementById('download-grid');
+const gridRunning = document.getElementById('grid-running');
+const SVG = 'http://www.w3.org/2000/svg';
+let view = 'list';
+try {
+  if (localStorage.getItem('chaya.downloads.view') === 'grid') view = 'grid';
+} catch {}
+
+/** The address of saved picture `id`, which only this window can open. */
+function savedPicture(id) {
+  return tauri.core.convertFileSrc(String(id), 'chaya-file');
+}
+
+function icon(id) {
+  const svg = document.createElementNS(SVG, 'svg');
+  const use = document.createElementNS(SVG, 'use');
+  use.setAttribute('href', `#${id}`);
+  svg.append(use);
+  return svg;
+}
+
+/** A tile or a page without a picture: its kind's icon over its name. */
+function named(task) {
+  const el = document.createElement('span');
+  el.className = 'tile__name';
+  el.append(icon(ROW_ICON[task.kind] ?? 'i-video'), span('', task.title || task.fileName));
+  return el;
+}
+
+/** What shows a saved download: the picture itself, a video's poster, or none. */
+function coverOf(task) {
+  if (task.kind === 'picture') return savedPicture(task.id);
+  return task.thumbnail?.startsWith('https://') ? task.thumbnail : null;
+}
+
+function image(src, onMissing) {
+  const img = new Image();
+  img.alt = '';
+  img.loading = 'lazy';
+  img.decoding = 'async';
+  img.referrerPolicy = 'no-referrer';
+  img.addEventListener('error', onMissing, { once: true });
+  img.src = src;
+  return img;
+}
+
+function tileFor({ key, ids }) {
+  const li = document.createElement('li');
+  li.dataset.key = key;
+  li.dataset.ids = ids.join(',');
+  const cover = tasks.get(ids[0]);
+  const name = cover.title || cover.fileName;
+  const tile = document.createElement('button');
+  tile.type = 'button';
+  tile.className = 'tile pressable';
+  tile.title = name;
+  tile.setAttribute('aria-label', ids.length > 1 ? `${name}, ${ids.length} files` : name);
+  const src = coverOf(cover);
+  if (src) {
+    const img = image(src, () => img.replaceWith(named(cover)));
+    tile.append(img);
+  } else {
+    tile.append(named(cover));
+  }
+  if (cover.kind === 'video') {
+    const play = span('tile__badge tile__badge--play', '');
+    play.append(icon('i-play'));
+    tile.append(play);
+  }
+  if (ids.length > 1) {
+    const count = span('tile__badge tile__badge--count num', '');
+    count.append(icon('i-post'), String(ids.length));
+    tile.append(count);
+  }
+  tile.addEventListener('click', () => {
+    const only = tasks.get(ids[0]);
+    if (ids.length === 1 && only?.kind !== 'picture') tauri.core.invoke('open_download', { id: ids[0] });
+    else openViewer(ids);
+  });
+  li.append(tile);
+  return li;
+}
+
+let gridding = 0;
+function renderGrid() {
+  if (view !== 'grid') return;
+  cancelAnimationFrame(gridding);
+  gridding = requestAnimationFrame(async () => {
+    const kept = [...tasks.values()].filter(keeps).map((t) => t.id);
+    const tiles = await tauri.core.invoke('library_tiles', { kept }).catch(() => null);
+    if (!tiles) return;
+    // A tile that holds the same files stays as it is, so its picture is not loaded again.
+    const shown = new Map([...grid.children].map((li) => [li.dataset.key, li]));
+    const next = tiles.map((tile) => {
+      const old = shown.get(tile.key);
+      return old && old.dataset.ids === tile.ids.join(',') ? old : tileFor(tile);
+    });
+    const now = [...grid.children];
+    if (next.length !== now.length || next.some((li, i) => li !== now[i])) grid.replaceChildren(...next);
+    // The grid shows what was saved; what is still on its way is followed in the list.
+    const running = [...tasks.values()].filter((t) => ['queued', 'downloading', 'paused'].includes(t.state)).length;
+    gridRunning.hidden = running === 0;
+    gridRunning.textContent = `${count(running, 'download')} still on the way · Show the list`;
+  });
+}
+
+function showView(next, remember = true) {
+  if (remember) {
+    view = next;
+    try {
+      localStorage.setItem('chaya.downloads.view', next);
+    } catch {}
+  }
+  for (const b of viewSwitch.querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.view === next));
+  downloadList.hidden = next === 'grid';
+  gridWrap.hidden = next !== 'grid';
+  if (next === 'grid') renderGrid();
+}
+
+viewSwitch.addEventListener('click', (e) => {
+  const choice = e.target.closest('[data-view]')?.dataset.view;
+  if (choice) showView(choice);
+});
+gridRunning.addEventListener('click', () => showView('list'));
+
+// ── The viewer ──────────────────────────────────────────────────────────────────────────────
+
+const viewer = document.getElementById('viewer');
+const viewerFrame = document.getElementById('viewer-frame');
+const viewerPrev = document.getElementById('viewer-prev');
+const viewerNext = document.getElementById('viewer-next');
+let viewing = { ids: [], at: 0 };
+
+function openViewer(ids, at = 0) {
+  viewing = { ids, at };
+  viewer.hidden = false;
+  // Over a page, the page would be drawn over the viewer: it hides while the viewer is open.
+  if (browsing) tauri.core.invoke('show_page', { visible: false });
+  showViewerPage();
+  document.getElementById('viewer-close').focus();
+}
+
+function closeViewer() {
+  viewer.hidden = true;
+  viewerFrame.replaceChildren();
+  if (browsing && !document.body.classList.contains('showing-downloads')) tauri.core.invoke('show_page', { visible: true });
+}
+
+function showViewerPage() {
+  const { ids, at } = viewing;
+  const task = tasks.get(ids[at]);
+  if (!task) return closeViewer();
+  document.getElementById('viewer-title').textContent = task.title || task.fileName;
+  document.getElementById('viewer-count').textContent = ids.length > 1 ? `${at + 1} of ${ids.length}` : '';
+  viewerPrev.disabled = at === 0;
+  viewerNext.disabled = at === ids.length - 1;
+  if (task.kind === 'picture') {
+    const img = image(savedPicture(task.id), () => img.replaceWith(named(task)));
+    img.loading = 'eager';
+    viewerFrame.replaceChildren(img);
+    return;
+  }
+  // A video (or anything else) in a post plays in its own program.
+  const play = document.createElement('div');
+  play.className = 'viewer__play';
+  const poster = coverOf(task);
+  play.append(poster ? image(poster, (e) => e.target.remove()) : named(task));
+  play.append(pill(task.kind === 'video' ? 'Play' : 'Open', () => tauri.core.invoke('open_download', { id: task.id }), true));
+  viewerFrame.replaceChildren(play);
+}
+
+function stepViewer(by) {
+  const at = viewing.at + by;
+  if (at < 0 || at >= viewing.ids.length) return;
+  viewing.at = at;
+  showViewerPage();
+}
+
+viewerPrev.addEventListener('click', () => stepViewer(-1));
+viewerNext.addEventListener('click', () => stepViewer(1));
+document.getElementById('viewer-close').addEventListener('click', closeViewer);
+document.getElementById('viewer-folder').addEventListener('click', () => {
+  tauri.core.invoke('show_download', { id: viewing.ids[viewing.at] });
+});
+viewer.addEventListener('keydown', (e) => {
+  // The viewer's own keys; the window's (Ctrl+L, the tab keys) wait until it is closed.
+  e.stopPropagation();
+  if (e.key === 'Escape') closeViewer();
+  else if (e.key === 'ArrowLeft') stepViewer(-1);
+  else if (e.key === 'ArrowRight') stepViewer(1);
+});
 
 /** A section whose downloads are all narrowed away keeps no heading. */
 function hideEmptySections() {

@@ -436,6 +436,30 @@ def run(tour, sites):
     except Exception as e:
         tour.failed('downloads-narrowed', e)
 
+    # The grid, as the phone's library: what was saved as tiles, a picture or a post opening in the viewer.
+    try:
+        if not tour.js("return document.getElementById('downloads-view').hidden"):
+            tour.click('#downloads-view [data-view="grid"]')
+            tour.wait(lambda: tour.js("return document.querySelectorAll('#download-grid .tile').length"), 10)
+            time.sleep(1.5)
+            tiles = tour.js("return [...document.querySelectorAll('#download-grid .tile')].map(t => t.getAttribute('aria-label'))")
+            pictures = tour.js("return [...document.querySelectorAll('#download-grid .tile img')].filter(i => i.naturalWidth > 0).length")
+            tour.shot('downloads-grid', tiles=tiles, pictures_shown=pictures)
+            opens = tour.js("const t = [...document.querySelectorAll('#download-grid .tile')]"
+                            ".find(t => t.querySelector('img[src*=\"chaya-file\"]') || t.querySelector('.tile__badge--count'));"
+                            " if (!t) return false; t.click(); return true;")
+            if opens:
+                tour.wait(lambda: not tour.js("return document.getElementById('viewer').hidden"), 5)
+                time.sleep(1)
+                tour.shot('viewer', title=tour.js("return document.getElementById('viewer-title').textContent"),
+                          count=tour.js("return document.getElementById('viewer-count').textContent"))
+                tour.js("document.getElementById('viewer').dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true})); return 1")
+                time.sleep(0.5)
+                tour.steps.append({'step': 'viewer-closed', 'closed': tour.js("return document.getElementById('viewer').hidden")})
+            tour.click('#downloads-view [data-view="list"]')
+    except Exception as e:
+        tour.failed('downloads-grid', e)
+
 
 def main():
     parser = argparse.ArgumentParser()
