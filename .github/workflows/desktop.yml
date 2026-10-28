@@ -17,6 +17,8 @@ on:
       - '.github/workflows/desktop.yml'
   push:
     branches: [ main, master ]
+    # A release: windows-v0.1.0 (GitHub does not apply the path filters below to tags).
+    tags: [ 'windows-v*' ]
     paths:
       - 'desktop/**'
       - 'app/src/main/python/**'
@@ -169,15 +171,47 @@ jobs:
           CHAYA_FFMPEG: ${{ github.workspace }}\desktop\app\src-tauri\engine\ffmpeg.exe
         run: cargo test --workspace -- --nocapture
 
+      # A release (a windows-v* tag) also signs the update Chaya fetches from inside the app (update.rs), with the
+      # key whose public half is in tauri.conf.json: TAURI_SIGNING_PRIVATE_KEY and its password are repository
+      # secrets, and without them a release fails rather than ship an update no copy of Chaya would accept. The
+      # tag must name the version in tauri.conf.json. WINDOWS_SIGN_COMMAND, when set, signs the installer itself
+      # (Tauri's bundle.windows.signCommand: a certificate's signing tool, %1 standing for the file); without it
+      # the installer is unsigned and Windows SmartScreen asks before it runs.
       - name: Build the installer
         working-directory: desktop/app
-        run: npm run build
+        shell: bash
+        env:
+          RELEASE: ${{ startsWith(github.ref, 'refs/tags/windows-v') }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ startsWith(github.ref, 'refs/tags/windows-v') && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ startsWith(github.ref, 'refs/tags/windows-v') && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
+          WINDOWS_SIGN_COMMAND: ${{ secrets.WINDOWS_SIGN_COMMAND }}
+        run: |
+          set -euo pipefail
+          if [ "$RELEASE" != true ]; then
+            npm run build
+            exit 0
+          fi
+          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          if [ "windows-v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::The tag $GITHUB_REF_NAME does not name the app's version $version (src-tauri/tauri.conf.json)."
+            exit 1
+          fi
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::error::TAURI_SIGNING_PRIVATE_KEY is not set: a release's update must be signed (docs/BUILD_AND_TEST.md)."
+            exit 1
+          fi
+          config=$(node -e "const c = { bundle: { createUpdaterArtifacts: true } };
+            if (process.env.WINDOWS_SIGN_COMMAND) c.bundle.windows = { signCommand: process.env.WINDOWS_SIGN_COMMAND };
+            console.log(JSON.stringify(c))")
+          npm run build -- --config "$config"
 
       - name: Keep the installer
         uses: actions/upload-artifact@v4
         with:
           name: chaya-windows-installer
-          path: desktop/target/release/bundle/nsis/*.exe
+          path: |
+            desktop/target/release/bundle/nsis/*.exe
+            desktop/target/release/bundle/nsis/*.exe.sig
           if-no-files-found: error
 
   # The installer installed on a Windows machine and the app toured, with a picture of the whole screen at each
@@ -279,3 +313,73 @@ jobs:
             gh release create windows-preview --prerelease --latest=false --target "$GITHUB_SHA" --title "$title" --notes "$notes"
           fi
           gh release upload windows-preview Chaya-Windows-preview-setup.exe --clobber
+
+  # A release of Chaya for Windows, from a windows-v* tag, once the tour has seen the app start: the installer on
+  # its own release page (never the repository's "latest", which stays the phone's), with its notes from
+  # docs/releases/windows-VERSION.md when there are any; and `latest.json` on the fixed `windows-latest` release,
+  # which every copy of Chaya for Windows reads at most once a day to offer the update (update.rs).
+  release:
+    name: Windows release
+    needs: [windows, tour]
+    if: startsWith(github.ref, 'refs/tags/windows-v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get the installer
+        uses: actions/download-artifact@v4
+        with:
+          name: chaya-windows-installer
+          path: installer
+
+      - name: Publish the release, and the update
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          tag="$GITHUB_REF_NAME"
+          version="${tag#windows-v}"
+          setup=$(ls installer/*.exe | head -n 1)
+          name="Chaya-Windows-$version-setup.exe"
+          cp "$setup" "$name"
+          cp "$setup.sig" "$name.sig"
+          notes_file="docs/releases/windows-$version.md"
+          if [ ! -f "$notes_file" ]; then
+            notes_file=$(mktemp)
+            echo "Chaya for Windows $version." > "$notes_file"
+          fi
+          {
+            cat "$notes_file"
+            echo
+            echo "**Install:** download $name and run it. Windows may say \"Windows protected your PC\": the"
+            echo "installer is not signed with a certificate yet, so choose *More info*, then *Run anyway*. Chaya"
+            echo "installs for you alone (no administrator needed), and an earlier Chaya is updated in place: your"
+            echo "downloads, settings and sign-ins stay. From now on Chaya offers its own updates in its settings."
+          } > release-notes.md
+          gh release create "$tag" --latest=false --verify-tag --title "Chaya for Windows $version" \
+            --notes-file release-notes.md "$name"
+
+          # What every Chaya for Windows reads to offer this release: its version, notes and signed installer.
+          url="https://github.com/$GITHUB_REPOSITORY/releases/download/$tag/$name"
+          python3 - "$version" "$url" "$name.sig" "$notes_file" > latest.json <<'PY'
+          import json, sys, datetime
+          version, url, sig, notes = sys.argv[1:]
+          print(json.dumps({
+              "version": version,
+              "notes": open(notes, encoding="utf-8").read().strip(),
+              "pub_date": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+              "platforms": {"windows-x86_64": {"signature": open(sig).read().strip(), "url": url}},
+          }, indent=2))
+          PY
+          title="Chaya for Windows: the update"
+          about="What Chaya for Windows reads to offer its newest release ($version). Not a release itself: the releases are the windows-v* ones."
+          if gh release view windows-latest >/dev/null 2>&1; then
+            gh release edit windows-latest --prerelease --title "$title" --notes "$about"
+          else
+            gh release create windows-latest --prerelease --latest=false --target "$GITHUB_SHA" --title "$title" --notes "$about"
+          fi
+          gh release upload windows-latest latest.json --clobber

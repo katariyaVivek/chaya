@@ -207,6 +207,10 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
   screen, as in any browser: the page's `ContainsFullScreenElementChanged` makes the window fullscreen and the
   page cover all of it, where WebView2 alone would fill only the page's place under the bar. Esc or the video's
   own button gives the window back as it was; showing another tab or Home leaves fullscreen too.
+- **Updates** (`update.rs`, `tauri-plugin-updater`): at most once a day (`update.json` in the app's data
+  folder) Chaya asks for `latest.json` on the `windows-latest` release; a newer version is offered in the
+  settings (a dot on their button), and fetched and installed only on *Update and restart*, checked against the
+  key in `tauri.conf.json` first. Releases are `windows-v*` tags (docs/BUILD_AND_TEST.md).
 - **Tabs**, up to ten, each its own webview (`page-1`, `page-2`, …) with its own history, made when the tab is
   first shown. Home is a new tab's start: an address typed there opens a new tab beside the one that was
   shown, and the strip's + goes there. A link that opens a new window opens a new tab. The strip is the title

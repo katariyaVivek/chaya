@@ -3,6 +3,7 @@
 
 mod ads;
 mod browser;
+mod update;
 mod window;
 
 use std::path::PathBuf;
@@ -365,6 +366,7 @@ impl From<Event> for DownloadEvent {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .register_asynchronous_uri_scheme_protocol("chaya-file", |ctx, request, responder| {
             let (app, from) = (ctx.app_handle().clone(), ctx.webview_label().to_string());
             // Read off the window's thread: a picture can be many megabytes.
@@ -416,11 +418,15 @@ pub fn run() {
             if let Some(main) = app.get_webview_window("main") {
                 window::place(&main, app.path().app_data_dir()?.join("window.json"));
             }
+            app.manage(update::Updates::default());
+            update::start(app.handle(), app.path().app_data_dir()?.join("update.json"));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             recognise_link,
             window::snap_layouts,
+            update::update_waiting,
+            update::install_update,
             look_up,
             download,
             list_downloads,

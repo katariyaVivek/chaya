@@ -55,7 +55,12 @@
         <button type="button" data-motion-choice="system">Same as Windows</button>
         <button type="button" data-motion-choice="reduce">Reduced</button>
       </div>
-      <p class="settings__credit">Titles are set in Cabinet Grotesk by Indian Type Foundry.</p>
+      <div class="settings__update" id="settings-update" hidden>
+        <p class="settings__label">Update</p>
+        <p class="settings__note" id="update-text"></p>
+        <button class="pill pill--primary pressable" type="button" id="update-install">Update and restart</button>
+      </div>
+      <p class="settings__credit"><span id="app-version"></span> Titles are set in Cabinet Grotesk by Indian Type Foundry.</p>
     </div>
   </div>
   <!-- Chaya draws the window's title bar: this row. Its buttons are Windows' own three, drawn as Windows draws them. -->

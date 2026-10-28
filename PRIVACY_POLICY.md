@@ -78,8 +78,7 @@ Chaya talks only to the sites involved in what you do:
 
 ## Chaya for Windows
 
-Chaya for Windows is in development and not released yet. It keeps the same promises, with these
-differences:
+Chaya for Windows keeps the same promises, with these differences:
 
 - **Pages you open** in its built-in browser load as in any browser (Microsoft Edge WebView2), and keep
   their cookies in Chaya's own WebView2 folder on your PC. A page cannot reach the app.
@@ -118,6 +117,11 @@ differences:
   the sites you let show ads) stay on your PC, and about once a week it fetches fresh EasyList and
   EasyPrivacy lists from easylist.to, sending nothing about you. To hide a page's ad boxes, a script of
   Chaya's in the page notes the names of the page's elements for Chaya to read; they go nowhere else.
+- **Updates.** At most once a day Chaya for Windows asks GitHub (github.com, where Chaya's releases are
+  published) for a small file naming the newest Windows version. Nothing about you is sent beyond what any
+  web request carries (your IP address, to GitHub). When there is a newer version, Chaya says so in its
+  settings, and fetches and installs it only when you click *Update and restart*. Every update is checked
+  against Chaya's own signing key before it runs, so only Chaya's releases install.
 
 ## What Chaya never does
 

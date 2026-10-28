@@ -69,6 +69,29 @@ and what Windows needs are in [`../desktop/README.md`](../desktop/README.md).
 3. **CI releases:** set the repository secrets `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`
    and `KEY_PASSWORD`, then push a tag (`git tag v0.4.0 && git push origin v0.4.0`).
 
+### Chaya for Windows
+
+Releases are `windows-v*` tags; the phone's stay `v*`, and stay the repository's "latest" release.
+
+1. **The update key, once** (done for 0.1.0). Chaya for Windows installs only updates signed with the key whose
+   public half is `plugins.updater.pubkey` in `desktop/app/src-tauri/tauri.conf.json`
+   (`desktop/app/src-tauri/src/update.rs` checks that the two belong together). Its private half and password
+   are the repository secrets `TAURI_SIGNING_PRIVATE_KEY` (the key file's text) and
+   `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. **Keep a copy of both somewhere safe, away from GitHub:** GitHub never
+   shows a secret again, and without the key no copy of Chaya already installed can be updated from inside the
+   app (each person would have to download the installer again). A new key is made with
+   `npx tauri signer generate -w chaya-windows-updater.key` (in `desktop/app`), and its `.pub` goes into
+   `tauri.conf.json`.
+2. **A release:** set the version in `desktop/app/src-tauri/tauri.conf.json` and `desktop/Cargo.toml`, write what
+   changed in `docs/releases/windows-VERSION.md`, merge, then tag main:
+   `git tag windows-v0.1.0 origin/main && git push origin windows-v0.1.0`. The Desktop workflow builds and
+   tours it, publishes the installer on the tag's release page, and refreshes `latest.json` on the
+   `windows-latest` release, which every copy of Chaya for Windows reads at most once a day.
+3. **Signing the installer** (optional): with the secret `WINDOWS_SIGN_COMMAND` set, every build signs the
+   installer with it (Tauri's `bundle.windows.signCommand`, `%1` standing for the file), for example a
+   certificate authority's cloud signing tool. Without it the installer is unsigned and Windows SmartScreen
+   asks before it runs, which the release page explains.
+
 Chaya ships as a direct APK through GitHub Releases. The Play Store is deferred: a media downloader
 is close to its copyrighted-content policy, and the diagnostics assume no Play Services.
 
