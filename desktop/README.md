@@ -1,5 +1,9 @@
 # Chaya for Windows
 
+**Try the newest build:** [Chaya-Windows-preview-setup.exe](https://github.com/katariyaVivek/chaya/releases/download/windows-preview/Chaya-Windows-preview-setup.exe),
+replaced after every merge to main that changes the app. Run it to install, or to update the Chaya you have;
+downloads, settings and sign-ins stay. A pull request's own build is its CI run's `chaya-windows-installer`.
+
 The desktop version of Chaya, built with [Tauri 2](https://v2.tauri.app/). The window is web content
 drawn with the design system in [`design/`](design/README.md), shown by Windows' own WebView2
 (Chromium). The work is done in Rust.
@@ -269,7 +273,10 @@ local pages.
 CI: `desktop.yml` builds the cut-down ffmpeg for Windows and Linux (once per version of
 `build_ffmpeg.sh`, kept in the Actions cache); tests `core` and the packaging on Linux with it; and on
 Windows puts the engine together, checks it, lints, tests and builds the installer, kept as the run's
-`chaya-windows-installer` artifact. `desktop-design.yml` runs the design system's tests.
+`chaya-windows-installer` artifact. After a merge to main that changes the app, once the tour has seen it
+start, the installer replaces the one on the `windows-preview` pre-release, so the newest build is always at
+[one address](https://github.com/katariyaVivek/chaya/releases/download/windows-preview/Chaya-Windows-preview-setup.exe).
+`desktop-design.yml` runs the design system's tests.
 
 ## Privacy
 
