@@ -611,3 +611,21 @@ fn settings_are_kept_and_read_back_and_a_broken_file_blocks_everywhere() {
     std::fs::write(&path, b"{ not json").unwrap();
     assert!(Settings::open(path).blocks_on("news.example"));
 }
+#[test]
+fn each_tab_has_its_own_page_and_count_and_shares_the_rules_and_the_persons_choices() {
+    let first = AdBlocker::new(Settings::in_memory(), sites);
+    let second = first.for_another_page();
+    // The lists are read once, after the tabs were opened, and both use them.
+    first.use_engine(engine(&["||ads.example^"]));
+    first.begin_page("https://www.news.example/story");
+    second.begin_page("https://www.shop.example/");
+    assert!(first.should_block("https://ads.example/a.js", SCRIPT));
+    assert!(second.should_block("https://ads.example/b.js", SCRIPT));
+    assert!(second.should_block("https://ads.example/c.js", SCRIPT));
+    assert_eq!((first.shield().site.as_str(), first.shield().blocked), ("news.example", 1));
+    assert_eq!((second.shield().site.as_str(), second.shield().blocked), ("shop.example", 2));
+
+    // Ads shown on one site, in either tab, are shown in both.
+    second.settings().set_allowed("news.example", true).unwrap();
+    assert!(!first.should_block("https://ads.example/d.js", SCRIPT));
+}

@@ -26,6 +26,7 @@
   <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
   <symbol id="i-close" viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
   <symbol id="i-zip" viewBox="0 0 24 24"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M13 9.5h2M13 12h2M13 14.5h2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5.5v13M5.5 12h13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
   <symbol id="i-home" viewBox="0 0 24 24"><path d="M4.5 11L12 4.5l7.5 6.5M6.5 9.5v9h4v-5h3v5h4v-9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H5m0 0l6-6m-6 6l6 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-forward" viewBox="0 0 24 24"><path d="M5 12h14m0 0l-6-6m6 6l-6 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
@@ -56,12 +57,16 @@
 </header>
 
 <main class="main">
+  <nav class="tabstrip" id="tabstrip" aria-label="Tabs" hidden>
+    <div class="tabstrip__tabs" role="tablist"></div>
+    <button class="icon-btn pressable tabstrip__new" type="button" id="tab-new" aria-label="New tab" title="New tab (Ctrl+T)"><svg><use href="#i-plus"/></svg></button>
+  </nav>
   <form class="urlbar" id="address-form" autocomplete="off">
     <div class="page-nav" data-browsing hidden>
       <button class="icon-btn pressable" type="button" id="page-back" aria-label="Back" title="Back"><svg><use href="#i-back"/></svg></button>
       <button class="icon-btn pressable" type="button" id="page-forward" aria-label="Forward" title="Forward"><svg><use href="#i-forward"/></svg></button>
       <button class="icon-btn pressable" type="button" id="page-reload" aria-label="Reload" title="Reload"><svg><use href="#i-retry"/></svg></button>
-      <button class="icon-btn pressable" type="button" id="page-close" aria-label="Home" title="Home"><svg><use href="#i-home"/></svg></button>
+      <button class="icon-btn pressable" type="button" id="page-home" aria-label="Home" title="Home"><svg><use href="#i-home"/></svg></button>
     </div>
     <label class="urlbar__field glass" for="address">
       <svg class="urlbar__icon"><use href="#i-link"/></svg>
@@ -153,6 +158,13 @@
       <button class="icon-btn pressable row__close" type="button"><svg><use href="#i-close"/></svg></button>
     </div>
   </li>
+</template>
+
+<template id="tab-template">
+  <div class="tab" role="tab" aria-selected="false">
+    <button class="tab__title" type="button"></button>
+    <button class="tab__close" type="button" aria-label="Close tab" title="Close tab (Ctrl+W)"><svg><use href="#i-close"/></svg></button>
+  </div>
 </template>
 
 <template id="found-template">

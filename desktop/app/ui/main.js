@@ -601,7 +601,10 @@ function setBrowsing(on) {
   }
 }
 
-/** Opens what `text` names in the page: an address, a site, an account, or a search. */
+/**
+ * Opens what `text` names in the page: an address, a site, an account, or a search. In the tab shown; from the home,
+ * in a new tab.
+ */
 async function openPage(text, signIn = false) {
   forget();
   const first = !browsing;
@@ -610,7 +613,7 @@ async function openPage(text, signIn = false) {
   // Laid out first, so the page opens where .page is.
   await new Promise(requestAnimationFrame);
   try {
-    const url = await tauri.core.invoke('open_page', { text, bounds: boundsOf(pageEl), signIn });
+    const url = await tauri.core.invoke('open_page', { text, bounds: boundsOf(pageEl), signIn, newTab: first });
     pageUrl = url;
     address.value = url;
     address.blur();
@@ -622,12 +625,134 @@ async function openPage(text, signIn = false) {
   }
 }
 
-function closePage() {
-  tauri.core.invoke('close_page');
+/** The window's own home, which is also where a new tab starts: every tab stays open behind it. */
+function goHome() {
+  tauri.core.invoke('go_home');
   setBrowsing(false);
   address.value = '';
   address.focus();
 }
+
+// ── Tabs ────────────────────────────────────────────────────────────────────────────────────
+//
+// The app keeps the tabs (`browser.rs`) and says how they are after every change; the window draws them. The strip
+// shows once there are two, or behind the home while any is open, so a single page keeps a one-row bar.
+
+const tabstrip = document.getElementById('tabstrip');
+const tabList = tabstrip.querySelector('.tabstrip__tabs');
+const tabTemplate = document.getElementById('tab-template');
+/** The tabs as last heard, and the one the window shows. */
+let tabsNow = { tabs: [], active: null };
+let activeTab = null;
+
+function tabName(tab) {
+  if (tab.title) return tab.title;
+  return tab.url ? hostOf(tab.url) : 'New tab';
+}
+
+function showTabs(view) {
+  tabsNow = view;
+  const shown = view.tabs.length >= 2 || (view.tabs.length >= 1 && view.active === null);
+  tabstrip.hidden = !shown;
+  document.body.classList.toggle('has-tabs', shown);
+  tabList.replaceChildren(
+    ...view.tabs.map((tab) => {
+      const el = tabTemplate.content.firstElementChild.cloneNode(true);
+      el.dataset.id = tab.id;
+      el.setAttribute('aria-selected', String(tab.id === view.active));
+      el.classList.toggle('tab--loading', tab.loading);
+      const title = el.querySelector('.tab__title');
+      title.textContent = tabName(tab);
+      title.title = tab.url ? `${tabName(tab)}\n${tab.url}` : tabName(tab);
+      title.addEventListener('click', () => switchTab(tab.id));
+      // A middle click closes a tab, as in any browser.
+      el.addEventListener('auxclick', (e) => {
+        if (e.button === 1) closeTab(tab.id);
+      });
+      el.querySelector('.tab__close').addEventListener('click', () => closeTab(tab.id));
+      return el;
+    }),
+  );
+  if (view.active === null && browsing) {
+    // The last tab shown was closed: the home again.
+    setBrowsing(false);
+    address.value = '';
+    activeTab = null;
+  } else if (view.active !== null && view.active !== activeTab) {
+    tabShown(view.tabs.find((t) => t.id === view.active));
+  }
+}
+
+/** Another tab is shown: the bar, the shield and what the page holds are that tab's now. */
+function tabShown(tab) {
+  activeTab = tab?.id ?? null;
+  if (!tab) return;
+  if (!browsing) setBrowsing(true);
+  forget();
+  forgetFound();
+  hideNotice();
+  pageLookedAt = '';
+  pageAt(tab.url);
+  setLoading(tab.loading);
+  tauri.core.invoke('ad_blocking').then((view) => showShield(view.shield)).catch(() => {});
+}
+
+async function switchTab(id) {
+  if (id === activeTab && browsing) return;
+  if (!browsing) setBrowsing(true);
+  showDownloads(false);
+  await new Promise(requestAnimationFrame);
+  tauri.core.invoke('switch_tab', { id, bounds: boundsOf(pageEl) }).catch((message) => showNotice(String(message)));
+}
+
+function closeTab(id) {
+  tauri.core.invoke('close_tab', { id });
+}
+
+/** The tab `step` places along from the one shown (or the first or last from the home), as Ctrl+Tab goes. */
+function cycleTabs(step) {
+  const { tabs } = tabsNow;
+  if (!tabs.length) return;
+  const at = tabs.findIndex((t) => t.id === activeTab);
+  const next = at < 0 ? (step > 0 ? 0 : tabs.length - 1) : (at + step + tabs.length) % tabs.length;
+  switchTab(tabs[next].id);
+}
+
+/** The tab key `e` is (with Ctrl held), named as `tab_key` in `browser.rs` names one pressed in a page. */
+function tabKeyOf(e) {
+  const key = e.key.toLowerCase();
+  if (key === 't' && !e.shiftKey) return 'new-tab';
+  if (key === 'w' && !e.shiftKey) return 'close-tab';
+  if (key === 'tab') return e.shiftKey ? 'previous-tab' : 'next-tab';
+  if (/^[1-9]$/.test(key) && !e.shiftKey) return `tab-${key}`;
+  return null;
+}
+
+function tabKey(name) {
+  if (name === 'new-tab') {
+    goHome();
+  } else if (name === 'close-tab') {
+    // The tab shown, never Chaya's own window.
+    if (browsing && activeTab !== null) closeTab(activeTab);
+  } else if (name === 'next-tab' || name === 'previous-tab') {
+    cycleTabs(name === 'next-tab' ? 1 : -1);
+  } else if (name === 'address') {
+    address.focus();
+    address.select();
+  } else if (name.startsWith('tab-')) {
+    // Ctrl+9 is the last tab, as in any browser.
+    const { tabs } = tabsNow;
+    const n = Number(name.slice(4));
+    const tab = n === 9 ? tabs[tabs.length - 1] : tabs[n - 1];
+    if (tab) switchTab(tab.id);
+  }
+}
+
+tauri?.event.listen('tabs', ({ payload }) => showTabs(payload));
+// Pressed with the focus in a page (Windows): WebView2 hands them here.
+tauri?.event.listen('tab-key', ({ payload }) => tabKey(payload));
+tauri?.core.invoke('list_tabs').then(showTabs).catch(() => {});
+document.getElementById('tab-new').addEventListener('click', goHome);
 
 const pageStill = document.getElementById('page-still');
 /** Counts the calls to showPageView, so a slow picture of the page is not shown after the panel has closed. */
@@ -717,10 +842,11 @@ pageReload.addEventListener('click', () =>
 pageDownloads.addEventListener('click', () =>
   showDownloads(!document.body.classList.contains('showing-downloads')),
 );
-document.getElementById('page-close').addEventListener('click', closePage);
+document.getElementById('page-home').addEventListener('click', goHome);
 
 tauri?.event.listen('page', ({ payload }) => {
-  if (!browsing) return;
+  // Only the tab shown speaks to the bar; the others' titles and loading show in the strip.
+  if (!browsing || payload.tab !== activeTab) return;
   switch (payload.type) {
     case 'loading':
       setLoading(true);
@@ -732,7 +858,8 @@ tauri?.event.listen('page', ({ payload }) => {
       pageAt(payload.url);
       break;
     case 'popup':
-      showNotice(`This page tried to open ${hostOf(payload.url)} in a new window.`, 'Open it here', () => openPage(payload.url));
+      // Only once the tabs are full; otherwise it opens in a new tab.
+      showNotice(`This page tried to open ${hostOf(payload.url)} in a new tab, but ten are open.`, 'Open it here', () => openPage(payload.url));
       break;
     case 'saving':
       showNotice(`Saving ${payload.name} in Downloads.`, 'Show', () => showDownloads(true));
@@ -1046,6 +1173,9 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     address.focus();
     address.select();
+  } else if (e.ctrlKey && !e.altKey && tabKeyOf(e)) {
+    e.preventDefault();
+    tabKey(tabKeyOf(e));
   } else if (browsing && e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
     // A browser's history keys, which WebView2 would otherwise spend on Chaya's own window.
     e.preventDefault();

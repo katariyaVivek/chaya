@@ -246,6 +246,10 @@ the 160 ms exit and then removes the element.
   pushed the page down about 100px after the page had loaded, and the bar and its spacing took 90px.
 - **Home, not a close button.** The bar's ✕ beside Downloads read as closing something else; Home beside
   Reload says where it goes: Chaya's own start.
+- **Home is a new tab's start, and tabs are a strip above the bar.** Chrome-style tabs on top, 32px
+  pills on the ground, the shown one raised on the surface. The strip appears only once a second tab
+  exists (or on Home while a page is open), so a person who never opens two pages never sees it. Home
+  needs no page of its own: the + goes there, and what is typed there opens beside the shown tab.
 - **No wordmark in the window.** Windows' title bar already names the app; the top of the window holds
   only the settings, which join the bar's row while a page is open.
 - **Glass and the shimmer** are the desktop's own choices. `PRODUCT.md` lists glassmorphism and
