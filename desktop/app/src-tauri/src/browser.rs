@@ -1,6 +1,8 @@
-//! The built-in browser: one page at a time, in a webview of its own inside the window, where the window's own
-//! content (`ui/main.js`) leaves room for it and says so. The window draws the bar around the page and asks
-//! here to go back, forward, reload or close.
+//! The built-in browser: tabs, each a page in a webview of its own inside the window, where the window's own content
+//! (`ui/main.js`) leaves room for it and says so. One tab is shown at a time (or none, while the window shows its
+//! own home); the window draws the bar and the tabs around it and asks here to go back, forward, reload, switch or
+//! close. Up to ten tabs, as on the phone at first; a tab's webview is made the first time it is shown, so the tabs
+//! kept from the last run (`tabs.json`: each one's address and title) cost nothing until then.
 //!
 //! A page gets nothing of the app. Its webview is not the window's: the app's commands are granted to the
 //! window's own content only (`capabilities/default.json`), and a page from the web is never local. A page can
@@ -17,10 +19,11 @@
 
 use std::collections::hash_map::RandomState;
 use std::hash::{BuildHasher, Hasher};
-use std::sync::Mutex;
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
-use chaya_core::adblock::{kind, Shield};
+use chaya_core::adblock::{kind, AdBlocker, Shield};
 use chaya_core::browse;
 use chaya_core::found::{self, Found, FoundKind, Report};
 use chaya_core::links::{self, Platform};
@@ -36,8 +39,8 @@ use chaya_core::media::{FailureKind, Media};
 use crate::ads::{self, Ads};
 use crate::{Downloads, Lookups};
 
-/// The page's webview.
-const PAGE: &str = "page";
+/// Most tabs open at once.
+pub const MAX_TABS: usize = 10;
 
 /// Where the page goes in the window, in the window's own (logical) pixels.
 #[derive(Clone, Copy, Debug, Deserialize)]
@@ -73,27 +76,195 @@ enum PageEvent {
     },
 }
 
-/// What the app knows about the page: its title, for naming what it downloads; the name its detector keeps its
-/// list under; what was found on it when the window last asked; and which opening of the page this is, so work
-/// for a page that was closed stops.
-#[derive(Default)]
-pub struct PageState(Mutex<PageInner>);
+/// A page event, and the tab it is about.
+#[derive(Clone, Serialize)]
+struct TabEvent {
+    tab: u64,
+    #[serde(flatten)]
+    event: PageEvent,
+}
 
-#[derive(Default)]
-struct PageInner {
+/// One tab: what the app knows about its page.
+struct Tab {
+    id: u64,
+    url: String,
+    /// Its title, for the tab and for naming what it downloads.
     title: String,
+    loading: bool,
+    /// The name its detector keeps its list under, and what was found on it when the window last asked.
     key: String,
     found: Vec<Found>,
-    generation: u64,
+    /// Its own page and count of what was blocked; the rules and the person's choices are the browser's.
+    blocker: Arc<AdBlocker>,
+    /// Whether its webview exists: a tab kept from the last run has none until it is shown.
+    opened: bool,
+}
+
+impl Tab {
+    fn new(id: u64, url: String, title: String, blocker: &AdBlocker) -> Tab {
+        Tab {
+            id,
+            url,
+            title,
+            loading: false,
+            key: format!("__chaya_{}", random_word()),
+            found: Vec::new(),
+            blocker: Arc::new(blocker.for_another_page()),
+            opened: false,
+        }
+    }
+}
+
+/// The browser's tabs, the one shown, and where its page goes in the window.
+#[derive(Default)]
+pub struct Tabs(Mutex<TabsInner>);
+
+#[derive(Default)]
+struct TabsInner {
+    tabs: Vec<Tab>,
+    /// The tab shown; None while the window shows its own home.
+    active: Option<u64>,
+    next: u64,
+    bounds: Option<Bounds>,
+    /// Where the tabs are kept for the next run.
+    store: Option<PathBuf>,
+}
+
+/// A tab as it is kept for the next run: where it was, and what it was called.
+#[derive(Serialize, Deserialize)]
+struct Kept {
+    url: String,
+    title: String,
+}
+
+impl Tabs {
+    /// The tabs kept at `store` from the last run, none of them shown yet.
+    pub fn open(store: PathBuf, blocker: &AdBlocker) -> Tabs {
+        let kept: Vec<Kept> =
+            std::fs::read(&store).ok().and_then(|bytes| serde_json::from_slice(&bytes).ok()).unwrap_or_default();
+        let tabs: Vec<Tab> = kept
+            .into_iter()
+            .filter(|k| Url::parse(&k.url).is_ok_and(|u| browse::may_open(&u) && u.scheme() != "about"))
+            .take(MAX_TABS)
+            .enumerate()
+            .map(|(i, k)| Tab::new(i as u64 + 1, k.url, k.title, blocker))
+            .collect();
+        let next = tabs.len() as u64 + 1;
+        Tabs(Mutex::new(TabsInner { tabs, active: None, next, bounds: None, store: Some(store) }))
+    }
+}
+
+/// A tab as the window shows it.
+#[derive(Clone, Serialize)]
+pub struct TabView {
+    id: u64,
+    title: String,
+    url: String,
+    loading: bool,
+}
+
+/// Every tab, in order, and the one shown.
+#[derive(Clone, Serialize)]
+pub struct TabsView {
+    tabs: Vec<TabView>,
+    active: Option<u64>,
+}
+
+fn tabs(app: &AppHandle) -> MutexGuard<'_, TabsInner> {
+    app.state::<Tabs>().inner().0.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// A tab's webview's label.
+fn label(id: u64) -> String {
+    format!("page-{id}")
+}
+
+/// The tab whose webview is `page`.
+fn tab_of(page: &Webview) -> Option<u64> {
+    page.label().strip_prefix("page-")?.parse().ok()
+}
+
+/// The tab shown, and its page.
+fn active_page(app: &AppHandle) -> Option<(u64, Webview)> {
+    let id = tabs(app).active?;
+    Some((id, app.get_webview(&label(id))?))
+}
+
+/// The page of the tab `id`, while the tab is open.
+pub fn tab_page(app: &AppHandle, id: u64) -> Option<Webview> {
+    tabs(app).tabs.iter().any(|t| t.id == id && t.opened).then(|| app.get_webview(&label(id)))?
+}
+
+/// The ad blocker of the tab `id`; None once it is closed.
+pub fn tab_blocker(app: &AppHandle, id: u64) -> Option<Arc<AdBlocker>> {
+    tabs(app).tabs.iter().find(|t| t.id == id).map(|t| t.blocker.clone())
+}
+
+/// Whether the tab `id` is the one shown.
+pub fn is_active(app: &AppHandle, id: u64) -> bool {
+    tabs(app).active == Some(id)
+}
+
+/// The ad blocker of the tab shown.
+pub fn active_blocker(app: &AppHandle) -> Option<Arc<AdBlocker>> {
+    let inner = tabs(app);
+    let id = inner.active?;
+    inner.tabs.iter().find(|t| t.id == id).map(|t| t.blocker.clone())
+}
+
+fn view(inner: &TabsInner) -> TabsView {
+    TabsView {
+        tabs: inner
+            .tabs
+            .iter()
+            .map(|t| TabView { id: t.id, title: t.title.clone(), url: t.url.clone(), loading: t.loading })
+            .collect(),
+        active: inner.active,
+    }
+}
+
+/// Tells the window how the tabs are now, and keeps them for the next run.
+fn tabs_changed(app: &AppHandle) {
+    let (view, store, kept) = {
+        let inner = tabs(app);
+        let kept: Vec<Kept> = inner
+            .tabs
+            .iter()
+            .filter(|t| !t.url.is_empty() && !t.url.starts_with("about:"))
+            .map(|t| Kept { url: t.url.clone(), title: t.title.clone() })
+            .collect();
+        (view(&inner), inner.store.clone(), kept)
+    };
+    let _ = app.emit("tabs", view);
+    if let Some(store) = store {
+        if let Ok(json) = serde_json::to_vec(&kept) {
+            let saving = store.with_extension("json.saving");
+            if std::fs::write(&saving, json).is_ok() {
+                let _ = std::fs::rename(&saving, &store);
+            }
+        }
+    }
+}
+
+/// Changes what the app knows of the tab `id`, then tells the window.
+fn update_tab(app: &AppHandle, id: u64, change: impl FnOnce(&mut Tab)) {
+    let found = {
+        let mut inner = tabs(app);
+        inner.tabs.iter_mut().find(|t| t.id == id).map(change).is_some()
+    };
+    if found {
+        tabs_changed(app);
+    }
+}
+
+#[tauri::command]
+pub fn list_tabs(app: AppHandle) -> TabsView {
+    view(&tabs(&app))
 }
 
 /// The browser's user agent, sent with what a page downloads as its sign-in is.
 #[derive(Default)]
 pub struct Agent(Mutex<Option<String>>);
-
-fn page_state(app: &AppHandle) -> std::sync::MutexGuard<'_, PageInner> {
-    app.state::<PageState>().inner().0.lock().unwrap_or_else(|e| e.into_inner())
-}
 
 /// A word no page can guess: 128 bits from the hasher's random keys, which the system seeds.
 fn random_word() -> String {
@@ -111,14 +282,6 @@ fn detector(key: &str, nonce: &str) -> String {
     include_str!("detector.js").replace("__CHAYA_KEY__", key).replace("__CHAYA_NONCE__", nonce)
 }
 
-/// The page, while it is still the one opened as `generation`.
-pub fn current_page(app: &AppHandle, generation: u64) -> Option<Webview> {
-    if page_state(app).generation != generation {
-        return None;
-    }
-    app.get_webview(PAGE)
-}
-
 /// What `call`, evaluated in the page's top document, returns: a string, or None when the page did not answer.
 pub async fn ask(page: &Webview, call: String) -> Option<String> {
     let (tx, rx) = tokio::sync::oneshot::channel::<String>();
@@ -134,14 +297,21 @@ pub async fn ask(page: &Webview, call: String) -> Option<String> {
     serde_json::from_str::<String>(&answer).ok()
 }
 
-fn emit(app: &AppHandle, event: PageEvent) {
-    let _ = app.emit("page", event);
+fn emit(app: &AppHandle, tab: u64, event: PageEvent) {
+    let _ = app.emit("page", TabEvent { tab, event });
 }
 
-/// Opens what `text` names (an address, a site, an account, or words to search for) in the page, creating the
-/// page where `bounds` says when there is none. Returns the address opened, for the address bar.
+/// Opens what `text` names (an address, a site, an account, or words to search for): in the tab shown, or in a new
+/// tab when `new_tab` asks for one or none is shown (from the window's home). `bounds` is where the page goes. Returns
+/// the address opened, for the address bar.
 #[tauri::command]
-pub async fn open_page(text: String, bounds: Bounds, sign_in: Option<bool>, app: AppHandle) -> Result<String, String> {
+pub async fn open_page(
+    text: String,
+    bounds: Bounds,
+    sign_in: Option<bool>,
+    new_tab: Option<bool>,
+    app: AppHandle,
+) -> Result<String, String> {
     // A video's link is looked up, not opened; only to sign in to its site is its page opened.
     let link = links::recognise(&text);
     let address = if sign_in.unwrap_or(false) { browse::sign_in_page(&link) } else { browse::page_for(&link) };
@@ -150,34 +320,88 @@ pub async fn open_page(text: String, bounds: Bounds, sign_in: Option<bool>, app:
     if !browse::may_open(&url) {
         return Err("Chaya opens only web pages.".into());
     }
-    if let Some(page) = app.get_webview(PAGE) {
-        page.navigate(url).map_err(|_| "The page couldn't be opened.".to_string())?;
-        let _ = page.show();
-        return Ok(address);
+    tabs(&app).bounds = Some(bounds);
+    match active_page(&app).filter(|_| !new_tab.unwrap_or(false)) {
+        Some((_, page)) => {
+            page.navigate(url).map_err(|_| "The page couldn't be opened.".to_string())?;
+            let _ = page.show();
+        }
+        None => {
+            new_tab_at(&app, url)?;
+        }
     }
+    Ok(address)
+}
+
+/// Opens `url` in a new tab and shows it.
+fn new_tab_at(app: &AppHandle, url: Url) -> Result<u64, String> {
+    let id = {
+        let mut inner = tabs(app);
+        if inner.tabs.len() >= MAX_TABS {
+            return Err(format!("{MAX_TABS} tabs are open. Close one to open another."));
+        }
+        let id = inner.next;
+        inner.next += 1;
+        let blocker = app.state::<Ads>().blocker.clone();
+        let tab = Tab::new(id, url.to_string(), String::new(), &blocker);
+        // Beside the tab it came from, as browsers place a new tab; at the end from the home.
+        let at =
+            inner.active.and_then(|a| inner.tabs.iter().position(|t| t.id == a)).map_or(inner.tabs.len(), |i| i + 1);
+        inner.tabs.insert(at, tab);
+        id
+    };
+    show_tab(app, id)?;
+    Ok(id)
+}
+
+/// Shows the tab `id` in the page's place, hiding the one shown before; its page is made the first time.
+fn show_tab(app: &AppHandle, id: u64) -> Result<(), String> {
+    let (previous, opened, url, bounds) = {
+        let mut inner = tabs(app);
+        let previous = inner.active.replace(id).filter(|p| *p != id);
+        let tab = inner.tabs.iter_mut().find(|t| t.id == id).ok_or("This tab is closed.")?;
+        let opened = std::mem::replace(&mut tab.opened, true);
+        (previous, opened, tab.url.clone(), inner.bounds)
+    };
+    if let Some(page) = previous.and_then(|p| app.get_webview(&label(p))) {
+        let _ = page.hide();
+    }
+    if opened {
+        if let Some(page) = app.get_webview(&label(id)) {
+            if let Some(bounds) = bounds {
+                let _ = page.set_position(position(bounds));
+                let _ = page.set_size(size(bounds));
+            }
+            let _ = page.show();
+        }
+    } else if let Err(error) = make_page(app, id, &url, bounds) {
+        update_tab(app, id, |t| t.opened = false);
+        return Err(error);
+    }
+    tabs_changed(app);
+    Ok(())
+}
+
+/// Makes the tab `id`'s page and sends it to `url`: blank first, so ad blocking is in place before it loads anything.
+fn make_page(app: &AppHandle, id: u64, url: &str, bounds: Option<Bounds>) -> Result<(), String> {
+    let url = Url::parse(url).map_err(|_| "This isn't an address Chaya can open.".to_string())?;
     let window = app.get_window("main").ok_or("The window is gone.")?;
     let ads = app.state::<Ads>();
     ads.start();
-    let key = format!("__chaya_{}", random_word());
-    let hide_key = format!("__chaya_{}", random_word());
-    let generation = {
-        let mut state = page_state(&app);
-        state.key = key.clone();
-        state.generation += 1;
-        state.generation
+    let (key, blocker) = {
+        let inner = tabs(app);
+        let tab = inner.tabs.iter().find(|t| t.id == id).ok_or("This tab is closed.")?;
+        (tab.key.clone(), tab.blocker.clone())
     };
-    let events = app.clone();
-    let titles = app.clone();
-    let popups = app.clone();
-    let blocker = ads.blocker.clone();
-    let popup_blocker = ads.blocker.clone();
-    // The page starts blank, so ad blocking is in place before it loads anything.
+    let hide_key = format!("__chaya_{}", random_word());
+    let (events, titles, popups) = (app.clone(), app.clone(), app.clone());
+    let (navigations, popup_blocker) = (blocker.clone(), blocker.clone());
     let blank = Url::parse("about:blank").expect("a valid address");
-    let builder = WebviewBuilder::new(PAGE, WebviewUrl::External(blank))
+    let builder = WebviewBuilder::new(label(id), WebviewUrl::External(blank))
         .on_navigation(move |url| {
             let allowed = browse::may_open(url);
             if allowed {
-                blocker.begin_page(url.as_str());
+                navigations.begin_page(url.as_str());
             }
             allowed
         })
@@ -185,37 +409,93 @@ pub async fn open_page(text: String, bounds: Bounds, sign_in: Option<bool>, app:
         .initialization_script(ads::hider(&hide_key))
         .on_page_load(move |_, payload| {
             let url = payload.url().to_string();
-            if payload.event() == PageLoadEvent::Started {
-                page_state(&events).found.clear();
-            }
-            emit(
-                &events,
-                match payload.event() {
-                    PageLoadEvent::Started => PageEvent::Loading { url },
-                    PageLoadEvent::Finished => PageEvent::Loaded { url },
-                },
-            );
+            let started = payload.event() == PageLoadEvent::Started;
+            let known = url.clone();
+            update_tab(&events, id, move |t| {
+                if started {
+                    t.found.clear();
+                }
+                if !known.starts_with("about:") {
+                    t.url = known;
+                }
+                t.loading = started;
+            });
+            emit(&events, id, if started { PageEvent::Loading { url } } else { PageEvent::Loaded { url } });
         })
         .on_document_title_changed(move |_, title| {
-            page_state(&titles).title = title.clone();
-            emit(&titles, PageEvent::Title { title });
+            let kept = title.clone();
+            update_tab(&titles, id, move |t| t.title = kept);
+            emit(&titles, id, PageEvent::Title { title });
         })
         .on_new_window(move |url, _| {
-            // An ad's window is refused without asking; the shield counts it.
+            // An ad's window is refused without asking; the shield counts it. Any other opens in a new tab, as a
+            // link that opens a new window does in a browser (and on the phone); once the tabs are full, the window
+            // asks instead.
             if browse::may_open(&url) && !popup_blocker.should_block_popup(url.as_str()) {
-                emit(&popups, PageEvent::Popup { url: url.to_string() });
+                let app = popups.clone();
+                // Not from inside the page's own callback: the new tab's page is made on the window's thread.
+                tauri::async_runtime::spawn(async move {
+                    if new_tab_at(&app, url.clone()).is_err() {
+                        emit(&app, id, PageEvent::Popup { url: url.to_string() });
+                    }
+                });
             }
             NewWindowResponse::Deny
         })
         .on_download(page_download);
+    let bounds = bounds.unwrap_or(Bounds { x: 0.0, y: 0.0, width: 1.0, height: 1.0 });
     let page = window
         .add_child(builder, position(bounds), size(bounds))
         .map_err(|_| "The page couldn't be opened.".to_string())?;
-    let _ = ads::block_requests(&page, ads.blocker.clone());
+    let _ = ads::block_requests(&page, blocker);
+    let _ = keys::forward(&page, app.clone());
     page.navigate(url).map_err(|_| "The page couldn't be opened.".to_string())?;
     tauri::async_runtime::spawn(learn_agent(app.clone()));
-    tauri::async_runtime::spawn(ads::hide_ads(app.clone(), hide_key, generation));
-    Ok(address)
+    tauri::async_runtime::spawn(ads::hide_ads(app.clone(), hide_key, id));
+    Ok(())
+}
+
+/// Shows the tab `id`, the page where `bounds` says.
+#[tauri::command]
+pub fn switch_tab(id: u64, bounds: Bounds, app: AppHandle) -> Result<(), String> {
+    tabs(&app).bounds = Some(bounds);
+    show_tab(&app, id)
+}
+
+/// Closes the tab `id`. Closing the tab shown shows the one beside it, or the window's home when it was the last.
+#[tauri::command]
+pub fn close_tab(id: u64, app: AppHandle) -> Result<(), String> {
+    let next = {
+        let mut inner = tabs(&app);
+        let Some(at) = inner.tabs.iter().position(|t| t.id == id) else { return Ok(()) };
+        inner.tabs.remove(at);
+        if inner.active == Some(id) {
+            inner.active = None;
+            inner.tabs.get(at).or_else(|| inner.tabs.last()).map(|t| t.id)
+        } else {
+            None
+        }
+    };
+    if let Some(page) = app.get_webview(&label(id)) {
+        let _ = page.close();
+    }
+    match next {
+        Some(next) => show_tab(&app, next),
+        None => {
+            tabs_changed(&app);
+            Ok(())
+        }
+    }
+}
+
+/// The window's own home: every tab stays open behind it, hidden.
+#[tauri::command]
+pub fn go_home(app: AppHandle) {
+    let previous = tabs(&app).active.take();
+    if let Some(page) = previous.and_then(|id| app.get_webview(&label(id))) {
+        let _ = page.hide();
+    }
+    tabs_changed(&app);
 }
 
 /// Reads the browser's user agent from the window's own content, once: the page's could be told anything.
@@ -234,7 +514,8 @@ async fn learn_agent(app: AppHandle) {
 /// never called on the window's thread.
 fn browser_cookies(app: &AppHandle, url: &Url) -> Vec<SessionCookie> {
     // One cookie store serves every webview of the app, so the window's own reads it when no page is open.
-    let Some(webview) = app.get_webview(PAGE).or_else(|| app.get_webview("main")) else { return Vec::new() };
+    let page = app.webviews().into_iter().find(|(label, _)| label.starts_with("page-")).map(|(_, page)| page);
+    let Some(webview) = page.or_else(|| app.get_webview("main")) else { return Vec::new() };
     webview
         .cookies_for_url(url.clone())
         .unwrap_or_default()
@@ -310,13 +591,15 @@ fn page_download(page: Webview, event: DownloadEvent<'_>) -> bool {
     let DownloadEvent::Requested { url, .. } = event else { return true };
     let app = page.app_handle();
     let page_url = page.url().map(|u| u.to_string()).unwrap_or_default();
-    let title = page_state(app).title.clone();
+    let id = tab_of(&page);
+    let title =
+        id.and_then(|id| tabs(app).tabs.iter().find(|t| t.id == id).map(|t| t.title.clone())).unwrap_or_default();
     let downloads = app.state::<Downloads>();
     match browse::page_download(url.as_str(), &page_url, &title, &downloads.folder, downloads.joins) {
         Some(new) => {
             let task = downloads.manager.add(new);
             let name = task.path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-            emit(app, PageEvent::Saving { name });
+            emit(app, id.unwrap_or_default(), PageEvent::Saving { name });
             // The browser's own download is cancelled: Chaya's list has it.
             false
         }
@@ -324,19 +607,24 @@ fn page_download(page: Webview, event: DownloadEvent<'_>) -> bool {
     }
 }
 
-/// Moves the page to where the window now leaves room for it.
+/// Moves the pages to where the window now leaves room for them: every open tab's, so a tab shown later is in place.
 #[tauri::command]
 pub fn place_page(bounds: Bounds, app: AppHandle) {
-    if let Some(page) = app.get_webview(PAGE) {
+    let open: Vec<u64> = {
+        let mut inner = tabs(&app);
+        inner.bounds = Some(bounds);
+        inner.tabs.iter().filter(|t| t.opened).map(|t| t.id).collect()
+    };
+    for page in open.into_iter().filter_map(|id| app.get_webview(&label(id))) {
         let _ = page.set_position(position(bounds));
         let _ = page.set_size(size(bounds));
     }
 }
 
-/// Shows or hides the page, while the window shows something in its place (the downloads, the settings).
+/// Shows or hides the tab shown's page, while the window shows something in its place (the downloads, a panel).
 #[tauri::command]
 pub fn show_page(visible: bool, app: AppHandle) {
-    if let Some(page) = app.get_webview(PAGE) {
+    if let Some((_, page)) = active_page(&app) {
         let _ = if visible { page.show() } else { page.hide() };
     }
 }
@@ -346,7 +634,7 @@ pub fn show_page(visible: bool, app: AppHandle) {
 /// itself. None when there is no page, or off Windows.
 #[tauri::command]
 pub async fn page_picture(app: AppHandle) -> Option<String> {
-    let page = app.get_webview(PAGE)?;
+    let (_, page) = active_page(&app)?;
     picture::take(&page).await
 }
 
@@ -414,10 +702,93 @@ mod picture {
     }
 }
 
+/// What a tab key pressed with the focus in a page does, for the window to act on as if pressed in its own bar
+/// (`tab-key`): "new-tab" (Ctrl+T), "close-tab" (Ctrl+W), "next-tab" and "previous-tab" (Ctrl+Tab, Ctrl+Shift+Tab),
+/// "tab-1" to "tab-9" (Ctrl+1 to 9), "address" (Ctrl+L). None for every other key, which stays the page's. `key` is
+/// Windows' virtual key; Ctrl with Alt is AltGr, which types a character.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn tab_key(key: u32, ctrl: bool, shift: bool, alt: bool) -> Option<String> {
+    if !ctrl || alt {
+        return None;
+    }
+    let name = match (key, shift) {
+        (0x54, false) => "new-tab".to_string(),
+        (0x57, false) => "close-tab".to_string(),
+        (0x09, false) => "next-tab".to_string(),
+        (0x09, true) => "previous-tab".to_string(),
+        (0x31..=0x39, false) => format!("tab-{}", key - 0x30),
+        (0x4C, false) => "address".to_string(),
+        _ => return None,
+    };
+    Some(name)
+}
+
+/// The tab keys pressed in a page go to the window: WebView2 keeps the keys pressed in a page for the page, so
+/// otherwise Ctrl+W, Ctrl+T and Ctrl+Tab would work only while the focus is in Chaya's own bar.
+#[cfg(windows)]
+mod keys {
+    use tauri::{AppHandle, Emitter, Manager};
+    use webview2_com::AcceleratorKeyPressedEventHandler;
+    use webview2_com::Microsoft::Web::WebView2::Win32::*;
+    use windows::Win32::UI::Input::KeyboardAndMouse::{GetKeyState, VIRTUAL_KEY, VK_CONTROL, VK_MENU, VK_SHIFT};
+
+    pub fn forward(page: &tauri::Webview, app: AppHandle) -> tauri::Result<()> {
+        page.with_webview(move |webview| {
+            if let Err(e) = attach(&webview.controller(), app) {
+                eprintln!("Chaya: the page's tab keys could not be set up: {e}");
+            }
+        })
+    }
+
+    fn attach(controller: &ICoreWebView2Controller, app: AppHandle) -> windows_core::Result<()> {
+        let handler = AcceleratorKeyPressedEventHandler::create(Box::new(move |_, args| {
+            let Some(args) = args else { return Ok(()) };
+            // SAFETY: WebView2 calls this on the window's thread with live arguments, as its documentation says.
+            unsafe {
+                let mut kind = COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN;
+                args.KeyEventKind(&mut kind)?;
+                if kind != COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN {
+                    return Ok(());
+                }
+                let mut key = 0u32;
+                args.VirtualKey(&mut key)?;
+                let down = |k: VIRTUAL_KEY| GetKeyState(i32::from(k.0)) < 0;
+                if let Some(name) = super::tab_key(key, down(VK_CONTROL), down(VK_SHIFT), down(VK_MENU)) {
+                    args.SetHandled(true)?;
+                    // A key held down repeats; one press closes one tab.
+                    let mut status = COREWEBVIEW2_PHYSICAL_KEY_STATUS::default();
+                    args.PhysicalKeyStatus(&mut status)?;
+                    if !status.WasKeyDown.as_bool() {
+                        // The bar's address takes typing next: the keyboard goes to Chaya's own webview first.
+                        if name == "address" || name == "new-tab" {
+                            if let Some(main) = app.get_webview("main") {
+                                tauri::async_runtime::spawn(async move { main.set_focus() });
+                            }
+                        }
+                        let _ = app.emit_to("main", "tab-key", name);
+                    }
+                }
+            }
+            Ok(())
+        }));
+        let mut token = 0i64;
+        // SAFETY: called on the window's thread (`with_webview`), on the page's own live webview.
+        unsafe { controller.add_AcceleratorKeyPressed(&handler, &mut token) }
+    }
+}
+
+#[cfg(not(windows))]
+mod keys {
+    /// WebKitGTK passes the keys a page leaves alone on to the window, which has its own.
+    pub fn forward(_page: &tauri::Webview, _app: tauri::AppHandle) -> tauri::Result<()> {
+        Ok(())
+    }
+}
+
 /// "back", "forward", "reload" or "stop".
 #[tauri::command]
 pub fn page_action(action: String, app: AppHandle) -> Result<(), String> {
-    let page = app.get_webview(PAGE).ok_or("No page is open.")?;
+    let (_, page) = active_page(&app).ok_or("No page is open.")?;
     let result = match action.as_str() {
         "back" => page.eval("history.back()"),
         "forward" => page.eval("history.forward()"),
@@ -426,16 +797,6 @@ pub fn page_action(action: String, app: AppHandle) -> Result<(), String> {
         _ => return Err(format!("Unknown action: {action}")),
     };
     result.map_err(|_| "The page didn't respond.".into())
-}
-
-/// Closes the page, and the window goes back to its own content.
-#[tauri::command]
-pub fn close_page(app: AppHandle) {
-    if let Some(page) = app.get_webview(PAGE) {
-        let _ = page.close();
-    }
-    let mut state = page_state(&app);
-    *state = PageInner { generation: state.generation + 1, ..PageInner::default() };
 }
 
 /// Something found on the page, as the window lists it.
@@ -465,8 +826,12 @@ pub struct PageMedia {
 
 #[tauri::command]
 pub async fn page_media(app: AppHandle) -> Result<PageMedia, String> {
-    let page = app.get_webview(PAGE).ok_or("No page is open.")?;
-    let key = page_state(&app).key.clone();
+    let (id, page) = active_page(&app).ok_or("No page is open.")?;
+    let (key, blocker) = {
+        let inner = tabs(&app);
+        let tab = inner.tabs.iter().find(|t| t.id == id).ok_or("No page is open.")?;
+        (tab.key.clone(), tab.blocker.clone())
+    };
     // The page's own document runs this; a page whose detector is missing (a page that failed to load) has none.
     let call =
         format!("(function () {{ var read = window['{key}']; return typeof read === 'function' ? read() : ''; }})()");
@@ -477,7 +842,6 @@ pub async fn page_media(app: AppHandle) -> Result<PageMedia, String> {
         .and_then(|text| serde_json::from_str(&text).ok())
         .unwrap_or_default();
     // An ad the blocker stops is never offered, even where its address was seen.
-    let blocker = app.state::<Ads>().blocker.clone();
     report.items.retain(|seen| !blocker.blocks(&seen.url, kind::MEDIA));
     let page_url = page.url().map(|u| u.to_string()).unwrap_or_default();
     let list = found::found(&report, &page_url);
@@ -495,7 +859,9 @@ pub async fn page_media(app: AppHandle) -> Result<PageMedia, String> {
             qualities: joins && matches!(f.kind, FoundKind::Stream | FoundKind::Dash),
         })
         .collect();
-    page_state(&app).found = list;
+    if let Some(tab) = tabs(&app).tabs.iter_mut().find(|t| t.id == id) {
+        tab.found = list;
+    }
     Ok(PageMedia { url: page_url, items: views, ads: blocker.shield() })
 }
 
@@ -520,7 +886,7 @@ pub async fn look_up_found(url: String, app: AppHandle) -> Result<Lookup, ()> {
 #[tauri::command]
 pub async fn download_found(url: String, choice: String, app: AppHandle) -> Result<Vec<crate::TaskView>, String> {
     let item = found_stream(&app, &url).ok_or("This is no longer on the page.")?;
-    let page_url = app.get_webview(PAGE).and_then(|p| p.url().ok()).map(|u| u.to_string()).unwrap_or_default();
+    let page_url = active_page(&app).and_then(|(_, p)| p.url().ok()).map(|u| u.to_string()).unwrap_or_default();
     let lookups = app.state::<Lookups>();
     let downloads = app.state::<Downloads>();
     let sign_in = stream_sign_in(&app, &item.url).await;
@@ -539,13 +905,16 @@ pub async fn download_found(url: String, choice: String, app: AppHandle) -> Resu
     Ok(plans.into_iter().map(|p| crate::TaskView::from(&downloads.manager.add(p))).collect())
 }
 
+/// What was last found on the tab shown at `url` that `wanted` accepts.
+fn found_on_page(app: &AppHandle, url: &str, wanted: impl Fn(&Found) -> bool) -> Option<Found> {
+    let inner = tabs(app);
+    let id = inner.active?;
+    inner.tabs.iter().find(|t| t.id == id)?.found.iter().find(|f| f.url == url && wanted(f)).cloned()
+}
+
 /// The stream at `url` in what the page was last found to hold.
 fn found_stream(app: &AppHandle, url: &str) -> Option<Found> {
-    page_state(app)
-        .found
-        .iter()
-        .find(|f| f.url == url && matches!(f.kind, FoundKind::Stream | FoundKind::Dash))
-        .cloned()
+    found_on_page(app, url, |f| matches!(f.kind, FoundKind::Stream | FoundKind::Dash))
 }
 
 /// A stream's own address names nothing ("manifest", "index"): it is called what the page calls it.
@@ -557,9 +926,8 @@ fn named(mut media: Media, item: &Found) -> Media {
 /// Saves what the window listed at `url` on the page.
 #[tauri::command]
 pub fn save_found(url: String, app: AppHandle) -> Result<Vec<crate::TaskView>, String> {
-    let item = page_state(&app).found.iter().find(|f| f.url == url).cloned();
-    let item = item.ok_or("This is no longer on the page.")?;
-    let page_url = app.get_webview(PAGE).and_then(|p| p.url().ok()).map(|u| u.to_string()).unwrap_or_default();
+    let item = found_on_page(&app, &url, |_| true).ok_or("This is no longer on the page.")?;
+    let page_url = active_page(&app).and_then(|(_, p)| p.url().ok()).map(|u| u.to_string()).unwrap_or_default();
     let downloads = app.state::<Downloads>();
     let new = browse::found_download(&item, &page_url, &downloads.folder, downloads.joins)
         .ok_or("Chaya can't save this yet.")?;
@@ -584,6 +952,24 @@ mod tests {
         assert_eq!(a.len(), 32);
         assert!(a.chars().all(|c| c.is_ascii_hexdigit()));
         assert_ne!(a, b);
+    }
+
+    #[test]
+    fn the_tab_keys_pressed_in_a_page_go_to_the_window_and_no_other_key_does() {
+        let ctrl = |key, shift| tab_key(key, true, shift, false);
+        assert_eq!(ctrl(0x54, false).as_deref(), Some("new-tab"));
+        assert_eq!(ctrl(0x57, false).as_deref(), Some("close-tab"));
+        assert_eq!(ctrl(0x09, false).as_deref(), Some("next-tab"));
+        assert_eq!(ctrl(0x09, true).as_deref(), Some("previous-tab"));
+        assert_eq!(ctrl(0x31, false).as_deref(), Some("tab-1"));
+        assert_eq!(ctrl(0x39, false).as_deref(), Some("tab-9"));
+        assert_eq!(ctrl(0x4C, false).as_deref(), Some("address"));
+        // The page's own: Ctrl+C, Ctrl+0 (its zoom), Ctrl+Shift+T, a W typed, and AltGr+W (Ctrl+Alt), which types.
+        assert_eq!(ctrl(0x43, false), None);
+        assert_eq!(ctrl(0x30, false), None);
+        assert_eq!(ctrl(0x54, true), None);
+        assert_eq!(tab_key(0x57, false, false, false), None);
+        assert_eq!(tab_key(0x57, true, false, true), None);
     }
 
     #[test]

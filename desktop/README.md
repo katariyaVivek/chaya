@@ -168,6 +168,14 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
   Back (the button, Alt+Left or Escape) from the Downloads list goes back to the page it covers. Home, in
   the bar beside Reload, closes the page for Chaya's own start. Left to WebView2, pressed outside the page they
   reloaded Chaya's own window instead.
+- **Tabs**, up to ten, each its own webview (`page-1`, `page-2`, …) with its own history, made when the tab is
+  first shown. Home is a new tab's start: an address typed there opens a new tab beside the one that was
+  shown, and the strip's + goes there. A link that opens a new window opens a new tab. The strip shows above
+  the bar once there are two tabs, or on Home while one is open; Ctrl+T, Ctrl+W, Ctrl+Tab and Ctrl+1–9 work
+  as in any browser, with the focus in a page too (WebView2 keeps a page's keys for the page, so the page's
+  `AcceleratorKeyPressed` hands these, and Ctrl+L, to the window). Each tab counts its own blocked ads (`AdBlocker::for_another_page`, sharing the rules
+  and the person's choices). The tabs' addresses and titles are kept in `tabs.json` in the app's data folder,
+  and come back on the strip at the next start, each loaded only when the person opens it.
 - **A page gets nothing of the app.** The app's commands are granted to the window's own webview only
   (`capabilities/default.json`: `webviews: ["main"]`, not the whole window), and a page from the web is
   never local, so a page asking for a command is refused. A page can go only to the web (`http`, `https`,
@@ -263,7 +271,7 @@ there. `core` needs nothing beyond Rust.
 **The Windows tour** (`app/tour/tour.py`, CI job `tour`) installs the installer on a Windows machine and
 starts the app with WebView2's DevTools port open, driving the window through it. CI runs elevated, where
 WebView2 ignores `WEBVIEW2_*` variables (and so msedgedriver never attaches), so the job opens the port with
-the machine's WebView2 policy for `chaya-desktop.exe`. It takes a real link looked up and a download cancelled, three pages in the built-in browser, the ad blocker's panel,
+the machine's WebView2 policy for `chaya-desktop.exe`. It takes a real link looked up and a download cancelled, three pages in the built-in browser, two tabs switched and one closed, the ad blocker's panel,
 Night. At each step it photographs the whole screen, so the page's place in the window, Windows' fonts and
 frame are seen; the pictures and `steps.json` (what each step found) are the run's `chaya-windows-tour`
 artifact. A site that refuses the machine is noted, not failed on. Off Windows it runs with `--via webdriver`:

@@ -353,7 +353,9 @@ pub fn run() {
             let folder =
                 app.path().download_dir().or_else(|_| app.path().home_dir().map(|home| home.join("Downloads")))?;
             app.manage(Downloads { manager, folder, joins });
-            app.manage(browser::PageState::default());
+            let tabs =
+                browser::Tabs::open(app.path().app_data_dir()?.join("tabs.json"), &app.state::<ads::Ads>().blocker);
+            app.manage(tabs);
             app.manage(browser::Agent::default());
             if let Some(main) = app.get_webview_window("main") {
                 window::place(&main, app.path().app_data_dir()?.join("window.json"));
@@ -377,7 +379,10 @@ pub fn run() {
             browser::show_page,
             browser::page_picture,
             browser::page_action,
-            browser::close_page,
+            browser::list_tabs,
+            browser::switch_tab,
+            browser::close_tab,
+            browser::go_home,
             browser::page_media,
             account_signed_in,
             save_account,

@@ -84,23 +84,25 @@ pub struct AdsView {
     updated: Option<u64>,
 }
 
+/// The ad blocker as the tab shown has it (its page and count), or the browser's before any tab is shown.
 #[tauri::command]
-pub fn ad_blocking(ads: State<'_, Ads>) -> AdsView {
-    AdsView { shield: ads.blocker.shield(), updated: ads.lists.last_updated() }
+pub fn ad_blocking(app: AppHandle, ads: State<'_, Ads>) -> AdsView {
+    let blocker = browser::active_blocker(&app).unwrap_or_else(|| ads.blocker.clone());
+    AdsView { shield: blocker.shield(), updated: ads.lists.last_updated() }
 }
 
-/// Blocks ads everywhere, or nowhere.
+/// Blocks ads everywhere, or nowhere: in every tab, whose blockers share the person's choices.
 #[tauri::command]
-pub fn block_ads(on: bool, ads: State<'_, Ads>) -> Result<AdsView, String> {
+pub fn block_ads(on: bool, app: AppHandle, ads: State<'_, Ads>) -> Result<AdsView, String> {
     ads.blocker.settings().set_enabled(on).map_err(|_| "The setting couldn't be saved.".to_string())?;
-    Ok(ad_blocking(ads))
+    Ok(ad_blocking(app, ads))
 }
 
 /// Lets `site` show its ads, or blocks them there again. The window reloads the page.
 #[tauri::command]
-pub fn allow_ads_on(site: String, allowed: bool, ads: State<'_, Ads>) -> Result<AdsView, String> {
+pub fn allow_ads_on(site: String, allowed: bool, app: AppHandle, ads: State<'_, Ads>) -> Result<AdsView, String> {
     ads.blocker.settings().set_allowed(&site, allowed).map_err(|_| "The setting couldn't be saved.".to_string())?;
-    Ok(ad_blocking(ads))
+    Ok(ad_blocking(app, ads))
 }
 
 /// The hider, with this page's name for it in it.
@@ -116,14 +118,16 @@ struct Names {
     names: Vec<String>,
 }
 
-/// Hides the ads in each document the page shows, for as long as the page is the one opened as `generation`.
-pub async fn hide_ads(app: AppHandle, key: String, generation: u64) {
+/// Hides the ads in each document the tab `tab` shows, for as long as the tab is open. A tab not shown is asked once
+/// it is: its ads are hidden within a moment of the person seeing it.
+pub async fn hide_ads(app: AppHandle, key: String, tab: u64) {
     let mut last_doc = String::new();
     loop {
         tokio::time::sleep(ASK_EVERY).await;
-        let Some(page) = browser::current_page(&app, generation) else { return };
-        let blocker = app.state::<Ads>().blocker.clone();
-        if !blocker.hides() {
+        let (Some(page), Some(blocker)) = (browser::tab_page(&app, tab), browser::tab_blocker(&app, tab)) else {
+            return;
+        };
+        if !browser::is_active(&app, tab) || !blocker.hides() {
             continue;
         }
         let call = format!(

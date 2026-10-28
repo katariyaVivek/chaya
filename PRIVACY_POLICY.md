@@ -83,6 +83,9 @@ differences:
 
 - **Pages you open** in its built-in browser load as in any browser (Microsoft Edge WebView2), and keep
   their cookies in Chaya's own WebView2 folder on your PC. A page cannot reach the app.
+- **Open tabs** are kept on your PC (each one's address and title, in Chaya's own folder), so they are
+  back the next time you open Chaya. Closing a tab removes it from that file; nothing about them leaves
+  your PC.
 - **A picture of the page.** While one of Chaya's panels is open over a page, a still picture of the page
   stands in for it. The picture is held only in Chaya's window while the panel is open and is never saved.
 - **Finding media on a page.** A small script of Chaya's runs in the pages you open, frames included. It

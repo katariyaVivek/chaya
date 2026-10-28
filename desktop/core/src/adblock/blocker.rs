@@ -35,9 +35,10 @@ struct Page {
 }
 
 pub struct AdBlocker {
-    settings: Settings,
+    /// The person's choices and the rules are the browser's; the page, its count and its hiding are this tab's.
+    settings: Arc<Settings>,
     site_of: SiteOf,
-    engine: RwLock<Option<Arc<FilterEngine>>>,
+    engine: Arc<RwLock<Option<Arc<FilterEngine>>>>,
     page: Mutex<Page>,
     /// The document whose hiding rules were last worked out, as for `page`.
     hiding: Mutex<Option<(Arc<FilterEngine>, PageContext)>>,
@@ -46,9 +47,20 @@ pub struct AdBlocker {
 impl AdBlocker {
     pub fn new(settings: Settings, site_of: SiteOf) -> AdBlocker {
         AdBlocker {
-            settings,
+            settings: Arc::new(settings),
             site_of,
-            engine: RwLock::new(None),
+            engine: Arc::new(RwLock::new(None)),
+            page: Mutex::new(Page::default()),
+            hiding: Mutex::new(None),
+        }
+    }
+
+    /// A blocker for another tab: the same settings and rules (and the rules read later), its own page and count.
+    pub fn for_another_page(&self) -> AdBlocker {
+        AdBlocker {
+            settings: self.settings.clone(),
+            site_of: self.site_of,
+            engine: self.engine.clone(),
             page: Mutex::new(Page::default()),
             hiding: Mutex::new(None),
         }

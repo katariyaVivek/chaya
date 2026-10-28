@@ -337,9 +337,31 @@ def run(tour, sites):
     except Exception as e:
         tour.failed('night', e)
 
-    # Close the page: the window's own content again.
+    # Tabs: Home is a new tab's start, an address typed there opens a second tab, and the strip switches between them.
     try:
-        tour.click('#page-close')
+        tour.click('#page-home')
+        time.sleep(0.5)
+        tour.type_address(sites['page'])
+        tour.wait(lambda: tour.js("return document.querySelectorAll('#tabstrip .tab').length") >= 2, 20)
+        time.sleep(4)
+        tabs = tour.js("return [...document.querySelectorAll('#tabstrip .tab')].map(t => t.innerText.trim())")
+        tour.shot('tabs', tabs=tabs, address=tour.js("return document.getElementById('address').value"),
+                  page_top=tour.js("return Math.round(document.getElementById('page').getBoundingClientRect().top)"))
+        tour.click('#tabstrip .tab .tab__title', 0)
+        time.sleep(2)
+        first = tour.js("return document.getElementById('address').value")
+        tour.js("document.dispatchEvent(new KeyboardEvent('keydown', {key: 'w', ctrlKey: true, bubbles: true, cancelable: true})); return 1")
+        time.sleep(1.5)
+        left = tour.js("return document.querySelectorAll('#tabstrip .tab').length")
+        tour.steps.append({'step': 'tab-switch-and-close', 'first tab': first, 'tabs left': left,
+                           'strip shown': not tour.js("return document.getElementById('tabstrip').hidden")})
+        print(f'tabs: switched to {first}, {left} left', flush=True)
+    except Exception as e:
+        tour.failed('tabs', e)
+
+    # Home: the window's own content again, the tab still open behind it in the strip.
+    try:
+        tour.click('#page-home')
         time.sleep(1)
         tour.shot('closed', downloads=tour.js("return document.getElementById('download-list').innerText"))
     except Exception as e:
