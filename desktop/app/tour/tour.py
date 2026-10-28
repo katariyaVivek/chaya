@@ -245,7 +245,7 @@ def run(tour, sites):
         tour.type_address(sites['youtube'])
         answer = tour.wait(
             lambda: tour.js("return document.querySelectorAll('#result .choice .dl').length")
-            or ('finding' not in tour.js("return document.querySelector('#result .card__state')?.innerHTML ?? 'finding'")),
+            or ('finding' not in tour.js("return document.querySelector('#result .card__state')?.innerHTML.toLowerCase() ?? 'finding'")),
             120,
         )
         tour.shot('link-looked-up', card=tour.card_text()[:400], choices=answer)
@@ -274,7 +274,7 @@ def run(tour, sites):
         tour.type_address(sites['pin'])
         found = tour.wait(
             lambda: tour.js("return document.querySelectorAll('#result .choice .dl').length")
-            or ('finding' not in tour.js("return document.querySelector('#result .card__state')?.innerHTML ?? 'finding'")),
+            or ('finding' not in tour.js("return document.querySelector('#result .card__state')?.innerHTML.toLowerCase() ?? 'finding'")),
             120,
         )
         tour.shot('pin-looked-up', card=tour.card_text()[:400], found=found)
