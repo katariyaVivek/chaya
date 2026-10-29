@@ -134,9 +134,10 @@ window, and playback starting where it stopped.
 Step 2 is merged: *Make subtitles* on any saved video (or for every download), listened to on the PC by whisper.cpp
 with a model fetched once from Hugging Face and checked against its pinned SHA-256; Settings › Speech recognition
 picks the model and the language. Then the player was organised as Vimpo's is (step 1b): its own controls over
-the picture, and tabs beside it, Transcript and Subtitles. Step 3's short lines are next to merge: subtitles made on
-the PC come in lines of 1 to 5 seconds that follow the speech, cut by each word's time. Then the graphics card
-(whisper.cpp's Vulkan build).
+the picture, and tabs beside it, Transcript and Subtitles. Step 3 is merged in two parts: subtitles made on the PC
+come in lines of 1 to 5 seconds that follow the speech, cut by each word's time; and they are made on the graphics
+card where the PC has one (whisper.cpp's Vulkan build), on the processor where not. Next: step 4, your own AI
+model.
 
 ## Known rough edges
 

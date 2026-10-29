@@ -344,7 +344,8 @@ a built-in browser. [`../desktop/README.md`](../desktop/README.md) has the layou
   video, one JSON file per download in `videos/`: for now where playback stopped.
 - **Subtitles made on the PC** (`chaya-core`'s `speech`, `desktop/app/src-tauri/src/speech.rs`): whisper.cpp's
   command-line program, built by `desktop/engine/build_whisper.sh` as ffmpeg is (cross-compiled with mingw-w64,
-  static), listens to the WAV ffmpeg makes of a video's sound, with a model `speech::models` fetches once from
+  static; a second build with Vulkan runs on the graphics card, tried first where Windows has Vulkan, the
+  processor's after it if it fails), listens to the WAV ffmpeg makes of a video's sound, with a model `speech::models` fetches once from
   Hugging Face and checks against its pinned SHA-256. Its full JSON is read into segments and words, each word timed
   by whisper.cpp's DTW (`-dtw`, with flash attention off); `speech::lines` cuts them into short lines by Vimpo's rules
   (sentence ends, pauses, then the best-scoring gap, with word lists per language), saved as "name.LANG.srt", and

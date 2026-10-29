@@ -12,6 +12,8 @@ The result is desktop/app/src-tauri/engine/, which the installer carries (tauri.
                         (build_ffmpeg.sh makes it; without it, qualities that need joining are not offered)
     engine/whisper-cli.exe  whisper.cpp, which makes subtitles from a video's sound, when given with --whisper
                         (build_whisper.sh makes it; without it, Make subtitles is not offered)
+    engine/whisper-cli-vulkan.exe  the same, on the graphics card, when given with --whisper-vulkan (build_whisper.sh
+                        windows-vulkan; without it, subtitles are made on the processor)
     engine/run.py       what the app starts: `python -I run.py extract URL --cache DIR ...`
     engine/engine.json  what is in it, read by the app and shown in diagnostics
 
@@ -63,6 +65,8 @@ def main(argv=None):
                         help='the ffmpeg build_ffmpeg.sh made, with its ffmpeg-LICENSE.txt beside it')
     parser.add_argument('--whisper', type=Path,
                         help='the whisper-cli build_whisper.sh made, with its whisper-LICENSE.txt beside it')
+    parser.add_argument('--whisper-vulkan', type=Path,
+                        help='the whisper-cli-vulkan.exe build_whisper.sh made, with its whisper-vulkan-LICENSE.txt')
     args = parser.parse_args(argv)
 
     out = args.out
@@ -70,7 +74,8 @@ def main(argv=None):
         shutil.rmtree(out)
     out.mkdir(parents=True)
 
-    manifest = {'packages': {}, 'python': None, 'quickjs': None, 'ffmpeg': None, 'whisper': None}
+    manifest = {'packages': {}, 'python': None, 'quickjs': None, 'ffmpeg': None, 'whisper': None,
+                'whisper_vulkan': None}
     if not args.host:
         unpack_python(args.python_zip or download(PYTHON), out / 'python')
         manifest['python'] = PYTHON['version']
@@ -84,6 +89,11 @@ def main(argv=None):
         manifest['whisper'] = place_program(args.whisper, out, 'whisper', r'whisper\.cpp (\S+), built from')
     else:
         print('No --whisper: subtitles cannot be made on the PC.')
+    if args.whisper_vulkan:
+        manifest['whisper_vulkan'] = place_program(args.whisper_vulkan, out, 'whisper-vulkan',
+                                                   r'whisper\.cpp (\S+), built from')
+    elif args.whisper:
+        print('No --whisper-vulkan: subtitles are made on the processor only.')
     manifest['packages'] = install_packages(out / 'packages', for_windows=not args.host)
     copy_engine(out / 'packages' / 'chaya_engine')
     shutil.copy2(HERE / 'run.py', out / 'run.py')

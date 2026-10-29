@@ -102,7 +102,7 @@ The subtitles appear in the player and as an SRT next to the video.
 are checked against Hugging Face's own list in CI (`check_models.py`). What was heard, word by word, is kept in
 `videos/ID.json` for step 3. Lines are whisper.cpp's segments for now; step 3 makes them short.
 
-### 3. Short lines, and the graphics card ☐
+### 3. Short lines, and the graphics card ☑
 
 **The person gets:** subtitles in short lines that follow the speech (1 to 5 seconds, about 40
 characters), instead of one line held for fifteen seconds; and transcription several times faster on a PC
@@ -128,6 +128,14 @@ Portuguese, French, Italian, German, Hindi). Recorded with Large v3 Turbo in CI,
 (3 min 18 s) went from whisper.cpp's 39 segments to 73 lines, averaging 2.4 s and 28 characters, the longest 4.3 s.
 With flash attention on, every DTW time came back as -1, as Vimpo found. On CI's four processor cores Large v3 Turbo
 took ten minutes for those three minutes of speech: the graphics card is next.
+
+**Graphics card done** (the second PR). `build_whisper.sh windows-vulkan` cross-compiles a Vulkan build with
+mingw-w64, Khronos' headers and an import library for `vulkan-1.dll` made from the loader's export list; it needs no
+DLL but Windows' own. Chaya runs it when Windows has Vulkan and *Listen on* is *Graphics card*, and the processor
+build when it does not, or when it fails. CI runs the JFK sample through it on Lavapipe (Mesa's Vulkan for the
+processor), and the Windows tour, on a runner with no Vulkan at all, through the fallback. Measuring on the owner's
+PC: the player's note says where subtitles were made and how long it took, and *Listen on* › *Processor* gives the
+before.
 
 ### 4. Your own AI model ☐
 

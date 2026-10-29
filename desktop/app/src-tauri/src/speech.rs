@@ -56,8 +56,11 @@ pub struct JobView {
     pub percent: u8,
     /// For "failed": why, in words.
     pub message: Option<String>,
-    /// For "done": the language of the subtitles made ("en").
+    /// For "done": the language of the subtitles made ("en"), whether they were heard on the graphics card, and how
+    /// many seconds listening took (with the sound, not the model's fetch), for the person to compare.
     pub language: Option<String>,
+    pub card: bool,
+    pub seconds: Option<u64>,
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -118,7 +121,7 @@ impl Speaking {
             let result = speaking.make(&app, id, &stop).await;
             lock(&speaking.jobs).running = None;
             match result {
-                Ok(language) => speaking.show(&app, JobView { id, state: "done", language, ..JobView::default() }),
+                Ok(done) => speaking.show(&app, JobView { id, state: "done", ..done }),
                 Err(SpeechError::Stopped) => {
                     lock(&speaking.jobs).views.remove(&id);
                     let _ = app.emit("speech", JobView { id, state: "stopped", ..JobView::default() });
@@ -129,22 +132,21 @@ impl Speaking {
         }
     }
 
-    /// Makes download `id`'s subtitles; the language they are in.
-    async fn make(
-        &self,
-        app: &AppHandle,
-        id: u64,
-        stop: &watch::Receiver<bool>,
-    ) -> Result<Option<String>, SpeechError> {
+    /// Makes download `id`'s subtitles; the language they are in, where they were heard, and how long that took.
+    async fn make(&self, app: &AppHandle, id: u64, stop: &watch::Receiver<bool>) -> Result<JobView, SpeechError> {
         let tools = self.tools.as_ref().ok_or(SpeechError::NoProgram)?;
         let task = app.state::<Downloads>().manager.get(id).filter(|t| t.state == TaskState::Completed);
         let task = task.ok_or(SpeechError::NoSound)?;
         let settings = self.speech.settings();
         let model = settings.model();
         let mut told = Instant::now() - PROGRESS_EVERY;
+        let mut began = None;
         let made = self
             .speech
-            .make(id, &task.path, model, settings.language.as_deref(), tools, &self.client, stop, &mut |step| {
+            .make(id, &task.path, &settings, tools, &self.client, stop, &mut |step| {
+                if !matches!(step, Step::Model { .. }) {
+                    began.get_or_insert_with(Instant::now);
+                }
                 let view = match step {
                     Step::Model { done, total } => {
                         if told.elapsed() < PROGRESS_EVERY && done < total {
@@ -161,8 +163,9 @@ impl Speaking {
             .await?;
         let language = made.path.file_stem().and_then(|s| s.to_str()).and_then(|s| s.rsplit_once('.')).map(|(_, l)| l);
         let language = language.map(str::to_string);
+        let seconds = began.map(|began| began.elapsed().as_secs());
         let _ = app.state::<Videos>().heard(id, made.transcript, &model.id);
-        Ok(language)
+        Ok(JobView { id, language, card: made.card, seconds, ..JobView::default() })
     }
 }
 
@@ -179,12 +182,13 @@ pub struct ModelView {
     fetched: bool,
 }
 
-/// Settings › Speech recognition: whether subtitles can be made here at all, what the person chose, the models, and
-/// how each video asked for is getting on.
+/// Settings › Speech recognition: whether subtitles can be made here at all, and on a graphics card (the Vulkan build,
+/// with Windows' Vulkan), what the person chose, the models, and how each video asked for is getting on.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SpeechStatus {
     available: bool,
+    card: bool,
     settings: Settings,
     models: Vec<ModelView>,
     jobs: Vec<JobView>,
@@ -205,6 +209,7 @@ pub fn speech_status(speaking: State<'_, Speaking>) -> SpeechStatus {
         .collect();
     SpeechStatus {
         available: speaking.tools.is_some(),
+        card: speaking.tools.as_ref().is_some_and(|tools| tools.whisper.on_card().is_some()),
         settings: speaking.speech.settings(),
         models,
         jobs: lock(&speaking.jobs).views.values().cloned().collect(),

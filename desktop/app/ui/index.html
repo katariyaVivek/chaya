@@ -70,6 +70,13 @@
           <button type="button" data-every="false">When I ask</button>
           <button type="button" data-every="true">For every download</button>
         </div>
+        <div id="speech-card-box" hidden>
+          <p class="settings__label" id="speech-card-label">Listen on</p>
+          <div class="seg" role="group" aria-labelledby="speech-card-label" id="speech-card">
+            <button type="button" data-card="true">Graphics card</button>
+            <button type="button" data-card="false">Processor</button>
+          </div>
+        </div>
         <p class="settings__credit">Chaya listens on this PC; nothing is uploaded. A model is fetched once, from Hugging Face, the first time it's used.</p>
       </div>
       <div class="settings__update" id="settings-update" hidden>

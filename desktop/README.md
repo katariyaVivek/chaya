@@ -174,13 +174,20 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
     list (`engine/check_models.py`). The language spoken is *Detected*, or picked from the list.
   - **The sound**: ffmpeg turns it into 16 kHz mono WAV in `speech/work/ID/` (gone when done). The cut-down ffmpeg
     decodes AAC, MP3, Opus, Vorbis, FLAC and PCM for this, resamples, and writes WAV; nothing else is encoded.
-  - **Listening**: whisper.cpp's `whisper-cli` (`engine/build_whisper.sh`, v1.9.5, static, AVX2, on the processor),
-    with full JSON output (each word with its times) and progress. It reads its arguments in the PC's code page, so
+  - **Listening**: whisper.cpp's `whisper-cli` (`engine/build_whisper.sh`, v1.9.5, static, AVX2), with full JSON output (each word with its times) and progress. It reads its arguments in the PC's code page, so
     it runs from the speech folder with short relative paths only. What it heard, word by word, is kept in the
     video's file (`videos/ID.json`, `core::video`) for the steps that follow. Silences it marks are left out.
     Each word's time comes from the model's attention heads (`-dtw`, which needs flash attention off).
-  - **Short lines** (`core::speech::lines`): what was said is cut where a sentence ends, where whisper.cpp ended a
-    segment, and at pauses of 0.7 s or more; a line still longer than 5 s or 44 characters is cut at its best gap,
+  - **The graphics card**: a second build, `whisper-cli-vulkan.exe` (`build_whisper.sh windows-vulkan`, with Khronos'
+    Vulkan and SPIR-V headers), runs on NVIDIA, AMD and Intel cards through the Vulkan driver that comes with them.
+    Chaya runs it first when Windows has Vulkan (`vulkan-1.dll`) and *Listen on* in Settings › Speech recognition is
+    *Graphics card* (the default; the choice is shown only where it applies). It uses the processor itself on a PC
+    with Vulkan but no card, and if it fails, the processor build listens again. When the subtitles are made the
+    player says where and how long it took ("Subtitles made on the graphics card in 1 min 12 s"), so the two can be
+    compared by switching *Listen on* to *Processor*. CI runs the JFK sample through it on Lavapipe, Mesa's Vulkan
+    driver for the processor.
+  - **Short lines** (`core::speech::lines`): what was said is cut where a sentence ends and at pauses of 0.7 s or
+    more (1.4 s after "the" or "of"); a line still longer than 5 s or 44 characters is cut at its best gap,
     one scoring higher after a comma, at a longer pause, before "and", "but" or "because" and when it leaves the
     halves alike, and lower after "the", "of" or "to", between an adjective and its noun, or leaving a half too
     short. A piece too small to read joins a neighbour. Each line shows 0.2 s before its first word and stays 0.3 s

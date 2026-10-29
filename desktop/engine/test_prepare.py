@@ -57,7 +57,8 @@ def test_the_engine_folder_holds_the_launcher_the_engine_and_what_is_in_it(tmp_p
     assert (engine / 'cli.py').is_file() and (engine / 'extract.py').is_file()
     assert not list(engine.rglob('__pycache__'))
     assert json.loads((out / 'engine.json').read_text()) == {
-        'packages': {'yt-dlp': '2026.8.19'}, 'python': None, 'quickjs': None, 'ffmpeg': None, 'whisper': None}
+        'packages': {'yt-dlp': '2026.8.19'}, 'python': None, 'quickjs': None, 'ffmpeg': None, 'whisper': None,
+        'whisper_vulkan': None}
 
 
 def test_an_engine_prepared_again_starts_from_an_empty_folder(tmp_path, monkeypatch):
@@ -101,6 +102,28 @@ def test_the_whisper_given_goes_in_with_its_licence(tmp_path, monkeypatch):
     assert (out / 'whisper-cli.exe').read_bytes() == b'MZ'
     assert 'v1.9.5' in (out / 'licenses' / 'whisper.txt').read_text()
     assert json.loads((out / 'engine.json').read_text())['whisper'] == 'v1.9.5'
+
+
+def test_the_vulkan_whisper_goes_in_beside_it_with_its_own_licence(tmp_path, monkeypatch):
+    monkeypatch.setattr(prepare, 'install_packages', lambda target, for_windows: target.mkdir(parents=True) or {})
+    built = tmp_path / 'built'
+    built.mkdir()
+    (built / 'whisper-cli.exe').write_bytes(b'MZ')
+    (built / 'whisper-LICENSE.txt').write_text('whisper.cpp v1.9.5, built from https://github.com/ggml-org/whisper.cpp\n')
+    (built / 'whisper-cli-vulkan.exe').write_bytes(b'MZ vulkan')
+    (built / 'whisper-vulkan-LICENSE.txt').write_text('whisper-cli (whisper-cli-vulkan.exe)\n'
+                                                      'whisper.cpp v1.9.5, built from https://github.com/ggml-org/whisper.cpp\n'
+                                                      'With the headers of Khronos\' Vulkan-Headers v1.4.309\n')
+    out = tmp_path / 'engine'
+
+    prepare.main(['--host', '--out', str(out), '--whisper', str(built / 'whisper-cli.exe'),
+                  '--whisper-vulkan', str(built / 'whisper-cli-vulkan.exe')])
+
+    assert (out / 'whisper-cli-vulkan.exe').read_bytes() == b'MZ vulkan'
+    assert (out / 'whisper-cli.exe').read_bytes() == b'MZ'
+    assert 'Vulkan-Headers' in (out / 'licenses' / 'whisper-vulkan.txt').read_text()
+    manifest = json.loads((out / 'engine.json').read_text())
+    assert (manifest['whisper'], manifest['whisper_vulkan']) == ('v1.9.5', 'v1.9.5')
 
 
 def test_a_whisper_without_its_licence_is_refused(tmp_path):
