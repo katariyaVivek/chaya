@@ -1,0 +1,54 @@
+name: Record words (temporary)
+
+# Records what whisper.cpp hears, each token with its DTW time, for the line-breaking tests' fixtures. Removed once
+# they are recorded.
+
+on:
+  push:
+    branches: [ claude/fervent-heisenberg-ifnlnu ]
+    paths: [ '.github/workflows/record-words.yml' ]
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/cache/restore@v4
+        with:
+          path: whisper-out
+          key: whisper-${{ hashFiles('desktop/engine/build_whisper.sh') }}
+          fail-on-cache-miss: true
+
+      - name: Record
+        run: |
+          chmod +x whisper-out/host/whisper-cli
+          W=$PWD/whisper-out/host/whisper-cli
+          mkdir rec && cd rec
+          curl -fsSL --retry 3 -o tiny.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin
+          curl -fsSL --retry 3 -o turbo.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin
+          curl -fsSL --retry 3 -A "Chaya-CI/1.0 (https://github.com/katariyaVivek/chaya)" -o gb1.ogg \
+            https://upload.wikimedia.org/wikipedia/commons/1/1f/George_W_Bush_Columbia_FINAL.ogg
+          ffmpeg -hide_banner -loglevel error -i ../desktop/core/tests/fixtures/jfk.m4a -ac 1 -ar 16000 -c:a pcm_s16le jfk.wav
+          ffmpeg -hide_banner -loglevel error -i gb1.ogg -ac 1 -ar 16000 -c:a pcm_s16le gb1.wav
+          $W -m tiny.bin -f jfk.wav -l auto -t 4 -ojf -of jfk-tiny -dtw tiny -nfa
+          $W -m tiny.bin -f jfk.wav -l auto -t 4 -ojf -of jfk-tiny-fa -dtw tiny
+          $W -m turbo.bin -f jfk.wav -l auto -t 4 -ojf -of jfk-turbo -dtw large.v3.turbo -nfa
+          $W -m turbo.bin -f gb1.wav -l auto -t 4 -ojf -of gb1-turbo -dtw large.v3.turbo -nfa
+          $W -m tiny.bin -f gb1.wav -l auto -t 4 -ojf -of gb1-tiny -dtw tiny -nfa
+          for f in jfk-tiny jfk-tiny-fa jfk-turbo gb1-turbo gb1-tiny; do
+            python3 - "$f.json" <<'PY'
+          import json, re, sys
+          raw = open(sys.argv[1], encoding='utf-8', errors='replace').read()
+          raw = re.sub(r': (-?nan|-?inf)', ': null', raw)
+          raw = ''.join(c if c >= ' ' or c in '\n\r\t' else ' ' for c in raw)
+          root = json.loads(raw)
+          out = {'result': root['result'], 'transcription': [
+              {'offsets': s['offsets'], 'text': s['text'], 'tokens': [
+                  {'text': t['text'], 'offsets': t['offsets'], 'p': round(t['p'], 3) if t.get('p') is not None else None,
+                   't_dtw': t.get('t_dtw')} for t in s['tokens']]} for s in root['transcription']]}
+          print('=====BEGIN', sys.argv[1])
+          print(json.dumps(out, ensure_ascii=False, separators=(',', ':')))
+          print('=====END', sys.argv[1])
+          PY
+          done
