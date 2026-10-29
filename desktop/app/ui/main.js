@@ -1507,12 +1507,14 @@ const speechBox = document.getElementById('settings-speech');
 const speechModels = document.getElementById('speech-models');
 const speechLanguage = document.getElementById('speech-language');
 const speechEvery = document.getElementById('speech-every');
+const speechCard = document.getElementById('speech-card');
 // Whisper's languages most people here will want, named in English by the window; the rest are detected.
 const LANGUAGES = ['ar', 'bn', 'cs', 'da', 'de', 'el', 'en', 'es', 'fa', 'fi', 'fr', 'gu', 'he', 'hi', 'hu', 'id', 'it',
   'ja', 'ko', 'mr', 'ms', 'nl', 'no', 'pa', 'pl', 'pt', 'ro', 'ru', 'sv', 'ta', 'te', 'th', 'tr', 'uk', 'ur', 'vi', 'zh'];
 
-/** What the app says of speech recognition: whether it is here, the person's choices, the models. */
-let speech = { available: false, settings: null, models: [] };
+/** What the app says of speech recognition: whether it is here, and on a graphics card, the person's choices, the
+ * models. */
+let speech = { available: false, card: false, settings: null, models: [] };
 
 async function loadSpeech() {
   const status = await tauri.core.invoke('speech_status').catch(() => null);
@@ -1533,8 +1535,11 @@ function speechText(job) {
       return 'Making subtitles · Reading the sound';
     case 'listening':
       return `Making subtitles · ${job.percent}%`;
-    case 'done':
-      return 'Subtitles made';
+    case 'done': {
+      // Where it listened and how long it took, so the graphics card and the processor can be compared.
+      const where = job.card ? 'on the graphics card' : 'on the processor';
+      return job.seconds == null ? 'Subtitles made' : `Subtitles made ${where} in ${timeLeft(job.seconds)}`;
+    }
     default:
       return job.message ?? 'Subtitles couldn’t be made.';
   }
@@ -1585,6 +1590,10 @@ function showSpeechSettings() {
   for (const b of speechEvery.querySelectorAll('button')) {
     b.setAttribute('aria-pressed', String(b.dataset.every === String(settings.everyDownload)));
   }
+  document.getElementById('speech-card-box').hidden = !speech.card;
+  for (const b of speechCard.querySelectorAll('button')) {
+    b.setAttribute('aria-pressed', String(b.dataset.card === String(settings.graphicsCard)));
+  }
 }
 
 function saveSpeech(change) {
@@ -1597,6 +1606,10 @@ speechLanguage.addEventListener('change', () => saveSpeech({ language: speechLan
 speechEvery.addEventListener('click', (e) => {
   const every = e.target.closest('[data-every]')?.dataset.every;
   if (every) saveSpeech({ everyDownload: every === 'true' });
+});
+speechCard.addEventListener('click', (e) => {
+  const card = e.target.closest('[data-card]')?.dataset.card;
+  if (card) saveSpeech({ graphicsCard: card === 'true' });
 });
 
 tauri?.event.listen('speech', ({ payload: job }) => {

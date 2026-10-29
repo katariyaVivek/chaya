@@ -3,6 +3,12 @@
 //! times, as JSON (`-ojf`), saying how far it has got as it goes (`-pp`). Both run with no console window, and stop
 //! when asked.
 //!
+//! The engine carries two builds of whisper-cli: one for the processor, and one with Vulkan, which runs on the
+//! graphics card. The Vulkan build is tried first where Windows has Vulkan (the graphics driver installs
+//! vulkan-1.dll) and the person has not turned the graphics card off; it says when it uses the card ("using Vulkan0
+//! backend"), and it runs on the processor itself when there is no card. If it fails, for a driver that crashes or
+//! a card without what it needs, the processor build listens again.
+//!
 //! whisper-cli reads its arguments in the PC's code page, not Unicode, so it runs from inside Chaya's speech folder
 //! and is given only short relative paths there ("models/ggml-tiny.bin", "work/12/sound.wav"): a person's name with
 //! letters outside that code page, in the path of their profile, never reaches it.
@@ -20,23 +26,49 @@ use crate::subtitles::Line;
 
 use super::SpeechError;
 
-/// whisper.cpp's command-line program.
+/// whisper.cpp's command-line programs: the processor's, and the Vulkan build when the engine has it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Whisper {
     pub program: PathBuf,
+    pub vulkan: Option<PathBuf>,
 }
 
 impl Whisper {
-    /// The whisper-cli in the engine folder, or `CHAYA_WHISPER` in development; `None` when there is neither, and the
-    /// app then offers no subtitles made on the PC.
+    /// The whisper-cli in the engine folder, or `CHAYA_WHISPER` in development, with whisper-cli-vulkan beside it
+    /// (or `CHAYA_WHISPER_VULKAN`); `None` when there is no whisper-cli, and the app then offers no subtitles made on
+    /// the PC.
     pub fn find(engine_folder: &Path) -> Option<Whisper> {
-        ["whisper-cli.exe", "whisper-cli"]
-            .iter()
-            .map(|name| engine_folder.join(name))
-            .find(|path| path.is_file())
-            .or_else(|| std::env::var_os("CHAYA_WHISPER").map(PathBuf::from).filter(|p| p.is_file()))
-            .map(|program| Whisper { program })
+        let find = |names: [&str; 2], variable: &str| {
+            names
+                .iter()
+                .map(|name| engine_folder.join(name))
+                .find(|path| path.is_file())
+                .or_else(|| std::env::var_os(variable).map(PathBuf::from).filter(|p| p.is_file()))
+        };
+        let program = find(["whisper-cli.exe", "whisper-cli"], "CHAYA_WHISPER")?;
+        let vulkan = find(["whisper-cli-vulkan.exe", "whisper-cli-vulkan"], "CHAYA_WHISPER_VULKAN");
+        Some(Whisper { program, vulkan })
     }
+
+    /// The Vulkan build, when there is one and Windows has Vulkan for it.
+    pub fn on_card(&self) -> Option<&Path> {
+        self.vulkan.as_deref().filter(|_| has_vulkan())
+    }
+}
+
+/// Whether Windows has Vulkan: vulkan-1.dll, which the graphics driver installs, in System32 or on the PATH. Without
+/// it the Vulkan build could not start, and Windows would say so in a box of its own.
+#[cfg(windows)]
+fn has_vulkan() -> bool {
+    let system = std::env::var_os("SystemRoot").map(|root| PathBuf::from(root).join("System32"));
+    let path = std::env::var_os("PATH").map(|p| std::env::split_paths(&p).collect::<Vec<_>>()).unwrap_or_default();
+    system.into_iter().chain(path).any(|folder| folder.join("vulkan-1.dll").is_file())
+}
+
+/// Elsewhere (the core's tests) the Vulkan build is a stand-in, which always starts.
+#[cfg(not(windows))]
+fn has_vulkan() -> bool {
+    true
 }
 
 /// One word whisper.cpp heard, and when (milliseconds); `p` is how sure it was, from 0 to 1.
@@ -86,7 +118,7 @@ pub enum Stage {
 
 /// What `transcribe` needs: the folder whisper-cli runs in, and inside it the model and which of whisper.cpp's
 /// attention-head presets times its words (`dtw`, "large.v3.turbo"), a work folder for this video, the language ("en"),
-/// or None to detect it, and how many of the processor's threads it may use.
+/// or None to detect it, how many of the processor's threads it may use, and whether it may use the graphics card.
 pub struct Request<'a> {
     pub folder: &'a Path,
     pub model: &'a Path,
@@ -94,6 +126,14 @@ pub struct Request<'a> {
     pub work: &'a Path,
     pub language: Option<&'a str>,
     pub threads: usize,
+    pub card: bool,
+}
+
+/// What whisper.cpp heard, and whether it listened on the graphics card.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Heard {
+    pub transcript: Transcript,
+    pub card: bool,
 }
 
 /// How many threads whisper.cpp listens with: about one a core (Windows counts each core twice when it runs two
@@ -103,8 +143,9 @@ pub fn threads() -> usize {
     (logical / 2).max(logical.min(4)).min(12)
 }
 
-/// Turns `video`'s sound into WAV with `ffmpeg`, listens to it with `whisper`, and reads what was heard. `stop`
-/// turning true stops whichever is running (`SpeechError::Stopped`). The work folder is left for the caller to delete.
+/// Turns `video`'s sound into WAV with `ffmpeg`, listens to it with `whisper` (the Vulkan build first, when it may,
+/// then the processor's if that fails), and reads what was heard. `stop` turning true stops whichever is running
+/// (`SpeechError::Stopped`). The work folder is left for the caller to delete.
 pub async fn transcribe(
     ffmpeg: &Path,
     whisper: &Whisper,
@@ -112,7 +153,7 @@ pub async fn transcribe(
     request: &Request<'_>,
     stop: &watch::Receiver<bool>,
     on_stage: &mut (dyn FnMut(Stage) + Send),
-) -> Result<Transcript, SpeechError> {
+) -> Result<Heard, SpeechError> {
     let relative = |path: &Path| path.strip_prefix(request.folder).map(Path::to_path_buf).unwrap_or(path.into());
     tokio::fs::create_dir_all(request.work).await.map_err(|_| SpeechError::CantWrite)?;
     let sound = request.work.join("sound.wav");
@@ -129,30 +170,47 @@ pub async fn transcribe(
         return Err(SpeechError::NoSound);
     }
 
-    on_stage(Stage::Listening { percent: 0 });
-    let mut command = Command::new(&whisper.program);
-    command
-        .current_dir(request.folder)
-        .arg("-m")
-        .arg(relative(request.model))
-        .arg("-f")
-        .arg(relative(&sound))
-        .args(["-l", request.language.unwrap_or("auto"), "-t", &request.threads.to_string(), "-ojf", "-pp"])
-        // Each word's time from the attention heads (DTW), which needs flash attention off: with it on, every time
-        // comes back as -1.
-        .args(["-dtw", request.dtw, "-nfa", "-of"])
-        .arg(relative(&out));
-    let listened = run(command, stop, &mut |line| {
-        if let Some(percent) = progress(line) {
-            on_stage(Stage::Listening { percent });
+    let card = whisper.on_card().filter(|_| request.card);
+    let programs = card.into_iter().chain([whisper.program.as_path()]);
+    for program in programs {
+        on_stage(Stage::Listening { percent: 0 });
+        let json = out.with_extension("json");
+        let _ = tokio::fs::remove_file(&json).await;
+        let mut command = Command::new(program);
+        command
+            .current_dir(request.folder)
+            .arg("-m")
+            .arg(relative(request.model))
+            .arg("-f")
+            .arg(relative(&sound))
+            .args(["-l", request.language.unwrap_or("auto"), "-t", &request.threads.to_string(), "-ojf", "-pp"])
+            // Each word's time from the attention heads (DTW), which needs flash attention off: with it on, every
+            // time comes back as -1.
+            .args(["-dtw", request.dtw, "-nfa", "-of"])
+            .arg(relative(&out));
+        let mut on_card = false;
+        let listened = run(command, stop, &mut |line| {
+            if let Some(percent) = progress(line) {
+                on_stage(Stage::Listening { percent });
+            }
+            on_card |= uses_card(line);
+        })
+        .await;
+        let listened = match listened {
+            // The Vulkan build that would not start, as one that failed: the processor's is next.
+            Err(SpeechError::NoProgram) if program != whisper.program => false,
+            other => other?,
+        };
+        if let (true, Ok(json)) = (listened, tokio::fs::read(&json).await) {
+            return parse(&String::from_utf8_lossy(&json)).map(|transcript| Heard { transcript, card: on_card });
         }
-    })
-    .await?;
-    let json = tokio::fs::read(out.with_extension("json")).await;
-    match (listened, json) {
-        (true, Ok(json)) => parse(&String::from_utf8_lossy(&json)),
-        _ => Err(SpeechError::CouldNotListen),
     }
+    Err(SpeechError::CouldNotListen)
+}
+
+/// Whether whisper-cli says it is listening on the graphics card: "whisper_backend_init_gpu: using Vulkan0 backend".
+fn uses_card(line: &str) -> bool {
+    line.contains("using Vulkan") && line.trim_end().ends_with("backend")
 }
 
 /// Runs `command` until it ends (true when it succeeded) or `stop` turns true (`SpeechError::Stopped`), handing each
@@ -383,6 +441,84 @@ mod tests {
         assert_eq!(transcript.segments[0].words[0].p, 0.0);
         assert_eq!(parse("not json"), Err(SpeechError::Unreadable));
         assert_eq!(parse("{\"result\": {}}"), Err(SpeechError::Unreadable));
+    }
+
+    /// A stand-in program: a shell script.
+    #[cfg(unix)]
+    fn program(path: &Path, script: &str) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::write(path, format!("#!/bin/sh\n{script}\n")).unwrap();
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        path.to_path_buf()
+    }
+
+    /// A stand-in whisper-cli that says `said` on its error stream and writes what it heard in `language` where `-of`
+    /// says.
+    #[cfg(unix)]
+    fn listener(path: &Path, said: &str, language: &str) -> PathBuf {
+        let json = format!(
+            r#"{{"result": {{"language": "{language}"}}, "transcription": [{{"offsets": {{"from": 0, "to": 900}}, "text": " Hi.", "tokens": []}}]}}"#
+        );
+        program(
+            path,
+            &format!(
+                "while [ \"$1\" != -of ]; do shift; done\necho '{said}' >&2\n\
+                 echo 'whisper_print_progress_callback: progress = 50%' >&2\necho '{json}' > \"$2.json\""
+            ),
+        )
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn the_graphics_card_listens_first_and_the_processor_when_it_fails() {
+        let dir = tempfile::tempdir().unwrap();
+        let folder = dir.path().join("speech");
+        std::fs::create_dir_all(folder.join("models")).unwrap();
+        std::fs::write(folder.join("models").join("ggml-tiny.bin"), b"").unwrap();
+        let video = dir.path().join("clip.mp4");
+        std::fs::write(&video, b"").unwrap();
+        let ffmpeg = program(&dir.path().join("ffmpeg"), r#"for a; do out="$a"; done; : > "$out""#);
+        let processor = listener(&dir.path().join("whisper-cli"), "whisper_backend_init_gpu: no GPU found", "de");
+        let card = listener(&dir.path().join("card"), "whisper_backend_init_gpu: using Vulkan0 backend", "fr");
+        let broken =
+            program(&dir.path().join("broken"), "echo 'whisper_backend_init_gpu: using Vulkan0 backend' >&2; exit 1");
+        let model = folder.join("models").join("ggml-tiny.bin");
+        let work = folder.join("work").join("1");
+        let request = |card| Request {
+            folder: &folder,
+            model: &model,
+            dtw: "tiny",
+            work: &work,
+            language: None,
+            threads: 2,
+            card,
+        };
+        let (_tx, stop) = watch::channel(false);
+        let listen = |vulkan: Option<&PathBuf>, card: bool| {
+            let whisper = Whisper { program: processor.clone(), vulkan: vulkan.cloned() };
+            let (ffmpeg, video, stop) = (ffmpeg.clone(), video.clone(), stop.clone());
+            let request = request(card);
+            async move {
+                let mut stages = Vec::new();
+                let heard = transcribe(&ffmpeg, &whisper, &video, &request, &stop, &mut |s| stages.push(s)).await;
+                (heard.map(|h| (h.transcript.language, h.card)), stages)
+            }
+        };
+
+        let (heard, stages) = listen(Some(&card), true).await;
+        assert_eq!(heard, Ok(("fr".into(), true)), "the Vulkan build, which used the card");
+        assert!(stages.contains(&Stage::Listening { percent: 50 }));
+        let (heard, stages) = listen(Some(&broken), true).await;
+        assert_eq!(heard, Ok(("de".into(), false)), "the processor's, once the Vulkan build failed");
+        assert_eq!(stages.iter().filter(|s| **s == Stage::Listening { percent: 0 }).count(), 2, "listening again");
+        let (heard, _) = listen(Some(&dir.path().join("not there")), true).await;
+        assert_eq!(heard, Ok(("de".into(), false)), "a Vulkan build that would not start");
+        let (heard, _) = listen(Some(&card), false).await;
+        assert_eq!(heard, Ok(("de".into(), false)), "the graphics card turned off");
+        let (heard, _) = listen(None, true).await;
+        assert_eq!(heard, Ok(("de".into(), false)), "no Vulkan build");
+        assert!(uses_card("whisper_backend_init_gpu: using Vulkan0 backend\r"));
+        assert!(!uses_card("whisper_backend_init_gpu: no GPU found"));
     }
 
     #[test]

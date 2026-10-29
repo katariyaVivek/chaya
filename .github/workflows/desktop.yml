@@ -4,7 +4,8 @@ name: Desktop app
 # into an NSIS installer, kept as a run artifact. On Windows the engine the installer carries (a Python,
 # yt-dlp, gallery-dl, chaya_engine, QuickJS and ffmpeg: desktop/engine/prepare.py) is put together first and
 # checked without the network. The cut-down ffmpeg that joins picture and sound, and whisper.cpp, which makes subtitles
-# on the PC, are each built once per version of their build script (desktop/engine/build_ffmpeg.sh, build_whisper.sh)
+# on the PC (for the processor, and with Vulkan for the graphics card), are each built once per version of their build
+# script (desktop/engine/build_ffmpeg.sh, build_whisper.sh)
 # and kept in the Actions cache; so is the Tiny speech model the tests listen with. Titles in this installer use Geist: Cabinet Grotesk's licence keeps its file out of
 # the repository (desktop/design/fonts/README.md).
 
@@ -80,8 +81,9 @@ jobs:
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq mingw-w64 g++-mingw-w64-x86-64-posix ninja-build cmake
+          sudo apt-get install -y -qq mingw-w64 g++-mingw-w64-x86-64-posix ninja-build cmake glslc
           desktop/engine/build_whisper.sh windows whisper-out/windows
+          desktop/engine/build_whisper.sh windows-vulkan whisper-out/windows
           desktop/engine/build_whisper.sh host whisper-out/host
 
       - name: Hand it to the other jobs
@@ -233,7 +235,27 @@ jobs:
         run: npm ci
 
       - name: Put the engine together
-        run: python desktop/engine/prepare.py --ffmpeg ffmpeg-out/windows/ffmpeg.exe --whisper whisper-out/windows/whisper-cli.exe
+        run: >-
+          python desktop/engine/prepare.py --ffmpeg ffmpeg-out/windows/ffmpeg.exe
+          --whisper whisper-out/windows/whisper-cli.exe --whisper-vulkan whisper-out/windows/whisper-cli-vulkan.exe
+
+      # The runner has no graphics card, so the Vulkan build is tested on Lavapipe, Mesa's Vulkan driver that runs on the
+      # processor: Vulkan's runtime (vulkan-1.dll) and Lavapipe, registered as a driver.
+      - name: Install Vulkan, with Lavapipe
+        uses: jakoch/install-vulkan-sdk-action@v1.7.0
+        with:
+          vulkan_version: 1.4.309.0
+          install_runtime_only: true
+          install_lavapipe: true
+          cache: true
+
+      - name: Register Lavapipe
+        shell: pwsh
+        run: |
+          $icd = Get-ChildItem C:\lavapipe -Recurse -Filter 'lvp_icd.x86_64.json' | Select-Object -First 1
+          reg add "HKLM\SOFTWARE\Khronos\Vulkan\Drivers" /v $icd.FullName /t REG_DWORD /d 0 /f
+          $runtime = Get-ChildItem C:\VulkanSDK -Recurse -Filter 'vulkan-1.dll' | Where-Object { $_.DirectoryName -like '*x64*' } | Select-Object -First 1
+          Add-Content $env:GITHUB_PATH $runtime.DirectoryName
 
       - name: Lint
         working-directory: desktop
@@ -243,14 +265,19 @@ jobs:
 
       # CHAYA_ENGINE_DIR also runs the prepared engine's own check (core/tests/bundled_engine.rs): its Python
       # starts, the packages are the pinned ones, yt-dlp accepts the bundled QuickJS, and the bundled ffmpeg
-      # joins a picture and its sound. The bundled whisper.cpp, cross-compiled, listens to the JFK sample on Windows.
+      # joins a picture and its sound. The bundled whisper.cpp, cross-compiled, listens to the JFK sample on Windows: the
+      # Vulkan build, on Lavapipe (which ggml uses only when told to, GGML_VK_VISIBLE_DEVICES, as it is no graphics
+      # card), and it must say it used Vulkan (CHAYA_EXPECT_CARD).
       - name: Test
         working-directory: desktop
         env:
           CHAYA_ENGINE_DIR: ${{ github.workspace }}\desktop\app\src-tauri\engine
           CHAYA_FFMPEG: ${{ github.workspace }}\desktop\app\src-tauri\engine\ffmpeg.exe
           CHAYA_WHISPER: ${{ github.workspace }}\desktop\app\src-tauri\engine\whisper-cli.exe
+          CHAYA_WHISPER_VULKAN: ${{ github.workspace }}\desktop\app\src-tauri\engine\whisper-cli-vulkan.exe
           CHAYA_WHISPER_MODEL: ${{ github.workspace }}\speech-model\ggml-tiny.bin
+          GGML_VK_VISIBLE_DEVICES: '0'
+          CHAYA_EXPECT_CARD: '1'
         run: cargo test --workspace -- --nocapture
 
       # A release (a windows-v* tag) also signs the update Chaya fetches from inside the app (update.rs), with the
