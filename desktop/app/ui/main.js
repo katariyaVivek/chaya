@@ -1012,7 +1012,13 @@ async function openPlayer(id) {
   playerProblem.hidden = true;
   playerResumed.hidden = true;
   playerCaption.hidden = true;
+  // Nothing of the video before shows while this one's subtitles are read.
   playerLines.replaceChildren();
+  playerLinesHead.hidden = true;
+  playerNone.hidden = true;
+  playerMakeBox.hidden = true;
+  playerMaking.hidden = true;
+  playerCc.hidden = true;
   player.hidden = false;
   if (browsing) tauri.core.invoke('show_page', { visible: false });
   showTab(remembered('chaya.player.tab', 'transcript'));

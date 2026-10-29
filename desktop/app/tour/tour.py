@@ -338,7 +338,8 @@ def make_subtitles(tour, id):
 
     tour.js(f"document.querySelector('#download-list .row[data-id=\"{id}\"] .row__title').click(); return 1", gesture=True)
     # No subtitles yet: the transcript's one action is to make them.
-    tour.wait(lambda: not tour.js("return document.getElementById('player-make-first').hidden"), 15)
+    tour.wait(lambda: tour.js("return !document.getElementById('player-none').hidden"
+                              " && !document.getElementById('player-make-first').hidden"), 15)
     tour.shot('no-subtitles-yet', transcript=tour.js("return document.getElementById('panel-transcript').innerText"))
     tour.click('#player-make-first')
     making = "const m = document.getElementById('player-making'); return m.hidden ? '' : m.innerText"
