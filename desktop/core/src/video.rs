@@ -1,12 +1,14 @@
 //! What only Chaya keeps about a saved video, in its own data folder: one JSON file per video, named by the download's
-//! number as `downloads.json` numbers them ("videos/12.json"). For now, where playback stopped; later steps add the
-//! words with their times, translations, highlights and clips. What a later Chaya wrote that this one does not know
+//! number as `downloads.json` numbers them ("videos/12.json"): where playback stopped, and what whisper.cpp heard in it,
+//! each word with its time, when Chaya made its subtitles. Later steps add translations, highlights and clips. What a later Chaya wrote that this one does not know
 //! is kept as it was.
 
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
+
+use crate::speech::whisper::Transcript;
 
 /// The folder in Chaya's data folder that holds the videos' files.
 pub const FOLDER: &str = "videos";
@@ -24,6 +26,11 @@ pub struct VideoData {
     pub stopped_at: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub duration: Option<f64>,
+    /// What whisper.cpp heard, the last time Chaya made subtitles for it, and with which model.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transcript: Option<Transcript>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transcript_model: Option<String>,
     #[serde(flatten)]
     pub other: Map<String, Value>,
 }
@@ -66,7 +73,8 @@ impl Videos {
         std::fs::create_dir_all(&self.folder)?;
         let path = self.path(id);
         let part = path.with_extension("json.part");
-        std::fs::write(&part, serde_json::to_vec_pretty(&data)?)?;
+        // Compact: a long video's words are many.
+        std::fs::write(&part, serde_json::to_vec(&data)?)?;
         std::fs::rename(&part, &path)
     }
 
@@ -75,6 +83,14 @@ impl Videos {
         self.change(id, |data| {
             data.stopped_at = Some(at).filter(|at| at.is_finite() && *at >= 0.0);
             data.duration = duration.filter(|d| d.is_finite() && *d > 0.0).or(data.duration);
+        })
+    }
+
+    /// Keeps what whisper.cpp heard in download `id`, listening with `model`.
+    pub fn heard(&self, id: u64, transcript: Transcript, model: &str) -> std::io::Result<()> {
+        self.change(id, |data| {
+            data.transcript = Some(transcript);
+            data.transcript_model = Some(model.to_string());
         })
     }
 
@@ -126,6 +142,24 @@ mod tests {
         videos.forget(3);
         assert_eq!(videos.load(3), VideoData::default());
         assert_eq!(videos.load(4).resume_at(), 10.0);
+    }
+
+    #[test]
+    fn what_whisper_heard_is_kept_beside_where_playback_stopped() {
+        use crate::speech::whisper::{Segment, Word};
+        let dir = tempfile::tempdir().unwrap();
+        let videos = Videos::in_folder(dir.path().to_path_buf());
+        videos.stopped(2, 30.0, Some(90.0)).unwrap();
+        let word = Word { text: "Hello".into(), start: 0, end: 400, p: 0.9 };
+        let transcript = Transcript {
+            language: "en".into(),
+            segments: vec![Segment { start: 0, end: 400, text: "Hello".into(), words: vec![word] }],
+        };
+        videos.heard(2, transcript.clone(), "tiny").unwrap();
+        let data = videos.load(2);
+        assert_eq!(data.transcript, Some(transcript));
+        assert_eq!(data.transcript_model.as_deref(), Some("tiny"));
+        assert_eq!(data.resume_at(), 30.0);
     }
 
     #[test]

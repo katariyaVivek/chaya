@@ -342,6 +342,12 @@ a built-in browser. [`../desktop/README.md`](../desktop/README.md) has the layou
   stack later); it also picks which of a site's subtitles a video's download saves beside it as
   "name.en.srt" (the engine lists them with `--subtitles`). `video` keeps what only Chaya needs about a saved
   video, one JSON file per download in `videos/`: for now where playback stopped.
+- **Subtitles made on the PC** (`chaya-core`'s `speech`, `desktop/app/src-tauri/src/speech.rs`): whisper.cpp's
+  command-line program, built by `desktop/engine/build_whisper.sh` as ffmpeg is (cross-compiled with mingw-w64,
+  static), listens to the WAV ffmpeg makes of a video's sound, with a model `speech::models` fetches once from
+  Hugging Face and checks against its pinned SHA-256. Its full JSON is read into segments and words; the lines are
+  saved as "name.LANG.srt" and the words kept in the video's file. The app runs one video at a time from a queue
+  and tells the window how each goes (`speech` events).
 - `desktop/app/src-tauri` hands `chaya-core` to the window as commands (`recognise_link`, `look_up`,
   `download` and the download controls) and sends it `download` events. The window
   may call only those and set its title bar's theme (`capabilities/default.json`). Its content

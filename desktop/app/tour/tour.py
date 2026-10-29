@@ -19,8 +19,9 @@ pictures.
     python tour.py --app PATH --out FOLDER [--via devtools|webdriver] [--sites sites.json] [--seed]
 
 `--sites` swaps the internet's addresses for others (a local test site, when trying the tour off Windows). `--seed`
-puts a saved video in place before the app starts (`fixtures/`: a 30-second clip, its English subtitles, and its
-entry in the Downloads list), for the player's step. It writes into the person's own Downloads folder and Chaya's own
+puts two saved videos in place before the app starts (`fixtures/`: a 30-second clip with its English subtitles, and
+the JFK sample whisper.cpp ships, with none; and their entries in the Downloads list), for the player's step and for
+making subtitles on the PC. It writes into the person's own Downloads folder and Chaya's own
 data folder, so only on a machine kept for the tour (CI's).
 """
 
@@ -35,6 +36,8 @@ from pathlib import Path
 
 FIXTURES = Path(__file__).parent / 'fixtures'
 CLIP = 'A walk in the park'
+# 11 seconds of a speech, with no subtitles: Chaya makes them.
+SPEECH = 'Ask not'
 
 SITES = {
     # A short, old, public video: the first one uploaded to YouTube.
@@ -251,9 +254,14 @@ class Tour:
         return self.js("const c = document.querySelector('#result .card'); return c ? c.innerText : '';")
 
 
-def seed_saved_video():
-    """The tour's clip and its subtitles in Downloads, and listed as a finished download in Chaya's data folder (as the
-    app keeps it: `downloads.json` in %APPDATA%\\com.chaya.desktop). Its number, for the player's step."""
+def seed_saved_videos():
+    """The tour's clips in Downloads, the first with its subtitles, each listed as a finished download in Chaya's data
+    folder (as the app keeps them: `downloads.json` in %APPDATA%\\com.chaya.desktop). Their numbers."""
+    return seed_saved_video(CLIP, [f'{CLIP}.en.srt']), seed_saved_video(SPEECH, [])
+
+
+def seed_saved_video(clip, beside):
+    """`clip`.mp4 and the files `beside` it in Downloads, and listed as a finished download; its number."""
     downloads = Path.home() / 'Downloads'
     if os.name == 'nt':
         data = Path(os.environ['APPDATA']) / 'com.chaya.desktop'
@@ -261,14 +269,14 @@ def seed_saved_video():
         data = Path(os.environ.get('XDG_DATA_HOME', Path.home() / '.local' / 'share')) / 'com.chaya.desktop'
     downloads.mkdir(parents=True, exist_ok=True)
     data.mkdir(parents=True, exist_ok=True)
-    video = downloads / f'{CLIP}.mp4'
-    for name in (f'{CLIP}.mp4', f'{CLIP}.en.srt'):
+    video = downloads / f'{clip}.mp4'
+    for name in (f'{clip}.mp4', *beside):
         (downloads / name).write_bytes((FIXTURES / name).read_bytes())
     store = data / 'downloads.json'
     listed = json.loads(store.read_text(encoding='utf-8')) if store.exists() else []
     task = json.loads((FIXTURES / 'saved-video.json').read_text(encoding='utf-8'))
     size = video.stat().st_size
-    task.update(id=max([t['id'] for t in listed] + [0]) + 1, path=str(video), done=size, total=size,
+    task.update(id=max([t['id'] for t in listed] + [0]) + 1, title=clip, path=str(video), done=size, total=size,
                 added=int(time.time()) - 60, ended=int(time.time()) - 60)
     store.write_text(json.dumps(listed + [task]), encoding='utf-8')
     return task['id']
@@ -316,6 +324,37 @@ def watch(tour, id):
     tour.wait(lambda: tour.js("return document.getElementById('player').hidden"), 5)
 
 
+def make_subtitles(tour, id):
+    """Subtitles made on the PC: Tiny picked in Settings › Speech recognition (fetched from Hugging Face the first
+    time), then Make subtitles on a saved speech with none. What whisper.cpp heard is listed beside the video."""
+    tour.click('#settings-button')
+    available = tour.wait(lambda: not tour.js("return document.getElementById('settings-speech').hidden"), 10)
+    tour.js("[...document.querySelectorAll('#speech-models .model__pick')].find(b => b.innerText.startsWith('Tiny'))"
+            "?.click(); return 1")
+    time.sleep(0.5)
+    tour.shot('speech-settings', available=bool(available), models=tour.js(
+        "return [...document.querySelectorAll('#speech-models .model')].map(m => m.innerText.replace(/\\n/g, ' | '))"))
+    tour.click('#settings-button')
+
+    tour.js(f"document.querySelector('#download-list .row[data-id=\"{id}\"] .row__title').click(); return 1", gesture=True)
+    tour.wait(lambda: not tour.js("return document.getElementById('player-make').hidden"), 15)
+    tour.click('#player-make')
+    making = "const m = document.getElementById('player-making'); return m.hidden ? '' : m.innerText"
+    tour.wait(lambda: 'Fetching' in (tour.js(making) or '') or 'Making' in (tour.js(making) or ''), 30)
+    tour.shot('making-subtitles', making=tour.js(making))
+    # Made (its lines listed; the note goes after a few seconds), or failed (the note offers Try again).
+    finished = "return document.querySelectorAll('#player-lines .player__line').length > 0" \
+               " || (document.getElementById('player-making').innerText || '').includes('Try again')"
+    tour.wait(lambda: tour.js(finished), 300, every=2)
+    lines = tour.js("return [...document.querySelectorAll('#player-lines .player__line')].map(l => l.innerText)")
+    heard = ' '.join(lines or []).lower()
+    tour.shot('subtitles-made', making=tour.js(making), lines=lines,
+              ask_not='ask not what your country can do for you' in heard,
+              subtitles=tour.js("return document.getElementById('player-subtitles').innerText"))
+    tour.press_in_player('Escape')
+    tour.wait(lambda: tour.js("return document.getElementById('player').hidden"), 5)
+
+
 def looked_up(tour):
     """Whether the card's lookup has ended: its state holds an answer, not the "Finding…" pill, and is not still empty
     from the moment before the lookup began."""
@@ -330,10 +369,16 @@ def run(tour, sites, seeded=None):
     tour.shot('home', title=tour.js('return document.title'))
 
     if seeded is not None:
+        clip, speech = seeded
         try:
-            watch(tour, seeded)
+            watch(tour, clip)
         except Exception as e:
             tour.failed('player', e)
+            tour.js("document.getElementById('player-close').click(); return 1")
+        try:
+            make_subtitles(tour, speech)
+        except Exception as e:
+            tour.failed('make-subtitles', e)
             tour.js("document.getElementById('player-close').click(); return 1")
 
     # A link: looked up by the bundled engine, its qualities offered.
@@ -565,7 +610,7 @@ def main():
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
 
-    seeded = seed_saved_video() if args.seed else None
+    seeded = seed_saved_videos() if args.seed else None
     try:
         window = DevToolsWindow(args.app, out) if args.via == 'devtools' else WebDriverWindow(args.app, args.driver)
     except Exception as e:

@@ -129,7 +129,11 @@ with the subtitles burned in. The steps are in [`PLAN.md`](PLAN.md), and what Vi
 
 Step 1 is merged: a saved video or sound plays in Chaya, with the site's subtitles (saved beside it as
 "name.en.srt" at download) drawn over it and listed beside it, a line clicked to play from there, speed, full
-window, and playback starting where it stopped. Next: step 2, subtitles made on the PC with whisper.cpp.
+window, and playback starting where it stopped.
+
+Step 2 is merged: *Make subtitles* on any saved video (or for every download), listened to on the PC by whisper.cpp
+with a model fetched once from Hugging Face and checked against its pinned SHA-256; Settings › Speech recognition
+picks the model and the language. Next: step 3, short lines and the graphics card.
 
 ## Known rough edges
 

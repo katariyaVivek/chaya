@@ -116,6 +116,13 @@ Chaya for Windows keeps the same promises, with these differences:
 - **A video's subtitles.** When a site has subtitles for a video you save from a link, Chaya fetches the ones in
   the video's language from the address yt-dlp found for them (the site's own server), with the same headers as
   the video, and saves them next to the video as an SRT file. Nothing else is sent.
+- **Subtitles made on your PC.** When you ask Chaya to make subtitles for a video (or turn that on for every
+  download), it listens to the video's sound on your PC with whisper.cpp; the sound and what was said never leave
+  your PC. The first time, Chaya fetches the speech model you picked from Hugging Face (huggingface.co, where
+  whisper.cpp's models are published), sending nothing about you beyond what any web request carries (your IP
+  address, to Hugging Face), and checks it against the checksum Chaya expects before using it. The model stays in
+  Chaya's own folder until you delete it in the settings. What was said, word by word with its times, is kept in
+  the video's small file in Chaya's own folder, for later features, and the subtitles are saved next to the video.
 - **The player.** Chaya plays what you saved on your PC, and remembers where each video stopped, in a small file
   per video in Chaya's own folder, so it starts there next time. The file is deleted when the download leaves
   Chaya's list. Nothing about what you watch leaves your PC.

@@ -150,6 +150,24 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
   saying so with *Start over*; one barely started, or stopped in its last 10 s (its last twentieth if shorter),
   starts at the start. Removing or cancelling a download deletes its file there, since its number can be given
   again.
+- **Subtitles made on the PC** (`core::speech`). *Make subtitles* in the player's bar;
+  and, in Settings › Speech recognition, *For every download*, which makes them for each video downloaded that came
+  without any. The first time, the speech model is fetched (the player and the row say how far), then the row and
+  the player say how far listening has got, with *Stop*; the subtitles appear in the player when done, and are
+  saved next to the video as "Title (720p).en.srt" in the language heard (or the one picked), replacing a file of
+  that name. One video at a time; the rest wait their turn.
+  - **The models**, in Settings › Speech recognition with their sizes, which are on this PC, and *Delete*: Tiny
+    (74 MB), Small (465 MB), Large v3 Turbo quantized (547 MB, the default), Medium (1.4 GB), Large v3 (2.9 GB).
+    Each is fetched when first needed from Hugging Face (`ggerganov/whisper.cpp`) into `speech/models/` in the app's
+    data folder, as "name.part" until whole (a fetch stopped part-way carries on from what arrived), and kept only
+    if its SHA-256 is the one `core/src/speech/models.json` pins; CI checks those pins against Hugging Face's own
+    list (`engine/check_models.py`). The language spoken is *Detected*, or picked from the list.
+  - **The sound**: ffmpeg turns it into 16 kHz mono WAV in `speech/work/ID/` (gone when done). The cut-down ffmpeg
+    decodes AAC, MP3, Opus, Vorbis, FLAC and PCM for this, resamples, and writes WAV; nothing else is encoded.
+  - **Listening**: whisper.cpp's `whisper-cli` (`engine/build_whisper.sh`, v1.9.5, static, AVX2, on the processor),
+    with full JSON output (each word with its times) and progress. It reads its arguments in the PC's code page, so
+    it runs from the speech folder with short relative paths only. What it heard, word by word, is kept in the
+    video's file (`videos/ID.json`, `core::video`) for the steps that follow. Silences it marks are left out.
 - **A video's subtitles from the site.** A video's lookup also lists its language and the site's subtitles
   (`chaya_engine` with `--subtitles`; the phone never asks). Its download picks the subtitles in the video's own
   language, those a person made before the machine's captions in that language, and never a machine translation
@@ -361,7 +379,9 @@ saying which page asked (`referrerpolicy="no-referrer"`); and a download fetches
 site's server with the headers yt-dlp names for it, and a video's subtitles, when the site has any, from the
 address yt-dlp names for them, with the same headers. No sign-in is used for a link and nothing is sent
 anywhere else. The list of downloads stays on the PC, and so does where playback of each video stopped
-(`videos/` in the app's data folder). Pages the person opens in the built-in browser load
+(`videos/` in the app's data folder). Subtitles made on the PC are listened to on the PC; the speech model is the
+only thing fetched for them, once, from Hugging Face (`ggerganov/whisper.cpp`), and checked against its pinned
+SHA-256. Pages the person opens in the built-in browser load
 as in any browser, and keep their cookies in the app's own WebView2 folder on the PC; they cannot reach
 the app. What is saved from a page is fetched with the browser's cookies for that file's own address, read
 from that folder each time the download starts and never kept elsewhere; a stream's lookup gets them in a
