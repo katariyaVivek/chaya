@@ -91,8 +91,10 @@ The six-part plan after v0.4.0 has shipped (#34 to #39); it is in
 
   Releases are `windows-v*` tags (#77): a release page each, and Chaya offers its own updates in its settings,
   checked once a day and signed. The installer is not signed with a certificate yet, so SmartScreen asks before
-  it runs; a certificate can be added later without other changes (docs/BUILD_AND_TEST.md). Next: the phone's
-  last library pieces, choosing several in the grid and looking inside a saved ZIP.
+  it runs; a certificate can be added later without other changes (docs/BUILD_AND_TEST.md). The first release,
+  `windows-v0.1.0`, went out on 28 October 2026, started from GitHub's website (#78). Next: watch, understand
+  and clip, step by step in [`PLAN.md`](PLAN.md). The phone's last library pieces (choosing several in the
+  grid, looking inside a saved ZIP) can come in between.
 
 0. **First: check #48 on the phone.** #47's name search kept its first look for 3 seconds, so a page
    that drew its name late and then went quiet (7movies) kept no name; #48 looks again when the kept
@@ -118,28 +120,12 @@ The six-part plan after v0.4.0 has shipped (#34 to #39); it is in
 7. Ads inside YouTube's own videos need uBlock Origin's scriptlets, which the blocker does not run.
    Revisit only if a safe, narrow way appears.
 
-## Later: watch, understand and clip
+## Now: watch, understand and clip
 
-An idea for after the Windows app holds up on a real PC, from [Vimpo](https://vimpo.app/) (a Mac app that
-downloads a video, then transcribes, translates and clips it on the Mac). Chaya already does its first step,
-getting the video; these would let the person work with it inside Chaya, still with nothing uploaded. In order,
-each useful on its own:
-
-1. **A player for what was saved.** A finished download opens in Chaya itself, with its subtitles when the site
-   had any (yt-dlp can fetch them).
-2. **Subtitles made on the PC.** Speech to text with [whisper.cpp](https://github.com/ggml-org/whisper.cpp), on
-   the PC, offline. Its models are 75 MB to 1.5 GB, so one would be fetched the first time the person asks for
-   subtitles, not carried in the installer. Short lines that follow the speech, not one line held for ten
-   seconds.
-3. **Translation, side by side.** The subtitles in the person's language beside the original, and a transcript
-   that follows the video and jumps to a line when clicked. A model on the PC, or the person's own key for one;
-   either way their choice, and said plainly in `PRIVACY_POLICY.md`.
-4. **Highlights and clips.** The moments worth watching marked on the progress bar, each with a title and a
-   reason; lines picked in the transcript cut into short clips, with the subtitles burnt in. The ffmpeg Chaya
-   carries only copies tracks, so burning subtitles in needs one built with an encoder (its size and licence to
-   weigh first).
-
-Not before the Windows app is solid: this is a second product on top of the first.
+Chaya for Windows learns what [Vimpo](https://vimpo.app/) does on a Mac: a player for what was saved,
+subtitles made on the PC, translation beside the original with the person's own model, highlights, and clips
+with the subtitles burned in. The steps are in [`PLAN.md`](PLAN.md), and what Vimpo does in
+[`vimpo-reference.md`](vimpo-reference.md).
 
 ## Known rough edges
 
