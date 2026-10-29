@@ -28,6 +28,8 @@ pub struct Model {
     pub file: String,
     pub size: u64,
     pub sha256: String,
+    /// Which of whisper.cpp's attention-head presets times this model's words (`-dtw`).
+    pub dtw: String,
     pub note: String,
     #[serde(default)]
     pub default: bool,
@@ -161,6 +163,9 @@ mod tests {
             assert_eq!(model.file, format!("ggml-{}.bin", model.id));
             assert!(model.sha256.len() == 64 && model.sha256.bytes().all(|b| b.is_ascii_hexdigit()), "{}", model.id);
         }
+        // Each with the preset of attention heads whisper.cpp 1.9.5 times its words by (`-dtw`, examples/cli/cli.cpp).
+        let presets: Vec<&str> = all().iter().map(|m| m.dtw.as_str()).collect();
+        assert_eq!(presets, ["tiny", "small", "large.v3.turbo", "medium", "large.v3"]);
         assert_eq!(find("tiny").map(|m| m.size), Some(77_691_713));
         assert!(find("../tiny").is_none());
     }
@@ -175,6 +180,7 @@ mod tests {
             file: "ggml-test.bin".into(),
             size: body.len() as u64,
             sha256: hasher.finalize().iter().map(|b| format!("{b:02x}")).collect(),
+            dtw: "tiny".into(),
             note: String::new(),
             default: false,
         }

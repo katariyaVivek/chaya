@@ -345,8 +345,10 @@ a built-in browser. [`../desktop/README.md`](../desktop/README.md) has the layou
 - **Subtitles made on the PC** (`chaya-core`'s `speech`, `desktop/app/src-tauri/src/speech.rs`): whisper.cpp's
   command-line program, built by `desktop/engine/build_whisper.sh` as ffmpeg is (cross-compiled with mingw-w64,
   static), listens to the WAV ffmpeg makes of a video's sound, with a model `speech::models` fetches once from
-  Hugging Face and checks against its pinned SHA-256. Its full JSON is read into segments and words; the lines are
-  saved as "name.LANG.srt" and the words kept in the video's file. The app runs one video at a time from a queue
+  Hugging Face and checks against its pinned SHA-256. Its full JSON is read into segments and words, each word timed
+  by whisper.cpp's DTW (`-dtw`, with flash attention off); `speech::lines` cuts them into short lines by Vimpo's rules
+  (sentence ends, pauses, then the best-scoring gap, with word lists per language), saved as "name.LANG.srt", and
+  the words are kept in the video's file. The app runs one video at a time from a queue
   and tells the window how each goes (`speech` events).
 - `desktop/app/src-tauri` hands `chaya-core` to the window as commands (`recognise_link`, `look_up`,
   `download` and the download controls) and sends it `download` events. The window

@@ -178,6 +178,14 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
     with full JSON output (each word with its times) and progress. It reads its arguments in the PC's code page, so
     it runs from the speech folder with short relative paths only. What it heard, word by word, is kept in the
     video's file (`videos/ID.json`, `core::video`) for the steps that follow. Silences it marks are left out.
+    Each word's time comes from the model's attention heads (`-dtw`, which needs flash attention off).
+  - **Short lines** (`core::speech::lines`): what was said is cut where a sentence ends, where whisper.cpp ended a
+    segment, and at pauses of 0.7 s or more; a line still longer than 5 s or 44 characters is cut at its best gap,
+    one scoring higher after a comma, at a longer pause, before "and", "but" or "because" and when it leaves the
+    halves alike, and lower after "the", "of" or "to", between an adjective and its noun, or leaving a half too
+    short. A piece too small to read joins a neighbour. Each line shows 0.2 s before its first word and stays 0.3 s
+    after its last (at least a second, where the next leaves room). Word lists for English, Spanish, Portuguese,
+    French, Italian, German and Hindi; Chinese, Japanese and Thai keep whisper.cpp's segments for now.
 - **A video's subtitles from the site.** A video's lookup also lists its language and the site's subtitles
   (`chaya_engine` with `--subtitles`; the phone never asks). Its download picks the subtitles in the video's own
   language, those a person made before the machine's captions in that language, and never a machine translation
