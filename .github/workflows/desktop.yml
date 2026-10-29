@@ -240,7 +240,7 @@ jobs:
           --whisper whisper-out/windows/whisper-cli.exe --whisper-vulkan whisper-out/windows/whisper-cli-vulkan.exe
 
       # The runner has no graphics card, so the Vulkan build is tested on Lavapipe, Mesa's Vulkan driver that runs on the
-      # processor: Vulkan's runtime (vulkan-1.dll) and Lavapipe, registered as a driver.
+      # processor: Vulkan's runtime (vulkan-1.dll), and Lavapipe, which the action registers as a driver.
       - name: Install Vulkan, with Lavapipe
         uses: jakoch/install-vulkan-sdk-action@v1.7.0
         with:
@@ -249,12 +249,12 @@ jobs:
           install_lavapipe: true
           cache: true
 
-      - name: Register Lavapipe
+      # Where Chaya looks for vulkan-1.dll (System32, then the PATH), as a graphics driver would put it.
+      - name: Put Vulkan's runtime on the PATH
         shell: pwsh
         run: |
-          $icd = Get-ChildItem C:\lavapipe -Recurse -Filter 'lvp_icd.x86_64.json' | Select-Object -First 1
-          reg add "HKLM\SOFTWARE\Khronos\Vulkan\Drivers" /v $icd.FullName /t REG_DWORD /d 0 /f
           $runtime = Get-ChildItem C:\VulkanSDK -Recurse -Filter 'vulkan-1.dll' | Where-Object { $_.DirectoryName -like '*x64*' } | Select-Object -First 1
+          if (-not $runtime) { throw 'No 64-bit vulkan-1.dll under C:\VulkanSDK' }
           Add-Content $env:GITHUB_PATH $runtime.DirectoryName
 
       - name: Lint
