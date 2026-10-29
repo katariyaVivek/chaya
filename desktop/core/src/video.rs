@@ -1,0 +1,143 @@
+//! What only Chaya keeps about a saved video, in its own data folder: one JSON file per video, named by the download's
+//! number as `downloads.json` numbers them ("videos/12.json"). For now, where playback stopped; later steps add the
+//! words with their times, translations, highlights and clips. What a later Chaya wrote that this one does not know
+//! is kept as it was.
+
+use std::path::PathBuf;
+
+use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
+
+/// The folder in Chaya's data folder that holds the videos' files.
+pub const FOLDER: &str = "videos";
+
+/// Playback stopped this close to the start begins at the start: nothing was watched.
+const BARELY_STARTED: f64 = 5.0;
+/// Playback stopped this close to the end (or within the last twentieth of a short video) begins again at the start:
+/// it was watched to the end.
+const NEARLY_DONE: f64 = 10.0;
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct VideoData {
+    /// Where playback stopped, in seconds, and the video's length then.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stopped_at: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration: Option<f64>,
+    #[serde(flatten)]
+    pub other: Map<String, Value>,
+}
+
+impl VideoData {
+    /// Where playback starts when the video is opened again: where it stopped, unless that was at the very start or
+    /// near enough the end.
+    pub fn resume_at(&self) -> f64 {
+        let Some(at) = self.stopped_at.filter(|at| at.is_finite() && *at >= BARELY_STARTED) else { return 0.0 };
+        match self.duration.filter(|d| d.is_finite() && *d > 0.0) {
+            Some(duration) if at >= duration - NEARLY_DONE.min(duration / 20.0) => 0.0,
+            _ => at,
+        }
+    }
+}
+
+/// The folder of videos' files: `videos` in Chaya's data folder.
+pub struct Videos {
+    folder: PathBuf,
+}
+
+impl Videos {
+    pub fn in_folder(folder: PathBuf) -> Videos {
+        Videos { folder }
+    }
+
+    fn path(&self, id: u64) -> PathBuf {
+        self.folder.join(format!("{id}.json"))
+    }
+
+    /// What is kept about download `id`; nothing yet, or a file that can't be read, is an empty one.
+    pub fn load(&self, id: u64) -> VideoData {
+        std::fs::read(self.path(id)).ok().and_then(|bytes| serde_json::from_slice(&bytes).ok()).unwrap_or_default()
+    }
+
+    /// Changes what is kept about download `id`, written whole to a file beside it first so a crash never leaves half.
+    pub fn change(&self, id: u64, change: impl FnOnce(&mut VideoData)) -> std::io::Result<()> {
+        let mut data = self.load(id);
+        change(&mut data);
+        std::fs::create_dir_all(&self.folder)?;
+        let path = self.path(id);
+        let part = path.with_extension("json.part");
+        std::fs::write(&part, serde_json::to_vec_pretty(&data)?)?;
+        std::fs::rename(&part, &path)
+    }
+
+    /// Where playback of download `id` stopped, in a video `duration` seconds long.
+    pub fn stopped(&self, id: u64, at: f64, duration: Option<f64>) -> std::io::Result<()> {
+        self.change(id, |data| {
+            data.stopped_at = Some(at).filter(|at| at.is_finite() && *at >= 0.0);
+            data.duration = duration.filter(|d| d.is_finite() && *d > 0.0).or(data.duration);
+        })
+    }
+
+    /// Forgets download `id`, when it leaves the list: its number may be given to another download.
+    pub fn forget(&self, id: u64) {
+        let _ = std::fs::remove_file(self.path(id));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn stopped(at: f64, duration: Option<f64>) -> VideoData {
+        VideoData { stopped_at: Some(at), duration, ..VideoData::default() }
+    }
+
+    #[test]
+    fn playback_starts_where_it_stopped() {
+        assert_eq!(stopped(754.5, Some(1800.0)).resume_at(), 754.5);
+        assert_eq!(stopped(754.5, None).resume_at(), 754.5);
+    }
+
+    #[test]
+    fn a_video_barely_started_or_watched_to_the_end_starts_at_the_start() {
+        assert_eq!(VideoData::default().resume_at(), 0.0);
+        assert_eq!(stopped(3.0, Some(1800.0)).resume_at(), 0.0);
+        assert_eq!(stopped(1795.0, Some(1800.0)).resume_at(), 0.0);
+        assert_eq!(stopped(1800.0, Some(1800.0)).resume_at(), 0.0);
+        assert_eq!(stopped(f64::NAN, Some(1800.0)).resume_at(), 0.0);
+        // A short clip's end is its last twentieth.
+        assert_eq!(stopped(20.0, Some(30.0)).resume_at(), 20.0);
+        assert_eq!(stopped(28.6, Some(30.0)).resume_at(), 0.0);
+    }
+
+    #[test]
+    fn where_playback_stopped_is_kept_per_download_and_forgotten_with_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let videos = Videos::in_folder(dir.path().join("videos"));
+        assert_eq!(videos.load(3), VideoData::default());
+        videos.stopped(3, 61.0, Some(300.0)).unwrap();
+        videos.stopped(4, 10.0, None).unwrap();
+        assert_eq!(videos.load(3).resume_at(), 61.0);
+        // The length, once known, stays when a later stop does not know it.
+        videos.stopped(3, 120.0, None).unwrap();
+        assert_eq!(videos.load(3), stopped(120.0, Some(300.0)));
+        assert!(dir.path().join("videos").join("3.json").exists());
+        assert!(!dir.path().join("videos").join("3.json.part").exists());
+        videos.forget(3);
+        assert_eq!(videos.load(3), VideoData::default());
+        assert_eq!(videos.load(4).resume_at(), 10.0);
+    }
+
+    #[test]
+    fn what_a_later_chaya_wrote_is_kept() {
+        let dir = tempfile::tempdir().unwrap();
+        let videos = Videos::in_folder(dir.path().to_path_buf());
+        std::fs::write(dir.path().join("5.json"), r#"{"stopped_at": 9.5, "clips": [{"from": 1, "to": 2}]}"#).unwrap();
+        videos.stopped(5, 30.0, Some(90.0)).unwrap();
+        let kept: Value = serde_json::from_slice(&std::fs::read(dir.path().join("5.json")).unwrap()).unwrap();
+        assert_eq!(kept["clips"][0]["to"], 2);
+        assert_eq!(kept["stopped_at"], 30.0);
+        std::fs::write(dir.path().join("6.json"), "not json").unwrap();
+        assert_eq!(videos.load(6), VideoData::default());
+    }
+}

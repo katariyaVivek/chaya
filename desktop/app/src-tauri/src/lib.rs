@@ -21,6 +21,9 @@ use chaya_core::links::{self, Link};
 use chaya_core::lookup::{Lookup, SignIn};
 use chaya_core::media::{Failure, FailureKind, Format, Media};
 use chaya_core::session::{self, CookieFile};
+use chaya_core::subtitles::{self, Track};
+use chaya_core::video::Videos;
+use chaya_core::{serve, video};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_opener::OpenerExt;
@@ -237,30 +240,59 @@ fn library_tiles(kept: Vec<u64>, downloads: State<'_, Downloads>) -> Vec<library
     library::tiles(&dated)
 }
 
-/// `chaya-file://localhost/ID`: the saved picture of download ID, for the grid and the viewer. Only Chaya's own
-/// window may ask (never a page in the browser, whose webviews share the scheme), only by a download's number
-/// (never a path), and only for a saved picture.
-fn saved_picture(app: &AppHandle, from: &str, uri: &tauri::http::Uri) -> tauri::http::Response<Vec<u8>> {
+/// `chaya-file://localhost/ID`: the saved picture, video or sound of download ID, for the grid, the viewer and the
+/// player. Only Chaya's own window may ask (never a page in the browser, whose webviews share the scheme), only by a
+/// download's number (never a path), and only for a saved picture, video or sound. A video or sound comes in the
+/// parts the player asks for (`serve`), so it seeks without being read whole.
+fn saved_file(app: &AppHandle, from: &str, request: &tauri::http::Request<Vec<u8>>) -> tauri::http::Response<Vec<u8>> {
     let status = |code: u16| tauri::http::Response::builder().status(code).body(Vec::new()).unwrap_or_default();
     if from != "main" {
         return status(403);
     }
-    let Some(task) = uri.path().trim_matches('/').parse().ok().and_then(|id| app.state::<Downloads>().manager.get(id))
-    else {
+    let id = request.uri().path().trim_matches('/').parse().ok();
+    let Some(task) = id.and_then(|id| app.state::<Downloads>().manager.get(id)) else {
         return status(404);
     };
+    if task.state != chaya_core::download::manager::State::Completed {
+        return status(404);
+    }
     let name = task.path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-    match (task.state == chaya_core::download::manager::State::Completed, library::picture_type(&name)) {
-        (true, Some(kind)) => match std::fs::read(&task.path) {
+    if let Some(kind) = library::picture_type(&name) {
+        return match std::fs::read(&task.path) {
             Ok(bytes) => tauri::http::Response::builder()
                 .header("Content-Type", kind)
                 .header("Cache-Control", "max-age=3600")
                 .body(bytes)
                 .unwrap_or_default(),
             Err(_) => status(404),
-        },
-        _ => status(404),
+        };
     }
+    let Some(kind) = serve::media_type(&name) else { return status(404) };
+    let range = request.headers().get("range").and_then(|r| r.to_str().ok());
+    let answer = serve::answer(&task.path, kind, range);
+    let mut response = tauri::http::Response::builder().status(answer.status);
+    for (name, value) in answer.headers {
+        response = response.header(name, value);
+    }
+    response.body(answer.body).unwrap_or_default()
+}
+
+/// The subtitles kept next to saved video `id` ("name.en.srt"), each language's lines and when each shows.
+#[tauri::command]
+fn video_subtitles(id: u64, downloads: State<'_, Downloads>) -> Vec<Track> {
+    downloads.manager.get(id).map(|task| subtitles::tracks_for(&task.path)).unwrap_or_default()
+}
+
+/// Where playback of saved video `id` starts: where it stopped last time, or the start (`video::VideoData`).
+#[tauri::command]
+fn playback_start(id: u64, videos: State<'_, Videos>) -> f64 {
+    videos.load(id).resume_at()
+}
+
+/// Where playback of saved video `id` stopped, `at` seconds into its `duration`.
+#[tauri::command]
+fn playback_stopped(id: u64, at: f64, duration: Option<f64>, videos: State<'_, Videos>) {
+    let _ = videos.stopped(id, at, duration);
 }
 
 /// The list's sections, as the phone's: what runs, what needs attention, then the days things were saved on, for a
@@ -283,14 +315,17 @@ fn resume_download(id: u64, downloads: State<'_, Downloads>) {
     downloads.manager.resume(id);
 }
 
+/// What Chaya kept about a download (`video`) goes with it: its number may be given to another download.
 #[tauri::command]
-fn cancel_download(id: u64, downloads: State<'_, Downloads>) {
+fn cancel_download(id: u64, downloads: State<'_, Downloads>, videos: State<'_, Videos>) {
     downloads.manager.cancel(id);
+    videos.forget(id);
 }
 
 #[tauri::command]
-fn remove_download(id: u64, downloads: State<'_, Downloads>) {
+fn remove_download(id: u64, downloads: State<'_, Downloads>, videos: State<'_, Videos>) {
     downloads.manager.remove(id);
+    videos.forget(id);
 }
 
 /// Tries a failed download again. The sites' addresses expire, so the link is looked up again first for a
@@ -308,7 +343,7 @@ async fn retry_download(id: u64, lookups: State<'_, Lookups>, downloads: State<'
             let choice = if task.group.is_some() { chaya_core::download::plan::WHOLE_POST } else { &task.choice };
             plan(&media, choice, &task.page_url, &downloads.folder, |f| downloads.can_join(f), downloads.joins)
                 .and_then(|plans| plans.into_iter().find(|p| p.choice == task.choice))
-                .map(|p| Fresh { source: p.source, sound: p.sound })
+                .map(|p| Fresh { source: p.source, sound: p.sound, subtitles: p.subtitles })
         }
         Err(_) => None,
     };
@@ -316,7 +351,7 @@ async fn retry_download(id: u64, lookups: State<'_, Lookups>, downloads: State<'
     Ok(())
 }
 
-/// Opens a finished file in the app Windows uses for it.
+/// Opens a finished file in the app Windows uses for it (a video Chaya can't play, or one the person wants elsewhere).
 #[tauri::command]
 fn open_download(id: u64, app: AppHandle, downloads: State<'_, Downloads>) -> Result<(), String> {
     let task = downloads.manager.get(id).ok_or("This download is gone.")?;
@@ -369,8 +404,8 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .register_asynchronous_uri_scheme_protocol("chaya-file", |ctx, request, responder| {
             let (app, from) = (ctx.app_handle().clone(), ctx.webview_label().to_string());
-            // Read off the window's thread: a picture can be many megabytes.
-            std::thread::spawn(move || responder.respond(saved_picture(&app, &from, request.uri())));
+            // Read off the window's thread: a picture, or a part of a video, can be many megabytes.
+            std::thread::spawn(move || responder.respond(saved_file(&app, &from, &request)));
         })
         .setup(|app| {
             let engine_dir = app.path().resource_dir()?.join("engine");
@@ -411,6 +446,7 @@ pub fn run() {
             let folder =
                 app.path().download_dir().or_else(|_| app.path().home_dir().map(|home| home.join("Downloads")))?;
             app.manage(Downloads { manager, folder, joins });
+            app.manage(Videos::in_folder(app.path().app_data_dir()?.join(video::FOLDER)));
             let tabs =
                 browser::Tabs::open(app.path().app_data_dir()?.join("tabs.json"), &app.state::<ads::Ads>().blocker);
             app.manage(tabs);
@@ -439,6 +475,9 @@ pub fn run() {
             retry_download,
             open_download,
             show_download,
+            video_subtitles,
+            playback_start,
+            playback_stopped,
             browser::open_page,
             browser::place_page,
             browser::show_page,

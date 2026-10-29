@@ -117,6 +117,16 @@ pub struct PostItem {
     pub headers: BTreeMap<String, String>,
 }
 
+/// Subtitles a site has for a video, as the engine lists them (`--subtitles`): a language ("en", "pt-BR", or
+/// YouTube's "en-orig" for the language spoken), where the file is (WebVTT or SRT), and whether the site made it
+/// by machine.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct SubtitleTrack {
+    pub language: String,
+    pub url: String,
+    pub automatic: bool,
+}
+
 /// Everything known about a link: what it is and what it can be saved as. A post with pictures has
 /// `items`, every picture and video in it, and no `formats`.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -131,6 +141,9 @@ pub struct Media {
     pub is_live: bool,
     pub formats: Vec<Format>,
     pub items: Vec<PostItem>,
+    /// The language spoken in the video, when the site says.
+    pub language: Option<String>,
+    pub subtitles: Vec<SubtitleTrack>,
 }
 
 /// Why a link could not be turned into something to download.
@@ -229,6 +242,16 @@ pub fn parse(json: &str) -> Result<Media, Failure> {
         is_live: media.get("is_live").and_then(Value::as_bool).unwrap_or(false),
         formats: list("formats").iter().filter_map(Value::as_object).filter_map(format).collect(),
         items: list("items").iter().filter_map(Value::as_object).filter_map(item).collect(),
+        language: text(media, "language"),
+        subtitles: list("subtitles").iter().filter_map(Value::as_object).filter_map(subtitle_track).collect(),
+    })
+}
+
+fn subtitle_track(t: &Map<String, Value>) -> Option<SubtitleTrack> {
+    Some(SubtitleTrack {
+        language: text(t, "language")?,
+        url: text(t, "url").filter(|u| u.starts_with("https://") || u.starts_with("http://"))?,
+        automatic: t.get("automatic").and_then(Value::as_bool).unwrap_or(false),
     })
 }
 
@@ -376,6 +399,23 @@ mod tests {
         .unwrap();
         assert_eq!(media.formats[0].fragments, ["https://cdn.example/init.mp4", "https://cdn.example/1.m4s"]);
         assert!(media.formats[1].fragments.is_empty());
+    }
+
+    #[test]
+    fn a_videos_language_and_its_sites_subtitles_are_read() {
+        let media = parse(
+            r#"{"media": {"title": "T", "language": "en", "subtitles": [
+            {"language": "en", "url": "https://www.youtube.com/api/timedtext?v=1&lang=en&fmt=vtt", "automatic": false},
+            {"language": "en-orig", "url": "https://www.youtube.com/api/timedtext?v=1&kind=asr", "automatic": true},
+            {"language": "fr", "url": "file:///C:/secret.txt"},
+            {"url": "https://subs.example/none"}
+        ]}}"#,
+        )
+        .unwrap();
+        assert_eq!(media.language.as_deref(), Some("en"));
+        let languages: Vec<(&str, bool)> = media.subtitles.iter().map(|t| (t.language.as_str(), t.automatic)).collect();
+        assert_eq!(languages, [("en", false), ("en-orig", true)], "only tracks with a language and a web address");
+        assert!(parse(r#"{"media": {"title": "T"}}"#).unwrap().subtitles.is_empty());
     }
 
     #[test]

@@ -112,6 +112,7 @@ pub fn page_download(url: &str, page_url: &str, page_title: &str, folder: &Path,
         sound: None,
         thumbnail: (kind == Kind::Picture).then(|| url.to_string()),
         group: None,
+        subtitles: None,
     })
 }
 
@@ -166,6 +167,7 @@ pub fn found_download(found: &Found, page_url: &str, folder: &Path, streams: boo
         sound: None,
         thumbnail: None,
         group: None,
+        subtitles: None,
     })
 }
 

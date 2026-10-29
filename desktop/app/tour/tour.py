@@ -16,9 +16,12 @@ A step that cannot be done (a site that refuses a data centre, a lookup that tim
 goes on; only a tour that cannot start the app fails. What each step saw goes into `steps.json` beside the
 pictures.
 
-    python tour.py --app PATH --out FOLDER [--via devtools|webdriver] [--sites sites.json]
+    python tour.py --app PATH --out FOLDER [--via devtools|webdriver] [--sites sites.json] [--seed]
 
-`--sites` swaps the internet's addresses for others (a local test site, when trying the tour off Windows).
+`--sites` swaps the internet's addresses for others (a local test site, when trying the tour off Windows). `--seed`
+puts a saved video in place before the app starts (`fixtures/`: a 30-second clip, its English subtitles, and its
+entry in the Downloads list), for the player's step. It writes into the person's own Downloads folder and Chaya's own
+data folder, so only on a machine kept for the tour (CI's).
 """
 
 import argparse
@@ -29,6 +32,9 @@ import sys
 import time
 import urllib.request
 from pathlib import Path
+
+FIXTURES = Path(__file__).parent / 'fixtures'
+CLIP = 'A walk in the park'
 
 SITES = {
     # A short, old, public video: the first one uploaded to YouTube.
@@ -205,8 +211,15 @@ class Tour:
         except Exception:
             pass
 
-    def js(self, script):
+    def js(self, script, gesture=False):
+        if gesture and isinstance(self.window, DevToolsWindow):
+            return self.window.run(script, gesture=True)
         return self.window.run(script)
+
+    def press_in_player(self, key):
+        """A key pressed in the player, as the keyboard sends it there."""
+        self.js("document.getElementById('player-video').dispatchEvent(new KeyboardEvent('keydown',"
+                f" {{key: {json.dumps(key)}, bubbles: true, cancelable: true}})); return 1")
 
     def click(self, selector, index=0):
         """Clicks what `selector` finds (the `index`th); false when there is nothing there."""
@@ -238,6 +251,71 @@ class Tour:
         return self.js("const c = document.querySelector('#result .card'); return c ? c.innerText : '';")
 
 
+def seed_saved_video():
+    """The tour's clip and its subtitles in Downloads, and listed as a finished download in Chaya's data folder (as the
+    app keeps it: `downloads.json` in %APPDATA%\\com.chaya.desktop). Its number, for the player's step."""
+    downloads = Path.home() / 'Downloads'
+    if os.name == 'nt':
+        data = Path(os.environ['APPDATA']) / 'com.chaya.desktop'
+    else:
+        data = Path(os.environ.get('XDG_DATA_HOME', Path.home() / '.local' / 'share')) / 'com.chaya.desktop'
+    downloads.mkdir(parents=True, exist_ok=True)
+    data.mkdir(parents=True, exist_ok=True)
+    video = downloads / f'{CLIP}.mp4'
+    for name in (f'{CLIP}.mp4', f'{CLIP}.en.srt'):
+        (downloads / name).write_bytes((FIXTURES / name).read_bytes())
+    store = data / 'downloads.json'
+    listed = json.loads(store.read_text(encoding='utf-8')) if store.exists() else []
+    task = json.loads((FIXTURES / 'saved-video.json').read_text(encoding='utf-8'))
+    size = video.stat().st_size
+    task.update(id=max([t['id'] for t in listed] + [0]) + 1, path=str(video), done=size, total=size,
+                added=int(time.time()) - 60, ended=int(time.time()) - 60)
+    store.write_text(json.dumps(listed + [task]), encoding='utf-8')
+    return task['id']
+
+
+def watch(tour, id):
+    """A saved video opens in Chaya's player and plays with its subtitles, drawn over it and listed beside it;
+    clicking a line plays from there; F fills the window; closed and opened again, it starts where it stopped."""
+    row = f'#download-list .row[data-id="{id}"] .row__title'
+    video = "document.getElementById('player-video')"
+    # As a click: a video starts playing on its own only after one.
+    tour.js(f"document.querySelector('{row}').click(); return 1", gesture=True)
+    tour.wait(lambda: not tour.js("return document.getElementById('player').hidden"), 10)
+    playing = tour.wait(lambda: tour.js(f"return {video}.currentTime > 1.5"), 20)
+    caption = tour.wait(lambda: tour.js("const c = document.getElementById('player-caption');"
+                                        " return c.hidden ? '' : c.textContent"), 10)
+    lines = tour.js("return [...document.querySelectorAll('#player-lines .player__line')].map(l => l.innerText)")
+    tour.shot('player', playing=bool(playing), caption=caption, lines=len(lines or []),
+              subtitles=tour.js("return document.getElementById('player-subtitles').innerText"),
+              error=tour.js(f"return {video}.error ? {video}.error.message || String({video}.error.code) : ''"))
+
+    # The line at 9 seconds, clicked: the video plays from there, the line marked as the one on show.
+    tour.js("document.querySelectorAll('#player-lines .player__line')[2].click(); return 1", gesture=True)
+    sought = tour.wait(lambda: tour.js(f"const t = {video}.currentTime; return t >= 9 && t < 13 ? t : 0"), 10)
+    time.sleep(1)
+    tour.shot('player-line-clicked', at=sought, current=tour.js(
+        "return document.querySelector('#player-lines [aria-current=\"true\"]')?.innerText ?? ''"),
+        caption=tour.js("return document.getElementById('player-caption').textContent"))
+
+    tour.press_in_player('f')
+    time.sleep(1)
+    tour.shot('player-full-window', full=tour.js("return document.getElementById('player').classList.contains('player--full')"))
+    tour.press_in_player('Escape')
+    tour.press_in_player('Escape')
+    closed = tour.wait(lambda: tour.js("return document.getElementById('player').hidden"), 5)
+
+    # Opened again, it starts where it stopped, and says so.
+    time.sleep(1)
+    tour.js(f"document.querySelector('{row}').click(); return 1", gesture=True)
+    resumed = tour.wait(lambda: tour.js("const r = document.getElementById('player-resumed');"
+                                        " return r.hidden ? '' : r.innerText"), 15)
+    at = tour.js(f"return {video}.currentTime")
+    tour.shot('player-resumed', closed=bool(closed), resumed=resumed, at=at)
+    tour.press_in_player('Escape')
+    tour.wait(lambda: tour.js("return document.getElementById('player').hidden"), 5)
+
+
 def looked_up(tour):
     """Whether the card's lookup has ended: its state holds an answer, not the "Finding…" pill, and is not still empty
     from the moment before the lookup began."""
@@ -247,9 +325,16 @@ def looked_up(tour):
     )
 
 
-def run(tour, sites):
+def run(tour, sites, seeded=None):
     tour.wait(lambda: tour.js("return !!document.getElementById('address')?.offsetParent"), 30)
     tour.shot('home', title=tour.js('return document.title'))
+
+    if seeded is not None:
+        try:
+            watch(tour, seeded)
+        except Exception as e:
+            tour.failed('player', e)
+            tour.js("document.getElementById('player-close').click(); return 1")
 
     # A link: looked up by the bundled engine, its qualities offered.
     try:
@@ -468,6 +553,7 @@ def main():
     parser.add_argument('--via', choices=('devtools', 'webdriver'), default='devtools' if os.name == 'nt' else 'webdriver')
     parser.add_argument('--driver', default='http://127.0.0.1:4444', help='tauri-driver, for --via webdriver')
     parser.add_argument('--sites', help='a JSON file of addresses to use instead of the internet\'s')
+    parser.add_argument('--seed', action='store_true', help='put a saved video in place first, for the player')
     args = parser.parse_args()
 
     # Windows' console and files default to its code page, which has no room for a page's '·' or 'é'.
@@ -479,6 +565,7 @@ def main():
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
 
+    seeded = seed_saved_video() if args.seed else None
     try:
         window = DevToolsWindow(args.app, out) if args.via == 'devtools' else WebDriverWindow(args.app, args.driver)
     except Exception as e:
@@ -487,7 +574,7 @@ def main():
 
     tour = Tour(window, out)
     try:
-        run(tour, sites)
+        run(tour, sites, seeded)
     finally:
         (out / 'steps.json').write_text(json.dumps(tour.steps, indent=2, ensure_ascii=False), encoding='utf-8')
         try:

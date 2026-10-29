@@ -3,7 +3,8 @@
 The phone calls `extract` through Chaquopy. The desktop app has no Python inside it, so it runs a bundled
 Python with this module instead, and reads one line of JSON from what it prints:
 
-    python -I run.py extract URL --cache DIR [--cookies FILE] [--js-runtime QJS] [--fragments] [--referer PAGE]
+    python -I run.py extract URL --cache DIR [--cookies FILE] [--js-runtime QJS] [--fragments] [--subtitles]
+                                 [--referer PAGE]
     python -I run.py selftest [--js-runtime QJS]
     python -I run.py profile SITE USERNAME --cache DIR --out LIST --stop FILE [--cookies FILE]
 
@@ -32,6 +33,8 @@ def main(argv=None):
     extract_command.add_argument('--js-runtime', help="a QuickJS program for YouTube's challenges")
     extract_command.add_argument('--fragments', action='store_true',
                                  help="list each DASH format's pieces, for an app that fetches them itself")
+    extract_command.add_argument('--subtitles', action='store_true',
+                                 help="list the video's language and the site's subtitles, for an app that saves them")
     extract_command.add_argument('--referer', help='the page a stream was found on, sent as its referrer')
 
     profile_command = commands.add_parser('profile', help="List an account's posts for a ZIP.")
@@ -50,7 +53,7 @@ def main(argv=None):
         from .extract import extract
 
         print(extract(args.url, args.cache, args.cookies, js_runtime=args.js_runtime, fragments=args.fragments,
-                      referer=args.referer))
+                      referer=args.referer, subtitles=args.subtitles))
     elif args.command == 'profile':
         from .profiles import list_profile
 

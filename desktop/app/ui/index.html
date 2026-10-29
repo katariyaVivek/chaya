@@ -31,6 +31,8 @@
   <symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H5m0 0l6-6m-6 6l6 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-forward" viewBox="0 0 24 24"><path d="M5 12h14m0 0l-6-6m6 6l-6 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3.5l7 2.6v5.4c0 4.3-2.9 7.8-7 9-4.1-1.2-7-4.7-7-9V6.1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+  <symbol id="i-expand" viewBox="0 0 24 24"><path d="M4.5 9V4.5H9M15 4.5h4.5V9M19.5 15v4.5H15M9 19.5H4.5V15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-open" viewBox="0 0 24 24"><path d="M13.5 4.5h6v6M19.5 4.5l-8 8M17.5 13.5v4a2 2 0 0 1-2 2h-9a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2h4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="16" cy="7" r="2" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="8" cy="17" r="2" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
 </svg>
 
@@ -233,6 +235,32 @@
     <button class="icon-btn pressable viewer__step" type="button" id="viewer-prev" aria-label="Previous" title="Previous (←)"><svg><use href="#i-back"/></svg></button>
     <figure class="viewer__frame" id="viewer-frame"></figure>
     <button class="icon-btn pressable viewer__step" type="button" id="viewer-next" aria-label="Next" title="Next (→)"><svg><use href="#i-forward"/></svg></button>
+  </div>
+</div>
+<!-- A saved video or sound, played in Chaya: its subtitles drawn by Chaya over it, and listed beside it -->
+<div class="player" id="player" role="dialog" aria-modal="true" aria-label="Player" hidden>
+  <div class="viewer__top player__top">
+    <p class="viewer__title" id="player-title"></p>
+    <div class="seg" role="group" aria-label="Subtitles" id="player-subtitles" hidden></div>
+    <div class="seg" role="group" aria-label="Speed" id="player-speed"></div>
+    <button class="icon-btn pressable" type="button" id="player-full" aria-label="Full window (F)" title="Full window (F)"><svg><use href="#i-expand"/></svg></button>
+    <button class="icon-btn pressable" type="button" id="player-open" aria-label="Open in another app" title="Open in another app"><svg><use href="#i-open"/></svg></button>
+    <button class="icon-btn pressable" type="button" id="player-folder" aria-label="Show in folder" title="Show in folder"><svg><use href="#i-folder"/></svg></button>
+    <button class="icon-btn pressable" type="button" id="player-close" aria-label="Close (Esc)" title="Close (Esc)"><svg><use href="#i-close"/></svg></button>
+  </div>
+  <div class="player__body">
+    <div class="player__stage" id="player-stage">
+      <video class="player__video" id="player-video" controls controlslist="nodownload nofullscreen noremoteplayback" disablepictureinpicture disableremoteplayback preload="metadata"></video>
+      <p class="player__caption" id="player-caption" hidden></p>
+      <p class="player__resumed glass" id="player-resumed" role="status" hidden><span class="num"></span><button class="downloads__all" type="button" id="player-restart">Start over</button></p>
+      <div class="player__problem" id="player-problem" hidden>
+        <p>Chaya can't play this file. Another app on this PC may.</p>
+        <button class="pill pill--primary glass pressable" type="button" id="player-problem-open">Open in another app</button>
+      </div>
+    </div>
+    <aside class="player__side" id="player-side" aria-label="Lines" hidden>
+      <ol class="player__lines" id="player-lines"></ol>
+    </aside>
   </div>
 </div>
 </body>

@@ -95,6 +95,38 @@ def test_a_dash_formats_pieces_are_listed_only_when_asked_for():
     json.dumps(asked)
 
 
+def test_subtitles_are_listed_only_when_asked_for_one_readable_address_a_language():
+    info = {
+        'title': 'A video',
+        'language': 'en',
+        'subtitles': {
+            'en': [{'ext': 'json3', 'url': 'https://s.example/en.json3'}, {'ext': 'srt', 'url': 'https://s.example/en.srt'},
+                   {'ext': 'vtt', 'url': 'https://s.example/en.vtt'}],
+            'de': [{'ext': 'srt', 'url': 'https://s.example/de.srt'}],
+            'live_chat': [{'ext': 'json', 'url': 'https://s.example/chat'}],
+            'ja': [{'ext': 'ttml', 'url': 'https://s.example/ja.ttml'}],
+        },
+        'automatic_captions': {
+            'en-orig': [{'ext': 'vtt', 'url': 'https://s.example/asr-orig.vtt'}],
+            'en': [{'ext': 'vtt', 'url': 'https://s.example/asr.vtt'}],
+            'fr': [{'ext': 'vtt', 'url': 'https://s.example/asr-fr.vtt'}],
+        },
+        'formats': [{'format_id': '18', 'url': 'https://example.com/18'}],
+    }
+
+    shaped = engine._shape(info, subtitles=True)
+    assert shaped['language'] == 'en'
+    assert shaped['subtitles'] == [
+        {'language': 'en', 'url': 'https://s.example/en.vtt', 'automatic': False},
+        {'language': 'de', 'url': 'https://s.example/de.srt', 'automatic': False},
+        {'language': 'en-orig', 'url': 'https://s.example/asr-orig.vtt', 'automatic': True},
+        {'language': 'en', 'url': 'https://s.example/asr.vtt', 'automatic': True},
+    ]
+    assert 'subtitles' not in engine._shape(info) and 'language' not in engine._shape(info), 'the phone never asks'
+    assert engine._shape({'title': 't', 'url': 'https://example.com/x.mp4'}, subtitles=True)['subtitles'] == []
+    json.dumps(shaped)
+
+
 def test_a_carousel_shows_its_first_item():
     carousel = {
         '_type': 'playlist',

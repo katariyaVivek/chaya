@@ -497,7 +497,7 @@ function renderRow(id) {
       img.src = task.thumbnail;
     }
     row.querySelector('.row__title').addEventListener('click', () => {
-      if (tasks.get(id)?.state === 'completed') tauri.core.invoke('open_download', { id });
+      if (tasks.get(id)?.state === 'completed') openSaved(id);
     });
     row.querySelector('.row__main').addEventListener('click', () => mainAction(id));
     row.querySelector('.row__close').addEventListener('click', () => {
@@ -797,7 +797,7 @@ function tileFor({ key, ids }) {
   }
   tile.addEventListener('click', () => {
     const only = tasks.get(ids[0]);
-    if (ids.length === 1 && only?.kind !== 'picture') tauri.core.invoke('open_download', { id: ids[0] });
+    if (ids.length === 1 && only?.kind !== 'picture') openSaved(ids[0]);
     else openViewer(ids);
   });
   li.append(tile);
@@ -883,12 +883,12 @@ function showViewerPage() {
     viewerFrame.replaceChildren(img);
     return;
   }
-  // A video (or anything else) in a post plays in its own program.
+  // A video in a post plays in Chaya's player; anything else in its own program.
   const play = document.createElement('div');
   play.className = 'viewer__play';
   const poster = coverOf(task);
   play.append(poster ? image(poster, (e) => e.target.remove()) : named(task));
-  play.append(pill(task.kind === 'video' ? 'Play' : 'Open', () => tauri.core.invoke('open_download', { id: task.id }), true));
+  play.append(pill(task.kind === 'video' ? 'Play' : 'Open', () => openSaved(task.id), true));
   viewerFrame.replaceChildren(play);
 }
 
@@ -911,6 +911,307 @@ viewer.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeViewer();
   else if (e.key === 'ArrowLeft') stepViewer(-1);
   else if (e.key === 'ArrowRight') stepViewer(1);
+});
+
+// ── The player ──────────────────────────────────────────────────────────────────────────────
+//
+// A saved video or sound plays here rather than in another program: from the list, the grid or a post's viewer. The
+// file comes through `chaya-file`, a part at a time so it seeks (`saved_file` in lib.rs). Its subtitles, the files
+// next to it ("name.en.srt"), are drawn by Chaya over the video and listed beside it; clicking a line plays from
+// there. Where playback stopped is kept (`core::video`), and the next time it starts there.
+
+const player = document.getElementById('player');
+const playerVideo = document.getElementById('player-video');
+const playerCaption = document.getElementById('player-caption');
+const playerSide = document.getElementById('player-side');
+const playerLines = document.getElementById('player-lines');
+const playerSubtitles = document.getElementById('player-subtitles');
+const playerSpeed = document.getElementById('player-speed');
+const playerResumed = document.getElementById('player-resumed');
+const playerProblem = document.getElementById('player-problem');
+const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
+const languageNames = (() => {
+  try {
+    return new Intl.DisplayNames(['en'], { type: 'language' });
+  } catch {
+    return null;
+  }
+})();
+
+/** What plays: the download, its subtitles by language, the one shown (or null for none), and its line on show. */
+let playing = null;
+
+function remembered(key, fallback) {
+  try {
+    return localStorage.getItem(key) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function remember(key, value) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {}
+}
+
+/** A finished download: a video or sound plays in the player, anything else opens in its own program. */
+function openSaved(id) {
+  const task = tasks.get(id);
+  if (task?.kind === 'video' || task?.kind === 'audio') openPlayer(id);
+  else tauri.core.invoke('open_download', { id });
+}
+
+/** "1:05", or "1:02:05" past an hour. */
+function clock(seconds) {
+  const s = Math.max(0, Math.floor(seconds));
+  const mm = String(Math.floor(s / 60) % 60);
+  const ss = String(s % 60).padStart(2, '0');
+  return s >= 3600 ? `${Math.floor(s / 3600)}:${mm.padStart(2, '0')}:${ss}` : `${mm}:${ss}`;
+}
+
+function languageName(code) {
+  if (!code) return 'Subtitles';
+  try {
+    return languageNames?.of(code) ?? code;
+  } catch {
+    return code;
+  }
+}
+
+async function openPlayer(id) {
+  const task = tasks.get(id);
+  if (!task) return;
+  if (!viewer.hidden) closeViewer();
+  playing = { id, tracks: [], shown: null, line: -1, savedAt: 0 };
+  document.getElementById('player-title').textContent = task.title || task.fileName;
+  playerProblem.hidden = true;
+  playerResumed.hidden = true;
+  playerCaption.hidden = true;
+  player.hidden = false;
+  if (browsing) tauri.core.invoke('show_page', { visible: false });
+  showSpeeds();
+  playerVideo.poster = task.thumbnail?.startsWith('https://') ? task.thumbnail : '';
+  playerVideo.src = tauri.core.convertFileSrc(String(id), 'chaya-file');
+  playerVideo.playbackRate = Number(remembered('chaya.player.speed', '1')) || 1;
+  playerVideo.focus();
+
+  const [tracks, start] = await Promise.all([
+    tauri.core.invoke('video_subtitles', { id }).catch(() => []),
+    tauri.core.invoke('playback_start', { id }).catch(() => 0),
+  ]);
+  if (playing?.id !== id) return;
+  playing.tracks = tracks;
+  const wanted = remembered('chaya.player.subtitles', '');
+  const chosen = wanted === 'off' ? null : tracks.find((t) => t.language === wanted) ?? tracks[0] ?? null;
+  showSubtitles(chosen);
+  whenReady(() => {
+    if (start > 0) {
+      playerVideo.currentTime = start;
+      showResumed(start);
+    }
+    playerVideo.play().catch(() => {});
+  });
+}
+
+/** Runs `then` once the video knows its length (now, if it already does). */
+function whenReady(then) {
+  if (playerVideo.readyState >= HTMLMediaElement.HAVE_METADATA) then();
+  else playerVideo.addEventListener('loadedmetadata', then, { once: true });
+}
+
+function showResumed(at) {
+  playerResumed.querySelector('span').textContent = `Playing from ${clock(at)}`;
+  playerResumed.hidden = false;
+  clearTimeout(showResumed.timer);
+  showResumed.timer = setTimeout(() => (playerResumed.hidden = true), 6000);
+}
+
+function closePlayer() {
+  if (!playing) return;
+  keepPosition(true);
+  playing = null;
+  player.classList.remove('player--full');
+  player.hidden = true;
+  playerVideo.pause();
+  playerVideo.removeAttribute('src');
+  playerVideo.load();
+  playerLines.replaceChildren();
+  if (browsing && !document.body.classList.contains('showing-downloads')) tauri.core.invoke('show_page', { visible: true });
+}
+
+/** Tells the app where playback is, at most every few seconds unless `now`. */
+function keepPosition(now = false) {
+  if (!playing || !Number.isFinite(playerVideo.currentTime)) return;
+  const moment = performance.now();
+  if (!now && moment - playing.savedAt < 5000) return;
+  playing.savedAt = moment;
+  const duration = Number.isFinite(playerVideo.duration) ? playerVideo.duration : null;
+  tauri.core.invoke('playback_stopped', { id: playing.id, at: playerVideo.currentTime, duration }).catch(() => {});
+}
+
+/** Fills a group of choices again, the focus staying on the chosen one if it was in the group. */
+function refill(group, buttons) {
+  const focused = group.contains(document.activeElement);
+  group.replaceChildren(...buttons);
+  if (focused) group.querySelector('[aria-pressed="true"]')?.focus();
+}
+
+function showSpeeds() {
+  const rate = Number(remembered('chaya.player.speed', '1')) || 1;
+  const buttons = SPEEDS.map((speed) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = `${speed}×`;
+    button.setAttribute('aria-pressed', String(speed === rate));
+    button.addEventListener('click', () => {
+      playerVideo.playbackRate = speed;
+      remember('chaya.player.speed', String(speed));
+      showSpeeds();
+    });
+    return button;
+  });
+  refill(playerSpeed, buttons);
+}
+
+/** Shows `track`'s subtitles over the video and its lines beside it; null shows none. */
+function showSubtitles(track) {
+  playing.shown = track;
+  // Drawn again from nothing, whatever was on show.
+  playing.line = null;
+  const { tracks } = playing;
+  playerSubtitles.hidden = tracks.length === 0;
+  const choices = [...tracks.map((t) => [t, languageName(t.language)]), [null, 'Off']];
+  refill(
+    playerSubtitles,
+    choices.map(([choice, label]) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = label;
+      button.setAttribute('aria-pressed', String(choice === track));
+      button.addEventListener('click', () => {
+        remember('chaya.player.subtitles', choice ? choice.language ?? '' : 'off');
+        showSubtitles(choice);
+      });
+      return button;
+    }),
+  );
+  playerSide.hidden = !track;
+  playerLines.replaceChildren(
+    ...(track?.lines ?? []).map((line, i) => {
+      const li = document.createElement('li');
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'player__line';
+      button.dataset.line = String(i);
+      button.append(span('num', clock(line.start / 1000)), span('', line.text));
+      button.addEventListener('click', () => {
+        playerVideo.currentTime = line.start / 1000;
+        playerVideo.play().catch(() => {});
+      });
+      li.append(button);
+      return li;
+    }),
+  );
+  followLine();
+}
+
+/** The line shown at `ms`, from the track's timeline (`core::subtitles::timeline`), or -1. */
+function lineAt(spans, ms) {
+  let lo = 0;
+  let hi = spans.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (spans[mid].start <= ms) lo = mid + 1;
+    else hi = mid;
+  }
+  const span = spans[lo - 1];
+  return span && ms < span.end ? span.line : -1;
+}
+
+/** When the person last scrolled the lines: the list follows the video again a little after. */
+let linesScrolled = 0;
+['wheel', 'pointerdown', 'keydown'].forEach((kind) => playerSide.addEventListener(kind, () => (linesScrolled = performance.now())));
+
+function followLine() {
+  if (!playing) return;
+  const track = playing.shown;
+  const line = track ? lineAt(track.spans, playerVideo.currentTime * 1000) : -1;
+  if (line === playing.line) return;
+  playing.line = line;
+  playerCaption.hidden = line < 0;
+  playerCaption.textContent = line < 0 ? '' : track.lines[line].text;
+  playerLines.querySelector('[aria-current="true"]')?.removeAttribute('aria-current');
+  const current = line < 0 ? null : playerLines.querySelector(`[data-line="${line}"]`);
+  if (!current) return;
+  current.setAttribute('aria-current', 'true');
+  if (performance.now() - linesScrolled > 4000) current.scrollIntoView({ block: 'center', behavior: 'smooth' });
+}
+
+// While it plays, the line follows every frame; the video's own events cover seeking while paused.
+function followFrames() {
+  followLine();
+  if (playing && !playerVideo.paused) requestAnimationFrame(followFrames);
+}
+playerVideo.addEventListener('play', () => requestAnimationFrame(followFrames));
+playerVideo.addEventListener('seeked', followLine);
+playerVideo.addEventListener('timeupdate', () => {
+  followLine();
+  keepPosition();
+});
+playerVideo.addEventListener('pause', () => keepPosition(true));
+playerVideo.addEventListener('ended', () => keepPosition(true));
+playerVideo.addEventListener('error', () => {
+  if (playing && playerVideo.getAttribute('src')) playerProblem.hidden = false;
+});
+playerVideo.addEventListener('dblclick', (e) => {
+  e.preventDefault();
+  fullWindow();
+});
+
+function fullWindow(on = !player.classList.contains('player--full')) {
+  player.classList.toggle('player--full', on);
+}
+
+document.getElementById('player-full').addEventListener('click', () => fullWindow(true));
+document.getElementById('player-close').addEventListener('click', closePlayer);
+document.getElementById('player-restart').addEventListener('click', () => {
+  playerVideo.currentTime = 0;
+  playerResumed.hidden = true;
+});
+for (const open of ['player-open', 'player-problem-open']) {
+  document.getElementById(open).addEventListener('click', () => {
+    const id = playing?.id;
+    playerVideo.pause();
+    if (id !== undefined) tauri.core.invoke('open_download', { id });
+  });
+}
+document.getElementById('player-folder').addEventListener('click', () => {
+  if (playing) tauri.core.invoke('show_download', { id: playing.id });
+});
+// The player's own keys, wherever the focus is while it is open; the window's (Ctrl+L, the tab keys) wait until it is
+// closed. Taken before anything else hears them.
+document.addEventListener('keydown', (e) => {
+  if (player.hidden) return;
+  e.stopPropagation();
+  const onButton = e.target instanceof Element && e.target.closest('button');
+  if (e.key === 'Escape') {
+    if (player.classList.contains('player--full')) fullWindow(false);
+    else closePlayer();
+  } else if (e.key.toLowerCase() === 'f' && !e.ctrlKey && !e.altKey) {
+    fullWindow();
+  } else if (e.key === ' ' && !onButton) {
+    e.preventDefault();
+    if (playerVideo.paused) playerVideo.play().catch(() => {});
+    else playerVideo.pause();
+  } else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !onButton) {
+    e.preventDefault();
+    playerVideo.currentTime = Math.max(0, playerVideo.currentTime + (e.key === 'ArrowLeft' ? -5 : 5));
+  }
+}, true);
+// A removed download takes its player with it.
+tauri?.event.listen('download', ({ payload }) => {
+  if (payload.type === 'removed' && playing?.id === payload.id) closePlayer();
 });
 
 /** A section whose downloads are all narrowed away keeps no heading. */

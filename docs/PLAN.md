@@ -54,7 +54,7 @@ step off here in the PR that finishes it.
 
 ## Steps
 
-### 1. Watch it in Chaya ☐
+### 1. Watch it in Chaya ☑
 
 **The person gets:** a finished video opens in Chaya instead of another program, and plays with its
 subtitles when the site had any. A list of the lines beside it follows the video; clicking a line jumps
@@ -68,6 +68,11 @@ there. Playback speed, full window (F or a double-click), and it starts again wh
   the subtitles itself rather than with `<track>`, so step 5 can stack two languages and style each.
 - **Tests:** SRT and VTT parsing (times, styling tags, overlaps), range requests, the line at a time; the
   Windows tour opens a saved video, sees it play, and clicks a line to seek.
+
+**Done.** The site's subtitles are not fetched by yt-dlp itself (Chaya for Windows downloads the files, not
+yt-dlp): the engine lists them (`--subtitles`), the download picks one (`core::subtitles::pick`) and fetches it
+after the video, as SRT. Where playback stopped is in `videos/ID.json` (`core::video`), the per-video file the
+later steps add to. The tour puts its own 30-second clip and subtitles in place first (`tour.py --seed`).
 
 ### 2. Subtitles made on the PC ☐
 

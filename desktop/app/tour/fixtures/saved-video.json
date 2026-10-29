@@ -1,0 +1,16 @@
+{
+  "id": 1,
+  "title": "A walk in the park",
+  "page_url": "",
+  "choice": "Video",
+  "kind": "video",
+  "path": "",
+  "source": {"url": "https://example.com/a-walk-in-the-park.mp4"},
+  "thumbnail": null,
+  "group": null,
+  "state": "completed",
+  "done": 0,
+  "total": null,
+  "added": 0,
+  "ended": 0
+}
