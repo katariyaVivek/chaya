@@ -74,6 +74,13 @@ yt-dlp): the engine lists them (`--subtitles`), the download picks one (`core::s
 after the video, as SRT. Where playback stopped is in `videos/ID.json` (`core::video`), the per-video file the
 later steps add to. The tour puts its own 30-second clip and subtitles in place first (`tour.py --seed`).
 
+### 1b. The player, organised ☑
+
+**The person gets:** the player laid out as Vimpo's is, after a look at its demo: the bar holds only the title and
+the window's buttons; the player's own controls over the picture fade while it plays; beside it, tabs (Transcript,
+Subtitles; Highlights and subtitle styles join in steps 5 and 6), one clear action in each, and motion that follows
+Chaya's design system (reduced motion respected).
+
 ### 2. Subtitles made on the PC ☑
 
 **The person gets:** *Make subtitles* on any saved video, and a switch to make them for every download.

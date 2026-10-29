@@ -922,22 +922,35 @@ viewer.addEventListener('keydown', (e) => {
 // ── The player ──────────────────────────────────────────────────────────────────────────────
 //
 // A saved video or sound plays here rather than in another program: from the list, the grid or a post's viewer. The
-// file comes through `chaya-file`, a part at a time so it seeks (`saved_file` in lib.rs). Its subtitles, the files
-// next to it ("name.en.srt"), are drawn by Chaya over the video and listed beside it; clicking a line plays from
-// there. Where playback stopped is kept (`core::video`), and the next time it starts there.
+// file comes through `chaya-file`, a part at a time so it seeks (`saved_file` in lib.rs). The player draws its own
+// controls over the picture, and they fade while it plays. Beside it, two tabs: the transcript, the lines of the
+// subtitles kept next to the video ("name.en.srt"), to read and jump through; and the subtitles, to choose a language
+// or make them on this PC. Chaya draws the line on show itself rather than with `<track>`, so a later step can stack
+// two languages. Where playback stopped is kept (`core::video`), and the next time it starts there.
 
 const player = document.getElementById('player');
 const playerVideo = document.getElementById('player-video');
 const playerCaption = document.getElementById('player-caption');
-const playerSide = document.getElementById('player-side');
 const playerLines = document.getElementById('player-lines');
+const playerLinesHead = document.getElementById('player-lines-head');
 const playerSubtitles = document.getElementById('player-subtitles');
 const playerSpeed = document.getElementById('player-speed');
 const playerSpeedButton = document.getElementById('player-speed-button');
 const playerSpeedPanel = document.getElementById('player-speed-panel');
 const playerResumed = document.getElementById('player-resumed');
 const playerProblem = document.getElementById('player-problem');
+const playerPlay = document.getElementById('player-play');
+const playerMute = document.getElementById('player-mute');
+const playerCc = document.getElementById('player-cc');
+const playerTime = document.getElementById('player-time');
+const playerSeek = document.getElementById('player-seek');
+const playerHover = document.getElementById('player-hover');
+const playerTabs = document.getElementById('player-tabs');
+const playerNone = document.getElementById('player-none');
+const playerMakeBox = document.getElementById('player-make-box');
+const playerMaking = document.getElementById('player-making');
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
+const TABS = { transcript: ['tab-transcript', 'panel-transcript'], subtitles: ['tab-subtitles', 'panel-subtitles'] };
 const languageNames = (() => {
   try {
     return new Intl.DisplayNames(['en'], { type: 'language' });
@@ -946,7 +959,7 @@ const languageNames = (() => {
   }
 })();
 
-/** What plays: the download, its subtitles by language, the one shown (or null for none), and its line on show. */
+/** What plays: the download, its subtitles by language, the one chosen (or null), and its line on show. */
 let playing = null;
 
 function remembered(key, fallback) {
@@ -963,6 +976,9 @@ function remember(key, value) {
   } catch {}
 }
 
+/** Whether the line on show is drawn over the picture (C, or the CC button). */
+let captionsOn = remembered('chaya.player.captions', 'on') === 'on';
+
 /** A finished download: a video or sound plays in the player, anything else opens in its own program. */
 function openSaved(id) {
   const task = tasks.get(id);
@@ -972,7 +988,7 @@ function openSaved(id) {
 
 /** "1:05", or "1:02:05" past an hour. */
 function clock(seconds) {
-  const s = Math.max(0, Math.floor(seconds));
+  const s = Math.max(0, Math.floor(seconds || 0));
   const mm = String(Math.floor(s / 60) % 60);
   const ss = String(s % 60).padStart(2, '0');
   return s >= 3600 ? `${Math.floor(s / 3600)}:${mm.padStart(2, '0')}:${ss}` : `${mm}:${ss}`;
@@ -991,17 +1007,28 @@ async function openPlayer(id) {
   const task = tasks.get(id);
   if (!task) return;
   if (!viewer.hidden) closeViewer();
-  playing = { id, tracks: [], shown: null, line: -1, savedAt: 0 };
+  playing = { id, tracks: [], shown: null, line: null, savedAt: 0 };
   document.getElementById('player-title').textContent = task.title || task.fileName;
   playerProblem.hidden = true;
   playerResumed.hidden = true;
   playerCaption.hidden = true;
+  // Nothing of the video before shows while this one's subtitles are read.
+  playerLines.replaceChildren();
+  playerLinesHead.hidden = true;
+  playerNone.hidden = true;
+  playerMakeBox.hidden = true;
+  playerMaking.hidden = true;
+  playerCc.hidden = true;
   player.hidden = false;
   if (browsing) tauri.core.invoke('show_page', { visible: false });
+  showTab(remembered('chaya.player.tab', 'transcript'));
   showSpeeds();
   playerVideo.poster = task.thumbnail?.startsWith('https://') ? task.thumbnail : '';
   playerVideo.src = tauri.core.convertFileSrc(String(id), 'chaya-file');
   playerVideo.playbackRate = Number(remembered('chaya.player.speed', '1')) || 1;
+  playerVideo.muted = remembered('chaya.player.muted', 'no') === 'yes';
+  showControls();
+  showPosition();
   playerVideo.focus();
 
   const [tracks, start] = await Promise.all([
@@ -1011,9 +1038,7 @@ async function openPlayer(id) {
   if (playing?.id !== id) return;
   playing.tracks = tracks;
   const wanted = remembered('chaya.player.subtitles', '');
-  const chosen = wanted === 'off' ? null : tracks.find((t) => t.language === wanted) ?? tracks[0] ?? null;
-  showSubtitles(chosen);
-  showMaking();
+  showSubtitles(tracks.find((t) => t.language === wanted) ?? tracks[0] ?? null);
   whenReady(() => {
     if (start > 0) {
       playerVideo.currentTime = start;
@@ -1036,19 +1061,11 @@ function showResumed(at) {
   showResumed.timer = setTimeout(() => (playerResumed.hidden = true), 6000);
 }
 
-/** The player's subtitles again, as they are next to the video now, showing those in `language`. */
-async function reloadSubtitles(id, language) {
-  const tracks = await tauri.core.invoke('video_subtitles', { id }).catch(() => null);
-  if (!tracks || playing?.id !== id) return;
-  playing.tracks = tracks;
-  showSubtitles(tracks.find((t) => t.language === language) ?? tracks[0] ?? null);
-}
-
 function closePlayer() {
   if (!playing) return;
   keepPosition(true);
   playing = null;
-  player.classList.remove('player--full');
+  player.classList.remove('player--full', 'player--idle');
   openSpeeds(false);
   player.hidden = true;
   playerVideo.pause();
@@ -1068,11 +1085,143 @@ function keepPosition(now = false) {
   tauri.core.invoke('playback_stopped', { id: playing.id, at: playerVideo.currentTime, duration }).catch(() => {});
 }
 
-/** Fills a group of choices again, the focus staying on the chosen one if it was in the group. */
-function refill(group, buttons) {
-  const focused = group.contains(document.activeElement);
-  group.replaceChildren(...buttons);
-  if (focused) group.querySelector('[aria-pressed="true"]')?.focus();
+// ── The player's tabs ──
+
+function showTab(name, focus = false) {
+  if (!TABS[name]) name = 'transcript';
+  for (const [key, [tabId, panelId]] of Object.entries(TABS)) {
+    const tab = document.getElementById(tabId);
+    const on = key === name;
+    tab.setAttribute('aria-selected', String(on));
+    tab.tabIndex = on ? 0 : -1;
+    document.getElementById(panelId).hidden = !on;
+    if (on && focus) tab.focus();
+  }
+  remember('chaya.player.tab', name);
+  placeTabLight();
+}
+
+/** The chosen tab's ground, under it; it slides there (`--dur-morph`, nothing under reduced motion). */
+function placeTabLight() {
+  const tab = playerTabs.querySelector('[aria-selected="true"]');
+  if (!tab || !tab.offsetWidth) return;
+  playerTabs.style.setProperty('--tab-x', `${tab.offsetLeft}px`);
+  playerTabs.style.setProperty('--tab-width', `${tab.offsetWidth}px`);
+}
+
+new ResizeObserver(placeTabLight).observe(playerTabs);
+for (const [name, [tabId]] of Object.entries(TABS)) {
+  document.getElementById(tabId).addEventListener('click', () => showTab(name));
+}
+/** The tab before or after the one shown (← and → in the tabs). */
+function stepTab(by) {
+  const names = Object.keys(TABS);
+  const at = names.findIndex((n) => document.getElementById(TABS[n][0]).getAttribute('aria-selected') === 'true');
+  showTab(names[(at + by + names.length) % names.length], true);
+}
+
+// ── The player's controls ──
+
+/** Shows the controls, and hides them again after a while if it is playing and nothing is being done with them. */
+function showControls() {
+  player.classList.remove('player--idle');
+  clearTimeout(showControls.timer);
+  showControls.timer = setTimeout(() => {
+    const busy = playerVideo.paused || !playerSpeedPanel.hidden || playerSeek.classList.contains('is-dragging');
+    if (playing && !busy) player.classList.add('player--idle');
+  }, 2500);
+}
+
+/** The time, the seek bar and how much has loaded, as they are now. */
+function showPosition() {
+  const duration = Number.isFinite(playerVideo.duration) ? playerVideo.duration : 0;
+  const at = playerVideo.currentTime || 0;
+  playerTime.textContent = `${clock(at)} / ${clock(duration)}`;
+  playerSeek.style.setProperty('--played', String(duration ? at / duration : 0));
+  playerSeek.setAttribute('aria-valuemax', String(Math.round(duration)));
+  playerSeek.setAttribute('aria-valuenow', String(Math.round(at)));
+  playerSeek.setAttribute('aria-valuetext', `${clock(at)} of ${clock(duration)}`);
+  const { buffered } = playerVideo;
+  let loaded = 0;
+  for (let i = 0; i < buffered.length; i++) if (buffered.start(i) <= at + 0.5) loaded = buffered.end(i);
+  playerSeek.style.setProperty('--buffered', String(duration ? Math.min(1, loaded / duration) : 0));
+}
+
+function showPlaying() {
+  const paused = playerVideo.paused;
+  playerPlay.querySelector('use').setAttribute('href', paused ? '#i-play' : '#i-pause');
+  const label = paused ? 'Play (Space)' : 'Pause (Space)';
+  playerPlay.setAttribute('aria-label', label);
+  playerPlay.title = label;
+  showControls();
+}
+
+function togglePlay() {
+  if (playerVideo.paused) playerVideo.play().catch(() => {});
+  else playerVideo.pause();
+}
+
+function showMuted() {
+  const muted = playerVideo.muted;
+  playerMute.querySelector('use').setAttribute('href', muted ? '#i-muted' : '#i-sound');
+  const label = muted ? 'Sound on (M)' : 'Mute (M)';
+  playerMute.setAttribute('aria-label', label);
+  playerMute.title = label;
+}
+
+/** The fraction of the video at the pointer's place on the seek bar. */
+function seekFraction(e) {
+  const r = playerSeek.getBoundingClientRect();
+  return Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+}
+
+function seekTo(fraction) {
+  if (Number.isFinite(playerVideo.duration)) playerVideo.currentTime = fraction * playerVideo.duration;
+  showPosition();
+}
+
+playerSeek.addEventListener('pointerdown', (e) => {
+  playerSeek.setPointerCapture(e.pointerId);
+  playerSeek.classList.add('is-dragging');
+  seekTo(seekFraction(e));
+});
+playerSeek.addEventListener('pointermove', (e) => {
+  const fraction = seekFraction(e);
+  if (playerSeek.classList.contains('is-dragging')) seekTo(fraction);
+  if (!Number.isFinite(playerVideo.duration)) return;
+  playerHover.hidden = false;
+  playerHover.textContent = clock(fraction * playerVideo.duration);
+  playerHover.style.left = `${fraction * 100}%`;
+});
+playerSeek.addEventListener('pointerleave', () => (playerHover.hidden = true));
+for (const end of ['pointerup', 'pointercancel']) {
+  playerSeek.addEventListener(end, () => {
+    playerSeek.classList.remove('is-dragging');
+    showControls();
+  });
+}
+
+playerPlay.addEventListener('click', togglePlay);
+playerVideo.addEventListener('click', togglePlay);
+playerMute.addEventListener('click', () => {
+  playerVideo.muted = !playerVideo.muted;
+  remember('chaya.player.muted', playerVideo.muted ? 'yes' : 'no');
+});
+playerCc.addEventListener('click', () => setCaptions(!captionsOn));
+document.getElementById('player-stage').addEventListener('pointermove', showControls);
+playerVideo.addEventListener('volumechange', showMuted);
+playerVideo.addEventListener('play', showPlaying);
+playerVideo.addEventListener('pause', showPlaying);
+playerVideo.addEventListener('loadedmetadata', showPosition);
+playerVideo.addEventListener('progress', showPosition);
+playerVideo.addEventListener('durationchange', showPosition);
+
+function setCaptions(on) {
+  captionsOn = on;
+  remember('chaya.player.captions', on ? 'on' : 'off');
+  playerCc.setAttribute('aria-pressed', String(on));
+  if (playing) playing.line = null;
+  followLine();
 }
 
 function showSpeeds() {
@@ -1095,11 +1244,19 @@ function showSpeeds() {
   playerSpeedButton.setAttribute('aria-label', `Speed, ${rate}×`);
 }
 
-/** The speeds, in a small panel under the bar's speed button. */
+/** Fills a group of choices again, the focus staying on the chosen one if it was in the group. */
+function refill(group, buttons) {
+  const focused = group.contains(document.activeElement);
+  group.replaceChildren(...buttons);
+  if (focused) group.querySelector('[aria-pressed="true"]')?.focus();
+}
+
+/** The speeds, in a small panel over the speed button. */
 function openSpeeds(open) {
   playerSpeedPanel.hidden = !open;
   playerSpeedButton.setAttribute('aria-expanded', String(open));
   if (open) playerSpeed.querySelector('[aria-pressed="true"]')?.focus();
+  else showControls();
 }
 
 playerSpeedButton.addEventListener('click', () => openSpeeds(playerSpeedPanel.hidden));
@@ -1107,31 +1264,38 @@ document.addEventListener('click', (e) => {
   if (!playerSpeedPanel.hidden && e.target.isConnected && !e.target.closest('.player__speed')) openSpeeds(false);
 });
 
-/** Shows `track`'s subtitles over the video and its lines beside it; null shows none. */
+// ── The transcript and the subtitles ──
+
+/** Shows `track`'s subtitles: its lines in the transcript, the line on show over the video; null shows none. */
 function showSubtitles(track) {
   playing.shown = track;
   // Drawn again from nothing, whatever was on show.
   playing.line = null;
   const { tracks } = playing;
-  playerSubtitles.hidden = tracks.length === 0;
-  const choices = [...tracks.map((t) => [t, languageName(t.language)]), [null, 'Off']];
+  playerCc.hidden = tracks.length === 0;
+  playerCc.setAttribute('aria-pressed', String(captionsOn));
   refill(
     playerSubtitles,
-    choices.map(([choice, label]) => {
+    tracks.map((t) => {
       const button = document.createElement('button');
       button.type = 'button';
-      button.textContent = label;
-      button.setAttribute('aria-pressed', String(choice === track));
+      button.textContent = languageName(t.language);
+      button.setAttribute('aria-pressed', String(t === track));
       button.addEventListener('click', () => {
-        remember('chaya.player.subtitles', choice ? choice.language ?? '' : 'off');
-        showSubtitles(choice);
+        remember('chaya.player.subtitles', t.language ?? '');
+        showSubtitles(t);
+        if (!captionsOn) setCaptions(true);
       });
       return button;
     }),
   );
-  playerSide.hidden = !track;
+  playerSubtitles.hidden = tracks.length === 0;
+  document.getElementById('player-subtitles-label').textContent = tracks.length ? 'Show' : 'No subtitles next to this video yet.';
+  const lines = track?.lines ?? [];
+  playerLinesHead.hidden = !track;
+  playerLinesHead.textContent = track ? `${languageName(track.language)} · ${count(lines.length, 'line')}` : '';
   playerLines.replaceChildren(
-    ...(track?.lines ?? []).map((line, i) => {
+    ...lines.map((line, i) => {
       const li = document.createElement('li');
       const button = document.createElement('button');
       button.type = 'button';
@@ -1146,6 +1310,7 @@ function showSubtitles(track) {
       return li;
     }),
   );
+  showMaking();
   followLine();
 }
 
@@ -1162,9 +1327,11 @@ function lineAt(spans, ms) {
   return span && ms < span.end ? span.line : -1;
 }
 
-/** When the person last scrolled the lines: the list follows the video again a little after. */
+/** When the person last scrolled the transcript: it follows the video again a little after. */
 let linesScrolled = 0;
-['wheel', 'pointerdown', 'keydown'].forEach((kind) => playerSide.addEventListener(kind, () => (linesScrolled = performance.now())));
+['wheel', 'pointerdown', 'keydown'].forEach((kind) =>
+  document.getElementById('panel-transcript').addEventListener(kind, () => (linesScrolled = performance.now())),
+);
 
 function followLine() {
   if (!playing) return;
@@ -1172,7 +1339,7 @@ function followLine() {
   const line = track ? lineAt(track.spans, playerVideo.currentTime * 1000) : -1;
   if (line === playing.line) return;
   playing.line = line;
-  playerCaption.hidden = line < 0;
+  playerCaption.hidden = line < 0 || !captionsOn;
   playerCaption.textContent = line < 0 ? '' : track.lines[line].text;
   playerLines.querySelector('[aria-current="true"]')?.removeAttribute('aria-current');
   const current = line < 0 ? null : playerLines.querySelector(`[data-line="${line}"]`);
@@ -1181,15 +1348,30 @@ function followLine() {
   if (performance.now() - linesScrolled > 4000) current.scrollIntoView({ block: 'center', behavior: 'smooth' });
 }
 
-// While it plays, the line follows every frame; the video's own events cover seeking while paused.
+/** The player's subtitles again, as they are next to the video now, showing those in `language`. */
+async function reloadSubtitles(id, language) {
+  const tracks = await tauri.core.invoke('video_subtitles', { id }).catch(() => null);
+  if (!tracks || playing?.id !== id) return;
+  playing.tracks = tracks;
+  showSubtitles(tracks.find((t) => t.language === language) ?? tracks[0] ?? null);
+}
+
+// While it plays, the line and the seek bar follow every frame; the video's own events cover seeking while paused.
 function followFrames() {
   followLine();
+  showPosition();
   if (playing && !playerVideo.paused) requestAnimationFrame(followFrames);
 }
 playerVideo.addEventListener('play', () => requestAnimationFrame(followFrames));
-playerVideo.addEventListener('seeked', followLine);
-playerVideo.addEventListener('timeupdate', () => {
+playerVideo.addEventListener('seeked', () => {
   followLine();
+  showPosition();
+});
+playerVideo.addEventListener('timeupdate', () => {
+  if (playerVideo.paused) {
+    followLine();
+    showPosition();
+  }
   keepPosition();
 });
 playerVideo.addEventListener('pause', () => keepPosition(true));
@@ -1204,10 +1386,63 @@ playerVideo.addEventListener('dblclick', (e) => {
 
 function fullWindow(on = !player.classList.contains('player--full')) {
   player.classList.toggle('player--full', on);
+  showControls();
 }
 
-document.getElementById('player-full').addEventListener('click', () => fullWindow(true));
+// ── Making subtitles, from the player ──
+
+/** How making the playing video's subtitles is going, over the tabs; and Make subtitles where it applies. */
+function showMaking() {
+  if (!playing) return;
+  const job = speechJobs.get(playing.id);
+  const active = job && !['done', 'failed'].includes(job.state);
+  const model = speech.models.find((m) => m.id === speech.settings?.model);
+  const offered = speech.available && !active;
+  const empty = playing.tracks.length === 0;
+  playerNone.hidden = !empty;
+  document.getElementById('player-make-first').hidden = !offered;
+  document.getElementById('player-none-note').textContent = speech.available
+    ? 'Chaya can listen to this video on this PC and write them. Nothing is uploaded.'
+    : 'This video came without subtitles.';
+  playerMakeBox.hidden = !speech.available || empty;
+  document.getElementById('player-make').hidden = !offered;
+  document.getElementById('player-make-note').textContent =
+    `Listens with ${model?.name ?? 'the model picked in the settings'}, in the language it hears, and replaces that language's file.`;
+  clearTimeout(showMaking.timer);
+  playerMaking.hidden = !job;
+  if (!job) return;
+  document.getElementById('player-making-text').textContent = speechText(job);
+  const share = { model: job.total ? (100 * job.done) / job.total : 0, listening: job.percent, done: 100 }[job.state] ?? 0;
+  playerMaking.style.setProperty('--p', String(share));
+  const action = document.getElementById('player-making-action');
+  action.hidden = job.state === 'done';
+  action.textContent = job.state === 'failed' ? 'Try again' : 'Stop';
+  if (job.state === 'done') showMaking.timer = setTimeout(() => (playerMaking.hidden = true), 5000);
+}
+
+function makeSubtitles() {
+  if (playing) tauri.core.invoke('make_subtitles', { id: playing.id });
+}
+
+document.getElementById('player-make').addEventListener('click', makeSubtitles);
+document.getElementById('player-make-first').addEventListener('click', makeSubtitles);
+document.getElementById('player-making-action').addEventListener('click', () => {
+  if (!playing) return;
+  const failed = speechJobs.get(playing.id)?.state === 'failed';
+  tauri.core.invoke(failed ? 'make_subtitles' : 'stop_subtitles', { id: playing.id });
+});
+
+/** A `speech` event about the video playing. */
+function playerHeard(job) {
+  if (playing?.id !== job.id) return;
+  showMaking();
+  if (job.state === 'done') reloadSubtitles(job.id, job.language);
+}
+
+// ── The player's keys ──
+
 document.getElementById('player-close').addEventListener('click', closePlayer);
+document.getElementById('player-full').addEventListener('click', () => fullWindow());
 document.getElementById('player-restart').addEventListener('click', () => {
   playerVideo.currentTime = 0;
   playerResumed.hidden = true;
@@ -1224,25 +1459,39 @@ document.getElementById('player-folder').addEventListener('click', () => {
 });
 // The player's own keys, wherever the focus is while it is open; the window's (Ctrl+L, the tab keys) wait until it is
 // closed. Taken before anything else hears them.
-document.addEventListener('keydown', (e) => {
-  if (player.hidden) return;
-  e.stopPropagation();
-  const onButton = e.target instanceof Element && e.target.closest('button');
-  if (e.key === 'Escape') {
-    if (!playerSpeedPanel.hidden) openSpeeds(false);
-    else if (player.classList.contains('player--full')) fullWindow(false);
-    else closePlayer();
-  } else if (e.key.toLowerCase() === 'f' && !e.ctrlKey && !e.altKey) {
-    fullWindow();
-  } else if (e.key === ' ' && !onButton) {
-    e.preventDefault();
-    if (playerVideo.paused) playerVideo.play().catch(() => {});
-    else playerVideo.pause();
-  } else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !onButton) {
-    e.preventDefault();
-    playerVideo.currentTime = Math.max(0, playerVideo.currentTime + (e.key === 'ArrowLeft' ? -5 : 5));
-  }
-}, true);
+document.addEventListener(
+  'keydown',
+  (e) => {
+    if (player.hidden) return;
+    e.stopPropagation();
+    showControls();
+    const onButton = e.target instanceof Element && e.target.closest('button, [role="tab"]');
+    const key = e.key.toLowerCase();
+    if (e.key === 'Escape') {
+      if (!playerSpeedPanel.hidden) openSpeeds(false);
+      else if (player.classList.contains('player--full')) fullWindow(false);
+      else closePlayer();
+    } else if (e.ctrlKey || e.altKey || e.metaKey) {
+      // Not the player's.
+    } else if (key === 'f') {
+      fullWindow();
+    } else if (key === 'm') {
+      playerMute.click();
+    } else if (key === 'c' && playing?.tracks.length) {
+      setCaptions(!captionsOn);
+    } else if (e.key === ' ' && !onButton) {
+      e.preventDefault();
+      togglePlay();
+    } else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && e.target.closest?.('[role="tab"]')) {
+      e.preventDefault();
+      stepTab(e.key === 'ArrowRight' ? 1 : -1);
+    } else if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !onButton) {
+      e.preventDefault();
+      playerVideo.currentTime = Math.max(0, playerVideo.currentTime + (e.key === 'ArrowLeft' ? -5 : 5));
+    }
+  },
+  true,
+);
 // A removed download takes its player with it.
 tauri?.event.listen('download', ({ payload }) => {
   if (payload.type === 'removed' && playing?.id === payload.id) closePlayer();
@@ -1258,8 +1507,6 @@ const speechBox = document.getElementById('settings-speech');
 const speechModels = document.getElementById('speech-models');
 const speechLanguage = document.getElementById('speech-language');
 const speechEvery = document.getElementById('speech-every');
-const playerMake = document.getElementById('player-make');
-const playerMaking = document.getElementById('player-making');
 // Whisper's languages most people here will want, named in English by the window; the rest are detected.
 const LANGUAGES = ['ar', 'bn', 'cs', 'da', 'de', 'el', 'en', 'es', 'fa', 'fi', 'fr', 'gu', 'he', 'hi', 'hu', 'id', 'it',
   'ja', 'ko', 'mr', 'ms', 'nl', 'no', 'pa', 'pl', 'pt', 'ro', 'ru', 'sv', 'ta', 'te', 'th', 'tr', 'uk', 'ur', 'vi', 'zh'];
@@ -1352,42 +1599,11 @@ speechEvery.addEventListener('click', (e) => {
   if (every) saveSpeech({ everyDownload: every === 'true' });
 });
 
-/** The player's Make subtitles, and how making them is going, for the video playing. */
-function showMaking() {
-  if (!playing) return;
-  const job = speechJobs.get(playing.id);
-  const active = job && !['done', 'failed'].includes(job.state);
-  playerMake.hidden = !speech.available || active;
-  clearTimeout(showMaking.timer);
-  if (!job) {
-    playerMaking.hidden = true;
-    return;
-  }
-  playerMaking.hidden = false;
-  playerMaking.querySelector('span').textContent = speechText(job);
-  const action = playerMaking.querySelector('button');
-  action.hidden = job.state === 'done';
-  action.textContent = job.state === 'failed' ? 'Try again' : 'Stop';
-  if (job.state === 'done') showMaking.timer = setTimeout(() => (playerMaking.hidden = true), 5000);
-}
-
-playerMake.addEventListener('click', () => {
-  if (playing) tauri.core.invoke('make_subtitles', { id: playing.id });
-});
-document.getElementById('player-making-action').addEventListener('click', () => {
-  if (!playing) return;
-  const failed = speechJobs.get(playing.id)?.state === 'failed';
-  tauri.core.invoke(failed ? 'make_subtitles' : 'stop_subtitles', { id: playing.id });
-});
-
 tauri?.event.listen('speech', ({ payload: job }) => {
   if (job.state === 'stopped') speechJobs.delete(job.id);
   else speechJobs.set(job.id, job);
   if (tasks.has(job.id)) renderRow(job.id);
-  if (playing?.id === job.id) {
-    showMaking();
-    if (job.state === 'done') reloadSubtitles(job.id, job.language);
-  }
+  playerHeard(job);
   // A model fetched, or failed to be: the settings say which are on this PC.
   if (['done', 'failed', 'stopped'].includes(job.state)) loadSpeech();
 });
