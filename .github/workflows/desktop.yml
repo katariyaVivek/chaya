@@ -3,8 +3,9 @@ name: Desktop app
 # Chaya for Windows (desktop/): the core crate's tests on Linux (the ad blocker's read the phone's lists), then the Tauri app built on Windows
 # into an NSIS installer, kept as a run artifact. On Windows the engine the installer carries (a Python,
 # yt-dlp, gallery-dl, chaya_engine, QuickJS and ffmpeg: desktop/engine/prepare.py) is put together first and
-# checked without the network. The cut-down ffmpeg that joins picture and sound is built once per version of
-# its build script (desktop/engine/build_ffmpeg.sh) and kept in the Actions cache. Titles in this installer use Geist: Cabinet Grotesk's licence keeps its file out of
+# checked without the network. The cut-down ffmpeg that joins picture and sound, and whisper.cpp, which makes subtitles
+# on the PC, are each built once per version of their build script (desktop/engine/build_ffmpeg.sh, build_whisper.sh)
+# and kept in the Actions cache; so is the Tiny speech model the tests listen with. Titles in this installer use Geist: Cabinet Grotesk's licence keeps its file out of
 # the repository (desktop/design/fonts/README.md).
 
 on:
@@ -60,9 +61,39 @@ jobs:
           path: ffmpeg-out
           if-no-files-found: error
 
+  whisper:
+    name: whisper.cpp
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Look for this build of whisper.cpp
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: whisper-out
+          key: whisper-${{ hashFiles('desktop/engine/build_whisper.sh') }}
+
+      # For Windows (cross-compiled with mingw-w64), and for the Linux tests below.
+      - name: Build whisper.cpp
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mingw-w64 g++-mingw-w64-x86-64-posix ninja-build cmake
+          desktop/engine/build_whisper.sh windows whisper-out/windows
+          desktop/engine/build_whisper.sh host whisper-out/host
+
+      - name: Hand it to the other jobs
+        uses: actions/upload-artifact@v4
+        with:
+          name: whisper
+          path: whisper-out
+          if-no-files-found: error
+
   core:
     name: Core tests
-    needs: ffmpeg
+    needs: [ffmpeg, whisper]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -89,6 +120,10 @@ jobs:
           python -m pip install --quiet pytest
           python -m pytest -q -p no:cacheprovider desktop/engine
 
+      # The speech models' sizes and SHA-256, as Chaya pins them, against Hugging Face's own list.
+      - name: Speech models' pins
+        run: python desktop/engine/check_models.py
+
       - name: Format
         working-directory: desktop
         run: cargo fmt -p chaya-core --check
@@ -103,18 +138,42 @@ jobs:
           name: ffmpeg
           path: ffmpeg-out
 
-      # The joining tests use the cut-down ffmpeg itself, built for Linux.
+      - name: Get whisper.cpp
+        uses: actions/download-artifact@v4
+        with:
+          name: whisper
+          path: whisper-out
+
+      # The Tiny model, which the JFK sample is listened to with; checked against its pin by the tests.
+      - name: Look for the Tiny speech model
+        id: tiny
+        uses: actions/cache@v4
+        with:
+          path: speech-model
+          key: speech-tiny-${{ hashFiles('desktop/core/src/speech/models.json') }}
+
+      - name: Fetch the Tiny speech model
+        if: steps.tiny.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p speech-model
+          curl -fsSL --retry 3 -o speech-model/ggml-tiny.bin \
+            https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin
+
+      # The joining tests use the cut-down ffmpeg itself, built for Linux; the speech tests, whisper.cpp and the Tiny
+      # model.
       - name: Test
         working-directory: desktop
         env:
           CHAYA_FFMPEG: ${{ github.workspace }}/ffmpeg-out/host/ffmpeg
+          CHAYA_WHISPER: ${{ github.workspace }}/whisper-out/host/whisper-cli
+          CHAYA_WHISPER_MODEL: ${{ github.workspace }}/speech-model/ggml-tiny.bin
         run: |
-          chmod +x "$CHAYA_FFMPEG"
+          chmod +x "$CHAYA_FFMPEG" "$CHAYA_WHISPER"
           cargo test -p chaya-core
 
   windows:
     name: Windows build
-    needs: ffmpeg
+    needs: [ffmpeg, whisper]
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -125,6 +184,27 @@ jobs:
         with:
           name: ffmpeg
           path: ffmpeg-out
+
+      - name: Get whisper.cpp
+        uses: actions/download-artifact@v4
+        with:
+          name: whisper
+          path: whisper-out
+
+      - name: Look for the Tiny speech model
+        id: tiny
+        uses: actions/cache@v4
+        with:
+          path: speech-model
+          key: speech-tiny-${{ hashFiles('desktop/core/src/speech/models.json') }}
+
+      - name: Fetch the Tiny speech model
+        if: steps.tiny.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          mkdir -p speech-model
+          curl -fsSL --retry 3 -o speech-model/ggml-tiny.bin \
+            https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin
 
       - name: Set up Node 22
         uses: actions/setup-node@v4
@@ -153,7 +233,7 @@ jobs:
         run: npm ci
 
       - name: Put the engine together
-        run: python desktop/engine/prepare.py --ffmpeg ffmpeg-out/windows/ffmpeg.exe
+        run: python desktop/engine/prepare.py --ffmpeg ffmpeg-out/windows/ffmpeg.exe --whisper whisper-out/windows/whisper-cli.exe
 
       - name: Lint
         working-directory: desktop
@@ -163,12 +243,14 @@ jobs:
 
       # CHAYA_ENGINE_DIR also runs the prepared engine's own check (core/tests/bundled_engine.rs): its Python
       # starts, the packages are the pinned ones, yt-dlp accepts the bundled QuickJS, and the bundled ffmpeg
-      # joins a picture and its sound.
+      # joins a picture and its sound. The bundled whisper.cpp, cross-compiled, listens to the JFK sample on Windows.
       - name: Test
         working-directory: desktop
         env:
           CHAYA_ENGINE_DIR: ${{ github.workspace }}\desktop\app\src-tauri\engine
           CHAYA_FFMPEG: ${{ github.workspace }}\desktop\app\src-tauri\engine\ffmpeg.exe
+          CHAYA_WHISPER: ${{ github.workspace }}\desktop\app\src-tauri\engine\whisper-cli.exe
+          CHAYA_WHISPER_MODEL: ${{ github.workspace }}\speech-model\ggml-tiny.bin
         run: cargo test --workspace -- --nocapture
 
       # A release (a windows-v* tag) also signs the update Chaya fetches from inside the app (update.rs), with the

@@ -927,6 +927,8 @@ const playerSide = document.getElementById('player-side');
 const playerLines = document.getElementById('player-lines');
 const playerSubtitles = document.getElementById('player-subtitles');
 const playerSpeed = document.getElementById('player-speed');
+const playerSpeedButton = document.getElementById('player-speed-button');
+const playerSpeedPanel = document.getElementById('player-speed-panel');
 const playerResumed = document.getElementById('player-resumed');
 const playerProblem = document.getElementById('player-problem');
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
@@ -1032,6 +1034,7 @@ function closePlayer() {
   keepPosition(true);
   playing = null;
   player.classList.remove('player--full');
+  openSpeeds(false);
   player.hidden = true;
   playerVideo.pause();
   playerVideo.removeAttribute('src');
@@ -1068,11 +1071,26 @@ function showSpeeds() {
       playerVideo.playbackRate = speed;
       remember('chaya.player.speed', String(speed));
       showSpeeds();
+      openSpeeds(false);
     });
     return button;
   });
   refill(playerSpeed, buttons);
+  playerSpeedButton.textContent = `${rate}×`;
+  playerSpeedButton.setAttribute('aria-label', `Speed, ${rate}×`);
 }
+
+/** The speeds, in a small panel under the bar's speed button. */
+function openSpeeds(open) {
+  playerSpeedPanel.hidden = !open;
+  playerSpeedButton.setAttribute('aria-expanded', String(open));
+  if (open) playerSpeed.querySelector('[aria-pressed="true"]')?.focus();
+}
+
+playerSpeedButton.addEventListener('click', () => openSpeeds(playerSpeedPanel.hidden));
+document.addEventListener('click', (e) => {
+  if (!playerSpeedPanel.hidden && !e.target.closest('.player__speed')) openSpeeds(false);
+});
 
 /** Shows `track`'s subtitles over the video and its lines beside it; null shows none. */
 function showSubtitles(track) {
@@ -1196,7 +1214,8 @@ document.addEventListener('keydown', (e) => {
   e.stopPropagation();
   const onButton = e.target instanceof Element && e.target.closest('button');
   if (e.key === 'Escape') {
-    if (player.classList.contains('player--full')) fullWindow(false);
+    if (!playerSpeedPanel.hidden) openSpeeds(false);
+    else if (player.classList.contains('player--full')) fullWindow(false);
     else closePlayer();
   } else if (e.key.toLowerCase() === 'f' && !e.ctrlKey && !e.altKey) {
     fullWindow();

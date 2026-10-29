@@ -57,7 +57,7 @@ def test_the_engine_folder_holds_the_launcher_the_engine_and_what_is_in_it(tmp_p
     assert (engine / 'cli.py').is_file() and (engine / 'extract.py').is_file()
     assert not list(engine.rglob('__pycache__'))
     assert json.loads((out / 'engine.json').read_text()) == {
-        'packages': {'yt-dlp': '2026.8.19'}, 'python': None, 'quickjs': None, 'ffmpeg': None}
+        'packages': {'yt-dlp': '2026.8.19'}, 'python': None, 'quickjs': None, 'ffmpeg': None, 'whisper': None}
 
 
 def test_an_engine_prepared_again_starts_from_an_empty_folder(tmp_path, monkeypatch):
@@ -87,8 +87,47 @@ def test_the_ffmpeg_given_goes_in_with_its_licence(tmp_path, monkeypatch):
     assert json.loads((out / 'engine.json').read_text())['ffmpeg'] == 'n8.1.3'
 
 
+def test_the_whisper_given_goes_in_with_its_licence(tmp_path, monkeypatch):
+    monkeypatch.setattr(prepare, 'install_packages', lambda target, for_windows: target.mkdir(parents=True) or {})
+    built = tmp_path / 'built'
+    built.mkdir()
+    (built / 'whisper-cli.exe').write_bytes(b'MZ')
+    (built / 'whisper-LICENSE.txt').write_text('whisper-cli (whisper-cli.exe), shipped with Chaya for Windows.\n'
+                                               'whisper.cpp v1.9.5, built from https://github.com/ggml-org/whisper.cpp\n')
+    out = tmp_path / 'engine'
+
+    prepare.main(['--host', '--out', str(out), '--whisper', str(built / 'whisper-cli.exe')])
+
+    assert (out / 'whisper-cli.exe').read_bytes() == b'MZ'
+    assert 'v1.9.5' in (out / 'licenses' / 'whisper.txt').read_text()
+    assert json.loads((out / 'engine.json').read_text())['whisper'] == 'v1.9.5'
+
+
+def test_a_whisper_without_its_licence_is_refused(tmp_path):
+    (tmp_path / 'whisper-cli.exe').write_bytes(b'MZ')
+
+    with pytest.raises(SystemExit, match='whisper-LICENSE'):
+        prepare.place_program(tmp_path / 'whisper-cli.exe', tmp_path, 'whisper', 'x')
+
+
 def test_an_ffmpeg_without_its_licence_is_refused(tmp_path):
     (tmp_path / 'ffmpeg.exe').write_bytes(b'MZ')
 
     with pytest.raises(SystemExit, match='LICENSE'):
         prepare.place_ffmpeg(tmp_path / 'ffmpeg.exe', tmp_path)
+
+
+def test_a_model_pinned_unlike_hugging_faces_list_is_named():
+    import check_models
+
+    pins = [{'file': 'ggml-tiny.bin', 'size': 10, 'sha256': 'a' * 64},
+            {'file': 'ggml-small.bin', 'size': 20, 'sha256': 'b' * 64},
+            {'file': 'ggml-gone.bin', 'size': 30, 'sha256': 'c' * 64}]
+    found = {'ggml-tiny.bin': (10, 'a' * 64), 'ggml-small.bin': (21, 'd' * 64)}
+
+    assert check_models.problems(pins, found) == [
+        'ggml-small.bin: size 21, pinned 20',
+        f"ggml-small.bin: SHA-256 {'d' * 64}, pinned {'b' * 64}",
+        'ggml-gone.bin: not listed on Hugging Face',
+    ]
+    assert check_models.problems(pins[:1], found) == []

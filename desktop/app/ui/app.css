@@ -327,7 +327,11 @@ body.browsing .settings__panel { background: var(--bg); }
   background: var(--bg);
   animation: var(--anim-enter) var(--dur-enter) var(--ease-out) both;
 }
-.player__top .seg button { padding: 0 var(--space-1); }
+.player__top { gap: var(--space-1); }
+.player__top > .seg, .player__speed { margin-right: var(--space-1); }
+.player__speed { position: relative; }
+.player__speed .pill { min-width: calc(var(--space-8) - var(--space-1)); justify-content: center; }
+.player__speed-panel { background: var(--bg); }
 .player__body {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -385,7 +389,7 @@ body.browsing .settings__panel { background: var(--bg); }
   background: var(--bg);
 }
 .player__problem p { margin: 0; font-size: var(--text-md); }
-.player__side { width: 340px; min-height: 0; overflow-y: auto; border-radius: var(--radius-md); }
+.player__side { width: clamp(240px, 30vw, 340px); min-height: 0; overflow-y: auto; border-radius: var(--radius-md); }
 .player__lines { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
 .player__line {
   display: grid;

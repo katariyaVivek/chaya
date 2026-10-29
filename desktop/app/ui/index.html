@@ -242,7 +242,13 @@
   <div class="viewer__top player__top">
     <p class="viewer__title" id="player-title"></p>
     <div class="seg" role="group" aria-label="Subtitles" id="player-subtitles" hidden></div>
-    <div class="seg" role="group" aria-label="Speed" id="player-speed"></div>
+    <div class="player__speed">
+      <button class="pill glass pressable num" type="button" id="player-speed-button" aria-expanded="false" aria-controls="player-speed-panel" title="Speed">1×</button>
+      <div class="settings__panel player__speed-panel" id="player-speed-panel" hidden>
+        <p class="settings__label">Speed</p>
+        <div class="seg" role="group" aria-label="Speed" id="player-speed"></div>
+      </div>
+    </div>
     <button class="icon-btn pressable" type="button" id="player-full" aria-label="Full window (F)" title="Full window (F)"><svg><use href="#i-expand"/></svg></button>
     <button class="icon-btn pressable" type="button" id="player-open" aria-label="Open in another app" title="Open in another app"><svg><use href="#i-open"/></svg></button>
     <button class="icon-btn pressable" type="button" id="player-folder" aria-label="Show in folder" title="Show in folder"><svg><use href="#i-folder"/></svg></button>
