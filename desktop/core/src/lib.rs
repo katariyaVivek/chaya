@@ -11,7 +11,10 @@ pub mod links;
 pub mod lookup;
 pub mod media;
 pub mod placement;
+pub mod serve;
 pub mod session;
+pub mod subtitles;
+pub mod video;
 
 /// The HTTP client downloads use, so the app builds it with the same version.
 pub use reqwest;

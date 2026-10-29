@@ -113,6 +113,12 @@ Chaya for Windows keeps the same promises, with these differences:
   which sends them only to that site; the file is deleted as soon as the listing ends. The account's files
   are then fetched from the site's servers without your cookies. A private account you don't follow can't
   be saved: Chaya sees only what your account can see.
+- **A video's subtitles.** When a site has subtitles for a video you save from a link, Chaya fetches the ones in
+  the video's language from the address yt-dlp found for them (the site's own server), with the same headers as
+  the video, and saves them next to the video as an SRT file. Nothing else is sent.
+- **The player.** Chaya plays what you saved on your PC, and remembers where each video stopped, in a small file
+  per video in Chaya's own folder, so it starts there next time. The file is deleted when the download leaves
+  Chaya's list. Nothing about what you watch leaves your PC.
 - **The ad blocker** works as the phone's: it decides on your PC, its settings (whether it is on, and
   the sites you let show ads) stay on your PC, and about once a week it fetches fresh EasyList and
   EasyPrivacy lists from easylist.to, sending nothing about you. To hide a page's ad boxes, a script of

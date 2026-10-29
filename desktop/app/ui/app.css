@@ -316,6 +316,102 @@ body.browsing .settings__panel { background: var(--bg); }
 .viewer__frame .tile__name { font-size: var(--text-md); }
 .viewer__play { display: grid; justify-items: center; gap: var(--space-2); }
 .viewer__step[disabled] { visibility: hidden; }
+
+/* ── The player: a saved video or sound, its subtitles drawn over it and listed beside it ───────────── */
+.player {
+  position: fixed;
+  inset: var(--titlebar-height) 0 0;
+  z-index: 50;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  background: var(--bg);
+  animation: var(--anim-enter) var(--dur-enter) var(--ease-out) both;
+}
+.player__top .seg button { padding: 0 var(--space-1); }
+.player__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-2);
+  min-height: 0;
+  padding: 0 var(--space-2) var(--space-2);
+}
+.player__stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--screen);
+}
+.player__video { display: block; width: 100%; height: 100%; min-height: 0; object-fit: contain; }
+/* Drawn by Chaya rather than the video's own <track>, so two languages can stack later; above the video's controls */
+.player__caption {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--space-8) + var(--space-1));
+  max-width: min(80%, 60ch);
+  margin: 0;
+  padding: var(--space-half) var(--space-1);
+  transform: translateX(-50%);
+  border-radius: var(--radius-sm);
+  background: var(--subtitle);
+  color: var(--subtitle-text);
+  font: 500 clamp(var(--text-lg), 2.2vw, calc(var(--title-size) * 1.5)) / 1.35 var(--font-ui);
+  text-align: center;
+  white-space: pre-line;
+  pointer-events: none;
+}
+.player__resumed {
+  position: absolute;
+  top: var(--space-2);
+  left: var(--space-2);
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin: 0;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-sm);
+  animation: var(--anim-enter) var(--dur-enter) var(--ease-out) both;
+}
+.player__problem {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: var(--space-2);
+  background: var(--bg);
+}
+.player__problem p { margin: 0; font-size: var(--text-md); }
+.player__side { width: 340px; min-height: 0; overflow-y: auto; border-radius: var(--radius-md); }
+.player__lines { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.player__line {
+  display: grid;
+  grid-template-columns: 5ch minmax(0, 1fr);
+  gap: var(--space-1);
+  width: 100%;
+  padding: var(--space-1);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  font: var(--text-md) / var(--leading-md) var(--font-ui);
+  text-align: left;
+  white-space: pre-line;
+  cursor: pointer;
+  user-select: text;
+  transition: background-color var(--dur-hover) var(--ease-out), color var(--dur-hover) var(--ease-out);
+}
+.player__line:hover { background: var(--wash); color: var(--text); }
+.player__line[aria-current="true"] { background: var(--wash-strong); color: var(--text); }
+.player__line .num { color: var(--muted); font-size: var(--text-sm); line-height: var(--leading-md); }
+/* Full window (F, or a double-click): the video alone, over the whole window */
+.player--full { inset: 0; z-index: 60; grid-template-rows: minmax(0, 1fr); background: var(--screen); }
+.player--full .player__top, .player--full .player__side { display: none; }
+.player--full .player__body { padding: 0; }
+.player--full .player__stage { border-radius: 0; }
 .downloads__all {
   padding: 0;
   border: 0;

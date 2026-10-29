@@ -128,12 +128,35 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
   window). The grid shows what was saved as square tiles, newest first, narrowed as the list is: a picture shows
   itself, a video the poster its site gave with a play badge, a post's files one tile with their count
   (`core::library::tiles`, the phone's `libraryItems`), a ZIP or a sound its icon and name. A picture or a post
-  opens in the viewer under the title bar (← and →, Esc, *Show in folder*; a video in a post plays in its own
-  program); anything else opens in its own program. What is still on its way is counted above the grid, which
-  goes to the list. Pictures reach the window by `chaya-file://localhost/ID` (`saved_picture`): only Chaya's own
-  window may ask, never a page in the browser (whose webviews share the scheme), only by a download's number,
-  never a path, and only for a saved picture. Tauri's asset protocol is not used: it would let any webview,
-  pages included, read from the folders it allows.
+  opens in the viewer under the title bar (← and →, Esc, *Show in folder*; a video in a post plays in the player);
+  a video or a sound plays in the player; anything else opens in its own program. What is still on its way is
+  counted above the grid, which goes to the list. Pictures, videos and sounds reach the window by
+  `chaya-file://localhost/ID` (`saved_file`): only Chaya's own window may ask, never a page in the browser (whose
+  webviews share the scheme), only by a download's number, never a path, and only for a saved picture, video or
+  sound. Tauri's asset protocol is not used: it would let any webview, pages included, read from the folders it
+  allows.
+- **The player.** A saved video or sound opens in Chaya, from the list (its name), the grid or a post's viewer,
+  instead of another program (*Open in another app* is in its bar, and offered when WebView2 can't play the file).
+  The file comes a part at a time, at most 4 MB per answer, by the HTTP ranges the player asks for
+  (`core::serve`), so it seeks without being read whole. Subtitles are the SRT and VTT files next to the video
+  ("name.en.srt", `core::subtitles::files_for`), read into lines (`parse`: SRT and WebVTT, styling taken off,
+  YouTube's rolling machine captions made one line after another) with a timeline of which line shows when
+  (`timeline`: where lines overlap, the later one). Chaya draws the line over the video itself, not with
+  `<track>`, so a later step can stack two languages, and lists every line beside it: the one on show is marked
+  and kept in view, and clicking one plays from there. The bar picks the language (or Off) and the speed (0.5× to
+  2×), both kept in the window; F, a double-click or the bar's button fills the window, Esc leaves it. Space plays
+  and pauses, ← and → go back and on 5 s. Where playback stopped is kept in `videos/ID.json` in the app's data
+  folder (`core::video`, one file per download, which later steps add to), and the video starts there next time,
+  saying so with *Start over*; one barely started, or stopped in its last 10 s (its last twentieth if shorter),
+  starts at the start. Removing or cancelling a download deletes its file there, since its number can be given
+  again.
+- **A video's subtitles from the site.** A video's lookup also lists its language and the site's subtitles
+  (`chaya_engine` with `--subtitles`; the phone never asks). Its download picks the subtitles in the video's own
+  language, those a person made before the machine's captions in that language, and never a machine translation
+  (`core::subtitles::pick`); a video whose language the site doesn't say gets its first subtitles. Once the video
+  is whole they are fetched from the site with the video's own headers, and saved next to it as SRT,
+  "Title (720p).en.srt", where VLC and other players find them too. Subtitles that can't be fetched or read are
+  left out; the video is saved all the same. A quality saved as sound alone takes none.
 - **The list narrows** as the phone's library does: by kind (Videos, Pictures, Audio, ZIPs), by the site it came
   from (`core::library::site_of`, the phone's `siteOf`, from the page it was found on or the file's own address),
   and by words in its name, all three together. A group of chips shows only once the downloads span two or more
@@ -335,8 +358,10 @@ The window's own files, fonts included, are packed into the app; nothing is fetc
 network is used only for what the person asks: a pasted link to a video or post is looked up with
 yt-dlp, which asks that site about it; its poster is shown from the site's image server, without
 saying which page asked (`referrerpolicy="no-referrer"`); and a download fetches the file from the
-site's server with the headers yt-dlp names for it. No sign-in is used for a link and nothing is sent
-anywhere else. The list of downloads stays on the PC. Pages the person opens in the built-in browser load
+site's server with the headers yt-dlp names for it, and a video's subtitles, when the site has any, from the
+address yt-dlp names for them, with the same headers. No sign-in is used for a link and nothing is sent
+anywhere else. The list of downloads stays on the PC, and so does where playback of each video stopped
+(`videos/` in the app's data folder). Pages the person opens in the built-in browser load
 as in any browser, and keep their cookies in the app's own WebView2 folder on the PC; they cannot reach
 the app. What is saved from a page is fetched with the browser's cookies for that file's own address, read
 from that folder each time the download starts and never kept elsewhere; a stream's lookup gets them in a

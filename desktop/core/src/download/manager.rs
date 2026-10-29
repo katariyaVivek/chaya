@@ -18,6 +18,7 @@ use tokio::runtime::Handle;
 use tokio::sync::watch;
 
 use crate::library::{site_of, Site};
+use crate::subtitles::{self, FromSite};
 
 use super::archive::{self, Account, ArchiveProgress, ListRequest, Listed, Lister};
 use super::error::DownloadError;
@@ -30,6 +31,9 @@ use super::stream;
 pub const AT_ONCE: usize = 3;
 /// How often progress reaches the window.
 const PROGRESS_EVERY: Duration = Duration::from_millis(250);
+/// How long a video's subtitles may take to arrive, and how big they may be.
+const SUBTITLES_WITHIN: Duration = Duration::from_secs(30);
+const SUBTITLES_AT_MOST: u64 = 20 * 1024 * 1024;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -87,6 +91,9 @@ pub struct Task {
     /// How far a ZIP has got while it runs; worked out again from its folder, so never stored.
     #[serde(skip)]
     pub archive: Option<ArchiveProgress>,
+    /// The site's subtitles, saved next to the file once it is whole ("name.en.srt").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subtitles: Option<FromSite>,
 }
 
 /// The steps of a download whose picture and sound come apart, or that is a stream. What is left is decided
@@ -210,6 +217,8 @@ pub struct NewDownload {
     pub sound: Option<Source>,
     pub thumbnail: Option<String>,
     pub group: Option<String>,
+    /// The site's subtitles for it, saved next to it once it is whole.
+    pub subtitles: Option<FromSite>,
 }
 
 /// An account to save as one ZIP.
@@ -229,6 +238,7 @@ pub struct NewArchive {
 pub struct Fresh {
     pub source: Source,
     pub sound: Option<Source>,
+    pub subtitles: Option<FromSite>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -350,6 +360,7 @@ impl Manager {
                 sound: None,
                 thumbnail: None,
                 group: None,
+                subtitles: None,
             },
             Some(new.account),
         )
@@ -386,6 +397,7 @@ impl Manager {
                 step: None,
                 account,
                 archive: None,
+                subtitles: new.subtitles,
             };
             tasks.push(task.clone());
             task
@@ -419,6 +431,7 @@ impl Manager {
             if let Some(fresh) = fresh.filter(|f| f.sound.is_some() == task.sound.is_some()) {
                 task.source = fresh.source;
                 task.sound = fresh.sound;
+                task.subtitles = fresh.subtitles.or(task.subtitles.take());
             }
             task.state = State::Queued;
         }
@@ -534,6 +547,10 @@ impl Manager {
             Ok(Outcome::Done) => {
                 let state = match finish(&part, &task.path) {
                     Ok(path) => {
+                        // Before the file is called saved, so the player finds its subtitles from the start.
+                        if let Some(from) = &task.subtitles {
+                            self.save_subtitles(from, &path).await;
+                        }
                         if let Some(t) = lock(&self.inner.tasks).iter_mut().find(|t| t.id == task.id) {
                             // The file's own size: for a join or a stream, not what was fetched to make it.
                             let size = file_size(&path);
@@ -557,6 +574,24 @@ impl Manager {
             Err(_) => {}
         }
         self.pump();
+    }
+
+    /// Fetches the site's subtitles `from` and keeps them as SRT next to the file at `video`. A video is whole without
+    /// them: subtitles that can't be fetched or read are left out, and the download is saved all the same.
+    async fn save_subtitles(&self, from: &FromSite, video: &Path) {
+        let mut request = self.inner.client.get(&from.url).timeout(SUBTITLES_WITHIN);
+        for (name, value) in &from.headers {
+            request = request.header(name, value);
+        }
+        let Ok(answer) = request.send().await.and_then(reqwest::Response::error_for_status) else { return };
+        if answer.content_length().is_some_and(|len| len > SUBTITLES_AT_MOST) {
+            return;
+        }
+        let Ok(bytes) = answer.bytes().await else { return };
+        let lines = subtitles::parse(&String::from_utf8_lossy(&bytes));
+        if !lines.is_empty() {
+            let _ = std::fs::write(subtitles::file_for(video, &from.language), subtitles::to_srt(&lines));
+        }
     }
 
     /// `task` as it is fetched: a source saved from a page carries the browser's cookies and user agent for its
@@ -942,6 +977,7 @@ mod tests {
             sound: None,
             thumbnail: None,
             group: None,
+            subtitles: None,
         }
     }
 
@@ -1006,6 +1042,34 @@ mod tests {
             Box::new(|_| {}),
         );
         assert_eq!(again.list(), vec![done]);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_videos_subtitles_from_the_site_are_saved_beside_it_as_srt() {
+        let vtt = "WEBVTT\n\n00:00.500 --> 00:02.000\n<c.white>Hello</c> there.\n".as_bytes().to_vec();
+        let server = TestServer::with_files(
+            vec![("/file".into(), body(50_000)), ("/subs.vtt".into(), vtt)],
+            Behaviour::default(),
+        );
+        let s = setup(AT_ONCE);
+        let subtitles = |path: &str| FromSite {
+            language: "en".into(),
+            url: server.url(path),
+            headers: [("User-Agent".to_string(), "Mozilla/5.0".to_string())].into(),
+        };
+        let new = NewDownload { subtitles: Some(subtitles("/subs.vtt")), ..new_download(&s, &server, "Clip.mp4") };
+        let task = s.manager.add(new);
+        let done = wait_for(&s.manager, task.id, |st| *st == State::Completed).await;
+        let srt = std::fs::read_to_string(done.path.with_file_name("Clip.en.srt")).unwrap();
+        assert_eq!(srt, "1\n00:00:00,500 --> 00:00:02,000\nHello there.\n\n");
+        assert!(server.requests().iter().any(|r| r.contains("/subs.vtt")));
+
+        // Subtitles the site no longer has: the video is saved all the same, without them.
+        let new = NewDownload { subtitles: Some(subtitles("/gone.vtt")), ..new_download(&s, &server, "Other.mp4") };
+        let task = s.manager.add(new);
+        let done = wait_for(&s.manager, task.id, |st| *st == State::Completed).await;
+        assert_eq!(std::fs::read(&done.path).unwrap(), body(50_000));
+        assert!(!done.path.with_file_name("Other.en.srt").exists());
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -1129,7 +1193,7 @@ mod tests {
 
         let source =
             Source { url: fresh.url("/file"), headers: Default::default(), expected_size: None, ..Source::default() };
-        s.manager.retry(task.id, Some(Fresh { source, sound: None }));
+        s.manager.retry(task.id, Some(Fresh { source, sound: None, subtitles: None }));
         let done = wait_for(&s.manager, task.id, |st| *st == State::Completed).await;
         assert_eq!(std::fs::read(&done.path).unwrap(), content);
         assert_eq!(done.source.url, fresh.url("/file"));
@@ -1195,6 +1259,7 @@ mod tests {
             step: None,
             account: None,
             archive: None,
+            subtitles: None,
         };
         std::fs::write(&store, serde_json::to_vec(&vec![task.clone()]).unwrap()).unwrap();
 
@@ -1237,6 +1302,7 @@ mod tests {
             step: None,
             account: None,
             archive: None,
+            subtitles: None,
         };
         let view = serde_json::to_value(TaskView::from(&task)).unwrap();
         assert_eq!(view["fileName"], "Me at the zoo.m4a");
@@ -1351,7 +1417,7 @@ mod tests {
         assert_eq!(failed.state, State::Failed(DownloadError::Http(403)));
 
         let sound = Source { url: fresh.url("/140"), ..new.sound.clone().unwrap() };
-        s.manager.retry(task.id, Some(Fresh { source: new.source.clone(), sound: Some(sound) }));
+        s.manager.retry(task.id, Some(Fresh { source: new.source.clone(), sound: Some(sound), subtitles: None }));
         let done = wait_for(&s.manager, task.id, |st| *st == State::Completed).await;
 
         assert_eq!(done.sound.unwrap().url, fresh.url("/140"));
@@ -1366,7 +1432,7 @@ mod tests {
         wait_for(&s.manager, task.id, |st| matches!(st, State::Failed(_))).await;
 
         let other = Source { url: "http://127.0.0.1:9/other".into(), ..task.source.clone() };
-        s.manager.retry(task.id, Some(Fresh { source: other.clone(), sound: Some(other) }));
+        s.manager.retry(task.id, Some(Fresh { source: other.clone(), sound: Some(other), subtitles: None }));
         let again = wait_for(&s.manager, task.id, |st| matches!(st, State::Failed(_))).await;
 
         assert_eq!((again.source, again.sound), (task.source, None));
@@ -1609,6 +1675,14 @@ mod tests {
     }
 
     #[test]
+    fn the_saved_video_the_windows_tour_puts_in_place_is_read_as_one() {
+        // desktop/app/tour/tour.py writes this into downloads.json before Chaya starts, its path and times filled in.
+        let task: Task = serde_json::from_str(include_str!("../../../app/tour/fixtures/saved-video.json")).unwrap();
+        assert_eq!((task.kind, task.state), (Kind::Video, State::Completed));
+        assert_eq!(task.subtitles, None);
+    }
+
+    #[test]
     fn a_task_is_stored_with_its_state_alongside() {
         let json = serde_json::to_value(Task {
             id: 1,
@@ -1629,6 +1703,7 @@ mod tests {
             step: None,
             account: None,
             archive: None,
+            subtitles: None,
         })
         .unwrap();
         assert_eq!(json["state"], "failed");
@@ -1839,6 +1914,7 @@ mod tests {
             step: None,
             account: Some(Account { platform: Platform::X, username: "someone".into(), sign_in: true }),
             archive: Some(ArchiveProgress { found: 3, saved: 1, listing: false }),
+            subtitles: None,
         };
         let json = serde_json::to_value(&task).unwrap();
         assert_eq!(json["kind"], "archive");

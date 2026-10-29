@@ -215,7 +215,8 @@ jobs:
           if-no-files-found: error
 
   # The installer installed on a Windows machine and the app toured, with a picture of the whole screen at each
-  # step (desktop/app/tour/tour.py): a link looked up for real, a download cancelled, pages in the built-in
+  # step (desktop/app/tour/tour.py): a saved video played with its subtitles (put in place first: --seed), a link
+  # looked up for real, a download cancelled, pages in the built-in
   # browser, the ad blocker's panel, Night. The pictures are kept as the run's `chaya-windows-tour` artifact, so
   # what the app looks like on Windows is seen, not guessed. A site that refuses this machine is noted in
   # steps.json, not failed on; the job fails only when the app does not start.
@@ -266,7 +267,7 @@ jobs:
       - name: Take the tour
         run: |
           python -m pip install --quiet websocket-client pillow
-          python desktop/app/tour/tour.py --app $env:CHAYA_APP --out tour --via devtools
+          python desktop/app/tour/tour.py --app $env:CHAYA_APP --out tour --via devtools --seed
 
       - name: Keep the pictures
         if: always()

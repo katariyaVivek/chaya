@@ -144,6 +144,13 @@ test("the window's close button is Windows' red under the pointer, its cross rea
   assert.ok(ratio >= 4.5, `close cross on red: ${ratio.toFixed(2)}`);
 });
 
+test('subtitles read at 4.5:1 over the brightest picture, in both themes', () => {
+  assert.ok(!nightPicked.has('--subtitle'), 'shared: a video is the same picture in either theme');
+  const behind = over(rgbAlpha(day.get('--subtitle')), [255, 255, 255]);
+  const ratio = contrast(hex(day.get('--subtitle-text')), behind);
+  assert.ok(ratio >= 4.5, `subtitle on white: ${ratio.toFixed(2)}`);
+});
+
 test('the accent is too pale for text on Day, so Day focuses with the text color', () => {
   assert.ok(contrast(hex(day.get('--accent')), hex(day.get('--bg'))) < 3);
   assert.equal(day.get('--focus'), 'var(--text)');

@@ -36,6 +36,12 @@
   --scrim: rgb(0 0 0 / 0.55);
   --scrim-text: #FFFFFF;
 
+  /* The player, the same in both themes: black around a video, as every player has it, and subtitles in white on
+     dark glass, readable over any picture */
+  --screen: #000000;
+  --subtitle: rgb(0 0 0 / 0.72);
+  --subtitle-text: #FFFFFF;
+
   /* Type */
   --font-ui: "Geist", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
   --font-mono: "Geist Mono", "Cascadia Mono", Consolas, ui-monospace, monospace;

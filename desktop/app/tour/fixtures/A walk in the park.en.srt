@@ -1,0 +1,27 @@
+1
+00:00:01,000 --> 00:00:04,000
+This is a walk in the park.
+
+2
+00:00:05,000 --> 00:00:08,000
+The numbers count the seconds.
+
+3
+00:00:09,000 --> 00:00:12,000
+Chaya draws these lines itself,
+
+4
+00:00:13,000 --> 00:00:16,000
+and lists them beside the video.
+
+5
+00:00:17,000 --> 00:00:20,000
+Clicking a line plays from there.
+
+6
+00:00:21,000 --> 00:00:24,000
+This one starts at 21 seconds.
+
+7
+00:00:25,000 --> 00:00:29,000
+The end of the walk.

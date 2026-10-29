@@ -127,6 +127,10 @@ subtitles made on the PC, translation beside the original with the person's own 
 with the subtitles burned in. The steps are in [`PLAN.md`](PLAN.md), and what Vimpo does in
 [`vimpo-reference.md`](vimpo-reference.md).
 
+Step 1 is merged: a saved video or sound plays in Chaya, with the site's subtitles (saved beside it as
+"name.en.srt" at download) drawn over it and listed beside it, a line clicked to play from there, speed, full
+window, and playback starting where it stopped. Next: step 2, subtitles made on the PC with whisper.cpp.
+
 ## Known rough edges
 
 - The emulator walkthrough sometimes loses the emulator itself: the app is reported as not running,

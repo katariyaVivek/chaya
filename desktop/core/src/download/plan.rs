@@ -6,6 +6,7 @@ use std::path::Path;
 use crate::formats;
 use crate::lookup::can_save;
 use crate::media::{Format, Media};
+use crate::subtitles;
 
 use super::http::Source;
 use super::manager::{Kind, NewDownload};
@@ -36,6 +37,7 @@ pub fn plan(
         sound: None,
         thumbnail: media.thumbnail_url.clone(),
         group: None,
+        subtitles: None,
     };
 
     if choice == WHOLE_POST {
@@ -85,13 +87,18 @@ pub fn plan(
     };
     let mut download = base(found.label.clone(), kind, name, source_of(&found.file));
     download.sound = found.audio_to_merge.as_ref().map(source_of);
+    // A video's subtitles from the site, in its own language, saved beside it; the sound alone has nothing to show
+    // them over.
+    if kind == Kind::Video {
+        download.subtitles = subtitles::to_save(media, &found.file.headers);
+    }
     Some(vec![download])
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::media::{parse, PostItem};
+    use crate::media::{parse, PostItem, SubtitleTrack};
     use std::path::PathBuf;
 
     const NEVER: fn(&Format) -> bool = |_| false;
@@ -113,6 +120,24 @@ mod tests {
         assert_eq!(p.source.headers.get("User-Agent").map(String::as_str), Some("Mozilla/5.0"));
         assert_eq!(p.folder, folder);
         assert_eq!(p.page_url, "https://youtu.be/jNQXAC9IVRw");
+    }
+
+    #[test]
+    fn a_video_takes_its_sites_subtitles_in_its_own_language_with_the_files_headers() {
+        let mut media = zoo();
+        media.language = Some("en".into());
+        media.subtitles = vec![
+            SubtitleTrack { language: "de".into(), url: "https://subs.example/de".into(), automatic: false },
+            SubtitleTrack { language: "en-orig".into(), url: "https://subs.example/en".into(), automatic: true },
+        ];
+        let plans = plan(&media, "240p", "https://youtu.be/jNQXAC9IVRw", Path::new("D"), |_| true, true).unwrap();
+        let subtitles = plans[0].subtitles.as_ref().expect("the English captions");
+        assert_eq!((subtitles.language.as_str(), subtitles.url.as_str()), ("en", "https://subs.example/en"));
+        assert_eq!(subtitles.headers.get("User-Agent").map(String::as_str), Some("Mozilla/5.0"));
+
+        let sound = plan(&media, "Audio only", "u", Path::new("D"), NEVER, false).unwrap();
+        assert_eq!(sound[0].subtitles, None, "the sound alone has no subtitles");
+        assert_eq!(plan(&zoo(), "240p", "u", Path::new("D"), |_| true, true).unwrap()[0].subtitles, None);
     }
 
     #[test]

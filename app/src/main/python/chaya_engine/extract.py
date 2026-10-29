@@ -28,7 +28,7 @@ _INFO_FIELDS = (
 )
 
 
-def extract(url, cache_dir, cookie_file=None, js_runtime=None, fragments=False, referer=None):
+def extract(url, cache_dir, cookie_file=None, js_runtime=None, fragments=False, referer=None, subtitles=False):
     """Returns a JSON string describing [url]: its title, poster, and the formats it can be saved in.
 
     [js_runtime] is the path of a QuickJS program for YouTube's challenges. Chaya for Windows ships one; the
@@ -39,6 +39,9 @@ def extract(url, cache_dir, cookie_file=None, js_runtime=None, fragments=False, 
 
     [referer] is the page a stream was found on, for a stream's address looked up directly (Chaya for Windows,
     listing a stream's qualities): its server may answer only the page's player.
+
+    With [subtitles], the video's language and the subtitles the site has for it are listed too (`_subtitle_tracks`):
+    Chaya for Windows saves them next to the video. The phone never asks.
     """
     options = {
         'quiet': True,
@@ -88,7 +91,7 @@ def extract(url, cache_dir, cookie_file=None, js_runtime=None, fragments=False, 
             post = _post_or_none(url, cache_dir, cookie_file)
             if post and (len(post['items']) > 1 or any(item['kind'] == 'image' for item in post['items'])):
                 return json.dumps({'media': post})
-        return json.dumps({'media': _shape(info, fragments)})
+        return json.dumps({'media': _shape(info, fragments, subtitles)})
     except Exception as error:  # noqa: BLE001
         return json.dumps(_error(error))
 
@@ -169,7 +172,7 @@ def _post_or_none(url, cache_dir, cookie_file):
     return media
 
 
-def _shape(info, fragments=False):
+def _shape(info, fragments=False, subtitles=False):
     # A carousel post (several photos or videos) arrives as a playlist; the first item is the one shown.
     if info.get('_type') == 'playlist':
         entries = [entry for entry in info.get('entries') or [] if entry]
@@ -185,7 +188,33 @@ def _shape(info, fragments=False):
     shaped = {key: info.get(key) for key in _INFO_FIELDS}
     shaped['thumbnail'] = _best_thumbnail(info)
     shaped['formats'] = formats
+    if subtitles:
+        shaped['language'] = info.get('language')
+        shaped['subtitles'] = _subtitle_tracks(info)
     return shaped
+
+
+# The kinds of subtitle file Chaya reads, best first.
+_SUBTITLE_EXTS = ('vtt', 'srt')
+
+
+def _subtitle_tracks(info):
+    """The site's subtitles for the video, one address each, in a kind Chaya reads: every language a person made,
+    and of the machine's captions only those in the language spoken (YouTube's "-orig", or the video's language);
+    the machine's translations into every other language are left behind."""
+    language = info.get('language')
+    tracks = []
+    for key, automatic in (('subtitles', False), ('automatic_captions', True)):
+        for lang, offers in (info.get(key) or {}).items():
+            if not lang or lang == 'live_chat' or not isinstance(offers, list):
+                continue
+            if automatic and not (lang.endswith('-orig') or lang == language):
+                continue
+            best = next((offer for ext in _SUBTITLE_EXTS for offer in offers
+                         if isinstance(offer, dict) and offer.get('ext') == ext and offer.get('url')), None)
+            if best:
+                tracks.append({'language': lang, 'url': best['url'], 'automatic': automatic})
+    return tracks
 
 
 def _format(f, fragments):

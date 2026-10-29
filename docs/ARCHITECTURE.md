@@ -336,6 +336,12 @@ a built-in browser. [`../desktop/README.md`](../desktop/README.md) has the layou
   Where the phone's page script asks `ChayaCosmetic` for the CSS of the classes and ids it found, the
   desktop's `hider.js` keeps them until the app asks, under a random name, and the app evaluates the CSS
   back into the document: again no bridge.
+- **The player** plays a saved video in the window, from `chaya-file://localhost/ID` with HTTP ranges
+  (`chaya-core`'s `serve`). `subtitles` reads the SRT and VTT files next to a video into lines and a timeline
+  of which line shows when, which the window draws over the video itself (not `<track>`, so two languages can
+  stack later); it also picks which of a site's subtitles a video's download saves beside it as
+  "name.en.srt" (the engine lists them with `--subtitles`). `video` keeps what only Chaya needs about a saved
+  video, one JSON file per download in `videos/`: for now where playback stopped.
 - `desktop/app/src-tauri` hands `chaya-core` to the window as commands (`recognise_link`, `look_up`,
   `download` and the download controls) and sends it `download` events. The window
   may call only those and set its title bar's theme (`capabilities/default.json`). Its content

@@ -9,19 +9,21 @@ from chaya_engine import cli
 def test_extract_prints_the_engines_answer_with_its_arguments(monkeypatch, capsys):
     seen = {}
 
-    def fake_extract(url, cache_dir, cookie_file=None, js_runtime=None, fragments=False, referer=None):
+    def fake_extract(url, cache_dir, cookie_file=None, js_runtime=None, fragments=False, referer=None,
+                     subtitles=False):
         seen.update(url=url, cache_dir=cache_dir, cookie_file=cookie_file, js_runtime=js_runtime, fragments=fragments,
-                    referer=referer)
+                    referer=referer, subtitles=subtitles)
         return json.dumps({'media': {'title': 'Ünïcödé'}})
 
     monkeypatch.setattr('chaya_engine.extract.extract', fake_extract)
 
     code = cli.main(['extract', 'https://youtu.be/x', '--cache', '/cache', '--js-runtime', '/engine/qjs.exe',
-                     '--fragments', '--referer', 'https://example.com/watch'])
+                     '--fragments', '--subtitles', '--referer', 'https://example.com/watch'])
 
     assert code == 0
     assert seen == {'url': 'https://youtu.be/x', 'cache_dir': '/cache', 'cookie_file': None,
-                    'js_runtime': '/engine/qjs.exe', 'fragments': True, 'referer': 'https://example.com/watch'}
+                    'js_runtime': '/engine/qjs.exe', 'fragments': True, 'referer': 'https://example.com/watch',
+                    'subtitles': True}
     last_line = capsys.readouterr().out.strip().splitlines()[-1]
     assert json.loads(last_line) == {'media': {'title': 'Ünïcödé'}}
 
@@ -29,12 +31,12 @@ def test_extract_prints_the_engines_answer_with_its_arguments(monkeypatch, capsy
 def test_a_sign_in_is_passed_only_when_given(monkeypatch, capsys):
     seen = {}
     monkeypatch.setattr('chaya_engine.extract.extract',
-                        lambda url, cache_dir, cookie_file=None, js_runtime=None, fragments=False, referer=None:
-                        seen.update(c=cookie_file, f=fragments) or '{}')
+                        lambda url, cache_dir, cookie_file=None, js_runtime=None, fragments=False, referer=None,
+                        subtitles=False: seen.update(c=cookie_file, f=fragments, s=subtitles) or '{}')
 
     cli.main(['extract', 'https://x.com/a/status/1', '--cache', '/c', '--cookies', '/tmp/cookies.txt'])
 
-    assert seen == {'c': '/tmp/cookies.txt', 'f': False}
+    assert seen == {'c': '/tmp/cookies.txt', 'f': False, 's': False}
 
 
 def test_profile_lists_the_account_with_its_arguments_and_prints_the_summary(monkeypatch, capsys):
