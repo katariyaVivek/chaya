@@ -66,18 +66,14 @@ pub struct Transcript {
 }
 
 impl Transcript {
-    /// The subtitle lines: a segment each, as whisper.cpp ended them, leaving out the silences it marks.
+    /// The subtitle lines: short ones that follow the speech (`lines`), leaving out the silences whisper.cpp marks.
     pub fn lines(&self) -> Vec<Line> {
-        self.segments
-            .iter()
-            .filter(|s| !s.text.is_empty() && !is_marker(&s.text) && s.end > s.start)
-            .map(|s| Line { start: s.start, end: s.end, text: s.text.clone() })
-            .collect()
+        super::lines::lines(self)
     }
 }
 
 /// whisper.cpp's word for a stretch with nothing said in it.
-fn is_marker(text: &str) -> bool {
+pub(crate) fn is_marker(text: &str) -> bool {
     matches!(text, "[BLANK_AUDIO]" | "[ Silence ]" | "[SILENCE]")
 }
 
@@ -88,11 +84,13 @@ pub enum Stage {
     Listening { percent: u8 },
 }
 
-/// What `transcribe` needs: the folder whisper-cli runs in, and inside it the model, a work folder for this video,
-/// the language ("en"), or None to detect it, and how many of the processor's threads it may use.
+/// What `transcribe` needs: the folder whisper-cli runs in, and inside it the model and which of whisper.cpp's
+/// attention-head presets times its words (`dtw`, "large.v3.turbo"), a work folder for this video, the language ("en"),
+/// or None to detect it, and how many of the processor's threads it may use.
 pub struct Request<'a> {
     pub folder: &'a Path,
     pub model: &'a Path,
+    pub dtw: &'a str,
     pub work: &'a Path,
     pub language: Option<&'a str>,
     pub threads: usize,
@@ -139,7 +137,10 @@ pub async fn transcribe(
         .arg(relative(request.model))
         .arg("-f")
         .arg(relative(&sound))
-        .args(["-l", request.language.unwrap_or("auto"), "-t", &request.threads.to_string(), "-ojf", "-pp", "-of"])
+        .args(["-l", request.language.unwrap_or("auto"), "-t", &request.threads.to_string(), "-ojf", "-pp"])
+        // Each word's time from the attention heads (DTW), which needs flash attention off: with it on, every time
+        // comes back as -1.
+        .args(["-dtw", request.dtw, "-nfa", "-of"])
         .arg(relative(&out));
     let listened = run(command, stop, &mut |line| {
         if let Some(percent) = progress(line) {
@@ -194,6 +195,12 @@ fn progress(line: &str) -> Option<u8> {
 /// not words (`[_BEG_]`, `[_TT_150]`) are left out, and a word whisper.cpp split into pieces (" Amer", "icans") is put
 /// back together. whisper-cli escapes only quotes and backslashes in what it writes, so a control character in what it
 /// heard is taken out before reading.
+///
+/// A word starts at its first piece's DTW time (`t_dtw`, in hundredths of a second: when the attention heads say it
+/// was said). It lasts until its last piece's, which for a word with punctuation after it ("Americans,") is about when
+/// it ended, or else twice a usual word's length; never past the next word's start. Without that cap a word followed
+/// by silence would run on through it, and the silence is where a line ends. Without DTW times (-1, as with flash
+/// attention on), a word has whisper.cpp's own rougher times.
 pub fn parse(json: &str) -> Result<Transcript, SpeechError> {
     let cleaned: String =
         json.chars().map(|c| if c.is_control() && !matches!(c, '\n' | '\r' | '\t') { ' ' } else { c }).collect();
@@ -207,7 +214,9 @@ pub fn parse(json: &str) -> Result<Transcript, SpeechError> {
     let language = root["result"]["language"].as_str().unwrap_or("").to_string();
     let segments = root["transcription"].as_array().ok_or(SpeechError::Unreadable)?;
     let offset = |v: &Value, end: &str| v["offsets"][end].as_u64();
-    let segments = segments
+    // Whether every word has a DTW time.
+    let mut timed = true;
+    let mut segments: Vec<Segment> = segments
         .iter()
         .filter_map(|s| {
             let mut words: Vec<Word> = Vec::new();
@@ -216,7 +225,10 @@ pub fn parse(json: &str) -> Result<Transcript, SpeechError> {
                 if text.starts_with("[_") || text.is_empty() {
                     continue;
                 }
-                let (Some(start), Some(end)) = (offset(token, "from"), offset(token, "to")) else { continue };
+                let (Some(from), Some(to)) = (offset(token, "from"), offset(token, "to")) else { continue };
+                let dtw = token["t_dtw"].as_i64().filter(|t| *t >= 0).map(|t| t as u64 * 10);
+                timed &= dtw.is_some();
+                let (start, end) = (dtw.unwrap_or(from), dtw.unwrap_or(to));
                 let p = token["p"].as_f64().unwrap_or(0.0) as f32;
                 match words.last_mut() {
                     // A piece of the word before: no space in front of it.
@@ -237,7 +249,34 @@ pub fn parse(json: &str) -> Result<Transcript, SpeechError> {
             })
         })
         .collect();
+    if timed {
+        end_words(&mut segments);
+    }
     Ok(Transcript { language, segments })
+}
+
+/// A word whose length is known only from its start lasts no longer than this many times the usual word's.
+const LONGEST_WORD: u64 = 2;
+
+/// Ends each word timed by DTW at its last piece's time, or twice a usual word's length after its start if that is
+/// later; never after the next word starts, nor the last of a segment after the segment's end.
+fn end_words(segments: &mut [Segment]) {
+    let starts: Vec<u64> = segments.iter().flat_map(|s| s.words.iter().map(|w| w.start)).collect();
+    let mut lengths: Vec<u64> = starts.windows(2).map(|w| w[1].saturating_sub(w[0])).collect();
+    lengths.sort_unstable();
+    // The usual word: the median gap from one word's start to the next, between a fifth and a half of a second.
+    let usual = lengths.get(lengths.len() / 2).copied().unwrap_or(400).clamp(200, 500);
+    let mut next = starts.iter().skip(1);
+    for segment in segments.iter_mut() {
+        let count = segment.words.len();
+        for (i, word) in segment.words.iter_mut().enumerate() {
+            let mut until = next.next().copied().unwrap_or(u64::MAX);
+            if i + 1 == count && segment.end > word.start {
+                until = until.min(segment.end);
+            }
+            word.end = until.min(word.end.max(word.start + LONGEST_WORD * usual)).max(word.start);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -263,14 +302,73 @@ mod tests {
         assert_eq!(transcript.segments[1].words.first().map(|w| w.text.as_str()), Some("ask"));
     }
 
+    /// What whisper-cli 1.9.5 heard, with Large v3 Turbo and its DTW times (`-dtw large.v3.turbo -nfa`), in George W.
+    /// Bush's address on the loss of the shuttle Columbia, 1 February 2003 (a work of the US government, in the public
+    /// domain; the recording is on Wikimedia Commons), cut down to what `parse` reads.
+    const COLUMBIA: &str = include_str!("../../tests/fixtures/whisper-columbia.json");
+
     #[test]
-    fn its_lines_are_the_segments_without_the_silences() {
+    fn a_word_starts_at_its_dtw_time_and_ends_at_its_punctuation_or_soon_after() {
+        let transcript = parse(COLUMBIA).unwrap();
+        let words: Vec<&Word> = transcript.segments.iter().flat_map(|s| &s.words).collect();
+        let find = |text: &str| words.iter().find(|w| w.text == text).unwrap();
+        // " Americans" at 1.82 s, its comma at 2.88 s; " this" at 3.58 s.
+        assert_eq!((find("Americans,").start, find("Americans,").end), (1_820, 2_880));
+        assert_eq!(find("this").start, 3_580);
+        // " news" at 4.92 s and " and" not until 6.42 s: the word is taken to last twice a usual word, and the rest is
+        // the pause after it.
+        let news = find("news");
+        assert_eq!(news.start, 4_920);
+        assert!(news.end > 5_100 && news.end < 6_000, "{news:?}");
+        for pair in words.windows(2) {
+            assert!(pair[0].start <= pair[0].end && pair[0].end <= pair[1].start, "{pair:?}");
+        }
+    }
+
+    #[test]
+    fn a_recorded_speech_comes_out_in_short_lines_that_follow_it() {
+        let transcript = parse(COLUMBIA).unwrap();
+        let lines = transcript.lines();
+        for line in &lines {
+            eprintln!("{:>6} {:>6} {:>4}  {}", line.start, line.end, line.text.chars().count(), line.text);
+        }
+        assert_eq!(transcript.segments.len(), 39);
+        assert!(lines.len() >= 70, "{} lines", lines.len());
+        let said: Vec<&str> = transcript.segments.iter().flat_map(|s| s.text.split_whitespace()).collect();
+        let shown: Vec<&str> = lines.iter().flat_map(|l| l.text.split_whitespace()).collect();
+        assert_eq!(shown, said, "every word, once, in order");
+        for pair in lines.windows(2) {
+            assert!(pair[0].start < pair[0].end && pair[0].end <= pair[1].start, "{pair:?}");
+        }
+        for line in &lines {
+            let one_word = !line.text.contains(' ');
+            assert!(one_word || line.text.chars().count() <= 44, "{line:?}");
+            assert!(line.end - line.start <= 5_500, "{line:?}");
+            for word in ["the", "a", "of", "to", "our"] {
+                assert!(!line.text.ends_with(&format!(" {word}")), "{line:?}");
+            }
+        }
+        let text = |i: usize| lines[i].text.as_str();
+        assert!((0..lines.len()).any(|i| text(i) == "My fellow Americans,"), "a pause after a comma");
+        assert!((0..lines.len()).all(|i| !text(i).ends_with("overlook the")), "not where whisper.cpp's segment ended");
+    }
+
+    #[test]
+    fn without_dtw_times_lines_are_cut_by_whisper_cpps_own() {
         let mut transcript = parse(JFK).unwrap();
         transcript.segments.push(Segment { start: 11_000, end: 12_000, text: "[BLANK_AUDIO]".into(), words: vec![] });
         let lines = transcript.lines();
-        assert_eq!(lines.len(), 2);
-        assert_eq!(lines[1].text, "ask not what your country can do for you, ask what you can do for your country.");
-        assert_eq!((lines[1].start, lines[1].end), (7_600, 11_000));
+        let texts: Vec<&str> = lines.iter().map(|l| l.text.as_str()).collect();
+        assert_eq!(
+            texts,
+            [
+                "And so my fellow Americans,",
+                "ask not what your country can do for you,",
+                "ask what you can do for your country."
+            ]
+        );
+        assert_eq!(lines[0].start, 0);
+        assert_eq!(lines[2].end, 11_000 + 300);
     }
 
     #[test]

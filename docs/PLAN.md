@@ -121,6 +121,14 @@ with a graphics card.
 - **Tests:** recorded whisper.cpp output split into lines (the reference's example went from 27 lines to
   127, the longest 5 s); the scoring rules one by one.
 
+**Short lines done** (the first of this step's two PRs). whisper-cli runs with `-dtw` (each model's preset in
+`models.json`) and `-nfa`; a word starts at its DTW time and ends at its punctuation's, or twice a usual word's length
+later, so the silence after it shows. `core::speech::lines` holds the rules and word lists (English, Spanish,
+Portuguese, French, Italian, German, Hindi). Recorded with Large v3 Turbo in CI, George W. Bush's Columbia address
+(3 min 18 s) went from whisper.cpp's 39 segments to 73 lines, averaging 2.4 s and 28 characters, the longest 4.3 s.
+With flash attention on, every DTW time came back as -1, as Vimpo found. On CI's four processor cores Large v3 Turbo
+took ten minutes for those three minutes of speech: the graphics card is next.
+
 ### 4. Your own AI model ☐
 
 **The person gets:** **Settings › AI model**: pick a service, paste a key (or point at Ollama or LM

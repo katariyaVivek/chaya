@@ -7,6 +7,7 @@
 //! what whisper.cpp wrote, while it listens), and `settings.json` (the model picked, the language, and whether every
 //! download gets subtitles).
 
+pub mod lines;
 pub mod models;
 pub mod whisper;
 
@@ -169,8 +170,14 @@ impl Speech {
             .get(client, model, stop, &mut |p: Progress| on_step(Step::Model { done: p.done, total }))
             .await?;
         let work = self.folder.join("work").join(id.to_string());
-        let request =
-            Request { folder: &self.folder, model: &path, work: &work, language, threads: whisper::threads() };
+        let request = Request {
+            folder: &self.folder,
+            model: &path,
+            dtw: &model.dtw,
+            work: &work,
+            language,
+            threads: whisper::threads(),
+        };
         let heard = whisper::transcribe(&tools.ffmpeg, &tools.whisper, video, &request, stop, &mut |stage| {
             on_step(match stage {
                 Stage::Sound => Step::Sound,
@@ -257,8 +264,11 @@ mod tests {
 
         assert_eq!(made.transcript.language, "en");
         assert_eq!(made.path, downloads.join("Inaugural address.en.srt"));
-        let srt = std::fs::read_to_string(&made.path).unwrap().to_lowercase();
-        assert!(srt.contains("ask not what your country can do for you"), "{srt}");
+        let srt = std::fs::read_to_string(&made.path).unwrap();
+        let lines = subtitles::parse(&srt);
+        let heard = lines.iter().map(|l| l.text.as_str()).collect::<Vec<_>>().join(" ").to_lowercase();
+        assert!(heard.contains("ask not what your country can do for you"), "{srt}");
+        assert!(lines.len() >= 2 && lines.iter().all(|l| l.end - l.start <= 5_500), "short lines: {srt}");
         let words: Vec<&str> =
             made.transcript.segments.iter().flat_map(|s| &s.words).map(|w| w.text.as_str()).collect();
         assert!(words.iter().any(|w| w.trim_matches(|c: char| !c.is_alphanumeric()).eq_ignore_ascii_case("country")));
