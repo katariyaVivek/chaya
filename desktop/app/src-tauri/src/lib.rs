@@ -3,6 +3,7 @@
 
 mod ads;
 mod browser;
+mod speech;
 mod update;
 mod window;
 
@@ -422,12 +423,18 @@ pub fn run() {
                 .read_timeout(Duration::from_secs(30))
                 .build()?;
             app.manage(ads::Ads::new(app.handle(), client.clone())?);
+            app.manage(speech::Speaking::new(app.path().app_data_dir()?.join("speech"), &engine_dir, client.clone()));
+            tauri::async_runtime::spawn(speech::Speaking::work(app.handle().clone()));
             let handle = app.handle().clone();
             let manager = DownloadManager::open(
                 app.path().app_data_dir()?.join("downloads.json"),
                 client,
                 tauri::async_runtime::handle().inner().clone(),
                 Box::new(move |event| {
+                    // A video just saved gets its subtitles made, when the person asked that of every download.
+                    if let Event::Changed(task) = &event {
+                        handle.state::<speech::Speaking>().downloaded(&handle, task);
+                    }
                     let _ = handle.emit("download", DownloadEvent::from(event));
                 }),
             );
@@ -478,6 +485,11 @@ pub fn run() {
             video_subtitles,
             playback_start,
             playback_stopped,
+            speech::speech_status,
+            speech::set_speech,
+            speech::delete_speech_model,
+            speech::make_subtitles,
+            speech::stop_subtitles,
             browser::open_page,
             browser::place_page,
             browser::show_page,

@@ -10,6 +10,8 @@ The result is desktop/app/src-tauri/engine/, which the installer carries (tauri.
     engine/qjs.exe      QuickJS-ng, which yt-dlp runs YouTube's challenge scripts in (not with --host)
     engine/ffmpeg.exe   the cut-down ffmpeg that joins picture and sound, when given with --ffmpeg
                         (build_ffmpeg.sh makes it; without it, qualities that need joining are not offered)
+    engine/whisper-cli.exe  whisper.cpp, which makes subtitles from a video's sound, when given with --whisper
+                        (build_whisper.sh makes it; without it, Make subtitles is not offered)
     engine/run.py       what the app starts: `python -I run.py extract URL --cache DIR ...`
     engine/engine.json  what is in it, read by the app and shown in diagnostics
 
@@ -59,6 +61,8 @@ def main(argv=None):
     parser.add_argument('--qjs', type=Path, help='a downloaded copy of qjs-windows-x86_64.exe')
     parser.add_argument('--ffmpeg', type=Path,
                         help='the ffmpeg build_ffmpeg.sh made, with its ffmpeg-LICENSE.txt beside it')
+    parser.add_argument('--whisper', type=Path,
+                        help='the whisper-cli build_whisper.sh made, with its whisper-LICENSE.txt beside it')
     args = parser.parse_args(argv)
 
     out = args.out
@@ -66,7 +70,7 @@ def main(argv=None):
         shutil.rmtree(out)
     out.mkdir(parents=True)
 
-    manifest = {'packages': {}, 'python': None, 'quickjs': None, 'ffmpeg': None}
+    manifest = {'packages': {}, 'python': None, 'quickjs': None, 'ffmpeg': None, 'whisper': None}
     if not args.host:
         unpack_python(args.python_zip or download(PYTHON), out / 'python')
         manifest['python'] = PYTHON['version']
@@ -76,6 +80,10 @@ def main(argv=None):
         manifest['ffmpeg'] = place_ffmpeg(args.ffmpeg, out)
     else:
         print('No --ffmpeg: qualities whose picture and sound need joining will not be offered.')
+    if args.whisper:
+        manifest['whisper'] = place_program(args.whisper, out, 'whisper', r'whisper\.cpp (\S+), built from')
+    else:
+        print('No --whisper: subtitles cannot be made on the PC.')
     manifest['packages'] = install_packages(out / 'packages', for_windows=not args.host)
     copy_engine(out / 'packages' / 'chaya_engine')
     shutil.copy2(HERE / 'run.py', out / 'run.py')
@@ -129,13 +137,19 @@ def place_quickjs(program, target):
 
 def place_ffmpeg(program, out):
     """Copies the ffmpeg build_ffmpeg.sh made, and its licence, into the engine; returns the FFmpeg version."""
-    licence = program.with_name('ffmpeg-LICENSE.txt')
+    return place_program(program, out, 'ffmpeg', r'FFmpeg (\S+), built from')
+
+
+def place_program(program, out, name, version):
+    """Copies a program build_NAME.sh made, and the NAME-LICENSE.txt beside it, into the engine; returns the
+    version its licence names (by the pattern [version])."""
+    licence = program.with_name(f'{name}-LICENSE.txt')
     if not program.is_file() or not licence.is_file():
-        raise SystemExit(f'{program} or its ffmpeg-LICENSE.txt is missing. Make them with build_ffmpeg.sh.')
+        raise SystemExit(f'{program} or its {name}-LICENSE.txt is missing. Make them with build_{name}.sh.')
     shutil.copy2(program, out / program.name)
     (out / 'licenses').mkdir(exist_ok=True)
-    shutil.copy2(licence, out / 'licenses' / 'ffmpeg.txt')
-    found = re.search(r'FFmpeg (\S+), built from', licence.read_text(encoding='utf-8'))
+    shutil.copy2(licence, out / 'licenses' / f'{name}.txt')
+    found = re.search(version, licence.read_text(encoding='utf-8'))
     return found.group(1) if found else 'unknown'
 
 

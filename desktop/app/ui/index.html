@@ -57,6 +57,18 @@
         <button type="button" data-motion-choice="system">Same as Windows</button>
         <button type="button" data-motion-choice="reduce">Reduced</button>
       </div>
+      <div class="settings__speech" id="settings-speech" hidden>
+        <p class="settings__label" id="speech-model-label">Speech recognition</p>
+        <ul class="models" id="speech-models" aria-labelledby="speech-model-label"></ul>
+        <label class="settings__label" for="speech-language">Language spoken</label>
+        <select class="select" id="speech-language"></select>
+        <p class="settings__label" id="speech-every-label">Make subtitles</p>
+        <div class="seg" role="group" aria-labelledby="speech-every-label" id="speech-every">
+          <button type="button" data-every="false">When I ask</button>
+          <button type="button" data-every="true">For every download</button>
+        </div>
+        <p class="settings__credit">Chaya listens on this PC; nothing is uploaded. A model is fetched once, from Hugging Face, the first time it's used.</p>
+      </div>
       <div class="settings__update" id="settings-update" hidden>
         <p class="settings__label">Update</p>
         <p class="settings__note" id="update-text"></p>
@@ -241,8 +253,15 @@
 <div class="player" id="player" role="dialog" aria-modal="true" aria-label="Player" hidden>
   <div class="viewer__top player__top">
     <p class="viewer__title" id="player-title"></p>
+    <button class="pill glass pressable" type="button" id="player-make" hidden>Make subtitles</button>
     <div class="seg" role="group" aria-label="Subtitles" id="player-subtitles" hidden></div>
-    <div class="seg" role="group" aria-label="Speed" id="player-speed"></div>
+    <div class="player__speed">
+      <button class="pill glass pressable num" type="button" id="player-speed-button" aria-expanded="false" aria-controls="player-speed-panel" title="Speed">1×</button>
+      <div class="settings__panel player__speed-panel" id="player-speed-panel" hidden>
+        <p class="settings__label">Speed</p>
+        <div class="seg" role="group" aria-label="Speed" id="player-speed"></div>
+      </div>
+    </div>
     <button class="icon-btn pressable" type="button" id="player-full" aria-label="Full window (F)" title="Full window (F)"><svg><use href="#i-expand"/></svg></button>
     <button class="icon-btn pressable" type="button" id="player-open" aria-label="Open in another app" title="Open in another app"><svg><use href="#i-open"/></svg></button>
     <button class="icon-btn pressable" type="button" id="player-folder" aria-label="Show in folder" title="Show in folder"><svg><use href="#i-folder"/></svg></button>
@@ -253,6 +272,7 @@
       <video class="player__video" id="player-video" controls controlslist="nodownload nofullscreen noremoteplayback" disablepictureinpicture disableremoteplayback preload="metadata"></video>
       <p class="player__caption" id="player-caption" hidden></p>
       <p class="player__resumed glass" id="player-resumed" role="status" hidden><span class="num"></span><button class="downloads__all" type="button" id="player-restart">Start over</button></p>
+      <p class="player__resumed player__making glass" id="player-making" role="status" hidden><span></span><button class="downloads__all" type="button" id="player-making-action">Stop</button></p>
       <div class="player__problem" id="player-problem" hidden>
         <p>Chaya can't play this file. Another app on this PC may.</p>
         <button class="pill pill--primary glass pressable" type="button" id="player-problem-open">Open in another app</button>

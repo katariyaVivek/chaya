@@ -122,7 +122,8 @@ function showSettings(open) {
 }
 settingsButton.addEventListener('click', () => showSettings(settingsPanel.hidden));
 document.addEventListener('click', (e) => {
-  if (!settingsPanel.hidden && !e.target.closest('.settings')) showSettings(false);
+  // A choice in the panel can draw the panel again, taking the button clicked out of the page: still inside.
+  if (!settingsPanel.hidden && e.target.isConnected && !e.target.closest('.settings')) showSettings(false);
 });
 
 // ── The address bar ─────────────────────────────────────────────────────────────────────────
@@ -366,6 +367,8 @@ const downloadsEmpty = document.getElementById('downloads-empty');
 
 /** Every download the window knows, by id, as the app last described it. */
 const tasks = new Map();
+/** How making each video's subtitles is getting on (`speech.rs`'s JobView), by download. */
+const speechJobs = new Map();
 /** The Download buttons on show, each with the downloads it started (a post's "Save all" starts several). */
 const buttons = new Set();
 /** Set while a button follows the app's events, so it does not send them back as clicks. */
@@ -586,8 +589,11 @@ function metaOf(task) {
     }
     case 'paused':
       return `Paused · ${sizes}`;
-    case 'completed':
+    case 'completed': {
+      const job = speechJobs.get(task.id);
+      if (job && !['done', 'failed'].includes(job.state)) return speechText(job);
       return `Saved · ${fileSize(task.total ?? task.done)} · ${task.folder.split(/[\\/]/).pop()}`;
+    }
     case 'failed':
       return task.error ?? 'The download failed.';
     default:
@@ -927,6 +933,8 @@ const playerSide = document.getElementById('player-side');
 const playerLines = document.getElementById('player-lines');
 const playerSubtitles = document.getElementById('player-subtitles');
 const playerSpeed = document.getElementById('player-speed');
+const playerSpeedButton = document.getElementById('player-speed-button');
+const playerSpeedPanel = document.getElementById('player-speed-panel');
 const playerResumed = document.getElementById('player-resumed');
 const playerProblem = document.getElementById('player-problem');
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
@@ -1005,6 +1013,7 @@ async function openPlayer(id) {
   const wanted = remembered('chaya.player.subtitles', '');
   const chosen = wanted === 'off' ? null : tracks.find((t) => t.language === wanted) ?? tracks[0] ?? null;
   showSubtitles(chosen);
+  showMaking();
   whenReady(() => {
     if (start > 0) {
       playerVideo.currentTime = start;
@@ -1027,11 +1036,20 @@ function showResumed(at) {
   showResumed.timer = setTimeout(() => (playerResumed.hidden = true), 6000);
 }
 
+/** The player's subtitles again, as they are next to the video now, showing those in `language`. */
+async function reloadSubtitles(id, language) {
+  const tracks = await tauri.core.invoke('video_subtitles', { id }).catch(() => null);
+  if (!tracks || playing?.id !== id) return;
+  playing.tracks = tracks;
+  showSubtitles(tracks.find((t) => t.language === language) ?? tracks[0] ?? null);
+}
+
 function closePlayer() {
   if (!playing) return;
   keepPosition(true);
   playing = null;
   player.classList.remove('player--full');
+  openSpeeds(false);
   player.hidden = true;
   playerVideo.pause();
   playerVideo.removeAttribute('src');
@@ -1068,11 +1086,26 @@ function showSpeeds() {
       playerVideo.playbackRate = speed;
       remember('chaya.player.speed', String(speed));
       showSpeeds();
+      openSpeeds(false);
     });
     return button;
   });
   refill(playerSpeed, buttons);
+  playerSpeedButton.textContent = `${rate}×`;
+  playerSpeedButton.setAttribute('aria-label', `Speed, ${rate}×`);
 }
+
+/** The speeds, in a small panel under the bar's speed button. */
+function openSpeeds(open) {
+  playerSpeedPanel.hidden = !open;
+  playerSpeedButton.setAttribute('aria-expanded', String(open));
+  if (open) playerSpeed.querySelector('[aria-pressed="true"]')?.focus();
+}
+
+playerSpeedButton.addEventListener('click', () => openSpeeds(playerSpeedPanel.hidden));
+document.addEventListener('click', (e) => {
+  if (!playerSpeedPanel.hidden && e.target.isConnected && !e.target.closest('.player__speed')) openSpeeds(false);
+});
 
 /** Shows `track`'s subtitles over the video and its lines beside it; null shows none. */
 function showSubtitles(track) {
@@ -1196,7 +1229,8 @@ document.addEventListener('keydown', (e) => {
   e.stopPropagation();
   const onButton = e.target instanceof Element && e.target.closest('button');
   if (e.key === 'Escape') {
-    if (player.classList.contains('player--full')) fullWindow(false);
+    if (!playerSpeedPanel.hidden) openSpeeds(false);
+    else if (player.classList.contains('player--full')) fullWindow(false);
     else closePlayer();
   } else if (e.key.toLowerCase() === 'f' && !e.ctrlKey && !e.altKey) {
     fullWindow();
@@ -1213,6 +1247,151 @@ document.addEventListener('keydown', (e) => {
 tauri?.event.listen('download', ({ payload }) => {
   if (payload.type === 'removed' && playing?.id === payload.id) closePlayer();
 });
+
+// ── Subtitles made on the PC ────────────────────────────────────────────────────────────────
+//
+// whisper.cpp listens to a saved video on this PC and its subtitles are saved next to it (`speech.rs`). Make subtitles
+// is in the player's bar; Settings › Speech recognition picks the model, the language spoken, and whether every
+// download gets subtitles. How each is getting on is in its row and over the player.
+
+const speechBox = document.getElementById('settings-speech');
+const speechModels = document.getElementById('speech-models');
+const speechLanguage = document.getElementById('speech-language');
+const speechEvery = document.getElementById('speech-every');
+const playerMake = document.getElementById('player-make');
+const playerMaking = document.getElementById('player-making');
+// Whisper's languages most people here will want, named in English by the window; the rest are detected.
+const LANGUAGES = ['ar', 'bn', 'cs', 'da', 'de', 'el', 'en', 'es', 'fa', 'fi', 'fr', 'gu', 'he', 'hi', 'hu', 'id', 'it',
+  'ja', 'ko', 'mr', 'ms', 'nl', 'no', 'pa', 'pl', 'pt', 'ro', 'ru', 'sv', 'ta', 'te', 'th', 'tr', 'uk', 'ur', 'vi', 'zh'];
+
+/** What the app says of speech recognition: whether it is here, the person's choices, the models. */
+let speech = { available: false, settings: null, models: [] };
+
+async function loadSpeech() {
+  const status = await tauri.core.invoke('speech_status').catch(() => null);
+  if (!status) return;
+  speech = status;
+  for (const job of status.jobs) speechJobs.set(job.id, job);
+  showSpeechSettings();
+  showMaking();
+}
+
+function speechText(job) {
+  switch (job.state) {
+    case 'waiting':
+      return 'Waiting to make subtitles';
+    case 'model':
+      return `Fetching the speech model · ${fileSize(job.done)} of ${fileSize(job.total)}`;
+    case 'sound':
+      return 'Making subtitles · Reading the sound';
+    case 'listening':
+      return `Making subtitles · ${job.percent}%`;
+    case 'done':
+      return 'Subtitles made';
+    default:
+      return job.message ?? 'Subtitles couldn’t be made.';
+  }
+}
+
+function showSpeechSettings() {
+  speechBox.hidden = !speech.available;
+  if (!speech.available) return;
+  const { settings } = speech;
+  speechModels.replaceChildren(
+    ...speech.models.map((model) => {
+      const li = document.createElement('li');
+      li.className = 'model';
+      const pick = document.createElement('button');
+      pick.type = 'button';
+      pick.className = 'model__pick';
+      pick.setAttribute('aria-pressed', String(model.id === settings.model));
+      const where = model.fetched ? 'On this PC' : 'Fetched when first used';
+      const meta = span('model__meta', '');
+      meta.append(span('num', fileSize(model.size)), ` · ${[where, model.note].filter(Boolean).join(' · ')}`);
+      pick.append(span('model__name', model.name), meta);
+      pick.addEventListener('click', () => saveSpeech({ model: model.id }));
+      li.append(pick);
+      if (model.fetched) {
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'icon-btn pressable';
+        remove.setAttribute('aria-label', `Delete ${model.name} from this PC`);
+        remove.title = `Delete ${model.name} from this PC`;
+        remove.append(icon('i-close'));
+        remove.addEventListener('click', async () => {
+          await tauri.core.invoke('delete_speech_model', { id: model.id }).catch((message) => (pick.title = String(message)));
+          loadSpeech();
+        });
+        li.append(remove);
+      }
+      return li;
+    }),
+  );
+  if (!speechLanguage.options.length) {
+    const named = LANGUAGES.map((code) => [code, languageName(code)]).sort((a, b) => a[1].localeCompare(b[1]));
+    speechLanguage.replaceChildren(
+      new Option('Detected', ''),
+      ...named.map(([code, name]) => new Option(name, code)),
+    );
+  }
+  speechLanguage.value = settings.language ?? '';
+  for (const b of speechEvery.querySelectorAll('button')) {
+    b.setAttribute('aria-pressed', String(b.dataset.every === String(settings.everyDownload)));
+  }
+}
+
+function saveSpeech(change) {
+  speech.settings = { ...speech.settings, ...change };
+  showSpeechSettings();
+  tauri.core.invoke('set_speech', { settings: speech.settings }).catch(() => loadSpeech());
+}
+
+speechLanguage.addEventListener('change', () => saveSpeech({ language: speechLanguage.value || null }));
+speechEvery.addEventListener('click', (e) => {
+  const every = e.target.closest('[data-every]')?.dataset.every;
+  if (every) saveSpeech({ everyDownload: every === 'true' });
+});
+
+/** The player's Make subtitles, and how making them is going, for the video playing. */
+function showMaking() {
+  if (!playing) return;
+  const job = speechJobs.get(playing.id);
+  const active = job && !['done', 'failed'].includes(job.state);
+  playerMake.hidden = !speech.available || active;
+  clearTimeout(showMaking.timer);
+  if (!job) {
+    playerMaking.hidden = true;
+    return;
+  }
+  playerMaking.hidden = false;
+  playerMaking.querySelector('span').textContent = speechText(job);
+  const action = playerMaking.querySelector('button');
+  action.hidden = job.state === 'done';
+  action.textContent = job.state === 'failed' ? 'Try again' : 'Stop';
+  if (job.state === 'done') showMaking.timer = setTimeout(() => (playerMaking.hidden = true), 5000);
+}
+
+playerMake.addEventListener('click', () => {
+  if (playing) tauri.core.invoke('make_subtitles', { id: playing.id });
+});
+document.getElementById('player-making-action').addEventListener('click', () => {
+  if (!playing) return;
+  const failed = speechJobs.get(playing.id)?.state === 'failed';
+  tauri.core.invoke(failed ? 'make_subtitles' : 'stop_subtitles', { id: playing.id });
+});
+
+tauri?.event.listen('speech', ({ payload: job }) => {
+  if (job.state === 'stopped') speechJobs.delete(job.id);
+  else speechJobs.set(job.id, job);
+  if (tasks.has(job.id)) renderRow(job.id);
+  if (playing?.id === job.id) {
+    showMaking();
+    if (job.state === 'done') reloadSubtitles(job.id, job.language);
+  }
+  // A model fetched, or failed to be: the settings say which are on this PC.
+  if (['done', 'failed', 'stopped'].includes(job.state)) loadSpeech();
+});
+loadSpeech();
 
 /** A section whose downloads are all narrowed away keeps no heading. */
 function hideEmptySections() {

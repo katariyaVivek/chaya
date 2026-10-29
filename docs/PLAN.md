@@ -74,7 +74,7 @@ yt-dlp): the engine lists them (`--subtitles`), the download picks one (`core::s
 after the video, as SRT. Where playback stopped is in `videos/ID.json` (`core::video`), the per-video file the
 later steps add to. The tour puts its own 30-second clip and subtitles in place first (`tour.py --seed`).
 
-### 2. Subtitles made on the PC ☐
+### 2. Subtitles made on the PC ☑
 
 **The person gets:** *Make subtitles* on any saved video, and a switch to make them for every download.
 The first time, Chaya fetches the speech model, showing the download, then shows how far it has got.
@@ -90,6 +90,10 @@ The subtitles appear in the player and as an SRT next to the video.
   whisper.cpp ships (public domain) comes back as "ask not what your country can do for you"; reading
   whisper.cpp's JSON; the model download resumes and refuses a file whose sum is wrong (a local server). The
   Windows tour makes subtitles for a short clip.
+
+**Done.** whisper.cpp v1.9.5. The JFK test also runs on Windows, with the cross-compiled program. The model pins
+are checked against Hugging Face's own list in CI (`check_models.py`). What was heard, word by word, is kept in
+`videos/ID.json` for step 3. Lines are whisper.cpp's segments for now; step 3 makes them short.
 
 ### 3. Short lines, and the graphics card ☐
 

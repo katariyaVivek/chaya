@@ -92,6 +92,41 @@ body.browsing .settings__panel { background: var(--bg); }
 }
 .settings__credit { max-width: 32ch; margin: var(--space-1) 0 0; color: var(--muted); font-size: var(--text-sm); line-height: var(--leading-sm); }
 
+/* The settings are taller than a small window: they scroll inside it */
+#settings-panel { box-sizing: border-box; max-height: calc(100vh - var(--titlebar-height) - var(--space-2)); overflow-y: auto; }
+
+/* Settings › Speech recognition: the models, one chosen, each saying whether it is on this PC */
+.settings__speech { display: grid; gap: var(--space-1); max-width: 360px; }
+.models { display: grid; gap: 2px; margin: 0; padding: var(--space-half); border-radius: var(--radius-md); background: var(--wash); list-style: none; }
+.model { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; border-radius: var(--radius-sm); }
+.model__pick {
+  display: grid;
+  gap: 2px;
+  padding: var(--space-1);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  font: var(--text-md) / var(--leading-md) var(--font-ui);
+  text-align: left;
+  cursor: pointer;
+}
+.model__pick:hover { color: var(--text); }
+.model:has(.model__pick[aria-pressed="true"]) { background: var(--surface); box-shadow: var(--shadow); }
+.model__pick[aria-pressed="true"] { color: var(--text); }
+.model__name { font-weight: 500; }
+.model__meta { color: var(--muted); font-size: var(--text-sm); line-height: var(--leading-sm); }
+.select {
+  height: var(--control-height);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text);
+  font: var(--text-md) / 1 var(--font-ui);
+}
+.select:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+
 .seg { display: flex; gap: 2px; padding: var(--space-half); border-radius: var(--radius-pill); background: var(--wash); }
 .seg button {
   height: var(--space-4);
@@ -327,7 +362,17 @@ body.browsing .settings__panel { background: var(--bg); }
   background: var(--bg);
   animation: var(--anim-enter) var(--dur-enter) var(--ease-out) both;
 }
-.player__top .seg button { padding: 0 var(--space-1); }
+.player { grid-template-columns: minmax(0, 1fr); }
+.player__top { gap: var(--space-1); }
+/* A narrow window keeps the bar to what has no other way in: F or a double-click fills the window, and the list
+   shows a download in its folder */
+@media (max-width: 900px) {
+  #player-full, #player-folder { display: none; }
+}
+.player__top > .seg, .player__speed { margin-right: var(--space-1); }
+.player__speed { position: relative; }
+.player__speed .pill { min-width: calc(var(--space-8) - var(--space-1)); justify-content: center; }
+.player__speed-panel { background: var(--bg); }
 .player__body {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -375,6 +420,7 @@ body.browsing .settings__panel { background: var(--bg); }
   font-size: var(--text-sm);
   animation: var(--anim-enter) var(--dur-enter) var(--ease-out) both;
 }
+.player__making { left: auto; right: var(--space-2); }
 .player__problem {
   position: absolute;
   inset: 0;
@@ -385,7 +431,7 @@ body.browsing .settings__panel { background: var(--bg); }
   background: var(--bg);
 }
 .player__problem p { margin: 0; font-size: var(--text-md); }
-.player__side { width: 340px; min-height: 0; overflow-y: auto; border-radius: var(--radius-md); }
+.player__side { width: clamp(240px, 30vw, 340px); min-height: 0; overflow-y: auto; border-radius: var(--radius-md); }
 .player__lines { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
 .player__line {
   display: grid;
