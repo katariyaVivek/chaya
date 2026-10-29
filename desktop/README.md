@@ -142,15 +142,25 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
   ("name.en.srt", `core::subtitles::files_for`), read into lines (`parse`: SRT and WebVTT, styling taken off,
   YouTube's rolling machine captions made one line after another) with a timeline of which line shows when
   (`timeline`: where lines overlap, the later one). Chaya draws the line over the video itself, not with
-  `<track>`, so a later step can stack two languages, and lists every line beside it: the one on show is marked
-  and kept in view, and clicking one plays from there. The bar picks the language (or Off) and the speed (0.5× to
-  2×), both kept in the window; F, a double-click or the bar's button fills the window, Esc leaves it. Space plays
-  and pauses, ← and → go back and on 5 s. Where playback stopped is kept in `videos/ID.json` in the app's data
+  `<track>`, so a later step can stack two languages: white words outlined in black, above the controls.
+  - **Laid out as Vimpo's player is**: the bar over it holds only the title, *Open in another app*, *Show in
+    folder* and close; everything else has one place. The player draws its own controls over the picture (play,
+    sound, the time, a seek bar that shows what has loaded and the time under the pointer, speed 0.5× to 2× in a
+    small panel, CC, full window); they fade while it plays and the pointer rests, and the line moves down.
+  - **Beside it, two tabs** (a ground that slides to the one chosen; ← and → move between them): *Transcript*,
+    every line with its time, the one on show a card lit with the accent and kept in view, a click playing from
+    there; with no subtitles yet, its one action is *Make subtitles*. *Subtitles*: which language is shown, and
+    making them again on this PC. How making them goes shows over the tabs, with a thin line of light and *Stop*.
+    Highlights and subtitle styles join as tabs in later steps.
+  - Keys: Space plays and pauses, ← and → go back and on 5 s, M mutes, C shows or hides the line, F or a
+    double-click fills the window, Esc leaves it (then closes the player). Speed, sound, subtitles on or off, the
+    language and the tab are kept in the window. Where playback stopped is kept in `videos/ID.json` in the app's data
   folder (`core::video`, one file per download, which later steps add to), and the video starts there next time,
   saying so with *Start over*; one barely started, or stopped in its last 10 s (its last twentieth if shorter),
   starts at the start. Removing or cancelling a download deletes its file there, since its number can be given
   again.
-- **Subtitles made on the PC** (`core::speech`). *Make subtitles* in the player's bar;
+- **Subtitles made on the PC** (`core::speech`). *Make subtitles* in the player (the transcript's one action when
+  there are none, and in its *Subtitles* tab);
   and, in Settings › Speech recognition, *For every download*, which makes them for each video downloaded that came
   without any. The first time, the speech model is fetched (the player and the row say how far), then the row and
   the player say how far listening has got, with *Stop*; the subtitles appear in the player when done, and are

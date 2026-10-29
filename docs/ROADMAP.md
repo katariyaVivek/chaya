@@ -133,7 +133,8 @@ window, and playback starting where it stopped.
 
 Step 2 is merged: *Make subtitles* on any saved video (or for every download), listened to on the PC by whisper.cpp
 with a model fetched once from Hugging Face and checked against its pinned SHA-256; Settings › Speech recognition
-picks the model and the language. Next: step 3, short lines and the graphics card.
+picks the model and the language. Then the player was organised as Vimpo's is (step 1b): its own controls over
+the picture, and tabs beside it, Transcript and Subtitles. Next: step 3, short lines and the graphics card.
 
 ## Known rough edges
 

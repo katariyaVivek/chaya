@@ -33,6 +33,9 @@
   <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3.5l7 2.6v5.4c0 4.3-2.9 7.8-7 9-4.1-1.2-7-4.7-7-9V6.1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
   <symbol id="i-expand" viewBox="0 0 24 24"><path d="M4.5 9V4.5H9M15 4.5h4.5V9M19.5 15v4.5H15M9 19.5H4.5V15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-open" viewBox="0 0 24 24"><path d="M13.5 4.5h6v6M19.5 4.5l-8 8M17.5 13.5v4a2 2 0 0 1-2 2h-9a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2h4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-sound" viewBox="0 0 24 24"><path d="M4.5 9.5h3l4.5-4v13l-4.5-4h-3z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="i-muted" viewBox="0 0 24 24"><path d="M4.5 9.5h3l4.5-4v13l-4.5-4h-3z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M16 9.5l5 5M21 9.5l-5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="i-cc" viewBox="0 0 24 24"><rect x="3.5" y="5.5" width="17" height="13" rx="3" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10.5 10.2a2.2 2.2 0 1 0 0 3.6M16.5 10.2a2.2 2.2 0 1 0 0 3.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
   <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="16" cy="7" r="2" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="8" cy="17" r="2" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
 </svg>
 
@@ -249,37 +252,78 @@
     <button class="icon-btn pressable viewer__step" type="button" id="viewer-next" aria-label="Next" title="Next (→)"><svg><use href="#i-forward"/></svg></button>
   </div>
 </div>
-<!-- A saved video or sound, played in Chaya: its subtitles drawn by Chaya over it, and listed beside it -->
+<!-- A saved video or sound, played in Chaya. Its own controls over the picture; beside it, tabs: the transcript to read
+     and jump through, and the subtitles to choose or make. -->
 <div class="player" id="player" role="dialog" aria-modal="true" aria-label="Player" hidden>
   <div class="viewer__top player__top">
     <p class="viewer__title" id="player-title"></p>
-    <button class="pill glass pressable" type="button" id="player-make" hidden>Make subtitles</button>
-    <div class="seg" role="group" aria-label="Subtitles" id="player-subtitles" hidden></div>
-    <div class="player__speed">
-      <button class="pill glass pressable num" type="button" id="player-speed-button" aria-expanded="false" aria-controls="player-speed-panel" title="Speed">1×</button>
-      <div class="settings__panel player__speed-panel" id="player-speed-panel" hidden>
-        <p class="settings__label">Speed</p>
-        <div class="seg" role="group" aria-label="Speed" id="player-speed"></div>
-      </div>
-    </div>
-    <button class="icon-btn pressable" type="button" id="player-full" aria-label="Full window (F)" title="Full window (F)"><svg><use href="#i-expand"/></svg></button>
-    <button class="icon-btn pressable" type="button" id="player-open" aria-label="Open in another app" title="Open in another app"><svg><use href="#i-open"/></svg></button>
-    <button class="icon-btn pressable" type="button" id="player-folder" aria-label="Show in folder" title="Show in folder"><svg><use href="#i-folder"/></svg></button>
+    <button class="icon-btn pressable player__wide" type="button" id="player-open" aria-label="Open in another app" title="Open in another app"><svg><use href="#i-open"/></svg></button>
+    <button class="icon-btn pressable player__wide" type="button" id="player-folder" aria-label="Show in folder" title="Show in folder"><svg><use href="#i-folder"/></svg></button>
     <button class="icon-btn pressable" type="button" id="player-close" aria-label="Close (Esc)" title="Close (Esc)"><svg><use href="#i-close"/></svg></button>
   </div>
   <div class="player__body">
     <div class="player__stage" id="player-stage">
-      <video class="player__video" id="player-video" controls controlslist="nodownload nofullscreen noremoteplayback" disablepictureinpicture disableremoteplayback preload="metadata"></video>
+      <video class="player__video" id="player-video" tabindex="0" aria-label="Video" preload="metadata" disablepictureinpicture disableremoteplayback></video>
       <p class="player__caption" id="player-caption" hidden></p>
-      <p class="player__resumed glass" id="player-resumed" role="status" hidden><span class="num"></span><button class="downloads__all" type="button" id="player-restart">Start over</button></p>
-      <p class="player__resumed player__making glass" id="player-making" role="status" hidden><span></span><button class="downloads__all" type="button" id="player-making-action">Stop</button></p>
+      <p class="player__note glass" id="player-resumed" role="status" hidden><span></span><button class="downloads__all" type="button" id="player-restart">Start over</button></p>
       <div class="player__problem" id="player-problem" hidden>
         <p>Chaya can't play this file. Another app on this PC may.</p>
         <button class="pill pill--primary glass pressable" type="button" id="player-problem-open">Open in another app</button>
       </div>
+      <!-- The player's own controls: they fade while it plays, and come back when the pointer moves -->
+      <div class="controls" id="player-controls">
+        <div class="controls__seek" id="player-seek" role="slider" tabindex="0" aria-label="Position" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
+          <span class="controls__buffered" id="player-buffered"></span>
+          <span class="controls__played" id="player-played"></span>
+          <span class="controls__thumb" id="player-thumb"></span>
+          <span class="controls__hover num" id="player-hover" hidden></span>
+        </div>
+        <div class="controls__row">
+          <button class="controls__play" type="button" id="player-play" aria-label="Play (Space)" title="Play (Space)"><svg><use href="#i-play"/></svg></button>
+          <button class="controls__btn" type="button" id="player-mute" aria-label="Mute (M)" title="Mute (M)"><svg><use href="#i-sound"/></svg></button>
+          <span class="controls__time num" id="player-time">0:00 / 0:00</span>
+          <span class="controls__gap"></span>
+          <div class="player__speed">
+            <button class="controls__btn controls__speed num" type="button" id="player-speed-button" aria-expanded="false" aria-controls="player-speed-panel" title="Speed">1×</button>
+            <div class="settings__panel player__speed-panel" id="player-speed-panel" hidden>
+              <p class="settings__label">Speed</p>
+              <div class="seg" role="group" aria-label="Speed" id="player-speed"></div>
+            </div>
+          </div>
+          <button class="controls__btn" type="button" id="player-cc" aria-label="Subtitles (C)" title="Subtitles (C)" aria-pressed="true" hidden><svg><use href="#i-cc"/></svg></button>
+          <button class="controls__btn" type="button" id="player-full" aria-label="Full window (F)" title="Full window (F)"><svg><use href="#i-expand"/></svg></button>
+        </div>
+      </div>
     </div>
-    <aside class="player__side" id="player-side" aria-label="Lines" hidden>
-      <ol class="player__lines" id="player-lines"></ol>
+    <aside class="player__panel" id="player-panel" aria-label="Transcript and subtitles">
+      <div class="tabs" role="tablist" id="player-tabs">
+        <span class="tabs__light" aria-hidden="true"></span>
+        <button class="tabs__tab" type="button" role="tab" id="tab-transcript" aria-controls="panel-transcript" aria-selected="true">Transcript</button>
+        <button class="tabs__tab" type="button" role="tab" id="tab-subtitles" aria-controls="panel-subtitles" aria-selected="false" tabindex="-1">Subtitles</button>
+      </div>
+      <!-- How making subtitles is going, whichever tab is open -->
+      <div class="making" id="player-making" role="status" hidden>
+        <div class="making__text"><span id="player-making-text"></span><button class="downloads__all" type="button" id="player-making-action">Stop</button></div>
+        <span class="making__bar"><span id="player-making-bar"></span></span>
+      </div>
+      <section class="tabpanel" role="tabpanel" id="panel-transcript" aria-labelledby="tab-transcript">
+        <p class="tabpanel__head num" id="player-lines-head"></p>
+        <ol class="player__lines" id="player-lines"></ol>
+        <div class="tabpanel__empty" id="player-none" hidden>
+          <p class="tabpanel__title">No subtitles yet</p>
+          <p class="tabpanel__note" id="player-none-note"></p>
+          <button class="pill pill--primary glass pressable" type="button" id="player-make-first">Make subtitles</button>
+        </div>
+      </section>
+      <section class="tabpanel" role="tabpanel" id="panel-subtitles" aria-labelledby="tab-subtitles" hidden>
+        <p class="settings__label" id="player-subtitles-label">Show</p>
+        <div class="seg seg--wrap" role="group" aria-labelledby="player-subtitles-label" id="player-subtitles"></div>
+        <div class="tabpanel__make" id="player-make-box" hidden>
+          <p class="settings__label">Made on this PC</p>
+          <p class="tabpanel__note" id="player-make-note"></p>
+          <button class="pill glass pressable" type="button" id="player-make">Make subtitles</button>
+        </div>
+      </section>
     </aside>
   </div>
 </div>

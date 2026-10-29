@@ -41,6 +41,13 @@
   --screen: #000000;
   --subtitle: rgb(0 0 0 / 0.72);
   --subtitle-text: #FFFFFF;
+  /* The outline around subtitle words drawn without a box (the player's default), and the shade under its controls */
+  --subtitle-outline: rgb(0 0 0 / 0.9);
+  --screen-shade: rgb(0 0 0 / 0.6);
+  /* On the video's screen, whatever the theme: a control under the pointer, the seek bar's track, and how much has loaded */
+  --screen-hover: rgb(255 255 255 / 0.16);
+  --screen-track: rgb(255 255 255 / 0.25);
+  --screen-loaded: rgb(255 255 255 / 0.4);
 
   /* Type */
   --font-ui: "Geist", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
