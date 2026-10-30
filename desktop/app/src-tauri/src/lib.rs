@@ -250,7 +250,19 @@ fn saved_file(app: &AppHandle, from: &str, request: &tauri::http::Request<Vec<u8
     if from != "main" {
         return status(403);
     }
-    let id = request.uri().path().trim_matches('/').parse().ok();
+    let path = request.uri().path().trim_matches('/');
+    // A saved video's poster, which the window made from it ("poster-12": convertFileSrc would encode a slash).
+    if let Some(id) = path.strip_prefix("poster-").and_then(|id| id.parse().ok()) {
+        return match std::fs::read(app.state::<Videos>().poster(id)) {
+            Ok(bytes) => tauri::http::Response::builder()
+                .header("Content-Type", "image/jpeg")
+                .header("Cache-Control", "no-cache")
+                .body(bytes)
+                .unwrap_or_default(),
+            Err(_) => status(404),
+        };
+    }
+    let id = path.parse().ok();
     let Some(task) = id.and_then(|id| app.state::<Downloads>().manager.get(id)) else {
         return status(404);
     };
@@ -271,7 +283,10 @@ fn saved_file(app: &AppHandle, from: &str, request: &tauri::http::Request<Vec<u8
     let Some(kind) = serve::media_type(&name) else { return status(404) };
     let range = request.headers().get("range").and_then(|r| r.to_str().ok());
     let answer = serve::answer(&task.path, kind, range);
-    let mut response = tauri::http::Response::builder().status(answer.status);
+    // The window takes a saved video's poster from it with a canvas, which a video from another origin would leave
+    // unreadable; only Chaya's own window gets an answer here at all.
+    let mut response =
+        tauri::http::Response::builder().status(answer.status).header("Access-Control-Allow-Origin", "*");
     for (name, value) in answer.headers {
         response = response.header(name, value);
     }
@@ -288,6 +303,14 @@ fn video_subtitles(id: u64, downloads: State<'_, Downloads>) -> Vec<Track> {
 #[tauri::command]
 fn playback_start(id: u64, videos: State<'_, Videos>) -> f64 {
     videos.load(id).resume_at()
+}
+
+/// Keeps `jpeg` (base64) as saved video `id`'s poster: a frame the window took from it, for the list and the grid.
+#[tauri::command]
+fn keep_poster(id: u64, jpeg: String, videos: State<'_, Videos>) -> Result<(), String> {
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD.decode(jpeg).map_err(|_| "Not a picture.".to_string())?;
+    videos.keep_poster(id, &bytes).map_err(|_| "The poster couldn't be kept.".to_string())
 }
 
 /// Where playback of saved video `id` stopped, `at` seconds into its `duration`.
@@ -485,6 +508,7 @@ pub fn run() {
             video_subtitles,
             playback_start,
             playback_stopped,
+            keep_poster,
             speech::speech_status,
             speech::set_speech,
             speech::delete_speech_model,

@@ -387,6 +387,47 @@ def restored_tab(tour):
     time.sleep(1)
 
 
+def poster_steps(tour):
+    """For each saved video: whether the app serves its poster, and if not, how far a frame of it gets in the window
+    (the video loads, seeks, is drawn, and the canvas can be read), as the window makes posters."""
+    tour.js("""
+      window.__posterSteps = null;
+      const file = (name) => window.__TAURI__.core.convertFileSrc(name, 'chaya-file');
+      const ids = [...document.querySelectorAll('#download-list .row')].map((r) => r.dataset.id);
+      Promise.all(ids.map(async (id) => {
+        const served = await new Promise((ok) => {
+          const img = new Image();
+          img.onload = () => ok('served');
+          img.onerror = () => ok('not served');
+          img.src = file(`poster-${id}`);
+        });
+        if (served === 'served') return [id, served];
+        const video = document.createElement('video');
+        video.muted = true; video.preload = 'auto'; video.crossOrigin = 'anonymous';
+        const step = (event) => new Promise((ok, no) => {
+          video.addEventListener(event, ok, { once: true });
+          video.addEventListener('error', () => no(`error ${video.error?.code}: ${video.error?.message}`), { once: true });
+          setTimeout(() => no(`no ${event} in 15 s`), 15000);
+        });
+        try {
+          video.src = file(String(id));
+          await step('loadedmetadata');
+          if (!video.videoWidth) return [id, served, 'no picture in it'];
+          video.currentTime = Math.min(30, (video.duration || 10) / 10);
+          await step('seeked');
+          const canvas = document.createElement('canvas');
+          canvas.width = 64; canvas.height = 36;
+          canvas.getContext('2d').drawImage(video, 0, 0, 64, 36);
+          canvas.toDataURL('image/jpeg');
+          return [id, served, 'a frame can be taken'];
+        } catch (e) {
+          return [id, served, String(e)];
+        }
+      })).then((steps) => (window.__posterSteps = steps));
+      return 1""")
+    return tour.wait(lambda: tour.js("return window.__posterSteps"), 40)
+
+
 def looked_up(tour):
     """Whether the card's lookup has ended: its state holds an answer, not the "Finding…" pill, and is not still empty
     from the moment before the lookup began."""
@@ -610,7 +651,11 @@ def run(tour, sites, seeded=None):
             time.sleep(1.5)
             tiles = tour.js("return [...document.querySelectorAll('#download-grid .tile')].map(t => t.getAttribute('aria-label'))")
             pictures = tour.js("return [...document.querySelectorAll('#download-grid .tile img')].filter(i => i.naturalWidth > 0).length")
-            tour.shot('downloads-grid', tiles=tiles, pictures_shown=pictures)
+            # The saved videos' posters, which the window makes from them (a canvas over a chaya-file video).
+            posters = tour.js("return [...document.querySelectorAll('#download-grid .tile img')]"
+                              ".filter(i => i.src.includes('poster-') && i.naturalWidth > 0).length")
+            tour.shot('downloads-grid', tiles=tiles, pictures_shown=pictures, posters=posters,
+                      poster_steps=poster_steps(tour))
             opens = tour.js("const t = [...document.querySelectorAll('#download-grid .tile')]"
                             ".find(t => t.querySelector('img[src*=\"chaya-file\"]') || t.querySelector('.tile__badge--count'));"
                             " if (!t) return false; t.click(); return true;")

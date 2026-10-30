@@ -37,6 +37,8 @@ body {
   -webkit-app-region: drag;
 }
 .top button, .top .settings__panel { app-region: no-drag; -webkit-app-region: no-drag; }
+/* Above the player and the viewer (50), so their tabs, Home and Settings stay at hand; below a full-window player (60) */
+.top { position: relative; z-index: 55; }
 .top .tabstrip { margin-right: auto; }
 
 .caption { display: flex; align-self: stretch; }
@@ -73,6 +75,8 @@ body.maximized .caption__restore { display: inline; }
 }
 /* Over the page's picture, which can be anything, glass can't keep a panel's words readable: it gets the ground */
 body.browsing .settings__panel { background: var(--bg); }
+/* Over a playing video or a picture likewise */
+body:has(.player:not([hidden]), .viewer:not([hidden])) .settings__panel { background: var(--bg); }
 .settings__label { margin: 0; color: var(--muted); font-size: var(--text-sm); }
 .settings__label:not(:first-child) { margin-top: var(--space-1); }
 .shield__status { max-width: 32ch; margin: 0; font-size: var(--text-md); line-height: var(--leading-md); }
@@ -316,6 +320,14 @@ body.browsing .settings__panel { background: var(--bg); }
   overflow-wrap: anywhere;
 }
 .tile__name svg { width: 24px; height: 24px; }
+/* A long title in three lines at most, clear of the play badge below it */
+.tile__name span {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
 .tile__badge {
   position: absolute;
   display: flex;

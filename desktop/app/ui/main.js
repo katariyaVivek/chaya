@@ -494,11 +494,6 @@ function renderRow(id) {
     row = rowTemplate.content.firstElementChild.cloneNode(true);
     row.dataset.id = id;
     row.querySelector('.row__thumb use').setAttribute('href', `#${ROW_ICON[task.kind] ?? 'i-video'}`);
-    const img = row.querySelector('.row__thumb img');
-    if (task.thumbnail?.startsWith('https://')) {
-      img.addEventListener('error', () => img.removeAttribute('src'), { once: true });
-      img.src = task.thumbnail;
-    }
     row.querySelector('.row__title').addEventListener('click', () => {
       if (tasks.get(id)?.state === 'completed') openSaved(id);
     });
@@ -512,6 +507,13 @@ function renderRow(id) {
     downloadList.insertBefore(row, newer ?? null);
   }
 
+  // Its picture once, and again once it is saved: a saved video's poster is made from the file.
+  const covered = task.state === 'completed' ? 'saved' : 'site';
+  if (row.dataset.covered !== covered) {
+    row.dataset.covered = covered;
+    const img = row.querySelector('.row__thumb img');
+    showCover(img, task, () => img.removeAttribute('src'));
+  }
   row.dataset.state = task.state;
   row.querySelector('.row__title').textContent = task.fileName;
   row.querySelector('.row__meta').textContent = metaOf(task);
@@ -756,21 +758,100 @@ function named(task) {
   return el;
 }
 
-/** What shows a saved download: the picture itself, a video's poster, or none. */
-function coverOf(task) {
-  if (task.kind === 'picture') return savedPicture(task.id);
-  return task.thumbnail?.startsWith('https://') ? task.thumbnail : null;
+/** What may show a download, best first: the picture itself; for a saved video, the poster made from it; the
+ * site's thumbnail (which may have stopped working). */
+function coversOf(task) {
+  if (task.kind === 'picture') return task.state === 'completed' ? [savedPicture(task.id)] : [];
+  const covers = task.kind === 'video' && task.state === 'completed' ? [posterOf(task.id)] : [];
+  if (task.thumbnail?.startsWith('https://')) covers.push(task.thumbnail);
+  return covers;
 }
 
-function image(src, onMissing) {
-  const img = new Image();
+/** Shows in `img` the first of `task`'s covers that loads, or calls `onNone`. A saved video whose poster isn't made
+ * yet has it made, and every picture of it shows the poster once it is. */
+function showCover(img, task, onNone) {
+  const covers = coversOf(task);
+  let at = 0;
+  img.dataset.cover = String(task.id);
   img.alt = '';
+  img.referrerPolicy = 'no-referrer';
+  img.onerror = () => {
+    if (covers[at] === posterOf(task.id)) makePoster(task.id);
+    at += 1;
+    if (at < covers.length) img.src = covers[at];
+    else {
+      img.onerror = null;
+      onNone();
+    }
+  };
+  if (covers.length) img.src = covers[0];
+  else onNone();
+}
+
+function image(task, onNone) {
+  const img = new Image();
   img.loading = 'lazy';
   img.decoding = 'async';
-  img.referrerPolicy = 'no-referrer';
-  img.addEventListener('error', onMissing, { once: true });
-  img.src = src;
+  showCover(img, task, () => onNone(img));
   return img;
+}
+
+// ── Posters ──
+//
+// A saved video's poster is a frame of it, taken here (WebView2 plays what Chaya saves) and kept by the app beside the
+// video's other data (`keep_poster`): a site's thumbnail address may stop working, and a video from a page has none.
+
+/** Where saved video `id`'s poster is served (`chaya-file`, which answers 404 until it is made). */
+function posterOf(id) {
+  return tauri.core.convertFileSrc(`poster-${id}`, 'chaya-file');
+}
+
+/** The videos whose poster was tried this run, made or not (a file WebView2 can't play isn't tried again). */
+const postersTried = new Set();
+let posterLine = Promise.resolve();
+
+function makePoster(id) {
+  if (postersTried.has(id)) return;
+  postersTried.add(id);
+  // One at a time: each is a video opened to its middle.
+  posterLine = posterLine.then(() => takePoster(id)).catch(() => {});
+}
+
+async function takePoster(id) {
+  const video = document.createElement('video');
+  video.muted = true;
+  video.preload = 'auto';
+  video.crossOrigin = 'anonymous';
+  const ready = (event) =>
+    new Promise((resolve, reject) => {
+      video.addEventListener(event, resolve, { once: true });
+      video.addEventListener('error', reject, { once: true });
+      setTimeout(reject, 20000);
+    });
+  try {
+    video.src = tauri.core.convertFileSrc(String(id), 'chaya-file');
+    await ready('loadedmetadata');
+    if (!video.videoWidth) return;
+    // A tenth of the way in, past a title card, and no further than half a minute.
+    video.currentTime = Math.min(30, (video.duration || 10) / 10);
+    await ready('seeked');
+    const scale = Math.min(1, 480 / video.videoWidth);
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(video.videoWidth * scale);
+    canvas.height = Math.round(video.videoHeight * scale);
+    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+    const jpeg = canvas.toDataURL('image/jpeg', 0.82).split(',')[1];
+    await tauri.core.invoke('keep_poster', { id, jpeg });
+    // Every picture of it, again: with the poster first, that is what loads now.
+    const task = tasks.get(id);
+    if (!task) return;
+    for (const img of document.querySelectorAll(`img[data-cover="${id}"]`)) {
+      showCover(img, task, () => {});
+    }
+  } finally {
+    video.removeAttribute('src');
+    video.load();
+  }
 }
 
 function tileFor({ key, ids }) {
@@ -784,13 +865,7 @@ function tileFor({ key, ids }) {
   tile.className = 'tile pressable';
   tile.title = name;
   tile.setAttribute('aria-label', ids.length > 1 ? `${name}, ${ids.length} files` : name);
-  const src = coverOf(cover);
-  if (src) {
-    const img = image(src, () => img.replaceWith(named(cover)));
-    tile.append(img);
-  } else {
-    tile.append(named(cover));
-  }
+  tile.append(coversOf(cover).length ? image(cover, (img) => img.replaceWith(named(cover))) : named(cover));
   if (cover.kind === 'video') {
     const play = span('tile__badge tile__badge--play', '');
     play.append(icon('i-play'));
@@ -864,7 +939,7 @@ function openViewer(ids, at = 0) {
   viewing = { ids, at };
   viewer.hidden = false;
   // Over a page, the page would be drawn over the viewer: it hides while the viewer is open.
-  if (browsing) tauri.core.invoke('show_page', { visible: false });
+  showPageView();
   showViewerPage();
   document.getElementById('viewer-close').focus();
 }
@@ -872,7 +947,7 @@ function openViewer(ids, at = 0) {
 function closeViewer() {
   viewer.hidden = true;
   viewerFrame.replaceChildren();
-  if (browsing && !document.body.classList.contains('showing-downloads')) tauri.core.invoke('show_page', { visible: true });
+  showPageView();
 }
 
 function showViewerPage() {
@@ -884,7 +959,7 @@ function showViewerPage() {
   viewerPrev.disabled = at === 0;
   viewerNext.disabled = at === ids.length - 1;
   if (task.kind === 'picture') {
-    const img = image(savedPicture(task.id), () => img.replaceWith(named(task)));
+    const img = image(task, (missing) => missing.replaceWith(named(task)));
     img.loading = 'eager';
     viewerFrame.replaceChildren(img);
     return;
@@ -892,8 +967,7 @@ function showViewerPage() {
   // A video in a post plays in Chaya's player; anything else in its own program.
   const play = document.createElement('div');
   play.className = 'viewer__play';
-  const poster = coverOf(task);
-  play.append(poster ? image(poster, (e) => e.target.remove()) : named(task));
+  play.append(coversOf(task).length ? image(task, (img) => img.remove()) : named(task));
   play.append(pill(task.kind === 'video' ? 'Play' : 'Open', () => openSaved(task.id), true));
   viewerFrame.replaceChildren(play);
 }
@@ -1020,10 +1094,10 @@ async function openPlayer(id) {
   playerMaking.hidden = true;
   playerCc.hidden = true;
   player.hidden = false;
-  if (browsing) tauri.core.invoke('show_page', { visible: false });
+  showPageView();
   showTab(remembered('chaya.player.tab', 'transcript'));
   showSpeeds();
-  playerVideo.poster = task.thumbnail?.startsWith('https://') ? task.thumbnail : '';
+  playerVideo.poster = posterOf(id);
   playerVideo.src = tauri.core.convertFileSrc(String(id), 'chaya-file');
   playerVideo.playbackRate = Number(remembered('chaya.player.speed', '1')) || 1;
   playerVideo.muted = remembered('chaya.player.muted', 'no') === 'yes';
@@ -1072,7 +1146,7 @@ function closePlayer() {
   playerVideo.removeAttribute('src');
   playerVideo.load();
   playerLines.replaceChildren();
-  if (browsing && !document.body.classList.contains('showing-downloads')) tauri.core.invoke('show_page', { visible: true });
+  showPageView();
 }
 
 /** Tells the app where playback is, at most every few seconds unless `now`. */
@@ -1748,6 +1822,7 @@ async function openPage(text, signIn = false) {
 
 /** The window's own home, which is also where a new tab starts: every tab stays open behind it. */
 function goHome() {
+  if (playing) closePlayer();
   tauri.core.invoke('go_home');
   setBrowsing(false);
   address.value = '';
@@ -1817,6 +1892,8 @@ function tabShown(tab) {
 }
 
 async function switchTab(id) {
+  // A tab is a place of its own: the player gives way to it.
+  if (playing) closePlayer();
   if (id === activeTab && browsing) return;
   if (!browsing) setBrowsing(true);
   showDownloads(false);
@@ -1877,16 +1954,37 @@ const pageStill = document.getElementById('page-still');
 /** Counts the calls to showPageView, so a slow picture of the page is not shown after the panel has closed. */
 let pageViews = 0;
 
+/** The narrowest a page is made to stand beside an open panel; narrower, a still picture of it stands in. */
+const NARROWEST_PAGE = 360;
+
+/** The panel open over the page, if one is. */
+function openPanel() {
+  return [settingsPanel, shieldPanel, mediaPanel].find((panel) => !panel.hidden) ?? null;
+}
+
+/** Where the page goes: its place in the window, narrowed to what an open panel leaves beside it; null when that is
+ * too narrow to be of use. */
+function pageBounds() {
+  const bounds = boundsOf(pageEl);
+  const panel = openPanel();
+  if (!panel) return bounds;
+  const width = Math.min(bounds.width, panel.getBoundingClientRect().left - 8 - bounds.x);
+  return width >= NARROWEST_PAGE ? { ...bounds, width } : null;
+}
+
 /**
  * Shows the page unless something is shown in its place. The page is drawn over the window, so a panel can't lie
- * over it: while one is open the page is hidden, and a still picture of it stands in its place.
+ * over it: while one is open the page steps aside for it and keeps playing; where the window is too narrow for both,
+ * the page is hidden and a still picture of it stands in its place.
  */
 async function showPageView() {
   if (!browsing) return;
   const view = ++pageViews;
-  const panel = !settingsPanel.hidden || !shieldPanel.hidden || !mediaPanel.hidden;
-  const downloads = document.body.classList.contains('showing-downloads');
-  if (panel && !downloads && pageStill.hidden) {
+  const panel = openPanel();
+  // The window's own views over the page's place: the Downloads list, the player and the viewer.
+  const covered = document.body.classList.contains('showing-downloads') || !player.hidden || !viewer.hidden;
+  const bounds = pageBounds();
+  if (panel && !bounds && !covered && pageStill.hidden) {
     const picture = await tauri.core.invoke('page_picture').catch(() => null);
     if (view !== pageViews) return;
     if (picture) {
@@ -1894,8 +1992,11 @@ async function showPageView() {
       pageStill.hidden = false;
     }
   }
-  if (!panel) hidePageStill();
-  tauri.core.invoke('show_page', { visible: !(panel || downloads) });
+  if (bounds) {
+    hidePageStill();
+    tauri.core.invoke('place_page', { bounds });
+  }
+  tauri.core.invoke('show_page', { visible: !covered && !!bounds });
 }
 
 function hidePageStill() {
@@ -1941,12 +2042,11 @@ function pageAt(url) {
 }
 
 // The page follows .page as the window lays out: resized, or moved by a card or a notice above it.
-new ResizeObserver(() => {
-  if (browsing) tauri.core.invoke('place_page', { bounds: boundsOf(pageEl) });
-}).observe(pageEl);
-new ResizeObserver(() => {
-  if (browsing) tauri.core.invoke('place_page', { bounds: boundsOf(pageEl) });
-}).observe(document.querySelector('.main'));
+const placePage = () => {
+  if (browsing) showPageView();
+};
+new ResizeObserver(placePage).observe(pageEl);
+new ResizeObserver(placePage).observe(document.querySelector('.main'));
 
 /** Back from the Downloads list is back to the page it covers; from the page, the page's own history. */
 function goBack() {
