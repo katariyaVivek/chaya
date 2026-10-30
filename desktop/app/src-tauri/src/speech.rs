@@ -11,7 +11,7 @@ use chaya_core::download::join::Joiner;
 use chaya_core::download::manager::{Kind, State as TaskState, Task};
 use chaya_core::reqwest::Client;
 use chaya_core::speech::models::{self, Model};
-use chaya_core::speech::whisper::Whisper;
+use chaya_core::speech::whisper::{Device, Whisper};
 use chaya_core::speech::{Settings, Speech, SpeechError, Step, Tools};
 use chaya_core::subtitles;
 use chaya_core::video::Videos;
@@ -52,14 +52,16 @@ pub struct JobView {
     /// For "model": bytes of the model fetched, of `total`.
     pub done: u64,
     pub total: u64,
-    /// For "listening": how far, and (with "done") whether on the graphics card.
+    /// For "listening": how far.
     pub percent: u8,
     /// For "failed": why, in words.
     pub message: Option<String>,
-    /// For "done": the language of the subtitles made ("en"), whether they were heard on the graphics card, and how
-    /// many seconds listening took (with the sound, not the model's fetch), for the person to compare.
+    /// For "listening" and "done": where whisper.cpp listened, the graphics card or the processor (and whether that
+    /// was after the card failed).
+    pub on: Device,
+    /// For "done": the language of the subtitles made ("en"), and how many seconds listening took (with the sound, not
+    /// the model's fetch), for the person to compare.
     pub language: Option<String>,
-    pub card: bool,
     pub seconds: Option<u64>,
 }
 
@@ -156,8 +158,8 @@ impl Speaking {
                         JobView { id, state: "model", done, total, ..JobView::default() }
                     }
                     Step::Sound => JobView { id, state: "sound", ..JobView::default() },
-                    Step::Listening { percent, card } => {
-                        JobView { id, state: "listening", percent, card, ..JobView::default() }
+                    Step::Listening { percent, on } => {
+                        JobView { id, state: "listening", percent, on, ..JobView::default() }
                     }
                 };
                 self.show(app, view);
@@ -167,7 +169,7 @@ impl Speaking {
         let language = language.map(str::to_string);
         let seconds = began.map(|began| began.elapsed().as_secs());
         let _ = app.state::<Videos>().heard(id, made.transcript, &model.id);
-        Ok(JobView { id, language, card: made.card, seconds, ..JobView::default() })
+        Ok(JobView { id, language, on: made.on, seconds, ..JobView::default() })
     }
 }
 

@@ -1525,6 +1525,12 @@ async function loadSpeech() {
   showMaking();
 }
 
+/** Where whisper.cpp is listening, as the making card says it. */
+const LISTENING_ON = {
+  graphicsCard: ' on the graphics card',
+  processorAfterCard: ' on the processor (the graphics card couldn’t run this model)',
+};
+
 function speechText(job) {
   switch (job.state) {
     case 'waiting':
@@ -1534,11 +1540,12 @@ function speechText(job) {
     case 'sound':
       return 'Making subtitles · Reading the sound';
     case 'listening':
-      return `Making subtitles${job.card ? ' on the graphics card' : ''} · ${job.percent}%`;
+      return `Making subtitles${LISTENING_ON[job.on] ?? ''} · ${job.percent}%`;
     case 'done': {
       // Where it listened and how long it took, so the graphics card and the processor can be compared.
-      const where = job.card ? 'on the graphics card' : 'on the processor';
-      return job.seconds == null ? 'Subtitles made' : `Subtitles made ${where} in ${timeLeft(job.seconds)}`;
+      const where = job.on === 'graphicsCard' ? 'on the graphics card' : 'on the processor';
+      const made = job.seconds == null ? 'Subtitles made' : `Subtitles made ${where} in ${timeLeft(job.seconds)}`;
+      return job.on === 'processorAfterCard' ? `${made}. The graphics card couldn’t run this model.` : made;
     }
     default:
       return job.message ?? 'Subtitles couldn’t be made.';
