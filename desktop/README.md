@@ -171,7 +171,11 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
   the player say how far listening has got, with *Stop*; the subtitles appear in the player when done, and are
   saved next to the video as "Title (720p).en.srt" in the language heard (or the one picked), replacing a file of
   that name. One video at a time; the rest wait their turn.
-  - **The models**, in Settings › Speech recognition with their sizes, which are on this PC, and *Delete*: Tiny
+  - **The models**, in Settings › Speech recognition with their sizes: the one *In use*, those *Downloaded* or
+    *Partly downloaded* (a fetch stopped part-way), *Delete* beside each of those (freeing its room; it is fetched
+    again when next used), and how much room the models take on this PC. The transcript of subtitles Chaya made
+    names the model that heard them and whether on the graphics card ("English · 42 lines · Made by Large v3
+    Turbo, on the graphics card", from `videos/ID.json`), as does the note when they are made. They are Tiny
     (74 MB), Small (465 MB), Large v3 Turbo quantized (547 MB, the default), Medium (1.4 GB), Large v3 (2.9 GB).
     Each is fetched when first needed from Hugging Face (`ggerganov/whisper.cpp`) into `speech/models/` in the app's
     data folder, as "name.part" until whole (a fetch stopped part-way carries on from what arrived), and kept only

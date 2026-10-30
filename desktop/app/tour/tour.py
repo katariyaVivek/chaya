@@ -366,6 +366,7 @@ def make_subtitles(tour, id):
     heard = ' '.join(lines or []).lower()
     tour.shot('subtitles-made', making=tour.js(making), lines=lines,
               ask_not='ask not what your country can do for you' in heard,
+              head=tour.js("return document.getElementById('player-lines-head').textContent"),
               subtitles=tour.js("return document.getElementById('player-subtitles').innerText"))
     tour.press_in_player('Escape')
     tour.wait(lambda: tour.js("return document.getElementById('player').hidden"), 5)

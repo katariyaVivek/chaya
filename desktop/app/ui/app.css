@@ -118,7 +118,18 @@ body:has(.player:not([hidden]), .viewer:not([hidden])) .settings__panel { backgr
 .model__pick:hover { color: var(--text); }
 .model:has(.model__pick[aria-pressed="true"]) { background: var(--surface); box-shadow: var(--shadow); }
 .model__pick[aria-pressed="true"] { color: var(--text); }
-.model__name { font-weight: 500; }
+.model__name { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-half) var(--space-1); font-weight: 500; }
+/* Which model listens, and which are on this PC */
+.model__tag {
+  padding: 2px 7px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: var(--wash-strong);
+  color: var(--muted);
+  font: 500 var(--text-sm) / 1.2 var(--font-ui);
+}
+.model__tag--use { border-color: var(--accent-edge); background: none; color: var(--text); }
+.model__delete { height: auto; margin-right: var(--space-1); padding: var(--space-half) var(--space-1); font-size: var(--text-sm); }
 .model__meta { color: var(--muted); font-size: var(--text-sm); line-height: var(--leading-sm); }
 .select {
   height: var(--control-height);

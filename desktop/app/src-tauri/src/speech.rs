@@ -59,9 +59,10 @@ pub struct JobView {
     /// For "listening" and "done": where whisper.cpp listened, the graphics card or the processor (and whether that
     /// was after the card failed).
     pub on: Device,
-    /// For "done": the language of the subtitles made ("en"), and how many seconds listening took (with the sound, not
-    /// the model's fetch), for the person to compare.
+    /// For "done": the language of the subtitles made ("en"), the model that heard it ("Large v3 Turbo"), and how many
+    /// seconds listening took (with the sound, not the model's fetch), for the person to compare.
     pub language: Option<String>,
+    pub model: Option<String>,
     pub seconds: Option<u64>,
 }
 
@@ -168,8 +169,9 @@ impl Speaking {
         let language = made.path.file_stem().and_then(|s| s.to_str()).and_then(|s| s.rsplit_once('.')).map(|(_, l)| l);
         let language = language.map(str::to_string);
         let seconds = began.map(|began| began.elapsed().as_secs());
-        let _ = app.state::<Videos>().heard(id, made.transcript, &model.id);
-        Ok(JobView { id, language, on: made.on, seconds, ..JobView::default() })
+        let _ = app.state::<Videos>().heard(id, made.transcript, &model.id, made.on);
+        let model = Some(model.name.clone());
+        Ok(JobView { id, language, model, on: made.on, seconds, ..JobView::default() })
     }
 }
 
@@ -182,17 +184,20 @@ pub struct ModelView {
     size: u64,
     note: String,
     default: bool,
-    /// Here, whole.
+    /// Here, whole; or how much of it a fetch stopped part-way left here.
     fetched: bool,
+    arrived: u64,
 }
 
 /// Settings › Speech recognition: whether subtitles can be made here at all, and on a graphics card (the Vulkan build,
-/// with Windows' Vulkan), what the person chose, the models, and how each video asked for is getting on.
+/// with Windows' Vulkan), what the person chose, the models and the room they take on this PC, and how each video
+/// asked for is getting on.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SpeechStatus {
     available: bool,
     card: bool,
+    used: u64,
     settings: Settings,
     models: Vec<ModelView>,
     jobs: Vec<JobView>,
@@ -209,10 +214,13 @@ pub fn speech_status(speaking: State<'_, Speaking>) -> SpeechStatus {
             note: m.note.clone(),
             default: m.default,
             fetched: speaking.speech.models.is_fetched(m),
+            arrived: speaking.speech.models.arrived(m),
         })
-        .collect();
+        .collect::<Vec<_>>();
+    let used = models.iter().map(|m| if m.fetched { m.size } else { m.arrived }).sum();
     SpeechStatus {
         available: speaking.tools.is_some(),
+        used,
         card: speaking.tools.as_ref().is_some_and(|tools| tools.whisper.on_card().is_some()),
         settings: speaking.speech.settings(),
         models,
@@ -235,6 +243,25 @@ pub fn delete_speech_model(id: String, speaking: State<'_, Speaking>) -> Result<
     }
     speaking.speech.models.delete(model);
     Ok(())
+}
+
+/// The subtitles Chaya made for saved video `id`, as the player names them: their language's file tag ("en"), the
+/// model that heard it, and where.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MadeView {
+    language: String,
+    model: String,
+    on: Option<Device>,
+}
+
+#[tauri::command]
+pub fn made_subtitles(id: u64, videos: State<'_, Videos>) -> Option<MadeView> {
+    let data = videos.load(id);
+    let language = subtitles::file_language(&data.transcript?.language)?;
+    let id = data.transcript_model?;
+    let model = models::find(&id).map_or(id, |m| m.name.clone());
+    Some(MadeView { language, model, on: data.transcript_on })
 }
 
 #[tauri::command]

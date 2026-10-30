@@ -1105,12 +1105,14 @@ async function openPlayer(id) {
   showPosition();
   playerVideo.focus();
 
-  const [tracks, start] = await Promise.all([
+  const [tracks, start, made] = await Promise.all([
     tauri.core.invoke('video_subtitles', { id }).catch(() => []),
     tauri.core.invoke('playback_start', { id }).catch(() => 0),
+    tauri.core.invoke('made_subtitles', { id }).catch(() => null),
   ]);
   if (playing?.id !== id) return;
   playing.tracks = tracks;
+  playing.made = made;
   const wanted = remembered('chaya.player.subtitles', '');
   showSubtitles(tracks.find((t) => t.language === wanted) ?? tracks[0] ?? null);
   whenReady(() => {
@@ -1367,7 +1369,10 @@ function showSubtitles(track) {
   document.getElementById('player-subtitles-label').textContent = tracks.length ? 'Show' : 'No subtitles next to this video yet.';
   const lines = track?.lines ?? [];
   playerLinesHead.hidden = !track;
-  playerLinesHead.textContent = track ? `${languageName(track.language)} · ${count(lines.length, 'line')}` : '';
+  // Subtitles Chaya made name the model that heard them, and where; a site's say nothing more.
+  const made = playing?.made?.language === track?.language ? playing.made : null;
+  const by = made ? ` · Made by ${made.model}${made.on === 'graphicsCard' ? ', on the graphics card' : ''}` : '';
+  playerLinesHead.textContent = track ? `${languageName(track.language)} · ${count(lines.length, 'line')}${by}` : '';
   playerLines.replaceChildren(
     ...lines.map((line, i) => {
       const li = document.createElement('li');
@@ -1424,9 +1429,13 @@ function followLine() {
 
 /** The player's subtitles again, as they are next to the video now, showing those in `language`. */
 async function reloadSubtitles(id, language) {
-  const tracks = await tauri.core.invoke('video_subtitles', { id }).catch(() => null);
+  const [tracks, made] = await Promise.all([
+    tauri.core.invoke('video_subtitles', { id }).catch(() => null),
+    tauri.core.invoke('made_subtitles', { id }).catch(() => null),
+  ]);
   if (!tracks || playing?.id !== id) return;
   playing.tracks = tracks;
+  playing.made = made;
   showSubtitles(tracks.find((t) => t.language === language) ?? tracks[0] ?? null);
 }
 
@@ -1582,6 +1591,7 @@ const speechModels = document.getElementById('speech-models');
 const speechLanguage = document.getElementById('speech-language');
 const speechEvery = document.getElementById('speech-every');
 const speechCard = document.getElementById('speech-card');
+const speechUsed = document.getElementById('speech-used');
 // Whisper's languages most people here will want, named in English by the window; the rest are detected.
 const LANGUAGES = ['ar', 'bn', 'cs', 'da', 'de', 'el', 'en', 'es', 'fa', 'fi', 'fr', 'gu', 'he', 'hi', 'hu', 'id', 'it',
   'ja', 'ko', 'mr', 'ms', 'nl', 'no', 'pa', 'pl', 'pt', 'ro', 'ru', 'sv', 'ta', 'te', 'th', 'tr', 'uk', 'ur', 'vi', 'zh'];
@@ -1618,7 +1628,8 @@ function speechText(job) {
     case 'done': {
       // Where it listened and how long it took, so the graphics card and the processor can be compared.
       const where = job.on === 'graphicsCard' ? 'on the graphics card' : 'on the processor';
-      const made = job.seconds == null ? 'Subtitles made' : `Subtitles made ${where} in ${timeLeft(job.seconds)}`;
+      const by = job.model ? ` with ${job.model}` : '';
+      const made = job.seconds == null ? `Subtitles made${by}` : `Subtitles made${by} ${where} in ${timeLeft(job.seconds)}`;
       return job.on === 'processorAfterCard' ? `${made}. The graphics card couldn’t run this model.` : made;
     }
     default:
@@ -1630,6 +1641,7 @@ function showSpeechSettings() {
   speechBox.hidden = !speech.available;
   if (!speech.available) return;
   const { settings } = speech;
+  speechUsed.textContent = speech.used ? `Models on this PC: ${fileSize(speech.used)}` : 'No models on this PC yet';
   speechModels.replaceChildren(
     ...speech.models.map((model) => {
       const li = document.createElement('li');
@@ -1637,24 +1649,30 @@ function showSpeechSettings() {
       const pick = document.createElement('button');
       pick.type = 'button';
       pick.className = 'model__pick';
-      pick.setAttribute('aria-pressed', String(model.id === settings.model));
-      const where = model.fetched ? 'On this PC' : 'Fetched when first used';
+      const inUse = model.id === settings.model;
+      pick.setAttribute('aria-pressed', String(inUse));
+      const name = span('model__name', '');
+      name.append(span('', model.name));
+      if (inUse) name.append(span('model__tag model__tag--use', 'In use'));
+      if (model.fetched) name.append(span('model__tag', 'Downloaded'));
+      else if (model.arrived) name.append(span('model__tag', 'Partly downloaded'));
       const meta = span('model__meta', '');
-      meta.append(span('num', fileSize(model.size)), ` · ${[where, model.note].filter(Boolean).join(' · ')}`);
-      pick.append(span('model__name', model.name), meta);
+      const size = model.fetched || !model.arrived ? fileSize(model.size) : `${fileSize(model.arrived)} of ${fileSize(model.size)}`;
+      const where = model.fetched ? '' : model.arrived ? 'the rest when next used' : 'downloaded when first used';
+      meta.append(span('num', size), ...[where, model.note].filter(Boolean).map((part) => ` · ${part}`));
+      pick.append(name, meta);
       pick.addEventListener('click', () => saveSpeech({ model: model.id }));
       li.append(pick);
-      if (model.fetched) {
-        const remove = document.createElement('button');
-        remove.type = 'button';
-        remove.className = 'icon-btn pressable';
-        remove.setAttribute('aria-label', `Delete ${model.name} from this PC`);
-        remove.title = `Delete ${model.name} from this PC`;
-        remove.append(icon('i-close'));
-        remove.addEventListener('click', async () => {
-          await tauri.core.invoke('delete_speech_model', { id: model.id }).catch((message) => (pick.title = String(message)));
-          loadSpeech();
+      if (model.fetched || model.arrived) {
+        const room = fileSize(model.fetched ? model.size : model.arrived);
+        const remove = pill('Delete', async () => {
+          const refused = await tauri.core.invoke('delete_speech_model', { id: model.id }).then(() => null, String);
+          await loadSpeech();
+          if (refused) speechUsed.textContent = refused;
         });
+        remove.classList.add('model__delete');
+        remove.setAttribute('aria-label', `Delete ${model.name} from this PC, freeing ${room}`);
+        remove.title = `Free ${room}; it is downloaded again when next used`;
         li.append(remove);
       }
       return li;

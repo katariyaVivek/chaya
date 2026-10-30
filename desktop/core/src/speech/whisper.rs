@@ -118,7 +118,7 @@ pub enum Stage {
 }
 
 /// Where whisper.cpp listens.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Device {
     #[default]
