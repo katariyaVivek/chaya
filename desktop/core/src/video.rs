@@ -1,7 +1,8 @@
 //! What only Chaya keeps about a saved video, in its own data folder: one JSON file per video, named by the download's
 //! number as `downloads.json` numbers them ("videos/12.json"): where playback stopped, and what whisper.cpp heard in it,
 //! each word with its time, when Chaya made its subtitles. Later steps add translations, highlights and clips. What a later Chaya wrote that this one does not know
-//! is kept as it was.
+//! is kept as it was. Beside it, "videos/12.jpg" is the video's poster: a frame of it, which the window takes from the
+//! saved file, as a site's thumbnail address may stop working (Instagram's and TikTok's do within hours) or never was.
 
 use std::path::PathBuf;
 
@@ -12,6 +13,9 @@ use crate::speech::whisper::Transcript;
 
 /// The folder in Chaya's data folder that holds the videos' files.
 pub const FOLDER: &str = "videos";
+
+/// A poster bigger than this is not one the window made (it makes them a few hundred pixels wide).
+const LARGEST_POSTER: usize = 1024 * 1024;
 
 /// Playback stopped this close to the start begins at the start: nothing was watched.
 const BARELY_STARTED: f64 = 5.0;
@@ -94,9 +98,27 @@ impl Videos {
         })
     }
 
-    /// Forgets download `id`, when it leaves the list: its number may be given to another download.
+    /// Where download `id`'s poster is kept.
+    pub fn poster(&self, id: u64) -> PathBuf {
+        self.folder.join(format!("{id}.jpg"))
+    }
+
+    /// Keeps `jpeg` as download `id`'s poster: only a JPEG, and no bigger than the window makes one.
+    pub fn keep_poster(&self, id: u64, jpeg: &[u8]) -> std::io::Result<()> {
+        if !jpeg.starts_with(&[0xFF, 0xD8, 0xFF]) || jpeg.len() > LARGEST_POSTER {
+            return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "not a poster"));
+        }
+        std::fs::create_dir_all(&self.folder)?;
+        let path = self.poster(id);
+        let part = path.with_extension("jpg.part");
+        std::fs::write(&part, jpeg)?;
+        std::fs::rename(&part, &path)
+    }
+
+    /// Forgets download `id`, and its poster, when it leaves the list: its number may be given to another download.
     pub fn forget(&self, id: u64) {
         let _ = std::fs::remove_file(self.path(id));
+        let _ = std::fs::remove_file(self.poster(id));
     }
 }
 
@@ -160,6 +182,21 @@ mod tests {
         assert_eq!(data.transcript, Some(transcript));
         assert_eq!(data.transcript_model.as_deref(), Some("tiny"));
         assert_eq!(data.resume_at(), 30.0);
+    }
+
+    #[test]
+    fn a_poster_is_kept_beside_and_forgotten_with_the_rest() {
+        let dir = tempfile::tempdir().unwrap();
+        let videos = Videos::in_folder(dir.path().join("videos"));
+        let jpeg = [&[0xFF, 0xD8, 0xFF, 0xE0][..], &[7; 100]].concat();
+        videos.keep_poster(4, &jpeg).unwrap();
+        assert_eq!(std::fs::read(videos.poster(4)).unwrap(), jpeg);
+        assert_eq!(videos.poster(4), dir.path().join("videos").join("4.jpg"));
+        assert!(videos.keep_poster(5, b"<svg onload=alert(1)>").is_err(), "only a JPEG");
+        assert!(videos.keep_poster(5, &[&jpeg[..], &vec![0; LARGEST_POSTER]].concat()).is_err(), "not too big");
+        assert!(!videos.poster(5).exists());
+        videos.forget(4);
+        assert!(!videos.poster(4).exists());
     }
 
     #[test]

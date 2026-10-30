@@ -126,7 +126,7 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
   again as the day turns.
 - **The grid**, as the phone's library: *List* and *Grid* beside the Downloads heading (the choice is kept in the
   window). The grid shows what was saved as square tiles, newest first, narrowed as the list is: a picture shows
-  itself, a video the poster its site gave with a play badge, a post's files one tile with their count
+  itself, a video its poster with a play badge, a post's files one tile with their count
   (`core::library::tiles`, the phone's `libraryItems`), a ZIP or a sound its icon and name. A picture or a post
   opens in the viewer under the title bar (← and →, Esc, *Show in folder*; a video in a post plays in the player);
   a video or a sound plays in the player; anything else opens in its own program. What is still on its way is
@@ -134,7 +134,12 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
   `chaya-file://localhost/ID` (`saved_file`): only Chaya's own window may ask, never a page in the browser (whose
   webviews share the scheme), only by a download's number, never a path, and only for a saved picture, video or
   sound. Tauri's asset protocol is not used: it would let any webview, pages included, read from the folders it
-  allows.
+  allows. A saved video's poster is a frame of it: the window opens the file in a video of its own, a tenth of
+  the way in (at most 30 s), draws it on a canvas 480 pixels wide at most, and the app keeps the JPEG as
+  `videos/ID.jpg` (`keep_poster`, only a JPEG under 1 MB), served as `poster-ID` and deleted with the download.
+  Until it is made, or where WebView2 can't play the file, the site's thumbnail shows, then the kind's icon: a
+  site's thumbnail address may stop working (Instagram's and TikTok's do within hours), and a video found on a
+  page has none. A title without a picture is kept to three lines.
 - **The player.** A saved video or sound opens in Chaya, from the list (its name), the grid or a post's viewer,
   instead of another program (*Open in another app* is in its bar, and offered when WebView2 can't play the file).
   The file comes a part at a time, at most 4 MB per answer, by the HTTP ranges the player asks for
@@ -257,9 +262,12 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
 - The page is a WebView2 webview of its own (Tauri's multiwebview, the `unstable` feature), drawn over
   the window where the window's `.page` leaves room for it. The window draws the bar around it (back,
   forward, reload or stop, Downloads, close), tells the app where the page goes whenever its layout
-  changes, and hides the page while it shows the downloads or a panel in its place. Under a panel (the
-  settings, the ad blocker's) a still picture of the page stands in for it (`page_picture`: WebView2's
-  `CapturePreview`, held only in the window while the panel is open).
+  changes, and hides the page while it shows the downloads, the player or the viewer in its place. A panel
+  (the settings, the ad blocker's, a page's downloads) opens beside the page: the page narrows to what the
+  panel leaves and keeps playing. In a window too narrow for both (under 360 pixels of page left), a still
+  picture of the page stands in for it (`page_picture`: WebView2's `CapturePreview`, held only in the window
+  while the panel is open). The title bar stays over the player and the viewer: a tab, + or Home closes the
+  player and goes there, and the settings open over it.
 - The window opens where it was left, maximized if it was (`window.json` in the app's data folder,
   `core::placement`), or, the first time, at 85% of the screen (at most 1600×1000) in its middle. It starts
   hidden, so it is never seen jumping there; a window left on a screen that is gone opens as the first time.

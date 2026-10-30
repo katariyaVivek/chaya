@@ -610,7 +610,10 @@ def run(tour, sites, seeded=None):
             time.sleep(1.5)
             tiles = tour.js("return [...document.querySelectorAll('#download-grid .tile')].map(t => t.getAttribute('aria-label'))")
             pictures = tour.js("return [...document.querySelectorAll('#download-grid .tile img')].filter(i => i.naturalWidth > 0).length")
-            tour.shot('downloads-grid', tiles=tiles, pictures_shown=pictures)
+            # The saved videos' posters, which the window makes from them (a canvas over a chaya-file video).
+            posters = tour.js("return [...document.querySelectorAll('#download-grid .tile img')]"
+                              ".filter(i => i.src.includes('poster-') && i.naturalWidth > 0).length")
+            tour.shot('downloads-grid', tiles=tiles, pictures_shown=pictures, posters=posters)
             opens = tour.js("const t = [...document.querySelectorAll('#download-grid .tile')]"
                             ".find(t => t.querySelector('img[src*=\"chaya-file\"]') || t.querySelector('.tile__badge--count'));"
                             " if (!t) return false; t.click(); return true;")
