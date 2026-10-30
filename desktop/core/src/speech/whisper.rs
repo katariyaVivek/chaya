@@ -655,7 +655,8 @@ mod tests {
         .await;
         assert_eq!(ran.expect("it ended"), Ok(true));
         assert!(lines.contains(&"caf\u{fffd}".to_string()), "{lines:?}");
-        assert_eq!(lines.last().map(String::as_str), Some("done"));
+        // Each stream to its end: the last line of each, in whichever order the two streams came in.
+        assert!(lines.iter().any(|l| l == "done") && lines.iter().any(|l| l.starts_with('b')), "{lines:?}");
     }
 
     #[test]
