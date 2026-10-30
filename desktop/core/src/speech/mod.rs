@@ -22,7 +22,7 @@ use crate::download::http::Progress;
 use crate::subtitles;
 
 use self::models::{Model, Models};
-use self::whisper::{Heard, Request, Stage, Transcript, Whisper};
+use self::whisper::{Device, Heard, Request, Stage, Transcript, Whisper};
 
 /// Why subtitles could not be made.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -113,6 +113,7 @@ pub enum Step {
     Sound,
     Listening {
         percent: u8,
+        on: Device,
     },
 }
 
@@ -123,13 +124,13 @@ pub struct Tools {
     pub whisper: Whisper,
 }
 
-/// Subtitles made: where they were saved, what was heard (kept in the video's own file, `video`), and whether it was
-/// heard on the graphics card.
+/// Subtitles made: where they were saved, what was heard (kept in the video's own file, `video`), and where it was
+/// heard.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Made {
     pub path: PathBuf,
     pub transcript: Transcript,
-    pub card: bool,
+    pub on: Device,
 }
 
 /// Chaya's speech folder.
@@ -197,12 +198,12 @@ impl Speech {
         let heard = whisper::transcribe(&tools.ffmpeg, &tools.whisper, video, &request, stop, &mut |stage| {
             on_step(match stage {
                 Stage::Sound => Step::Sound,
-                Stage::Listening { percent } => Step::Listening { percent },
+                Stage::Listening { percent, on } => Step::Listening { percent, on },
             })
         })
         .await;
         let _ = tokio::fs::remove_dir_all(&work).await;
-        let Heard { transcript, card } = heard?;
+        let Heard { transcript, on } = heard?;
         let lines = transcript.lines();
         if lines.is_empty() {
             return Err(SpeechError::NothingHeard);
@@ -210,7 +211,7 @@ impl Speech {
         let tag = language.or(Some(transcript.language.as_str())).and_then(subtitles::file_language);
         let path = subtitles::file_for(video, tag.as_deref().unwrap_or("und"));
         tokio::fs::write(&path, subtitles::to_srt(&lines)).await.map_err(|_| SpeechError::CantWrite)?;
-        Ok(Made { path, transcript, card })
+        Ok(Made { path, transcript, on })
     }
 }
 
@@ -298,7 +299,7 @@ mod tests {
             speech.make(1, &video, &settings, &tools, &Client::new(), &stop, &mut |s| steps.push(s)).await.unwrap();
 
         assert_eq!(made.transcript.language, "en");
-        assert_eq!(made.card, card, "on the graphics card when one was expected");
+        assert_eq!(made.on == Device::GraphicsCard, card, "on the graphics card when one was expected");
         assert_eq!(made.path, downloads.join("Inaugural address.en.srt"));
         let srt = std::fs::read_to_string(&made.path).unwrap();
         let lines = subtitles::parse(&srt);

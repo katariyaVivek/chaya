@@ -7,7 +7,8 @@
 //! graphics card. The Vulkan build is tried first where Windows has Vulkan (the graphics driver installs
 //! vulkan-1.dll) and the person has not turned the graphics card off; it says when it uses the card ("using Vulkan0
 //! backend"), and it runs on the processor itself when there is no card. If it fails, for a driver that crashes or
-//! a card without what it needs, the processor build listens again.
+//! a card without the memory a large model needs, the processor build listens again, the person is told, and what the
+//! Vulkan build said is kept in the speech folder as `graphics-card.log` (without what it heard).
 //!
 //! whisper-cli reads its arguments in the PC's code page, not Unicode, so it runs from inside Chaya's speech folder
 //! and is given only short relative paths there ("models/ggml-tiny.bin", "work/12/sound.wav"): a person's name with
@@ -113,8 +114,22 @@ pub(crate) fn is_marker(text: &str) -> bool {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Stage {
     Sound,
-    Listening { percent: u8 },
+    Listening { percent: u8, on: Device },
 }
+
+/// Where whisper.cpp listens.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Device {
+    #[default]
+    Processor,
+    GraphicsCard,
+    /// The processor, once the graphics card had failed.
+    ProcessorAfterCard,
+}
+
+/// The file in the speech folder that keeps what the Vulkan build said when it last failed.
+pub const CARD_LOG: &str = "graphics-card.log";
 
 /// What `transcribe` needs: the folder whisper-cli runs in, and inside it the model and which of whisper.cpp's
 /// attention-head presets times its words (`dtw`, "large.v3.turbo"), a work folder for this video, the language ("en"),
@@ -129,11 +144,11 @@ pub struct Request<'a> {
     pub card: bool,
 }
 
-/// What whisper.cpp heard, and whether it listened on the graphics card.
+/// What whisper.cpp heard, and where it listened.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Heard {
     pub transcript: Transcript,
-    pub card: bool,
+    pub on: Device,
 }
 
 /// How many threads whisper.cpp listens with: about one a core (Windows counts each core twice when it runs two
@@ -170,10 +185,14 @@ pub async fn transcribe(
         return Err(SpeechError::NoSound);
     }
 
+    // Milliseconds of sound: 16,000 two-byte samples a second, after the WAV's 44-byte header.
+    let length = tokio::fs::metadata(&sound).await.map_or(0, |m| m.len().saturating_sub(44) / 32);
     let card = whisper.on_card().filter(|_| request.card);
     let programs = card.into_iter().chain([whisper.program.as_path()]);
+    let mut card_failed = false;
     for program in programs {
-        on_stage(Stage::Listening { percent: 0 });
+        let first = if card_failed { Device::ProcessorAfterCard } else { Device::Processor };
+        on_stage(Stage::Listening { percent: 0, on: first });
         let json = out.with_extension("json");
         let _ = tokio::fs::remove_file(&json).await;
         let mut command = Command::new(program);
@@ -186,27 +205,53 @@ pub async fn transcribe(
             .args(["-l", request.language.unwrap_or("auto"), "-t", &request.threads.to_string(), "-ojf", "-pp"])
             // Each word's time from the attention heads (DTW), which needs flash attention off: with it on, every
             // time comes back as -1.
-            .args(["-dtw", request.dtw, "-nfa", "-of"])
+            .args(["-dtw", request.dtw, "-nfa"])
+            // Each 30 seconds heard afresh, not led by the text before (-mc 0): led by it, whisper falls into saying
+            // one line over and over through music or noise, for minutes.
+            .args(["-mc", "0", "-of"])
             .arg(relative(&out));
-        let mut on_card = false;
+        let (mut on, mut percent) = (first, 0);
+        // What it says of itself, for graphics-card.log: not the stretches of speech it heard.
+        let mut said = Vec::new();
         let listened = run(command, stop, &mut |line| {
-            if let Some(percent) = progress(line) {
-                on_stage(Stage::Listening { percent });
+            // whisper-cli says how far it has got only every 5% of the sound, which with a large model on the
+            // processor can be minutes; each stretch of speech it writes says how far into the sound it has heard.
+            let until = heard_until(line);
+            let heard = until.filter(|_| length > 0).map(|until| (until * 100 / length).min(99) as u8);
+            let now = progress(line).max(heard).unwrap_or(percent).max(percent);
+            let device = if uses_card(line) { Device::GraphicsCard } else { on };
+            if (now, device) != (percent, on) {
+                (percent, on) = (now, device);
+                on_stage(Stage::Listening { percent, on });
             }
-            on_card |= uses_card(line);
+            if until.is_none() && progress(line).is_none() {
+                said.push(line.to_string());
+            }
         })
         .await;
         let listened = match listened {
             // The Vulkan build that would not start, as one that failed: the processor's is next.
-            Err(SpeechError::NoProgram) if program != whisper.program => false,
+            Err(SpeechError::NoProgram) if program != whisper.program => {
+                said.push("It would not start.".into());
+                false
+            }
             other => other?,
         };
         if let (true, Ok(json)) = (listened, tokio::fs::read(&json).await) {
-            return parse(&String::from_utf8_lossy(&json)).map(|transcript| Heard { transcript, card: on_card });
+            return parse(&String::from_utf8_lossy(&json)).map(|transcript| Heard { transcript, on });
+        }
+        if program != whisper.program {
+            card_failed = true;
+            let kept = said.len().saturating_sub(CARD_LOG_LINES);
+            let log = format!("{}\n{}\n", program.display(), said[kept..].join("\n"));
+            let _ = tokio::fs::write(request.folder.join(CARD_LOG), log).await;
         }
     }
     Err(SpeechError::CouldNotListen)
 }
+
+/// How many of its last lines graphics-card.log keeps of what the Vulkan build said.
+const CARD_LOG_LINES: usize = 200;
 
 /// Whether whisper-cli says it is listening on the graphics card: "whisper_backend_init_gpu: using Vulkan0 backend".
 fn uses_card(line: &str) -> bool {
@@ -214,23 +259,30 @@ fn uses_card(line: &str) -> bool {
 }
 
 /// Runs `command` until it ends (true when it succeeded) or `stop` turns true (`SpeechError::Stopped`), handing each
-/// line it writes to its error stream to `on_line`.
+/// line it writes, to either stream, to `on_line`. Both are read to their end, whatever bytes they carry: a stream
+/// left unread fills, and the program writing to it waits for ever.
 async fn run(
     mut command: Command,
     stop: &watch::Receiver<bool>,
     on_line: &mut (dyn FnMut(&str) + Send),
 ) -> Result<bool, SpeechError> {
-    command.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::piped()).kill_on_drop(true);
+    command.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
     #[cfg(windows)]
     command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
     let mut child = command.spawn().map_err(|_| SpeechError::NoProgram)?;
-    let mut lines = BufReader::new(child.stderr.take().ok_or(SpeechError::NoProgram)?).lines();
+    let mut out = BufReader::new(child.stdout.take().ok_or(SpeechError::NoProgram)?).split(b'\n');
+    let mut err = BufReader::new(child.stderr.take().ok_or(SpeechError::NoProgram)?).split(b'\n');
+    let (mut out_open, mut err_open) = (true, true);
     let mut stop = stop.clone();
-    loop {
+    while out_open || err_open {
         tokio::select! {
-            line = lines.next_line() => match line {
-                Ok(Some(line)) => on_line(&line),
-                _ => break,
+            line = out.next_segment(), if out_open => match line {
+                Ok(Some(line)) => on_line(String::from_utf8_lossy(&line).trim_end()),
+                _ => out_open = false,
+            },
+            line = err.next_segment(), if err_open => match line {
+                Ok(Some(line)) => on_line(String::from_utf8_lossy(&line).trim_end()),
+                _ => err_open = false,
             },
             _ = stop.wait_for(|stopped| *stopped) => return Err(SpeechError::Stopped),
         }
@@ -240,6 +292,18 @@ async fn run(
         _ = stop.wait_for(|stopped| *stopped) => return Err(SpeechError::Stopped),
     };
     Ok(status.is_ok_and(|s| s.success()))
+}
+
+/// How far into the sound a stretch of speech whisper-cli wrote ends, in milliseconds: "[00:01:02.340 -->
+/// 00:01:05.000]  And so my fellow Americans,".
+fn heard_until(line: &str) -> Option<u64> {
+    let (_, rest) = line.strip_prefix('[')?.split_once("-->")?;
+    let (time, _) = rest.split_once(']')?;
+    let mut parts = time.trim().splitn(3, ':');
+    let (hours, minutes, seconds) = (parts.next()?, parts.next()?, parts.next()?);
+    let (seconds, millis) = seconds.split_once('.')?;
+    let number = |text: &str| text.parse::<u64>().ok();
+    Some(((number(hours)? * 60 + number(minutes)?) * 60 + number(seconds)?) * 1_000 + number(millis)?)
 }
 
 /// How far whisper-cli says it has got: "whisper_print_progress_callback: progress =  42%".
@@ -310,7 +374,20 @@ pub fn parse(json: &str) -> Result<Transcript, SpeechError> {
     if timed {
         end_words(&mut segments);
     }
+    drop_repeats(&mut segments);
     Ok(Transcript { language, segments })
+}
+
+/// Leaves out a segment that says just what the one before said: whisper.cpp, stuck, says one line over and over.
+fn drop_repeats(segments: &mut Vec<Segment>) {
+    let said = |s: &Segment| s.text.to_lowercase().chars().filter(|c| c.is_alphanumeric()).collect::<String>();
+    let mut last = String::new();
+    segments.retain(|segment| {
+        let text = said(segment);
+        let repeat = !text.is_empty() && text == last;
+        last = text;
+        !repeat
+    });
 }
 
 /// A word whose length is known only from its start lasts no longer than this many times the usual word's.
@@ -430,6 +507,31 @@ mod tests {
     }
 
     #[test]
+    fn a_line_said_over_and_over_is_kept_once() {
+        let said = [
+            "We walked to the river.",
+            "And then we sat down.",
+            "And then we sat down",
+            "and then we sat down.",
+            "The water was cold.",
+            "And then we sat down.",
+        ];
+        let segments: Vec<Value> = (0..)
+            .zip(said)
+            .map(|(i, text)| {
+                serde_json::json!({"offsets": {"from": i * 2_000, "to": i * 2_000 + 2_000}, "text": text, "tokens": []})
+            })
+            .collect();
+        let json = serde_json::json!({"result": {"language": "en"}, "transcription": segments});
+        let texts: Vec<String> = parse(&json.to_string()).unwrap().segments.into_iter().map(|s| s.text).collect();
+        assert_eq!(
+            texts,
+            ["We walked to the river.", "And then we sat down.", "The water was cold.", "And then we sat down."],
+            "a repeat right after is left out; the same line later is kept"
+        );
+    }
+
+    #[test]
     fn what_whisper_cli_writes_that_json_has_no_word_for_is_still_read() {
         let json =
             "{\"result\": {\"language\": \"de\"}, \"transcription\": [{\"offsets\": {\"from\": 0, \"to\": 1000},\
@@ -463,6 +565,7 @@ mod tests {
             path,
             &format!(
                 "while [ \"$1\" != -of ]; do shift; done\necho '{said}' >&2\n\
+                 echo '[00:00:00.000 --> 00:00:02.500]  Hi.'\nsleep 0.2\n\
                  echo 'whisper_print_progress_callback: progress = 50%' >&2\necho '{json}' > \"$2.json\""
             ),
         )
@@ -477,11 +580,16 @@ mod tests {
         std::fs::write(folder.join("models").join("ggml-tiny.bin"), b"").unwrap();
         let video = dir.path().join("clip.mp4");
         std::fs::write(&video, b"").unwrap();
-        let ffmpeg = program(&dir.path().join("ffmpeg"), r#"for a; do out="$a"; done; : > "$out""#);
+        // Ten seconds of sound, after the WAV header.
+        let ffmpeg =
+            program(&dir.path().join("ffmpeg"), r#"for a; do out="$a"; done; head -c 320044 /dev/zero > "$out""#);
         let processor = listener(&dir.path().join("whisper-cli"), "whisper_backend_init_gpu: no GPU found", "de");
         let card = listener(&dir.path().join("card"), "whisper_backend_init_gpu: using Vulkan0 backend", "fr");
-        let broken =
-            program(&dir.path().join("broken"), "echo 'whisper_backend_init_gpu: using Vulkan0 backend' >&2; exit 1");
+        let broken = program(
+            &dir.path().join("broken"),
+            "echo 'whisper_backend_init_gpu: using Vulkan0 backend' >&2; echo '[00:00:00.000 --> 00:00:01.000]  Hi.'
+            echo 'ggml_vulkan: Device memory allocation of size 1048576000 failed.' >&2; exit 1",
+        );
         let model = folder.join("models").join("ggml-tiny.bin");
         let work = folder.join("work").join("1");
         let request = |card| Request {
@@ -501,24 +609,53 @@ mod tests {
             async move {
                 let mut stages = Vec::new();
                 let heard = transcribe(&ffmpeg, &whisper, &video, &request, &stop, &mut |s| stages.push(s)).await;
-                (heard.map(|h| (h.transcript.language, h.card)), stages)
+                (heard.map(|h| (h.transcript.language, h.on)), stages)
             }
         };
 
+        use Device::*;
         let (heard, stages) = listen(Some(&card), true).await;
-        assert_eq!(heard, Ok(("fr".into(), true)), "the Vulkan build, which used the card");
-        assert!(stages.contains(&Stage::Listening { percent: 50 }));
+        assert_eq!(heard, Ok(("fr".into(), GraphicsCard)), "the Vulkan build, which used the card");
+        let heard = [25, 50].map(|percent| Stage::Listening { percent, on: GraphicsCard });
+        assert!(heard.iter().all(|s| stages.contains(s)), "2.5 s of 10 heard, then whisper-cli's 50%: {stages:?}");
+        assert!(!folder.join(CARD_LOG).exists());
         let (heard, stages) = listen(Some(&broken), true).await;
-        assert_eq!(heard, Ok(("de".into(), false)), "the processor's, once the Vulkan build failed");
-        assert_eq!(stages.iter().filter(|s| **s == Stage::Listening { percent: 0 }).count(), 2, "listening again");
+        assert_eq!(heard, Ok(("de".into(), ProcessorAfterCard)), "the processor's, once the Vulkan build failed");
+        assert_eq!(stages[1], Stage::Listening { percent: 0, on: Processor });
+        assert!(stages.contains(&Stage::Listening { percent: 0, on: ProcessorAfterCard }), "again: {stages:?}");
+        let log = std::fs::read_to_string(folder.join(CARD_LOG)).unwrap();
+        assert!(log.contains("broken") && log.contains("ggml_vulkan: Device memory allocation"), "{log}");
+        assert!(!log.contains("Hi."), "what it heard stays out of the log");
         let (heard, _) = listen(Some(&dir.path().join("not there")), true).await;
-        assert_eq!(heard, Ok(("de".into(), false)), "a Vulkan build that would not start");
+        assert_eq!(heard, Ok(("de".into(), ProcessorAfterCard)), "a Vulkan build that would not start");
         let (heard, _) = listen(Some(&card), false).await;
-        assert_eq!(heard, Ok(("de".into(), false)), "the graphics card turned off");
+        assert_eq!(heard, Ok(("de".into(), Processor)), "the graphics card turned off");
         let (heard, _) = listen(None, true).await;
-        assert_eq!(heard, Ok(("de".into(), false)), "no Vulkan build");
+        assert_eq!(heard, Ok(("de".into(), Processor)), "no Vulkan build");
         assert!(uses_card("whisper_backend_init_gpu: using Vulkan0 backend\r"));
         assert!(!uses_card("whisper_backend_init_gpu: no GPU found"));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn a_program_writing_bytes_that_are_not_utf_8_and_plenty_of_them_still_ends() {
+        let dir = tempfile::tempdir().unwrap();
+        // A byte that is not UTF-8, then more than a pipe holds, on both streams.
+        let noisy = program(
+            &dir.path().join("noisy"),
+            r"printf 'caf\351\n' >&2; printf 'caf\351\n'; head -c 300000 /dev/zero | tr '\0' 'a' >&2
+            head -c 300000 /dev/zero | tr '\0' 'b'; echo; echo >&2; echo done >&2",
+        );
+        let (_tx, stop) = watch::channel(false);
+        let mut lines = Vec::new();
+        let ran = tokio::time::timeout(
+            std::time::Duration::from_secs(20),
+            run(Command::new(&noisy), &stop, &mut |line| lines.push(line.chars().take(8).collect::<String>())),
+        )
+        .await;
+        assert_eq!(ran.expect("it ended"), Ok(true));
+        assert!(lines.contains(&"caf\u{fffd}".to_string()), "{lines:?}");
+        assert_eq!(lines.last().map(String::as_str), Some("done"));
     }
 
     #[test]
@@ -527,6 +664,10 @@ mod tests {
         assert_eq!(progress("whisper_print_progress_callback: progress = 100%"), Some(100));
         assert_eq!(progress("whisper_print_progress_callback: progress = 272%"), Some(100));
         assert_eq!(progress("whisper_full_with_state: auto-detected language: en (p = 0.97)"), None);
+        assert_eq!(heard_until("[00:01:02.340 --> 01:00:05.000]  And so my fellow Americans,"), Some(3_605_000));
+        assert_eq!(heard_until("[00:00:00.000 --> 00:00:02.500]  "), Some(2_500));
+        assert_eq!(heard_until("whisper_print_progress_callback: progress =  42%"), None);
+        assert_eq!(heard_until("[BLANK_AUDIO]"), None);
     }
 
     #[test]

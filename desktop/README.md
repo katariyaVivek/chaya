@@ -175,14 +175,20 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
   - **The sound**: ffmpeg turns it into 16 kHz mono WAV in `speech/work/ID/` (gone when done). The cut-down ffmpeg
     decodes AAC, MP3, Opus, Vorbis, FLAC and PCM for this, resamples, and writes WAV; nothing else is encoded.
   - **Listening**: whisper.cpp's `whisper-cli` (`engine/build_whisper.sh`, v1.9.5, static, AVX2), with full JSON output (each word with its times) and progress. It reads its arguments in the PC's code page, so
-    it runs from the speech folder with short relative paths only. What it heard, word by word, is kept in the
+    it runs from the speech folder with short relative paths only. How far it has got is read from each stretch of
+    speech it writes, as it writes it (its own progress comes only every 5% of the sound, minutes apart with a large
+    model on the processor), and both of its output streams are read to the end, whatever bytes they carry. Each 30
+    seconds is heard afresh (`-mc 0`), not led by the text before, which kept whisper saying one line over and over
+    through music or noise; a segment that only repeats the one before is left out. What it heard, word by word, is kept in the
     video's file (`videos/ID.json`, `core::video`) for the steps that follow. Silences it marks are left out.
     Each word's time comes from the model's attention heads (`-dtw`, which needs flash attention off).
   - **The graphics card**: a second build, `whisper-cli-vulkan.exe` (`build_whisper.sh windows-vulkan`, with Khronos'
     Vulkan and SPIR-V headers), runs on NVIDIA, AMD and Intel cards through the Vulkan driver that comes with them.
     Chaya runs it first when Windows has Vulkan (`vulkan-1.dll`) and *Listen on* in Settings › Speech recognition is
     *Graphics card* (the default; the choice is shown only where it applies). It uses the processor itself on a PC
-    with Vulkan but no card, and if it fails, the processor build listens again. When the subtitles are made the
+    with Vulkan but no card, and if it fails (a card without the memory a large model needs, a driver that stops
+    it), the processor build listens again and the player says so; what the Vulkan build said, without what it
+    heard, is kept in `speech/graphics-card.log` in the app's data folder (`%APPDATA%\com.chaya.desktop`). When the subtitles are made the
     player says where and how long it took ("Subtitles made on the graphics card in 1 min 12 s"), so the two can be
     compared by switching *Listen on* to *Processor*. CI runs the JFK sample through it on Lavapipe, Mesa's Vulkan
     driver for the processor.
