@@ -260,15 +260,28 @@ def seed_saved_videos():
     return seed_saved_video(CLIP, [f'{CLIP}.en.srt']), seed_saved_video(SPEECH, [])
 
 
-def seed_saved_video(clip, beside):
-    """`clip`.mp4 and the files `beside` it in Downloads, and listed as a finished download; its number."""
-    downloads = Path.home() / 'Downloads'
+def data_folder():
+    """Chaya's data folder, made if it is not there yet."""
     if os.name == 'nt':
         data = Path(os.environ['APPDATA']) / 'com.chaya.desktop'
     else:
         data = Path(os.environ.get('XDG_DATA_HOME', Path.home() / '.local' / 'share')) / 'com.chaya.desktop'
-    downloads.mkdir(parents=True, exist_ok=True)
     data.mkdir(parents=True, exist_ok=True)
+    return data
+
+
+def seed_tabs(url):
+    """A tab kept from a last run, as the app keeps them (`tabs.json`): shown in the strip, its page not made until it
+    is clicked."""
+    (data_folder() / 'tabs.json').write_text(json.dumps([{'url': url, 'title': 'Kept from the last run'}]),
+                                             encoding='utf-8')
+
+
+def seed_saved_video(clip, beside):
+    """`clip`.mp4 and the files `beside` it in Downloads, and listed as a finished download; its number."""
+    downloads = Path.home() / 'Downloads'
+    data = data_folder()
+    downloads.mkdir(parents=True, exist_ok=True)
     video = downloads / f'{clip}.mp4'
     for name in (f'{clip}.mp4', *beside):
         (downloads / name).write_bytes((FIXTURES / name).read_bytes())
@@ -358,6 +371,22 @@ def make_subtitles(tour, id):
     tour.wait(lambda: tour.js("return document.getElementById('player').hidden"), 5)
 
 
+def restored_tab(tour):
+    """The tab kept from the last run (`seed_tabs`), clicked: its page is made then, and the app still answers. Made in
+    a synchronous command, WebView2 waited for the window's thread, which was waiting for it: Chaya froze."""
+    tour.wait(lambda: tour.js("return document.querySelectorAll('#tabstrip .tab').length") >= 1, 10)
+    tabs = tour.js("return [...document.querySelectorAll('#tabstrip .tab')].map(t => t.innerText.trim())")
+    tour.click('#tabstrip .tab .tab__title', 0)
+    time.sleep(3)
+    tour.js("window.__answered = null; window.__TAURI__.core.invoke('list_tabs')"
+            ".then(v => (window.__answered = v)); return 1")
+    answered = tour.wait(lambda: tour.js("return window.__answered"), 20)
+    tour.shot('restored-tab', tabs=tabs, answers=bool(answered), shown=(answered or {}).get('active'),
+              address=tour.js("return document.getElementById('address').value"))
+    tour.click('#page-home')
+    time.sleep(1)
+
+
 def looked_up(tour):
     """Whether the card's lookup has ended: its state holds an answer, not the "Finding…" pill, and is not still empty
     from the moment before the lookup began."""
@@ -383,6 +412,10 @@ def run(tour, sites, seeded=None):
         except Exception as e:
             tour.failed('make-subtitles', e)
             tour.js("document.getElementById('player-close').click(); return 1")
+        try:
+            restored_tab(tour)
+        except Exception as e:
+            tour.failed('restored-tab', e)
 
     # A link: looked up by the bundled engine, its qualities offered.
     try:
@@ -601,7 +634,8 @@ def main():
     parser.add_argument('--via', choices=('devtools', 'webdriver'), default='devtools' if os.name == 'nt' else 'webdriver')
     parser.add_argument('--driver', default='http://127.0.0.1:4444', help='tauri-driver, for --via webdriver')
     parser.add_argument('--sites', help='a JSON file of addresses to use instead of the internet\'s')
-    parser.add_argument('--seed', action='store_true', help='put a saved video in place first, for the player')
+    parser.add_argument('--seed', action='store_true',
+                        help='put saved videos, and a tab kept from a last run, in place first')
     args = parser.parse_args()
 
     # Windows' console and files default to its code page, which has no room for a page's '·' or 'é'.
@@ -614,6 +648,8 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
 
     seeded = seed_saved_videos() if args.seed else None
+    if args.seed:
+        seed_tabs(sites['page'])
     try:
         window = DevToolsWindow(args.app, out) if args.via == 'devtools' else WebDriverWindow(args.app, args.driver)
     except Exception as e:
