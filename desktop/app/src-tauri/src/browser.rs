@@ -468,16 +468,19 @@ fn make_page(app: &AppHandle, id: u64, url: &str, bounds: Option<Bounds>) -> Res
     Ok(())
 }
 
-/// Shows the tab `id`, the page where `bounds` says.
+/// Shows the tab `id`, the page where `bounds` says. Async, as every command that may make a page must be: a tab kept
+/// from the last run has its page made here, and made on the window's own thread (a synchronous command's) WebView2
+/// waits for that thread while it waits for WebView2, and Chaya freezes.
 #[tauri::command]
-pub fn switch_tab(id: u64, bounds: Bounds, app: AppHandle) -> Result<(), String> {
+pub async fn switch_tab(id: u64, bounds: Bounds, app: AppHandle) -> Result<(), String> {
     tabs(&app).bounds = Some(bounds);
     show_tab(&app, id)
 }
 
-/// Closes the tab `id`. Closing the tab shown shows the one beside it, or the window's home when it was the last.
+/// Closes the tab `id`. Closing the tab shown shows the one beside it, or the window's home when it was the last. Async
+/// as `switch_tab` is: the one beside it may be a tab kept from the last run, whose page is made here.
 #[tauri::command]
-pub fn close_tab(id: u64, app: AppHandle) -> Result<(), String> {
+pub async fn close_tab(id: u64, app: AppHandle) -> Result<(), String> {
     if tabs(&app).fullscreen.as_ref().is_some_and(|f| f.tab == id) {
         leave_fullscreen(&app);
     }
