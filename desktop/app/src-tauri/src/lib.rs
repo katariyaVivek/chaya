@@ -251,8 +251,8 @@ fn saved_file(app: &AppHandle, from: &str, request: &tauri::http::Request<Vec<u8
         return status(403);
     }
     let path = request.uri().path().trim_matches('/');
-    // A saved video's poster, which the window made from it ("poster/12").
-    if let Some(id) = path.strip_prefix("poster/").and_then(|id| id.parse().ok()) {
+    // A saved video's poster, which the window made from it ("poster-12": convertFileSrc would encode a slash).
+    if let Some(id) = path.strip_prefix("poster-").and_then(|id| id.parse().ok()) {
         return match std::fs::read(app.state::<Videos>().poster(id)) {
             Ok(bytes) => tauri::http::Response::builder()
                 .header("Content-Type", "image/jpeg")
