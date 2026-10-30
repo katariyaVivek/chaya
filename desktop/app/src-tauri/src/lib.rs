@@ -513,6 +513,7 @@ pub fn run() {
             speech::set_speech,
             speech::delete_speech_model,
             speech::make_subtitles,
+            speech::made_subtitles,
             speech::stop_subtitles,
             browser::open_page,
             browser::place_page,

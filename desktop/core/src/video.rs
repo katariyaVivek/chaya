@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-use crate::speech::whisper::Transcript;
+use crate::speech::whisper::{Device, Transcript};
 
 /// The folder in Chaya's data folder that holds the videos' files.
 pub const FOLDER: &str = "videos";
@@ -30,11 +30,13 @@ pub struct VideoData {
     pub stopped_at: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub duration: Option<f64>,
-    /// What whisper.cpp heard, the last time Chaya made subtitles for it, and with which model.
+    /// What whisper.cpp heard, the last time Chaya made subtitles for it, with which model, and where.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub transcript: Option<Transcript>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub transcript_model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transcript_on: Option<Device>,
     #[serde(flatten)]
     pub other: Map<String, Value>,
 }
@@ -90,11 +92,12 @@ impl Videos {
         })
     }
 
-    /// Keeps what whisper.cpp heard in download `id`, listening with `model`.
-    pub fn heard(&self, id: u64, transcript: Transcript, model: &str) -> std::io::Result<()> {
+    /// Keeps what whisper.cpp heard in download `id`, listening with `model` `on` the graphics card or not.
+    pub fn heard(&self, id: u64, transcript: Transcript, model: &str, on: Device) -> std::io::Result<()> {
         self.change(id, |data| {
             data.transcript = Some(transcript);
             data.transcript_model = Some(model.to_string());
+            data.transcript_on = Some(on);
         })
     }
 
@@ -177,10 +180,11 @@ mod tests {
             language: "en".into(),
             segments: vec![Segment { start: 0, end: 400, text: "Hello".into(), words: vec![word] }],
         };
-        videos.heard(2, transcript.clone(), "tiny").unwrap();
+        videos.heard(2, transcript.clone(), "tiny", Device::GraphicsCard).unwrap();
         let data = videos.load(2);
         assert_eq!(data.transcript, Some(transcript));
         assert_eq!(data.transcript_model.as_deref(), Some("tiny"));
+        assert_eq!(data.transcript_on, Some(Device::GraphicsCard));
         assert_eq!(data.resume_at(), 30.0);
     }
 
