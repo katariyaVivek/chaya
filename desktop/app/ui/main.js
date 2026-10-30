@@ -1534,7 +1534,7 @@ function speechText(job) {
     case 'sound':
       return 'Making subtitles · Reading the sound';
     case 'listening':
-      return `Making subtitles · ${job.percent}%`;
+      return `Making subtitles${job.card ? ' on the graphics card' : ''} · ${job.percent}%`;
     case 'done': {
       // Where it listened and how long it took, so the graphics card and the processor can be compared.
       const where = job.card ? 'on the graphics card' : 'on the processor';

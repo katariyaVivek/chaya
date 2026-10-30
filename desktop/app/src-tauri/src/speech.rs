@@ -52,7 +52,7 @@ pub struct JobView {
     /// For "model": bytes of the model fetched, of `total`.
     pub done: u64,
     pub total: u64,
-    /// For "listening".
+    /// For "listening": how far, and (with "done") whether on the graphics card.
     pub percent: u8,
     /// For "failed": why, in words.
     pub message: Option<String>,
@@ -156,7 +156,9 @@ impl Speaking {
                         JobView { id, state: "model", done, total, ..JobView::default() }
                     }
                     Step::Sound => JobView { id, state: "sound", ..JobView::default() },
-                    Step::Listening { percent } => JobView { id, state: "listening", percent, ..JobView::default() },
+                    Step::Listening { percent, card } => {
+                        JobView { id, state: "listening", percent, card, ..JobView::default() }
+                    }
                 };
                 self.show(app, view);
             })

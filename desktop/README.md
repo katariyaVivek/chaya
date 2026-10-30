@@ -175,7 +175,9 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
   - **The sound**: ffmpeg turns it into 16 kHz mono WAV in `speech/work/ID/` (gone when done). The cut-down ffmpeg
     decodes AAC, MP3, Opus, Vorbis, FLAC and PCM for this, resamples, and writes WAV; nothing else is encoded.
   - **Listening**: whisper.cpp's `whisper-cli` (`engine/build_whisper.sh`, v1.9.5, static, AVX2), with full JSON output (each word with its times) and progress. It reads its arguments in the PC's code page, so
-    it runs from the speech folder with short relative paths only. What it heard, word by word, is kept in the
+    it runs from the speech folder with short relative paths only. How far it has got is read from each stretch of
+    speech it writes, as it writes it (its own progress comes only every 5% of the sound, minutes apart with a large
+    model on the processor), and both of its output streams are read to the end, whatever bytes they carry. What it heard, word by word, is kept in the
     video's file (`videos/ID.json`, `core::video`) for the steps that follow. Silences it marks are left out.
     Each word's time comes from the model's attention heads (`-dtw`, which needs flash attention off).
   - **The graphics card**: a second build, `whisper-cli-vulkan.exe` (`build_whisper.sh windows-vulkan`, with Khronos'

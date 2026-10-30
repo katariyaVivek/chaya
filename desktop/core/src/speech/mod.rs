@@ -113,6 +113,7 @@ pub enum Step {
     Sound,
     Listening {
         percent: u8,
+        card: bool,
     },
 }
 
@@ -197,7 +198,7 @@ impl Speech {
         let heard = whisper::transcribe(&tools.ffmpeg, &tools.whisper, video, &request, stop, &mut |stage| {
             on_step(match stage {
                 Stage::Sound => Step::Sound,
-                Stage::Listening { percent } => Step::Listening { percent },
+                Stage::Listening { percent, card } => Step::Listening { percent, card },
             })
         })
         .await;
