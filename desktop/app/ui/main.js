@@ -118,6 +118,8 @@ function showSettings(open) {
   settingsPanel.hidden = !open;
   settingsButton.setAttribute('aria-expanded', String(open));
   fitSettings();
+  // Whether Ollama or LM Studio has started since.
+  if (open) loadAi();
   // The page's webview is drawn over the window's content, so it makes way for the panel.
   showPageView();
 }
@@ -2447,3 +2449,154 @@ document.addEventListener('keydown', (e) => {
 });
 
 address.focus();
+
+// ── AI model ──
+//
+// Settings › AI model (`ai.rs`): a service, its key (kept in Windows Credential Manager by the app, never here once
+// saved), its address for one the person names or a program on the PC, and a model from its list. *Test* asks it
+// something small. Nothing else uses it yet.
+
+const aiService = document.getElementById('ai-service');
+const aiAddress = document.getElementById('ai-address');
+const aiKey = document.getElementById('ai-key');
+const aiModel = document.getElementById('ai-model');
+const aiModels = document.getElementById('ai-models');
+const aiNote = document.getElementById('ai-note');
+const aiKeyNote = document.getElementById('ai-key-note');
+/** What the app says of it: the services, the person's choices, which services have a key saved, which run here. */
+let ai = { services: [], settings: {}, keys: [], running: [] };
+/** Counts the person's changes, so an answer asked for before one does not undo it. */
+let aiChanges = 0;
+
+async function loadAi() {
+  const asked = aiChanges;
+  const status = await tauri.core.invoke('ai_status').catch(() => null);
+  if (!status) return;
+  // Chosen while the app was looking (Ollama or LM Studio can take a moment): the window's choice stands.
+  if (asked !== aiChanges) status.settings = ai.settings;
+  const changed = status.settings.service !== ai.settings.service || status.keys.join() !== ai.keys.join();
+  ai = status;
+  showAi();
+  if (changed) listAiModels();
+}
+
+function aiChosen() {
+  return ai.services.find((s) => s.id === ai.settings.service) ?? null;
+}
+
+function showAi() {
+  const running = ai.running.join();
+  if (!aiService.options.length || aiService.dataset.running !== running) {
+    aiService.dataset.running = running;
+    aiService.replaceChildren(
+      new Option('None', ''),
+      ...ai.services.map((s) => new Option(ai.running.includes(s.id) ? `${s.name} · running on this PC` : s.name, s.id)),
+    );
+  }
+  const service = aiChosen();
+  aiService.value = service?.id ?? '';
+  document.getElementById('ai-address-box').hidden = !service || !(service.local || service.id === 'custom');
+  aiAddress.placeholder = service?.address || 'https://…/v1';
+  if (document.activeElement !== aiAddress) aiAddress.value = ai.settings.address ?? '';
+
+  document.getElementById('ai-key-box').hidden = !service?.key;
+  const saved = !!service && ai.keys.includes(service.id);
+  aiKey.value = '';
+  aiKey.placeholder = saved ? 'Saved · paste a new one to replace it' : 'Paste your key';
+  aiKeyNote.replaceChildren();
+  if (saved) {
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'ai__link';
+    remove.textContent = 'Remove it';
+    remove.addEventListener('click', forgetAiKey);
+    aiKeyNote.append('Kept in Windows Credential Manager. ', remove);
+  } else if (service?.keysAt) {
+    const link = document.createElement('button');
+    link.type = 'button';
+    link.className = 'ai__link';
+    link.textContent = new URL(service.keysAt).host;
+    link.addEventListener('click', () => {
+      showSettings(false);
+      openPage(service.keysAt);
+    });
+    aiKeyNote.append(`Make one at `, link, '.');
+  }
+
+  document.getElementById('ai-model-box').hidden = !service;
+  if (document.activeElement !== aiModel) aiModel.value = ai.settings.model ?? '';
+}
+
+function sayAi(text) {
+  aiNote.textContent = text;
+}
+
+function saveAi(change) {
+  aiChanges += 1;
+  ai.settings = { ...ai.settings, ...change };
+  return tauri.core.invoke('set_ai', { settings: ai.settings }).catch((message) => sayAi(String(message)));
+}
+
+/** The chosen service's models, offered as the model field is typed in; a service that lists none is typed in full. */
+async function listAiModels() {
+  aiModels.replaceChildren();
+  const service = aiChosen();
+  if (!service || (service.key && !ai.keys.includes(service.id))) return;
+  try {
+    const names = await tauri.core.invoke('ai_models', { settings: ai.settings });
+    if (ai.settings.service !== service.id) return;
+    aiModels.replaceChildren(...names.map((name) => new Option(name)));
+    aiModel.placeholder = names.length ? `Pick one of ${count(names.length, 'model')}, or type one` : 'Type the model’s name';
+  } catch (message) {
+    sayAi(String(message));
+  }
+}
+
+async function forgetAiKey() {
+  const service = aiChosen();
+  if (!service) return;
+  await tauri.core.invoke('forget_ai_key', { service: service.id }).catch((message) => sayAi(String(message)));
+  sayAi('');
+  await loadAi();
+}
+
+aiService.addEventListener('change', async () => {
+  sayAi('');
+  await saveAi({ service: aiService.value || null, address: null, model: null });
+  showAi();
+  listAiModels();
+});
+aiAddress.addEventListener('change', async () => {
+  sayAi('');
+  await saveAi({ address: aiAddress.value.trim() || null });
+  listAiModels();
+});
+aiModel.addEventListener('change', () => {
+  sayAi('');
+  saveAi({ model: aiModel.value.trim() || null });
+});
+document.getElementById('ai-key-save').addEventListener('click', async () => {
+  const service = aiChosen();
+  if (!service) return;
+  try {
+    await tauri.core.invoke('set_ai_key', { service: service.id, key: aiKey.value });
+    sayAi('');
+    await loadAi();
+  } catch (message) {
+    sayAi(String(message));
+  }
+});
+aiKey.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('ai-key-save').click();
+});
+document.getElementById('ai-test').addEventListener('click', async () => {
+  if (aiModel.value.trim() !== (ai.settings.model ?? '')) await saveAi({ model: aiModel.value.trim() || null });
+  sayAi('Asking…');
+  try {
+    const seconds = await tauri.core.invoke('test_ai', { settings: ai.settings });
+    sayAi(`It answered in ${seconds < 10 ? seconds.toFixed(1) : Math.round(seconds)} s. It’s ready.`);
+  } catch (message) {
+    sayAi(String(message));
+  }
+});
+loadAi();

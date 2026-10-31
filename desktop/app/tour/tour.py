@@ -429,6 +429,82 @@ def poster_steps(tour):
     return tour.wait(lambda: tour.js("return window.__posterSteps"), 40)
 
 
+class StandInService:
+    """An OpenAI-compatible service on this machine, for Settings › AI model's Test: it lists one model, answers
+    every question with the JSON Test asks for, and keeps the keys it was sent."""
+
+    def __init__(self):
+        import http.server
+        import threading
+
+        keys = self.keys = []
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *args):
+                pass
+
+            def answer(self, body):
+                data = json.dumps(body).encode()
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Content-Length', str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
+            def do_GET(self):
+                keys.append(self.headers.get('Authorization'))
+                self.answer({'data': [{'id': 'stand-in-model'}, {'id': 'text-embedding-stand-in'}]})
+
+            def do_POST(self):
+                keys.append(self.headers.get('Authorization'))
+                self.rfile.read(int(self.headers.get('Content-Length', 0)))
+                reply = '{"ok": true, "word": "Chaya"}'
+                self.answer({'choices': [{'message': {'role': 'assistant', 'content': reply}}]})
+
+        self.server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+        self.address = f'http://127.0.0.1:{self.server.server_address[1]}/v1'
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+
+
+def ai_model(tour):
+    """Settings › AI model with a service on this machine: its address, a key (kept by Windows Credential Manager),
+    a model from its list, and Test. The service must get the key; ai.json must not hold it. The key is removed after."""
+    service = StandInService()
+    key = 'chaya-tour-key-123'
+    tour.click('#settings-button')
+    tour.wait(lambda: tour.js("return document.getElementById('ai-service').options.length > 1"), 10)
+    time.sleep(0.8)
+    set_field = "const e = document.getElementById({}); e.value = {}; e.dispatchEvent(new Event('change')); return 1"
+    tour.js(set_field.format(json.dumps('ai-service'), json.dumps('custom')))
+    time.sleep(0.8)
+    tour.js(set_field.format(json.dumps('ai-address'), json.dumps(service.address)))
+    time.sleep(0.8)
+    tour.js(f"document.getElementById('ai-key').value = {json.dumps(key)}; document.getElementById('ai-key-save').click(); return 1")
+    tour.wait(lambda: 'Credential Manager' in (tour.js("return document.getElementById('ai-key-note').innerText") or ''), 10)
+    listed = tour.wait(lambda: tour.js("return [...document.getElementById('ai-models').options].map(o => o.value)"), 10)
+    tour.js(set_field.format(json.dumps('ai-model'), json.dumps('stand-in-model')))
+    time.sleep(0.5)
+    tour.click('#ai-test')
+    # Its answer, or why there is none: anything but "Asking…".
+    answered = "const n = document.getElementById('ai-note').textContent; return n.startsWith('Asking') ? '' : n"
+    note = tour.wait(lambda: tour.js(answered), 20)
+    tour.js("document.getElementById('settings-ai').scrollIntoView(); return 1")
+    kept = (Path(os.environ['APPDATA']) / 'com.chaya.desktop' / 'ai.json') if os.name == 'nt' else None
+    in_file = kept.read_text(encoding='utf-8') if kept and kept.exists() else ''
+    tour.shot('ai-model', note=note, models=listed, key_note=tour.js("return document.getElementById('ai-key-note').innerText"),
+              key_sent=service.keys.count(f'Bearer {key}'), asked=len(service.keys),
+              key_in_ai_json=key in in_file, ai_json=in_file.replace('\n', ' '))
+    # The key out of Credential Manager again, and no service chosen.
+    tour.js("document.querySelector('#ai-key-note .ai__link')?.click(); return 1")
+    time.sleep(1)
+    removed = 'Credential Manager' not in (tour.js("return document.getElementById('ai-key-note').innerText") or '')
+    tour.js(set_field.format(json.dumps('ai-service'), json.dumps('')))
+    tour.steps.append({'step': 'ai-key-removed', 'removed': removed})
+    print(f'ai: key removed {removed}', flush=True)
+    tour.click('#settings-button')
+    service.server.shutdown()
+
+
 def looked_up(tour):
     """Whether the card's lookup has ended: its state holds an answer, not the "Finding…" pill, and is not still empty
     from the moment before the lookup began."""
@@ -458,6 +534,10 @@ def run(tour, sites, seeded=None):
             restored_tab(tour)
         except Exception as e:
             tour.failed('restored-tab', e)
+        try:
+            ai_model(tour)
+        except Exception as e:
+            tour.failed('ai-model', e)
 
     # A link: looked up by the bundled engine, its qualities offered.
     try:

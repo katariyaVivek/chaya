@@ -1,6 +1,7 @@
 //! What Chaya for Windows does, kept apart from its window so it builds and tests anywhere.
 
 pub mod adblock;
+pub mod ai;
 pub mod browse;
 pub mod download;
 pub mod engine;

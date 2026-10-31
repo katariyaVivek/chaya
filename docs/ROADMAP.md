@@ -136,8 +136,9 @@ with a model fetched once from Hugging Face and checked against its pinned SHA-2
 picks the model and the language. Then the player was organised as Vimpo's is (step 1b): its own controls over
 the picture, and tabs beside it, Transcript and Subtitles. Step 3 is merged in two parts: subtitles made on the PC
 come in lines of 1 to 5 seconds that follow the speech, cut by each word's time; and they are made on the graphics
-card where the PC has one (whisper.cpp's Vulkan build), on the processor where not. Next: step 4, your own AI
-model.
+card where the PC has one (whisper.cpp's Vulkan build), on the processor where not. Step 4 is merged: Settings ›
+AI model sets up the person's own AI service or a model on their PC (the key in Windows Credential Manager), with
+*Test*. Next: step 5, translation side by side.
 
 ## Known rough edges
 

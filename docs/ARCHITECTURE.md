@@ -351,6 +351,10 @@ a built-in browser. [`../desktop/README.md`](../desktop/README.md) has the layou
   (sentence ends, pauses, then the best-scoring gap, with word lists per language), saved as "name.LANG.srt", and
   the words are kept in the video's file. The app runs one video at a time from a queue
   and tells the window how each goes (`speech` events).
+- **The person's own AI model** (`chaya-core`'s `ai`, `desktop/app/src-tauri/src/ai.rs`): the services offered, the
+  two protocols (OpenAI's chat completions, Anthropic's Messages) with streaming off, the model's JSON checked
+  against what was asked, and its failures in words; tested against a local stand-in service. The app keeps the key
+  in Windows Credential Manager (`keyring`) and the choice in `ai.json`.
 - `desktop/app/src-tauri` hands `chaya-core` to the window as commands (`recognise_link`, `look_up`,
   `download` and the download controls) and sends it `download` events. The window
   may call only those and set its title bar's theme (`capabilities/default.json`). Its content
