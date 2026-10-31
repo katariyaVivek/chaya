@@ -123,6 +123,17 @@ Chaya for Windows keeps the same promises, with these differences:
   address, to Hugging Face), and checks it against the checksum Chaya expects before using it. The model stays in
   Chaya's own folder until you delete it in the settings. What was said, word by word with its times, is kept in
   the video's small file in Chaya's own folder, for later features, and the subtitles are saved next to the video.
+- **Your own AI model.** In Settings › AI model you may choose an AI service you have an account with (OpenAI,
+  Anthropic, Gemini, DeepSeek, OpenRouter, Mistral, Groq, xAI, or another service at an address you give) and paste
+  your key, or choose a program on your own PC (Ollama or LM Studio). Your key is kept by Windows Credential Manager,
+  never in a file of Chaya's, and is sent only to the service it belongs to, over an encrypted connection (plain
+  `http://` is accepted only on your PC or your local network). Chaya keeps which service, address and model you chose
+  in a small file in its own folder. Contact with the service happens only when you act: listing its models when you
+  choose it or save a key, and *Test*, which sends a fixed question ("Reply with exactly this JSON object…") and
+  nothing about you or your videos. Translation and highlights, when they come, will send the service only the
+  subtitle text and title of the video you ask about, when you ask. When Chaya opens Settings, it checks whether
+  Ollama or LM Studio is running at its usual address on your PC (127.0.0.1); that request never leaves your PC.
+  What the service does with what it receives is up to its own privacy policy.
 - **The player.** Chaya plays what you saved on your PC, and remembers where each video stopped, in a small file
   per video in Chaya's own folder, so it starts there next time. The file is deleted when the download leaves
   Chaya's list. Nothing about what you watch leaves your PC.

@@ -137,7 +137,7 @@ processor), and the Windows tour, on a runner with no Vulkan at all, through the
 PC: the player's note says where subtitles were made and how long it took, and *Listen on* › *Processor* gives the
 before.
 
-### 4. Your own AI model ☐
+### 4. Your own AI model ☑
 
 **The person gets:** **Settings › AI model**: pick a service, paste a key (or point at Ollama or LM
 Studio, found on their usual ports), pick a model from the service's list, and *Test*. Nothing else
@@ -148,6 +148,12 @@ changes until they use it in step 5 or 6.
 - `PRIVACY_POLICY.md` says exactly what is sent, when, and to whom.
 - **Tests:** both protocols against a local stand-in server: a reply, a refused key, a rate limit, a model
   that answers in prose instead of JSON.
+
+**Done.** `core::ai` (services, both protocols, `models`, `ask`, `ask_json` with a check, `test`), keys in
+Credential Manager through `keyring` in the app (`ai.rs`), Settings › AI model in the window. Gemini's 400 for a
+wrong key is told as a refused key; a model's JSON is found in a fenced block or among words. The Windows tour sets
+up a stand-in OpenAI-compatible service on the runner, saves a key, picks its model and runs *Test*: the service
+must get the key, and `ai.json` must not hold it.
 
 ### 5. Translation side by side ☐
 

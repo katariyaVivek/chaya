@@ -140,6 +140,17 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
   Until it is made, or where WebView2 can't play the file, the site's thumbnail shows, then the kind's icon: a
   site's thumbnail address may stop working (Instagram's and TikTok's do within hours), and a video found on a
   page has none. A title without a picture is kept to three lines.
+- **Your own AI model** (`core::ai`, `app/src-tauri/src/ai.rs`), for translation and highlights (steps 5 and 6;
+  nothing uses it yet). Settings › AI model: a service (OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter, Mistral,
+  Groq, xAI, another at an address the person gives, or Ollama or LM Studio on the PC, marked when running at their
+  usual address), its key, its model (picked from its own list, or typed), and *Test*, which asks for a small JSON
+  object and says how long the answer took. Two protocols: OpenAI's chat completions and Anthropic's Messages,
+  streaming off, the reply's JSON read out of a fenced block or words around it and checked against what was asked.
+  A refused key, a rate limit (with its Retry-After), a model of no such name, a service that doesn't answer and a
+  model that answers in prose are each said in words. The key is kept in Windows Credential Manager ("Chaya AI
+  model" › SERVICE, `keyring`), read each time it is used, never written to a file or sent to the window once
+  saved; `ai.json` in the app's data folder holds the service, address and model. Plain `http://` is accepted only
+  on the PC or the local network, and a program there is reached without the PC's proxy.
 - **The player.** A saved video or sound opens in Chaya, from the list (its name), the grid or a post's viewer,
   instead of another program (*Open in another app* is in its bar, and offered when WebView2 can't play the file).
   The file comes a part at a time, at most 4 MB per answer, by the HTTP ranges the player asks for

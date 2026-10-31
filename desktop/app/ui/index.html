@@ -80,6 +80,32 @@
         </div>
         <p class="settings__credit">Chaya listens on this PC; nothing is uploaded. A model is fetched once, from Hugging Face, the first time it's used.</p>
       </div>
+      <div class="settings__ai" id="settings-ai">
+        <label class="settings__label" for="ai-service">AI model</label>
+        <select class="select" id="ai-service"></select>
+        <div class="ai__part" id="ai-address-box" hidden>
+          <label class="settings__label" for="ai-address">Address</label>
+          <input class="field" id="ai-address" type="url" spellcheck="false" autocomplete="off" placeholder="https://…/v1">
+        </div>
+        <div class="ai__part" id="ai-key-box" hidden>
+          <label class="settings__label" for="ai-key">Key</label>
+          <div class="ai__row">
+            <input class="field" id="ai-key" type="password" spellcheck="false" autocomplete="off">
+            <button class="pill glass pressable" type="button" id="ai-key-save">Save</button>
+          </div>
+          <p class="settings__note text-sm muted" id="ai-key-note"></p>
+        </div>
+        <div class="ai__part" id="ai-model-box" hidden>
+          <label class="settings__label" for="ai-model">Model</label>
+          <div class="ai__row">
+            <input class="field" id="ai-model" list="ai-models" spellcheck="false" autocomplete="off" placeholder="Pick or type a model">
+            <datalist id="ai-models"></datalist>
+            <button class="pill glass pressable" type="button" id="ai-test">Test</button>
+          </div>
+        </div>
+        <p class="settings__note text-sm" id="ai-note" aria-live="polite"></p>
+        <p class="settings__credit">Nothing is sent until you use it to translate or find highlights, and then only a video's subtitles and title, only to this service. Keys are kept in Windows Credential Manager.</p>
+      </div>
       <div class="settings__update" id="settings-update" hidden>
         <p class="settings__label">Update</p>
         <p class="settings__note" id="update-text"></p>

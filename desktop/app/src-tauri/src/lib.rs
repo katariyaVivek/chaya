@@ -2,6 +2,7 @@
 //! the app knows lives in `chaya-core`, and this crate only hands it to the window.
 
 mod ads;
+mod ai;
 mod browser;
 mod speech;
 mod update;
@@ -477,6 +478,7 @@ pub fn run() {
                 app.path().download_dir().or_else(|_| app.path().home_dir().map(|home| home.join("Downloads")))?;
             app.manage(Downloads { manager, folder, joins });
             app.manage(Videos::in_folder(app.path().app_data_dir()?.join(video::FOLDER)));
+            app.manage(ai::AiPlace(app.path().app_data_dir()?.join("ai.json")));
             let tabs =
                 browser::Tabs::open(app.path().app_data_dir()?.join("tabs.json"), &app.state::<ads::Ads>().blocker);
             app.manage(tabs);
@@ -510,6 +512,12 @@ pub fn run() {
             playback_stopped,
             keep_poster,
             speech::speech_status,
+            ai::ai_status,
+            ai::set_ai,
+            ai::set_ai_key,
+            ai::forget_ai_key,
+            ai::ai_models,
+            ai::test_ai,
             speech::set_speech,
             speech::delete_speech_model,
             speech::make_subtitles,

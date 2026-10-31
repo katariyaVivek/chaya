@@ -141,6 +141,26 @@ body:has(.player:not([hidden]), .viewer:not([hidden])) .settings__panel { backgr
   font: var(--text-md) / 1 var(--font-ui);
 }
 .select:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+/* A line of text to type (an address, a key, a model's name), as the select beside it */
+.field {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: var(--control-height);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text);
+  font: var(--text-md) / 1 var(--font-ui);
+}
+.field::placeholder { color: var(--muted); }
+.field:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.settings__ai, .ai__part { display: grid; gap: var(--space-1); }
+.ai__row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-1); }
+#ai-note:empty { display: none; }
+#ai-note { color: var(--text); }
+.ai__link { padding: 0; border: 0; background: none; color: var(--text); font: inherit; text-decoration: underline; cursor: pointer; }
 
 .seg { display: flex; gap: 2px; padding: var(--space-half); border-radius: var(--radius-pill); background: var(--wash); }
 .seg button {
