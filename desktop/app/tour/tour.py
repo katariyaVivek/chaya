@@ -472,6 +472,7 @@ def ai_model(tour):
     service = StandInService()
     key = 'chaya-tour-key-123'
     tour.click('#settings-button')
+    tour.wait(lambda: tour.js("return document.getElementById('ai-service').options.length > 1"), 10)
     time.sleep(0.8)
     set_field = "const e = document.getElementById({}); e.value = {}; e.dispatchEvent(new Event('change')); return 1"
     tour.js(set_field.format(json.dumps('ai-service'), json.dumps('custom')))

@@ -365,17 +365,20 @@ pub async fn test(endpoint: &Endpoint, model: &str) -> Result<Duration, AiError>
     Ok(started.elapsed())
 }
 
-/// The programs on this PC that are running at their usual address (Ollama, LM Studio), for the settings to say so.
+/// The programs on this PC that are running at their usual address (Ollama, LM Studio), for the settings to say so:
+/// all asked at once, and briefly (Windows takes a while to give up on a port nothing listens on).
 pub async fn running_here() -> Vec<&'static str> {
-    let mut running = Vec::new();
+    let client = Client::builder().no_proxy().timeout(Duration::from_millis(700)).build().unwrap_or_default();
+    let mut asking = tokio::task::JoinSet::new();
     for service in SERVICES.iter().filter(|s| s.local) {
-        let Ok(address) = Url::parse(&format!("{}/", service.address)) else { continue };
-        let endpoint = Endpoint { protocol: service.protocol, address, key: None };
-        let client = Client::builder().no_proxy().timeout(Duration::from_millis(800)).build().unwrap_or_default();
-        if client.get(endpoint.at("models")).send().await.is_ok_and(|r| r.status().is_success()) {
-            running.push(service.id);
-        }
+        let client = client.clone();
+        asking.spawn(async move {
+            let answered = client.get(format!("{}/models", service.address)).send().await;
+            answered.is_ok_and(|r| r.status().is_success()).then_some(service.id)
+        });
     }
+    let mut running: Vec<&'static str> = asking.join_all().await.into_iter().flatten().collect();
+    running.sort_unstable();
     running
 }
 

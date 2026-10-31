@@ -2465,10 +2465,15 @@ const aiNote = document.getElementById('ai-note');
 const aiKeyNote = document.getElementById('ai-key-note');
 /** What the app says of it: the services, the person's choices, which services have a key saved, which run here. */
 let ai = { services: [], settings: {}, keys: [], running: [] };
+/** Counts the person's changes, so an answer asked for before one does not undo it. */
+let aiChanges = 0;
 
 async function loadAi() {
+  const asked = aiChanges;
   const status = await tauri.core.invoke('ai_status').catch(() => null);
   if (!status) return;
+  // Chosen while the app was looking (Ollama or LM Studio can take a moment): the window's choice stands.
+  if (asked !== aiChanges) status.settings = ai.settings;
   const changed = status.settings.service !== ai.settings.service || status.keys.join() !== ai.keys.join();
   ai = status;
   showAi();
@@ -2527,6 +2532,7 @@ function sayAi(text) {
 }
 
 function saveAi(change) {
+  aiChanges += 1;
   ai.settings = { ...ai.settings, ...change };
   return tauri.core.invoke('set_ai', { settings: ai.settings }).catch((message) => sayAi(String(message)));
 }
