@@ -117,9 +117,17 @@ const settingsPanel = document.getElementById('settings-panel');
 function showSettings(open) {
   settingsPanel.hidden = !open;
   settingsButton.setAttribute('aria-expanded', String(open));
+  fitSettings();
   // The page's webview is drawn over the window's content, so it makes way for the panel.
   showPageView();
 }
+/** The panel ends inside the window wherever its button is (lower while browsing, beside the address bar), and
+ * scrolls the rest. */
+function fitSettings() {
+  if (settingsPanel.hidden) return;
+  settingsPanel.style.maxHeight = `${Math.max(160, window.innerHeight - settingsPanel.getBoundingClientRect().top - 12)}px`;
+}
+window.addEventListener('resize', fitSettings);
 settingsButton.addEventListener('click', () => showSettings(settingsPanel.hidden));
 document.addEventListener('click', (e) => {
   // A choice in the panel can draw the panel again, taking the button clicked out of the page: still inside.

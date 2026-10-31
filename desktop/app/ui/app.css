@@ -709,6 +709,8 @@ body.browsing .settings {
   right: var(--space-3);
   z-index: 6;
 }
+/* Over the player or the viewer, whose own bar is where that would be, it is back in the title bar */
+body.browsing:has(.player:not([hidden]), .viewer:not([hidden])) .settings { position: relative; top: auto; right: auto; }
 body.browsing .urlbar { margin-right: calc(var(--control-height) + var(--space-half)); }
 body.browsing .main > * { flex: none; }
 body.browsing .downloads { margin-top: 0; overflow-y: auto; }
