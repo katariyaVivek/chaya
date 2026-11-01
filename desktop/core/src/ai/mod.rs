@@ -151,6 +151,8 @@ pub enum AiError {
     Said(String),
     /// The service answered with an error and no words for it.
     Status(u16),
+    /// The person stopped it.
+    Stopped,
 }
 
 impl AiError {
@@ -172,6 +174,7 @@ impl AiError {
             AiError::NotJson => "The model answered, but not in the form Chaya asked for. Try another model.".into(),
             AiError::Said(words) => format!("{service} said: {words}"),
             AiError::Status(code) => format!("{service} answered with an error ({code})."),
+            AiError::Stopped => "Stopped.".into(),
         }
     }
 }

@@ -9,6 +9,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
+use crate::highlights::Highlight;
 use crate::speech::whisper::{Device, Transcript};
 
 /// The folder in Chaya's data folder that holds the videos' files.
@@ -40,6 +41,9 @@ pub struct VideoData {
     /// Its subtitles translated by the person's AI model, a version for each language and model.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub translations: Vec<Translation>,
+    /// Its highlights, the last time the person's AI model found them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub highlights: Option<Highlights>,
     #[serde(flatten)]
     pub other: Map<String, Value>,
 }
@@ -57,6 +61,15 @@ pub struct Translation {
     /// The version saved next to the video as "name.es.srt", of those into its language.
     #[serde(default)]
     pub in_file: bool,
+}
+
+/// A video's highlights: found in which language's subtitles, by which model, when, and each.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Highlights {
+    pub from: Option<String>,
+    pub model: String,
+    pub made: u64,
+    pub items: Vec<Highlight>,
 }
 
 impl Translation {
@@ -168,6 +181,11 @@ impl Videos {
             chosen = Some(data.translations[found].clone());
         })?;
         Ok(chosen)
+    }
+
+    /// Keeps `highlights` of download `id`, in place of any before.
+    pub fn highlighted(&self, id: u64, highlights: Highlights) -> std::io::Result<()> {
+        self.change(id, |data| data.highlights = Some(highlights))
     }
 
     /// Forgets download `id`, and its poster, when it leaves the list: its number may be given to another download.
@@ -290,6 +308,34 @@ mod tests {
         let part = Translation { to: "de".into(), lines: vec![None], ..first.clone() };
         videos.translated(7, &part).unwrap();
         assert_eq!(videos.in_file(7, "de", "Gemini · flash-lite").unwrap(), None, "not one that isn't whole");
+    }
+
+    #[test]
+    fn highlights_are_kept_in_place_of_those_before() {
+        let dir = tempfile::tempdir().unwrap();
+        let videos = Videos::in_folder(dir.path().to_path_buf());
+        let highlight = Highlight {
+            title: "A claim".into(),
+            reason: "Numbers.".into(),
+            first: 2,
+            last: 5,
+            start: 10_000,
+            end: 29_000,
+        };
+        let first = Highlights {
+            from: Some("en".into()),
+            model: "Gemini · flash-lite".into(),
+            made: 1,
+            items: vec![highlight.clone()],
+        };
+        videos.highlighted(3, first).unwrap();
+        let again = Highlights {
+            model: "OpenAI · gpt-4.1".into(),
+            items: vec![highlight.clone(), highlight],
+            ..videos.load(3).highlights.unwrap()
+        };
+        videos.highlighted(3, again.clone()).unwrap();
+        assert_eq!(videos.load(3).highlights, Some(again));
     }
 
     #[test]

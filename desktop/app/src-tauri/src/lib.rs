@@ -4,6 +4,7 @@
 mod ads;
 mod ai;
 mod browser;
+mod highlights;
 mod speech;
 mod translate;
 mod update;
@@ -451,6 +452,7 @@ pub fn run() {
             app.manage(speech::Speaking::new(app.path().app_data_dir()?.join("speech"), &engine_dir, client.clone()));
             tauri::async_runtime::spawn(speech::Speaking::work(app.handle().clone()));
             app.manage(translate::Translating::default());
+            app.manage(highlights::Finding::default());
             tauri::async_runtime::spawn(translate::Translating::work(app.handle().clone()));
             let handle = app.handle().clone();
             let manager = DownloadManager::open(
@@ -527,6 +529,9 @@ pub fn run() {
             translate::translator,
             translate::video_translations,
             translate::use_translation,
+            highlights::find_highlights,
+            highlights::stop_highlights,
+            highlights::video_highlights,
             speech::set_speech,
             speech::delete_speech_model,
             speech::make_subtitles,

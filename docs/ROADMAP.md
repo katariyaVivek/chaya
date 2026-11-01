@@ -140,7 +140,8 @@ card where the PC has one (whisper.cpp's Vulkan build), on the processor where n
 AI model sets up the person's own AI service or a model on their PC (the key in Windows Credential Manager), with
 *Test*. Step 5 is merged: the player's Subtitles tab translates a video's subtitles with the person's model (the
 whole transcript going with every batch) and shows the original and the translation together, each language in its
-own style, a version for each model. Next: step 6, highlights.
+own style, a version for each model. Step 6 is merged: the Highlights tab finds the moments worth watching with
+the person's model, lists them and marks them on the seek bar. Next: step 7, clips.
 
 ## Known rough edges
 

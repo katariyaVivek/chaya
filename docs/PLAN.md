@@ -181,7 +181,7 @@ service. Next: showing the original and the translation together, with each lang
 language under each line, each language's colour, font and size (design tokens `--subtitle-yellow` … and
 `--font-serif`), and a language's versions by model to switch between (`video_translations`, `use_translation`).
 
-### 6. Highlights ☐
+### 6. Highlights ☑
 
 **The person gets:** *Find highlights*: the moments that stand on their own, each with a title, a reason
 and its time, marked on the progress bar and listed beside the video. Clicking one plays it from the
@@ -190,6 +190,10 @@ start. The person picks how many.
 - The model gets the numbered lines and the title, and answers with line ranges; Chaya turns lines into
   times, so a highlight never starts mid-word.
 - **Tests:** the reply checked (ranges inside the video, in order, not overlapping); markers placed.
+
+**Done.** `core::highlights` (the question with numbered, timed lines and the language to write in; ranges checked,
+turned round, overlaps dropped by score, timed by lines; long videos in parts), kept as `video::Highlights`. The
+Highlights tab lists them, the seek bar marks them, and the Windows tour finds and plays them with a stand-in service.
 
 ### 7. Clips ☐
 

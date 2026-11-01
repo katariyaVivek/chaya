@@ -459,7 +459,12 @@ class StandInService:
                 keys.append(self.headers.get('Authorization'))
                 asked = json.loads(self.rfile.read(int(self.headers.get('Content-Length', 0))) or b'{}')
                 question = (asked.get('messages') or [{}])[-1].get('content', '')
-                if 'Translate these lines' in question:
+                if 'best highlights' in question:
+                    reply = json.dumps({'highlights': [
+                        {'from': 1, 'to': 2, 'title': 'Into the park', 'reason': 'Where the walk begins.', 'score': 8},
+                        {'from': 6, 'to': 7, 'title': 'The end of the walk', 'reason': 'A quiet close.', 'score': 7},
+                    ]})
+                elif 'Translate these lines' in question:
                     # Each line asked for, by its number: "12: text" becomes {"n": 12, "text": "FR text"}.
                     wanted = question.split('and no others:\n', 1)[1].splitlines()
                     lines = [{'n': int(l.split(':', 1)[0]), 'text': 'FR ' + l.split(':', 1)[1].strip()} for l in wanted if ':' in l]
@@ -507,6 +512,10 @@ def ai_model(tour, clip):
         translate(tour, clip)
     except Exception as e:
         tour.failed('translated', e)
+    try:
+        find_highlights(tour, clip)
+    except Exception as e:
+        tour.failed('highlights', e)
     tour.click('#settings-button')
     time.sleep(0.8)
     # The key out of Credential Manager again, and no service chosen.
@@ -545,6 +554,26 @@ def translate(tour, clip):
               under=tour.js("return document.getElementById('player-caption-under').textContent"),
               versions=tour.js("return document.getElementById('player-versions').innerText"),
               styles=tour.js("return document.querySelectorAll('#player-styles .styles__lang').length"))
+    tour.press_in_player('Escape')
+    tour.wait(lambda: tour.js("return document.getElementById('player').hidden"), 5)
+
+
+def find_highlights(tour, clip):
+    """The clip's highlights found by the stand-in service: listed with their times, marked on the seek bar, and the
+    second played from its start when clicked."""
+    tour.js(f"document.querySelector('#download-list .row[data-id=\"{clip}\"] .row__title').click(); return 1", gesture=True)
+    tour.wait(lambda: tour.js("return !document.getElementById('player').hidden"), 10)
+    tour.click('#tab-highlights')
+    tour.wait(lambda: not tour.js("return document.getElementById('player-find-row').hidden"), 15)
+    tour.click('#player-find')
+    found = "return [...document.querySelectorAll('#player-highlights .highlight')].map(h => h.innerText.replace(/\\n/g, ' | '))"
+    tour.wait(lambda: tour.js(found), 30)
+    tour.js("document.querySelectorAll('#player-highlights .highlight')[1]?.click(); return 1")
+    time.sleep(1.5)
+    tour.shot('highlights', found=tour.js(found),
+              head=tour.js("return document.getElementById('player-highlights-head').textContent"),
+              marks=tour.js("return document.querySelectorAll('#player-marks .controls__mark').length"),
+              playing_from=tour.js("return Math.round(document.getElementById('player-video').currentTime)"))
     tour.press_in_player('Escape')
     tour.wait(lambda: tour.js("return document.getElementById('player').hidden"), 5)
 

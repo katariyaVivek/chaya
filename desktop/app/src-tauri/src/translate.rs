@@ -290,6 +290,6 @@ pub fn translator(place: State<'_, AiPlace>) -> Option<String> {
 }
 
 /// A model as a translation is labelled: "Gemini · gemini-3.5-flash-lite".
-fn label(service: &Service, model: &str) -> String {
+pub(crate) fn label(service: &Service, model: &str) -> String {
     format!("{} · {}", if service.id == "custom" { "Your service" } else { service.name }, model.trim())
 }

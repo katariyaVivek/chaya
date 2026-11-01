@@ -359,6 +359,9 @@ a built-in browser. [`../desktop/README.md`](../desktop/README.md) has the layou
   numbered batches, each with the title and the whole transcript, read back by number, missing lines asked for alone;
   kept in `videos/ID.json` as it goes (`video::Translation`, a version per language and model) and saved as
   `name.LANG.srt` when whole. The app translates one video at a time and tells the window with `translate` events.
+- **Highlights** (`chaya-core`'s `highlights`, `desktop/app/src-tauri/src/highlights.rs`): the subtitles' lines,
+  numbered with their times, to the person's model, which answers with ranges of lines; checked and timed by lines,
+  kept in `videos/ID.json` (`video::Highlights`).
 - `desktop/app/src-tauri` hands `chaya-core` to the window as commands (`recognise_link`, `look_up`,
   `download` and the download controls) and sends it `download` events. The window
   may call only those and set its title bar's theme (`capabilities/default.json`). Its content
