@@ -167,6 +167,14 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
   Mono), kept in the window by language for every video. A language translated by more than one model lists them
   (*French translated by*); picking one writes that version to "name.fr.srt" (`use_translation`), and
   `videos/ID.json` marks which is there.
+- **Highlights** (`core::highlights`, `app/src-tauri/src/highlights.rs`). The player's Highlights tab finds, with the
+  person's AI model, the moments that stand on their own (3, 5, 8 or 12 of them, as picked) in the subtitles shown:
+  the model gets the title and the lines numbered with their times, and answers with ranges of lines, each with a
+  title, a reason and a score. Each range is checked (inside the video, turned round if given backwards, not
+  overlapping a better one, with a title) and timed by its lines, so a highlight starts with a line, never mid-word;
+  a video past 60,000 characters of subtitles goes in parts, each asked for its share, and the best are kept. They
+  are listed with their times, titles and reasons (the one playing marked), marked on the seek bar (its hover label
+  names the one under the pointer), and kept in `videos/ID.json`; clicking one plays it from its start.
 - **The player.** A saved video or sound opens in Chaya, from the list (its name), the grid or a post's viewer,
   instead of another program (*Open in another app* is in its bar, and offered when WebView2 can't play the file).
   The file comes a part at a time, at most 4 MB per answer, by the HTTP ranges the player asks for

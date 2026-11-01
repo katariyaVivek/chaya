@@ -53,6 +53,8 @@
   --screen-hover: rgb(255 255 255 / 0.16);
   --screen-track: rgb(255 255 255 / 0.25);
   --screen-loaded: rgb(255 255 255 / 0.4);
+  /* A highlight marked on the seek bar */
+  --screen-highlight: rgb(255 228 92 / 0.85);
 
   /* Type */
   --font-ui: "Geist", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;

@@ -133,8 +133,9 @@ Chaya for Windows keeps the same promises, with these differences:
   nothing about you or your videos. When you press *Translate* in the player, Chaya sends that service the video's
   title and the text of the subtitles shown (in batches, each with the whole transcript, so names and terms come out
   right), and nothing else: not the video, its sound, its address or anything about you. The translation is kept in
-  the video's small file in Chaya's folder and saved next to the video. Highlights, when they come, will send the
-  same, when you ask. When Chaya opens Settings, it checks whether
+  the video's small file in Chaya's folder and saved next to the video. When you press *Find* in the player's
+  Highlights tab, Chaya sends that service the same: the video's title and the subtitles shown, line by line with
+  their times, and nothing else. The highlights it finds are kept in the video's small file in Chaya's folder. When Chaya opens Settings, it checks whether
   Ollama or LM Studio is running at its usual address on your PC (127.0.0.1); that request never leaves your PC.
   What the service does with what it receives is up to its own privacy policy.
 - **The player.** Chaya plays what you saved on your PC, and remembers where each video stopped, in a small file

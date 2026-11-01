@@ -1036,7 +1036,11 @@ const playerNone = document.getElementById('player-none');
 const playerMakeBox = document.getElementById('player-make-box');
 const playerMaking = document.getElementById('player-making');
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
-const TABS = { transcript: ['tab-transcript', 'panel-transcript'], subtitles: ['tab-subtitles', 'panel-subtitles'] };
+const TABS = {
+  transcript: ['tab-transcript', 'panel-transcript'],
+  highlights: ['tab-highlights', 'panel-highlights'],
+  subtitles: ['tab-subtitles', 'panel-subtitles'],
+};
 const languageNames = (() => {
   try {
     return new Intl.DisplayNames(['en'], { type: 'language' });
@@ -1119,14 +1123,16 @@ async function openPlayer(id) {
   showPosition();
   playerVideo.focus();
 
-  const [tracks, start, made] = await Promise.all([
+  const [tracks, start, made, highlights] = await Promise.all([
     tauri.core.invoke('video_subtitles', { id }).catch(() => []),
     tauri.core.invoke('playback_start', { id }).catch(() => 0),
     tauri.core.invoke('made_subtitles', { id }).catch(() => null),
+    tauri.core.invoke('video_highlights', { id }).catch(() => null),
   ]);
   if (playing?.id !== id) return;
   playing.tracks = tracks;
   playing.made = made;
+  playing.highlights = highlights;
   const wanted = remembered('chaya.player.subtitles', '');
   showSubtitles(tracks.find((t) => t.language === wanted) ?? tracks[0] ?? null);
   whenReady(() => {
@@ -1280,7 +1286,9 @@ playerSeek.addEventListener('pointermove', (e) => {
   if (playerSeek.classList.contains('is-dragging')) seekTo(fraction);
   if (!Number.isFinite(playerVideo.duration)) return;
   playerHover.hidden = false;
-  playerHover.textContent = clock(fraction * playerVideo.duration);
+  const at = fraction * playerVideo.duration;
+  const highlight = playing?.highlights?.items.find((h) => h.start <= at * 1000 && at * 1000 < h.end);
+  playerHover.textContent = highlight ? `${clock(at)} · ${highlight.title}` : clock(at);
   playerHover.style.left = `${fraction * 100}%`;
 });
 playerSeek.addEventListener('pointerleave', () => (playerHover.hidden = true));
@@ -1413,6 +1421,7 @@ function showSubtitles(track) {
   showSecond();
   showMaking();
   showTranslate();
+  showHighlights();
   followLine();
 }
 
@@ -2816,6 +2825,7 @@ let translator = null;
 async function loadTranslator() {
   translator = await tauri.core.invoke('translator').catch(() => null);
   showTranslate();
+  showHighlights();
 }
 
 /** The Subtitles tab's *Translate*: the subtitles shown, into the language picked, with the person's model. */
@@ -2915,3 +2925,121 @@ tauri?.event.listen('translate', ({ payload: job }) => {
 });
 tauri?.core.invoke('translations_status').then((jobs) => jobs.forEach((job) => translateJobs.set(job.id, job))).catch(() => {});
 loadTranslator();
+
+// ── Highlights ──
+//
+// The moments worth watching on their own, found by the person's AI model in the subtitles shown (`highlights.rs`):
+// listed in the Highlights tab with their time, title and reason, marked on the seek bar, the one playing marked in
+// the list. Clicking one plays it from its start.
+
+const playerHighlights = document.getElementById('player-highlights');
+const findCount = document.getElementById('player-find-count');
+const findButton = document.getElementById('player-find');
+/** The video whose highlights are being found now, if any. */
+let findingFor = null;
+
+function showHighlights() {
+  if (!playing) return;
+  const found = playing.highlights?.items ?? [];
+  const head = document.getElementById('player-highlights-head');
+  head.hidden = found.length === 0;
+  head.textContent = found.length ? `${count(found.length, 'highlight')} · found by ${playing.highlights.model}` : '';
+  playerHighlights.replaceChildren(
+    ...found.map((h, i) => {
+      const li = document.createElement('li');
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'highlight';
+      button.dataset.highlight = String(i);
+      button.append(
+        span('highlight__time num', `${clock(h.start / 1000)} – ${clock(h.end / 1000)}`),
+        span('highlight__title', h.title),
+      );
+      if (h.reason) button.append(span('highlight__reason', h.reason));
+      button.addEventListener('click', () => {
+        playerVideo.currentTime = h.start / 1000;
+        playerVideo.play().catch(() => {});
+      });
+      li.append(button);
+      return li;
+    }),
+  );
+  markHighlights();
+
+  // Find: in the subtitles shown, with the person's model; again, in place of those found before.
+  const shown = playing.shown;
+  findCount.value = remembered('chaya.highlights.count', '5');
+  const busy = findingFor === playing.id;
+  document.getElementById('player-find-label').textContent = found.length ? 'Find them again' : 'Find highlights';
+  document.getElementById('player-find-row').hidden = !translator || !shown;
+  document.getElementById('player-find-setup').hidden = !!translator || !shown;
+  findButton.textContent = busy ? 'Stop' : 'Find';
+  findCount.disabled = busy;
+  const note = document.getElementById('player-find-note');
+  if (busy) note.textContent = `Finding highlights with ${translator}…`;
+  else if (!shown) note.textContent = 'Highlights are found in a video’s subtitles: make or translate them first.';
+  else if (!translator) note.textContent = 'Highlights are found by your own AI model: a service you have a key for, or one on this PC.';
+  else if (!note.dataset.kept) note.textContent = `In the ${languageName(shown.language)} subtitles, with ${translator}. Only their text and the video’s title are sent.`;
+  delete note.dataset.kept;
+}
+
+/** The highlights on the seek bar, each where it is in the video. */
+function markHighlights() {
+  const marks = document.getElementById('player-marks');
+  const duration = playerVideo.duration;
+  const found = Number.isFinite(duration) && duration > 0 ? playing?.highlights?.items ?? [] : [];
+  marks.replaceChildren(
+    ...found.map((h) => {
+      const mark = span('controls__mark', '');
+      mark.style.left = `${Math.min(100, (h.start / 1000 / duration) * 100)}%`;
+      mark.style.width = `${Math.max(0.4, ((h.end - h.start) / 1000 / duration) * 100)}%`;
+      return mark;
+    }),
+  );
+}
+playerVideo.addEventListener('loadedmetadata', markHighlights);
+
+/** The highlight playing now, marked in the list. */
+function followHighlight() {
+  const at = playerVideo.currentTime * 1000;
+  const index = (playing?.highlights?.items ?? []).findIndex((h) => h.start <= at && at < h.end);
+  const current = playerHighlights.querySelector('[aria-current="true"]');
+  if (current && current.dataset.highlight === String(index)) return;
+  current?.removeAttribute('aria-current');
+  if (index >= 0) playerHighlights.querySelector(`[data-highlight="${index}"]`)?.setAttribute('aria-current', 'true');
+}
+playerVideo.addEventListener('timeupdate', followHighlight);
+
+findCount.addEventListener('change', () => remember('chaya.highlights.count', findCount.value));
+findButton.addEventListener('click', async () => {
+  if (!playing?.shown) return;
+  const id = playing.id;
+  if (findingFor === id) {
+    tauri.core.invoke('stop_highlights', { id });
+    return;
+  }
+  findingFor = id;
+  showHighlights();
+  const note = document.getElementById('player-find-note');
+  try {
+    const found = await tauri.core.invoke('find_highlights', {
+      id,
+      from: playing.shown.language ?? null,
+      language: languageName(playing.shown.language),
+      count: Number(findCount.value),
+    });
+    if (playing?.id === id) playing.highlights = found;
+  } catch (message) {
+    if (playing?.id === id) {
+      note.textContent = String(message);
+      note.dataset.kept = 'yes';
+    }
+  } finally {
+    findingFor = null;
+    if (playing?.id === id) showHighlights();
+  }
+});
+document.getElementById('player-find-setup').addEventListener('click', () => {
+  showSettings(true);
+  document.getElementById('settings-ai').scrollIntoView({ block: 'start' });
+});

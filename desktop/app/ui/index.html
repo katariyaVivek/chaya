@@ -312,6 +312,7 @@
         <div class="controls__seek" id="player-seek" role="slider" tabindex="0" aria-label="Position" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
           <span class="controls__buffered" id="player-buffered"></span>
           <span class="controls__played" id="player-played"></span>
+          <span class="controls__marks" id="player-marks" aria-hidden="true"></span>
           <span class="controls__thumb" id="player-thumb"></span>
           <span class="controls__hover num" id="player-hover" hidden></span>
         </div>
@@ -336,6 +337,7 @@
       <div class="tabs" role="tablist" id="player-tabs">
         <span class="tabs__light" aria-hidden="true"></span>
         <button class="tabs__tab" type="button" role="tab" id="tab-transcript" aria-controls="panel-transcript" aria-selected="true">Transcript</button>
+        <button class="tabs__tab" type="button" role="tab" id="tab-highlights" aria-controls="panel-highlights" aria-selected="false" tabindex="-1">Highlights</button>
         <button class="tabs__tab" type="button" role="tab" id="tab-subtitles" aria-controls="panel-subtitles" aria-selected="false" tabindex="-1">Subtitles</button>
       </div>
       <!-- How making subtitles is going, whichever tab is open -->
@@ -354,6 +356,24 @@
           <p class="tabpanel__title">No subtitles yet</p>
           <p class="tabpanel__note" id="player-none-note"></p>
           <button class="pill pill--primary glass pressable" type="button" id="player-make-first">Make subtitles</button>
+        </div>
+      </section>
+      <section class="tabpanel" role="tabpanel" id="panel-highlights" aria-labelledby="tab-highlights" hidden>
+        <p class="tabpanel__head num" id="player-highlights-head" hidden></p>
+        <ol class="highlights" id="player-highlights"></ol>
+        <div class="tabpanel__make" id="player-find-box">
+          <p class="settings__label" id="player-find-label">Find highlights</p>
+          <p class="tabpanel__note" id="player-find-note"></p>
+          <div class="ai__row" id="player-find-row">
+            <select class="select" id="player-find-count" aria-label="How many">
+              <option value="3">3 highlights</option>
+              <option value="5">5 highlights</option>
+              <option value="8">8 highlights</option>
+              <option value="12">12 highlights</option>
+            </select>
+            <button class="pill glass pressable" type="button" id="player-find">Find</button>
+          </div>
+          <button class="pill glass pressable" type="button" id="player-find-setup" hidden>Set up an AI model</button>
         </div>
       </section>
       <section class="tabpanel" role="tabpanel" id="panel-subtitles" aria-labelledby="tab-subtitles" hidden>
