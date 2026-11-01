@@ -155,7 +155,7 @@ wrong key is told as a refused key; a model's JSON is found in a fenced block or
 up a stand-in OpenAI-compatible service on the runner, saves a key, picks its model and runs *Test*: the service
 must get the key, and `ai.json` must not hold it.
 
-### 5. Translation side by side ☐
+### 5. Translation side by side ☑
 
 **The person gets:** the subtitles in their language, with the original under it (or over it, or alone).
 Each language has its own colour, font and size. A translation can be made again with another model and
@@ -176,6 +176,10 @@ number, a line left out asked for on its own, rate limits waited out, progress h
 Translations are kept in `videos/ID.json`, a version per language and model, and a whole one is written as
 `name.LANG.srt`. *Translate* is in the player's Subtitles tab. The Windows tour translates its clip with a stand-in
 service. Next: showing the original and the translation together, with each language's style, and switching versions.
+
+**Side by side done** (the second PR). *Also show* and *On top* in the Subtitles tab, the transcript with the second
+language under each line, each language's colour, font and size (design tokens `--subtitle-yellow` … and
+`--font-serif`), and a language's versions by model to switch between (`video_translations`, `use_translation`).
 
 ### 6. Highlights ☐
 

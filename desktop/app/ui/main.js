@@ -1015,6 +1015,8 @@ viewer.addEventListener('keydown', (e) => {
 const player = document.getElementById('player');
 const playerVideo = document.getElementById('player-video');
 const playerCaption = document.getElementById('player-caption');
+const playerCaptionTop = document.getElementById('player-caption-top');
+const playerCaptionUnder = document.getElementById('player-caption-under');
 const playerLines = document.getElementById('player-lines');
 const playerLinesHead = document.getElementById('player-lines-head');
 const playerSubtitles = document.getElementById('player-subtitles');
@@ -1360,6 +1362,9 @@ function showSubtitles(track) {
   // Drawn again from nothing, whatever was on show.
   playing.line = null;
   const { tracks } = playing;
+  // The second language, shown with the first: the one chosen before, when this video has it.
+  const wantedSecond = remembered('chaya.player.second', '');
+  playing.second = (wantedSecond && tracks.find((t) => t !== track && (t.language ?? '') === wantedSecond)) || null;
   playerCc.hidden = tracks.length === 0;
   playerCc.setAttribute('aria-pressed', String(captionsOn));
   refill(
@@ -1392,7 +1397,11 @@ function showSubtitles(track) {
       button.type = 'button';
       button.className = 'player__line';
       button.dataset.line = String(i);
-      button.append(span('num', clock(line.start / 1000)), span('', line.text));
+      const text = span('', line.text);
+      // The second language's line at the same moment, under it.
+      const second = playing.second ? lineAt(playing.second.spans, line.start + 1) : -1;
+      if (second >= 0) text.append(span('player__second', playing.second.lines[second].text));
+      button.append(span('num', clock(line.start / 1000)), text);
       button.addEventListener('click', () => {
         playerVideo.currentTime = line.start / 1000;
         playerVideo.play().catch(() => {});
@@ -1401,9 +1410,185 @@ function showSubtitles(track) {
       return li;
     }),
   );
+  showSecond();
   showMaking();
   showTranslate();
   followLine();
+}
+
+// ── Two languages at once ──
+//
+// A second language drawn with the first (the original and its translation), either on top; and each language's own
+// colour, font and size, kept by language for every video.
+
+const SWATCHES = { white: '--subtitle-text', yellow: '--subtitle-yellow', cyan: '--subtitle-cyan', green: '--subtitle-green', pink: '--subtitle-pink' };
+const SIZES = { S: 0.8, M: 1, L: 1.2, XL: 1.45 };
+const FONTS = { Sans: '--font-ui', Serif: '--font-serif', Display: '--font-display', Mono: '--font-mono' };
+
+/** `language`'s subtitle style: its colour, size and font, as chosen in the Subtitles tab. */
+function styleOf(language) {
+  let kept = {};
+  try {
+    kept = JSON.parse(remembered(`chaya.style.${language ?? 'und'}`, '{}'));
+  } catch {
+    kept = {};
+  }
+  return { color: 'white', size: 'M', font: 'Sans', ...kept };
+}
+
+function setStyle(language, change) {
+  remember(`chaya.style.${language ?? 'und'}`, JSON.stringify({ ...styleOf(language), ...change }));
+  showSecond();
+  if (playing) playing.line = null;
+  followLine();
+}
+
+/** Gives a caption line `language`'s style. */
+function styleLine(el, language) {
+  const style = styleOf(language);
+  el.style.setProperty('--line-color', `var(${SWATCHES[style.color] ?? SWATCHES.white})`);
+  el.style.setProperty('--line-font', `var(${FONTS[style.font] ?? FONTS.Sans})`);
+  el.style.setProperty('--line-size', String(SIZES[style.size] ?? 1));
+}
+
+/** The Subtitles tab's second language, which goes on top, versions, and each shown language's style. */
+function showSecond() {
+  const { tracks, shown, second } = playing;
+  const others = tracks.filter((t) => t !== shown);
+  document.getElementById('player-second-box').hidden = !shown || others.length === 0;
+  const choose = (t) => {
+    remember('chaya.player.second', t ? t.language ?? '' : '');
+    showSubtitles(shown);
+  };
+  const none = document.createElement('button');
+  none.type = 'button';
+  none.textContent = 'None';
+  none.setAttribute('aria-pressed', String(!second));
+  none.addEventListener('click', () => choose(null));
+  refill(document.getElementById('player-second'), [
+    none,
+    ...others.map((t) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = languageName(t.language);
+      button.setAttribute('aria-pressed', String(t === second));
+      button.addEventListener('click', () => choose(t));
+      return button;
+    }),
+  ]);
+
+  document.getElementById('player-top-box').hidden = !second;
+  const top = remembered('chaya.player.top', 'second');
+  if (second) {
+    refill(
+      document.getElementById('player-top'),
+      [
+        ['first', shown],
+        ['second', second],
+      ].map(([which, t]) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = languageName(t.language);
+        button.setAttribute('aria-pressed', String(which === top));
+        button.addEventListener('click', () => {
+          remember('chaya.player.top', which);
+          showSecond();
+          playing.line = null;
+          followLine();
+        });
+        return button;
+      }),
+    );
+  }
+
+  const styles = document.getElementById('player-styles');
+  const languages = [shown, second].filter(Boolean);
+  styles.hidden = languages.length === 0;
+  styles.replaceChildren(
+    ...(languages.length ? [span('settings__label', 'Style')] : []),
+    ...languages.map((t) => {
+      const style = styleOf(t.language);
+      const box = document.createElement('div');
+      box.className = 'styles__lang';
+      const swatches = document.createElement('div');
+      swatches.className = 'styles__row';
+      swatches.append(
+        ...Object.entries(SWATCHES).map(([name, token]) => {
+          const swatch = document.createElement('button');
+          swatch.type = 'button';
+          swatch.className = 'swatch';
+          swatch.style.setProperty('--swatch', `var(${token})`);
+          swatch.setAttribute('aria-label', `${languageName(t.language)} in ${name}`);
+          swatch.title = name;
+          swatch.setAttribute('aria-pressed', String(style.color === name));
+          swatch.addEventListener('click', () => setStyle(t.language, { color: name }));
+          return swatch;
+        }),
+      );
+      const choice = (label, options, key) => {
+        const seg = document.createElement('div');
+        seg.className = 'seg';
+        seg.setAttribute('role', 'group');
+        seg.setAttribute('aria-label', `${languageName(t.language)}: ${label}`);
+        seg.append(
+          ...options.map((option) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.textContent = option;
+            button.setAttribute('aria-pressed', String(style[key] === option));
+            button.addEventListener('click', () => setStyle(t.language, { [key]: option }));
+            return button;
+          }),
+        );
+        return seg;
+      };
+      box.append(
+        span('styles__name', languageName(t.language)),
+        swatches,
+        choice('size', Object.keys(SIZES), 'size'),
+        choice('font', Object.keys(FONTS), 'font'),
+      );
+      return box;
+    }),
+  );
+  showVersions();
+}
+
+/** A language's translations by more than one model: which is the one next to the video, and the others to use. */
+async function showVersions() {
+  const box = document.getElementById('player-versions');
+  const id = playing?.id;
+  const versions = id == null ? [] : await tauri.core.invoke('video_translations', { id }).catch(() => []);
+  if (playing?.id !== id) return;
+  const shownLanguages = [playing.shown, playing.second].filter(Boolean).map((t) => t.language);
+  const groups = shownLanguages
+    .map((language) => [language, versions.filter((v) => v.to === language && v.whole)])
+    .filter(([, list]) => list.length > 1);
+  box.hidden = groups.length === 0;
+  box.replaceChildren(
+    ...groups.flatMap(([language, list]) => {
+      const seg = document.createElement('div');
+      seg.className = 'seg seg--wrap';
+      seg.setAttribute('role', 'group');
+      seg.setAttribute('aria-label', `Version of ${languageName(language)}`);
+      seg.append(
+        ...list.map((v) => {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.textContent = v.model;
+          button.title = `Translated ${new Date(v.made * 1000).toLocaleDateString()}`;
+          button.setAttribute('aria-pressed', String(v.inFile));
+          button.addEventListener('click', async () => {
+            if (v.inFile) return;
+            await tauri.core.invoke('use_translation', { id, to: v.to, model: v.model }).catch(() => {});
+            reloadSubtitles(id, playing.shown?.language);
+          });
+          return button;
+        }),
+      );
+      return [span('settings__label', `${languageName(language)} translated by`), seg];
+    }),
+  );
 }
 
 /** The line shown at `ms`, from the track's timeline (`core::subtitles::timeline`), or -1. */
@@ -1428,11 +1613,20 @@ let linesScrolled = 0;
 function followLine() {
   if (!playing) return;
   const track = playing.shown;
-  const line = track ? lineAt(track.spans, playerVideo.currentTime * 1000) : -1;
-  if (line === playing.line) return;
-  playing.line = line;
-  playerCaption.hidden = line < 0 || !captionsOn;
-  playerCaption.textContent = line < 0 ? '' : track.lines[line].text;
+  const ms = playerVideo.currentTime * 1000;
+  const line = track ? lineAt(track.spans, ms) : -1;
+  const second = playing.second ? lineAt(playing.second.spans, ms) : -1;
+  if (playing.line === `${line}:${second}`) return;
+  playing.line = `${line}:${second}`;
+  playerCaption.hidden = (line < 0 && second < 0) || !captionsOn;
+  // The second language on top, or under the first, each in its own style.
+  const first = [line < 0 ? '' : track.lines[line].text, track?.language];
+  const other = [second < 0 ? '' : playing.second.lines[second].text, playing.second?.language];
+  const [top, under] = remembered('chaya.player.top', 'second') === 'second' && playing.second ? [other, first] : [first, other];
+  for (const [el, [text, language]] of [[playerCaptionTop, top], [playerCaptionUnder, under]]) {
+    el.textContent = text;
+    styleLine(el, language);
+  }
   playerLines.querySelector('[aria-current="true"]')?.removeAttribute('aria-current');
   const current = line < 0 ? null : playerLines.querySelector(`[data-line="${line}"]`);
   if (!current) return;

@@ -4,6 +4,7 @@
 //! stopped or failed part-way carries on from there; a whole one is saved next to the video as "name.es.srt".
 
 use std::collections::{HashMap, VecDeque};
+use std::path::Path;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -127,6 +128,7 @@ impl Translating {
             model: label.clone(),
             made,
             lines: Vec::new(),
+            in_file: false,
         });
         let view = |done: &[Option<String>]| TranslateView {
             id: wanted.id,
@@ -153,18 +155,80 @@ impl Translating {
             (error, message)
         })?;
 
-        // Whole: saved next to the video, timed as the original.
-        let translated: Vec<Line> = source
-            .lines
-            .iter()
-            .zip(&translation.lines)
-            .map(|(line, text)| Line { text: text.clone().unwrap_or_default(), ..line.clone() })
-            .collect();
-        let path = subtitles::file_for(&task.path, &wanted.to);
-        std::fs::write(&path, subtitles::to_srt(&translated))
-            .map_err(|_| failed("Chaya couldn't write the translation next to the video."))?;
+        save(&videos, wanted.id, &task.path, &source.lines, &translation).map_err(|message| failed(&message))?;
         Ok(view(&translation.lines))
     }
+}
+
+/// Saves whole `translation` next to the video at `video` as "name.es.srt", timed as the original's `lines`, and
+/// marks it as the version there.
+fn save(videos: &Videos, id: u64, video: &Path, lines: &[Line], translation: &Translation) -> Result<(), String> {
+    if lines.len() != translation.lines.len() || !translation.is_whole() {
+        return Err("The original subtitles have changed since. Translate them again.".into());
+    }
+    let translated: Vec<Line> = lines
+        .iter()
+        .zip(&translation.lines)
+        .map(|(line, text)| Line { text: text.clone().unwrap_or_default(), ..line.clone() })
+        .collect();
+    std::fs::write(subtitles::file_for(video, &translation.to), subtitles::to_srt(&translated))
+        .map_err(|_| "Chaya couldn't write the translation next to the video.".to_string())?;
+    let _ = videos.in_file(id, &translation.to, &translation.model);
+    Ok(())
+}
+
+/// A version of a video's translation, as the player lists them.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VersionView {
+    to: String,
+    from: Option<String>,
+    model: String,
+    made: u64,
+    whole: bool,
+    in_file: bool,
+}
+
+/// Every translation of download `id`'s subtitles, a version for each language and model.
+#[tauri::command]
+pub fn video_translations(id: u64, videos: State<'_, Videos>) -> Vec<VersionView> {
+    let data = videos.load(id);
+    data.translations
+        .iter()
+        .map(|t| VersionView {
+            to: t.to.clone(),
+            from: t.from.clone(),
+            model: t.model.clone(),
+            made: t.made,
+            whole: t.is_whole(),
+            in_file: t.in_file,
+        })
+        .collect()
+}
+
+/// Saves download `id`'s translation into `to` by `model` next to the video, in place of the version there.
+#[tauri::command]
+pub fn use_translation(
+    id: u64,
+    to: String,
+    model: String,
+    videos: State<'_, Videos>,
+    downloads: State<'_, Downloads>,
+) -> Result<(), String> {
+    let task = downloads
+        .manager
+        .get(id)
+        .filter(|t| t.state == TaskState::Completed)
+        .ok_or("This video isn't saved any more.")?;
+    let data = videos.load(id);
+    let translation = data
+        .translations
+        .iter()
+        .find(|t| t.to == to && t.model == model && t.is_whole())
+        .ok_or("That version isn't whole. Translate again with that model.")?;
+    let source = subtitles::tracks_for(&task.path).into_iter().find(|t| t.language == translation.from);
+    let source = source.ok_or("The original subtitles aren't next to the video any more.")?;
+    save(&videos, id, &task.path, &source.lines, translation)
 }
 
 /// Translates download `id`'s subtitles in `from` into `to` ("es", named `into`, "Spanish"), after any asked for

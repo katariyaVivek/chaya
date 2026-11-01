@@ -161,6 +161,12 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
   for each language and model), so a translation stopped or failed carries on from there and nothing is paid for
   twice. A whole one is saved next to the video as "name.fr.srt", timed as the original, and shown. One video at a
   time; the rest wait their turn.
+- **Two languages at once.** The Subtitles tab's *Also show* draws a second language with the first (the original
+  and its translation), *On top* says which goes above, and the transcript lists the second under each line. Each
+  language has its own colour (white, yellow, cyan, green or pink), size (S to XL) and font (Sans, Serif, Display,
+  Mono), kept in the window by language for every video. A language translated by more than one model lists them
+  (*French translated by*); picking one writes that version to "name.fr.srt" (`use_translation`), and
+  `videos/ID.json` marks which is there.
 - **The player.** A saved video or sound opens in Chaya, from the list (its name), the grid or a post's viewer,
   instead of another program (*Open in another app* is in its bar, and offered when WebView2 can't play the file).
   The file comes a part at a time, at most 4 MB per answer, by the HTTP ranges the player asks for

@@ -43,6 +43,11 @@
   --subtitle-text: #FFFFFF;
   /* The outline around subtitle words drawn without a box (the player's default), and the shade under its controls */
   --subtitle-outline: rgb(0 0 0 / 0.9);
+  /* The colours a language's subtitles may be given (the player's Subtitles tab), each clear over the outline */
+  --subtitle-yellow: #FFE45C;
+  --subtitle-cyan: #7FE3FF;
+  --subtitle-green: #A6F08A;
+  --subtitle-pink: #FFA3D1;
   --screen-shade: rgb(0 0 0 / 0.6);
   /* On the video's screen, whatever the theme: a control under the pointer, the seek bar's track, and how much has loaded */
   --screen-hover: rgb(255 255 255 / 0.16);
@@ -53,6 +58,8 @@
   --font-ui: "Geist", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
   --font-mono: "Geist Mono", "Cascadia Mono", Consolas, ui-monospace, monospace;
   --font-display: "Cabinet Grotesk", "Geist", "Segoe UI Variable Display", sans-serif;
+  /* For subtitles only, when a language is given a serif */
+  --font-serif: Georgia, "Cambria", "Times New Roman", serif;
   --text-sm: 13px; --leading-sm: 18px;
   --text-md: 14px; --leading-md: 20px;
   --text-lg: 16px; --leading-lg: 24px;
