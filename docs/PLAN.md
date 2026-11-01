@@ -170,6 +170,13 @@ kept as a second version.
 - **Tests:** batching, numbering and the check that every line came back; a stand-in server that drops a
   line, or merges two.
 
+**Translating done** (the first of this step's two PRs). `core::translate`: batches of 40 lines (3,000 characters),
+the whole transcript with each up to 60,000 characters and the lines around beyond, lines numbered and read back by
+number, a line left out asked for on its own, rate limits waited out, progress handed back after every batch.
+Translations are kept in `videos/ID.json`, a version per language and model, and a whole one is written as
+`name.LANG.srt`. *Translate* is in the player's Subtitles tab. The Windows tour translates its clip with a stand-in
+service. Next: showing the original and the translation together, with each language's style, and switching versions.
+
 ### 6. Highlights ☐
 
 **The person gets:** *Find highlights*: the moments that stand on their own, each with a title, a reason

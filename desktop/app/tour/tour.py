@@ -457,8 +457,15 @@ class StandInService:
 
             def do_POST(self):
                 keys.append(self.headers.get('Authorization'))
-                self.rfile.read(int(self.headers.get('Content-Length', 0)))
-                reply = '{"ok": true, "word": "Chaya"}'
+                asked = json.loads(self.rfile.read(int(self.headers.get('Content-Length', 0))) or b'{}')
+                question = (asked.get('messages') or [{}])[-1].get('content', '')
+                if 'Translate these lines' in question:
+                    # Each line asked for, by its number: "12: text" becomes {"n": 12, "text": "FR text"}.
+                    wanted = question.split('and no others:\n', 1)[1].splitlines()
+                    lines = [{'n': int(l.split(':', 1)[0]), 'text': 'FR ' + l.split(':', 1)[1].strip()} for l in wanted if ':' in l]
+                    reply = json.dumps({'lines': lines})
+                else:
+                    reply = '{"ok": true, "word": "Chaya"}'
                 self.answer({'choices': [{'message': {'role': 'assistant', 'content': reply}}]})
 
         self.server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
@@ -466,7 +473,7 @@ class StandInService:
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
 
 
-def ai_model(tour):
+def ai_model(tour, clip):
     """Settings › AI model with a service on this machine: its address, a key (kept by Windows Credential Manager),
     a model from its list, and Test. The service must get the key; ai.json must not hold it. The key is removed after."""
     service = StandInService()
@@ -494,6 +501,14 @@ def ai_model(tour):
     tour.shot('ai-model', note=note, models=listed, key_note=tour.js("return document.getElementById('ai-key-note').innerText"),
               key_sent=service.keys.count(f'Bearer {key}'), asked=len(service.keys),
               key_in_ai_json=key in in_file, ai_json=in_file.replace('\n', ' '))
+    tour.click('#settings-button')
+    time.sleep(0.5)
+    try:
+        translate(tour, clip)
+    except Exception as e:
+        tour.failed('translated', e)
+    tour.click('#settings-button')
+    time.sleep(0.8)
     # The key out of Credential Manager again, and no service chosen.
     tour.js("document.querySelector('#ai-key-note .ai__link')?.click(); return 1")
     time.sleep(1)
@@ -503,6 +518,27 @@ def ai_model(tour):
     print(f'ai: key removed {removed}', flush=True)
     tour.click('#settings-button')
     service.server.shutdown()
+
+
+def translate(tour, clip):
+    """The clip's English subtitles translated into French by the stand-in service: listed beside the English, shown,
+    and saved next to the video."""
+    tour.js(f"document.querySelector('#download-list .row[data-id=\"{clip}\"] .row__title').click(); return 1", gesture=True)
+    tour.wait(lambda: tour.js("return !document.getElementById('player').hidden"), 10)
+    tour.click('#tab-subtitles')
+    tour.wait(lambda: not tour.js("return document.getElementById('player-translate-box').hidden"), 15)
+    tour.js("const s = document.getElementById('player-translate-to'); s.value = 'fr'; s.dispatchEvent(new Event('change')); return 1")
+    tour.click('#player-translate')
+    shown = "return document.getElementById('player-subtitles').innerText"
+    tour.wait(lambda: 'French' in (tour.js(shown) or ''), 60)
+    time.sleep(1)
+    srt = Path.home() / 'Downloads' / f'{CLIP}.fr.srt'
+    tour.shot('translated', card=tour.js("return document.getElementById('player-translating-text').textContent"),
+              subtitles=tour.js(shown), head=tour.js("return document.getElementById('player-lines-head').textContent"),
+              first=tour.js("return document.querySelector('#player-lines .player__line')?.innerText"),
+              file=srt.exists(), file_start=srt.read_text(encoding='utf-8')[:80] if srt.exists() else '')
+    tour.press_in_player('Escape')
+    tour.wait(lambda: tour.js("return document.getElementById('player').hidden"), 5)
 
 
 def looked_up(tour):
@@ -535,7 +571,7 @@ def run(tour, sites, seeded=None):
         except Exception as e:
             tour.failed('restored-tab', e)
         try:
-            ai_model(tour)
+            ai_model(tour, clip)
         except Exception as e:
             tour.failed('ai-model', e)
 

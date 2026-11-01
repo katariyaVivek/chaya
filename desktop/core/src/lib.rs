@@ -16,6 +16,7 @@ pub mod serve;
 pub mod session;
 pub mod speech;
 pub mod subtitles;
+pub mod translate;
 pub mod video;
 
 /// The HTTP client downloads use, so the app builds it with the same version.

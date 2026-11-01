@@ -355,6 +355,10 @@ a built-in browser. [`../desktop/README.md`](../desktop/README.md) has the layou
   two protocols (OpenAI's chat completions, Anthropic's Messages) with streaming off, the model's JSON checked
   against what was asked, and its failures in words; tested against a local stand-in service. The app keeps the key
   in Windows Credential Manager (`keyring`) and the choice in `ai.json`.
+- **Translation** (`chaya-core`'s `translate`, `desktop/app/src-tauri/src/translate.rs`): a video's subtitles in
+  numbered batches, each with the title and the whole transcript, read back by number, missing lines asked for alone;
+  kept in `videos/ID.json` as it goes (`video::Translation`, a version per language and model) and saved as
+  `name.LANG.srt` when whole. The app translates one video at a time and tells the window with `translate` events.
 - `desktop/app/src-tauri` hands `chaya-core` to the window as commands (`recognise_link`, `look_up`,
   `download` and the download controls) and sends it `download` events. The window
   may call only those and set its title bar's theme (`capabilities/default.json`). Its content

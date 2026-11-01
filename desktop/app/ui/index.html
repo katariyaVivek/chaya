@@ -340,6 +340,10 @@
         <div class="making__text"><span id="player-making-text"></span><button class="downloads__all" type="button" id="player-making-action">Stop</button></div>
         <span class="making__bar"><span id="player-making-bar"></span></span>
       </div>
+      <div class="making" id="player-translating" role="status" hidden>
+        <div class="making__text"><span id="player-translating-text"></span><button class="downloads__all" type="button" id="player-translating-action">Stop</button></div>
+        <span class="making__bar"><span></span></span>
+      </div>
       <section class="tabpanel" role="tabpanel" id="panel-transcript" aria-labelledby="tab-transcript">
         <p class="tabpanel__head num" id="player-lines-head"></p>
         <ol class="player__lines" id="player-lines"></ol>
@@ -356,6 +360,15 @@
           <p class="settings__label">Made on this PC</p>
           <p class="tabpanel__note" id="player-make-note"></p>
           <button class="pill glass pressable" type="button" id="player-make">Make subtitles</button>
+        </div>
+        <div class="tabpanel__make" id="player-translate-box" hidden>
+          <p class="settings__label" id="player-translate-label">Translate</p>
+          <p class="tabpanel__note" id="player-translate-note"></p>
+          <div class="ai__row" id="player-translate-row">
+            <select class="select" id="player-translate-to" aria-labelledby="player-translate-label"></select>
+            <button class="pill glass pressable" type="button" id="player-translate">Translate</button>
+          </div>
+          <button class="pill glass pressable" type="button" id="player-translate-setup" hidden>Set up an AI model</button>
         </div>
       </section>
     </aside>

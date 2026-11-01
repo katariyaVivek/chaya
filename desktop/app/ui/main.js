@@ -1102,6 +1102,8 @@ async function openPlayer(id) {
   playerNone.hidden = true;
   playerMakeBox.hidden = true;
   playerMaking.hidden = true;
+  playerTranslating.hidden = true;
+  document.getElementById('player-translate-box').hidden = true;
   playerCc.hidden = true;
   player.hidden = false;
   showPageView();
@@ -1400,6 +1402,7 @@ function showSubtitles(track) {
     }),
   );
   showMaking();
+  showTranslate();
   followLine();
 }
 
@@ -2534,7 +2537,10 @@ function sayAi(text) {
 function saveAi(change) {
   aiChanges += 1;
   ai.settings = { ...ai.settings, ...change };
-  return tauri.core.invoke('set_ai', { settings: ai.settings }).catch((message) => sayAi(String(message)));
+  return tauri.core
+    .invoke('set_ai', { settings: ai.settings })
+    .then(() => loadTranslator())
+    .catch((message) => sayAi(String(message)));
 }
 
 /** The chosen service's models, offered as the model field is typed in; a service that lists none is typed in full. */
@@ -2600,3 +2606,118 @@ document.getElementById('ai-test').addEventListener('click', async () => {
   }
 });
 loadAi();
+
+// ── Translating, from the player ──
+//
+// The subtitles shown, translated by the person's AI model (`translate.rs`): into a language picked in the Subtitles
+// tab, the whole transcript going with every batch so names and terms come out right. A whole translation is saved
+// next to the video ("name.es.srt") and listed with its other subtitles.
+
+const translateJobs = new Map();
+const translateTo = document.getElementById('player-translate-to');
+const playerTranslating = document.getElementById('player-translating');
+/** The person's model as *Translate* names it ("Gemini · gemini-3.5-flash-lite"), or null when not set up. */
+let translator = null;
+
+async function loadTranslator() {
+  translator = await tauri.core.invoke('translator').catch(() => null);
+  showTranslate();
+}
+
+/** The Subtitles tab's *Translate*: the subtitles shown, into the language picked, with the person's model. */
+function showTranslate() {
+  if (!playing) return;
+  const shown = playing.shown;
+  document.getElementById('player-translate-box').hidden = !shown;
+  if (!shown) return;
+  if (!translateTo.options.length) {
+    const named = LANGUAGES.map((code) => [code, languageName(code)]).sort((a, b) => a[1].localeCompare(b[1]));
+    const choose = new Option('Choose a language', '');
+    choose.disabled = true;
+    translateTo.replaceChildren(choose, ...named.map(([code, name]) => new Option(name, code)));
+    const own = (navigator.language || 'en').split('-')[0];
+    translateTo.value = remembered('chaya.translate.to', LANGUAGES.includes(own) ? own : 'en');
+  }
+  for (const option of [...translateTo.options].slice(1)) option.disabled = option.value === shown.language;
+  // Never into the language the subtitles are already in.
+  if (translateTo.value === shown.language) translateTo.value = '';
+  const job = translateJobs.get(playing.id);
+  const busy = job && ['waiting', 'translating'].includes(job.state);
+  document.getElementById('player-translate-row').hidden = !translator;
+  document.getElementById('player-translate-setup').hidden = !!translator;
+  document.getElementById('player-translate').disabled = busy || !translateTo.value;
+  document.getElementById('player-translate-note').textContent = translator
+    ? `${languageName(shown.language)} subtitles, with ${translator}. Only their text and the video’s title are sent.`
+    : 'Translating uses your own AI model: a service you have a key for, or one on this PC.';
+  showTranslating();
+}
+
+function translatingText(job) {
+  const into = languageName(job.language);
+  switch (job.state) {
+    case 'waiting':
+      return `Waiting to translate into ${into}`;
+    case 'translating':
+      return `Translating into ${into} · ${job.done} of ${count(job.total, 'line')}`;
+    case 'done':
+      return `Translated into ${into} with ${job.model}`;
+    default:
+      return job.message ?? 'The translation couldn’t be finished.';
+  }
+}
+
+/** How translating the playing video is going, over the tabs. */
+function showTranslating() {
+  if (!playing) return;
+  const job = translateJobs.get(playing.id);
+  clearTimeout(showTranslating.timer);
+  playerTranslating.hidden = !job;
+  if (!job) return;
+  document.getElementById('player-translating-text').textContent = translatingText(job);
+  const share = job.state === 'done' ? 100 : job.total ? (100 * job.done) / job.total : 0;
+  playerTranslating.style.setProperty('--p', String(share));
+  const action = document.getElementById('player-translating-action');
+  action.hidden = job.state === 'done';
+  action.textContent = job.state === 'failed' ? 'Try again' : 'Stop';
+  if (job.state === 'done') showTranslating.timer = setTimeout(() => (playerTranslating.hidden = true), 6000);
+}
+
+function translate(to = translateTo.value) {
+  if (!playing?.shown || !to) return;
+  remember('chaya.translate.to', to);
+  const from = playing.shown.language ?? null;
+  translateJobs.set(playing.id, { id: playing.id, state: 'waiting', done: 0, total: 0, language: to, from });
+  showTranslate();
+  tauri.core.invoke('translate_video', { id: playing.id, from, to, into: languageName(to) }).catch((message) => {
+    translateJobs.set(playing.id, { id: playing.id, state: 'failed', language: to, message: String(message) });
+    showTranslate();
+  });
+}
+
+document.getElementById('player-translate').addEventListener('click', () => translate());
+translateTo.addEventListener('change', showTranslate);
+document.getElementById('player-translate-setup').addEventListener('click', () => {
+  showSettings(true);
+  document.getElementById('settings-ai').scrollIntoView({ block: 'start' });
+});
+document.getElementById('player-translating-action').addEventListener('click', () => {
+  const job = playing && translateJobs.get(playing.id);
+  if (!job) return;
+  if (job.state === 'failed') translate(job.language);
+  else tauri.core.invoke('stop_translation', { id: playing.id });
+});
+
+tauri?.event.listen('translate', ({ payload: job }) => {
+  const from = translateJobs.get(job.id)?.from;
+  if (job.state === 'stopped') translateJobs.delete(job.id);
+  else translateJobs.set(job.id, { ...job, from });
+  if (playing?.id !== job.id) return;
+  showTranslate();
+  // Done: listed with the video's other subtitles, and shown.
+  if (job.state === 'done') {
+    remember('chaya.player.subtitles', job.language);
+    reloadSubtitles(job.id, job.language);
+  }
+});
+tauri?.core.invoke('translations_status').then((jobs) => jobs.forEach((job) => translateJobs.set(job.id, job))).catch(() => {});
+loadTranslator();
