@@ -42,13 +42,13 @@ curl -o app/src/main/assets/adblock/easyprivacy.txt https://easylist.to/easylist
 
 | Workflow | When | What |
 |---|---|---|
-| `build.yml` | every PR and push to `main` | unit tests, then the debug APK. Test-only changes skip the APK. A failing test prints its message, and the reports are uploaded. |
+| `build.yml` | every PR and push to `main` | unit tests, then the debug APK. Test-only changes skip the APK; a PR that changes only `desktop/`, its workflows, `docs/` or the root's Markdown skips the job altogether (skipped, so it never holds up a merge). A failing test prints its message, and the reports are uploaded. |
 | `build.yml` (manual) | *Run workflow* | also runs the instrumented tests on an emulator |
 | `build.yml` (tag `v*`) | pushing a version tag | tests, signed release APK, GitHub Release |
 | `engine.yml` | PRs touching the Python engine | pytest with the versions pinned in `app/build.gradle.kts` (`enginePackages`) |
 | `device-tests.yml` | `ui-check` label on a PR, or manual | `connectedDebugAndroidTest` in a cloud emulator |
 | `emulator-check.yml` | `ui-check` label on a PR, or manual | `walkthrough.py` drives the debug build and, beside it, the release build (R8-shrunk, debug-signed), including a link looked up by the engine; screenshots, screen text and logs are uploaded as `emulator-evidence-debug` and `-release` |
-| `desktop.yml` | PRs touching `desktop/` | Chaya for Windows: `chaya-core` tests on Linux, then lint, tests and the NSIS installer on Windows, uploaded as `chaya-windows-installer` |
+| `desktop.yml` | PRs touching `desktop/` | Chaya for Windows: `chaya-core` tests on Linux, then lint, tests and the NSIS installer on Windows, uploaded as `chaya-windows-installer`; once the tour has seen it start, a PR's installer is also published on the `windows-test` prerelease (`Chaya-Windows-test-setup.exe`), replaced by the next PR's, to try a change before it is merged |
 | `desktop-design.yml` | PRs touching `desktop/design/` | the desktop design system's tests (`npm test`) |
 
 ## Chaya for Windows

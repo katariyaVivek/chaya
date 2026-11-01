@@ -427,6 +427,44 @@ jobs:
           fi
           gh release upload windows-preview Chaya-Windows-preview-setup.exe --clobber
 
+  # A pull request's own installer, once the tour has seen it start: on the fixed `windows-test` prerelease, replaced by
+  # the next pull request's build, so a change can be tried before it is merged (and without waiting for main's build).
+  test-build:
+    name: Windows test build
+    needs: [windows, tour]
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Get the installer
+        uses: actions/download-artifact@v4
+        with:
+          name: chaya-windows-installer
+          path: installer
+
+      - name: Publish it as the test build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          setup=$(ls installer/*.exe | head -n 1)
+          cp "$setup" Chaya-Windows-test-setup.exe
+          title="Chaya for Windows (test build of a pull request)"
+          notes="Built from pull request #${PR_NUMBER} (${PR_TITLE}), commit ${PR_SHA::7}, on $(date -u '+%Y-%m-%d at %H:%M UTC').
+          It is for trying a change before it is merged, and is replaced by the next pull request's build; it is not a release.
+          Run Chaya-Windows-test-setup.exe to install, or to update the Chaya you have: your downloads, settings and sign-ins stay."
+          if gh release view windows-test >/dev/null 2>&1; then
+            gh release edit windows-test --prerelease --title "$title" --notes "$notes"
+          else
+            gh release create windows-test --prerelease --latest=false --target main --title "$title" --notes "$notes"
+          fi
+          gh release upload windows-test Chaya-Windows-test-setup.exe --clobber
+
   # A release of Chaya for Windows, from a windows-v* tag, once the tour has seen the app start: the installer on
   # its own release page (never the repository's "latest", which stays the phone's), with its notes from
   # docs/releases/windows-VERSION.md when there are any; and `latest.json` on the fixed `windows-latest` release,
