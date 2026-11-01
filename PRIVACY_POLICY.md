@@ -130,8 +130,11 @@ Chaya for Windows keeps the same promises, with these differences:
   `http://` is accepted only on your PC or your local network). Chaya keeps which service, address and model you chose
   in a small file in its own folder. Contact with the service happens only when you act: listing its models when you
   choose it or save a key, and *Test*, which sends a fixed question ("Reply with exactly this JSON object…") and
-  nothing about you or your videos. Translation and highlights, when they come, will send the service only the
-  subtitle text and title of the video you ask about, when you ask. When Chaya opens Settings, it checks whether
+  nothing about you or your videos. When you press *Translate* in the player, Chaya sends that service the video's
+  title and the text of the subtitles shown (in batches, each with the whole transcript, so names and terms come out
+  right), and nothing else: not the video, its sound, its address or anything about you. The translation is kept in
+  the video's small file in Chaya's folder and saved next to the video. Highlights, when they come, will send the
+  same, when you ask. When Chaya opens Settings, it checks whether
   Ollama or LM Studio is running at its usual address on your PC (127.0.0.1); that request never leaves your PC.
   What the service does with what it receives is up to its own privacy policy.
 - **The player.** Chaya plays what you saved on your PC, and remembers where each video stopped, in a small file

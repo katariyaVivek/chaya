@@ -151,6 +151,16 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
   model" › SERVICE, `keyring`), read each time it is used, never written to a file or sent to the window once
   saved; `ai.json` in the app's data folder holds the service, address and model. Plain `http://` is accepted only
   on the PC or the local network, and a program there is reached without the PC's proxy.
+- **Translation** (`core::translate`, `app/src-tauri/src/translate.rs`). The player's Subtitles tab translates the
+  subtitles shown into a language picked there, with the person's AI model; the making card above the tabs counts
+  the lines, with *Stop*. As Vimpo's Smart Translation: every request carries the title and the whole transcript (or,
+  past 60,000 characters, the lines around), so a misheard name is put right and a term translated the same way each
+  time; lines go out numbered, at most 40 (and 3,000 characters) a request, and must come back with the same
+  numbers. A line left out, or merged into another, is asked for on its own (twice). A rate limit is waited out (its
+  Retry-After, at most 90 s, four times). What is translated is kept in `videos/ID.json` after every batch (a version
+  for each language and model), so a translation stopped or failed carries on from there and nothing is paid for
+  twice. A whole one is saved next to the video as "name.fr.srt", timed as the original, and shown. One video at a
+  time; the rest wait their turn.
 - **The player.** A saved video or sound opens in Chaya, from the list (its name), the grid or a post's viewer,
   instead of another program (*Open in another app* is in its bar, and offered when WebView2 can't play the file).
   The file comes a part at a time, at most 4 MB per answer, by the HTTP ranges the player asks for

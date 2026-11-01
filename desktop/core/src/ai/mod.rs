@@ -8,7 +8,7 @@
 //! so a key never crosses the internet unencrypted.
 
 #[cfg(test)]
-mod stand_in;
+pub(crate) mod stand_in;
 
 use std::net::IpAddr;
 use std::path::Path;
@@ -283,8 +283,9 @@ pub async fn models(endpoint: &Endpoint) -> Result<Vec<String>, AiError> {
 }
 
 /// Words in the names of models made for something other than text (OpenAI lists them all together).
+/// Gemini's "live" models answer only over its Live API's open connection, never a request like Chaya's.
 const NOT_FOR_CHAT: &[&str] =
-    &["embed", "tts", "whisper", "dall-e", "moderation", "image", "audio", "realtime", "transcribe", "rerank"];
+    &["embed", "tts", "whisper", "dall-e", "moderation", "image", "audio", "realtime", "transcribe", "rerank", "live"];
 
 /// A question for the model: what it is for (`system`), what is asked (`user`), and how long its answer may run.
 pub struct Ask<'a> {
@@ -488,7 +489,8 @@ mod tests {
     async fn the_models_listed_are_those_for_text_without_gemini_s_prefix() {
         let listed = json!({"data": [
             {"id": "gpt-4.1-mini"}, {"id": "text-embedding-3-small"}, {"id": "whisper-1"},
-            {"id": "models/gemini-2.5-flash"}, {"id": "dall-e-3"}, {"id": "gpt-4.1"}
+            {"id": "models/gemini-2.5-flash"}, {"id": "dall-e-3"}, {"id": "gpt-4.1"},
+            {"id": "models/gemini-3-flash-live"}, {"id": "gemini-live-2.5-flash-preview"}
         ]});
         let stand_in = StandIn::start(vec![("/v1/models", Answer::ok(listed.to_string()))]);
         let names = models(&at(&stand_in, "openai", Some("k"))).await.unwrap();

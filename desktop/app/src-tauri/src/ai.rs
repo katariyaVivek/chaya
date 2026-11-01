@@ -29,7 +29,8 @@ fn named(settings: &Settings) -> &'static str {
     }
 }
 
-fn endpoint(settings: &Settings) -> Result<Endpoint, String> {
+/// The chosen service, with its key from Credential Manager; or why it can't be reached, in words.
+pub fn endpoint(settings: &Settings) -> Result<Endpoint, String> {
     let key = settings.service.as_deref().and_then(key_of);
     Endpoint::new(settings, key).map_err(|error| error.message(named(settings)))
 }

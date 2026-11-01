@@ -43,8 +43,14 @@ pub struct StandIn {
 impl StandIn {
     /// Answers each path in `answers` ("/v1/chat/completions"); anything else is not found.
     pub fn start(answers: Vec<(&str, Answer)>) -> StandIn {
-        let answers: Arc<HashMap<String, Answer>> =
-            Arc::new(answers.into_iter().map(|(path, answer)| (path.to_string(), answer)).collect());
+        let answers: HashMap<String, Answer> =
+            answers.into_iter().map(|(path, answer)| (path.to_string(), answer)).collect();
+        StandIn::answering(move |sent| answers.get(&sent.path).cloned().unwrap_or_else(|| Answer::status(404, "{}")))
+    }
+
+    /// Answers each request with what `answer` makes of it: a model that reads what it was asked.
+    pub fn answering(answer: impl Fn(&Sent) -> Answer + Send + Sync + 'static) -> StandIn {
+        let answer = Arc::new(answer);
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let port = listener.local_addr().unwrap().port();
         let sent = Arc::new(Mutex::new(Vec::new()));
@@ -77,8 +83,9 @@ impl StandIn {
                 let mut body = vec![0; length];
                 let _ = reader.read_exact(&mut body);
                 let body = String::from_utf8_lossy(&body).into_owned();
-                kept.lock().unwrap().push(Sent { method, path: path.clone(), authorization, api_key, body });
-                let answer = answers.get(&path).cloned().unwrap_or_else(|| Answer::status(404, "{}"));
+                let sent = Sent { method, path, authorization, api_key, body };
+                let answer = answer(&sent);
+                kept.lock().unwrap().push(sent);
                 let mut head = format!(
                     "HTTP/1.1 {} X\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n",
                     answer.status,

@@ -37,8 +37,29 @@ pub struct VideoData {
     pub transcript_model: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub transcript_on: Option<Device>,
+    /// Its subtitles translated by the person's AI model, a version for each language and model.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub translations: Vec<Translation>,
     #[serde(flatten)]
     pub other: Map<String, Value>,
+}
+
+/// A translation of a video's subtitles: from which language's subtitles (`None` for a file that names none), into
+/// which ("es"), by which model ("Gemini · gemini-3.5-flash-lite"), when it was begun (seconds since 1970), and a line
+/// for each of the original's, `None` where it is not translated yet.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Translation {
+    pub from: Option<String>,
+    pub to: String,
+    pub model: String,
+    pub made: u64,
+    pub lines: Vec<Option<String>>,
+}
+
+impl Translation {
+    pub fn is_whole(&self) -> bool {
+        self.lines.iter().all(Option::is_some)
+    }
 }
 
 impl VideoData {
@@ -116,6 +137,19 @@ impl Videos {
         let part = path.with_extension("jpg.part");
         std::fs::write(&part, jpeg)?;
         std::fs::rename(&part, &path)
+    }
+
+    /// Keeps `translation` of download `id`, in place of the one from the same subtitles, into the same language, by
+    /// the same model.
+    pub fn translated(&self, id: u64, translation: &Translation) -> std::io::Result<()> {
+        self.change(id, |data| {
+            let same =
+                |t: &Translation| t.from == translation.from && t.to == translation.to && t.model == translation.model;
+            match data.translations.iter_mut().find(|t| same(t)) {
+                Some(kept) => *kept = translation.clone(),
+                None => data.translations.push(translation.clone()),
+            }
+        })
     }
 
     /// Forgets download `id`, and its poster, when it leaves the list: its number may be given to another download.
@@ -201,6 +235,29 @@ mod tests {
         assert!(!videos.poster(5).exists());
         videos.forget(4);
         assert!(!videos.poster(4).exists());
+    }
+
+    #[test]
+    fn a_translation_is_kept_a_version_for_each_model_and_updated_as_it_goes() {
+        let dir = tempfile::tempdir().unwrap();
+        let videos = Videos::in_folder(dir.path().to_path_buf());
+        let mut first = Translation {
+            from: Some("en".into()),
+            to: "es".into(),
+            model: "Gemini · flash-lite".into(),
+            made: 1,
+            lines: vec![Some("Hola".into()), None],
+        };
+        videos.translated(7, &first).unwrap();
+        assert!(!videos.load(7).translations[0].is_whole());
+        first.lines[1] = Some("Adiós".into());
+        videos.translated(7, &first).unwrap();
+        let other = Translation { model: "OpenAI · gpt-4.1".into(), ..first.clone() };
+        videos.translated(7, &other).unwrap();
+        let kept = videos.load(7).translations;
+        assert_eq!(kept.len(), 2, "one version a model");
+        assert!(kept[0].is_whole());
+        assert_eq!(kept[1].model, "OpenAI · gpt-4.1");
     }
 
     #[test]
