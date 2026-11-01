@@ -525,6 +525,8 @@ pub fn run() {
             translate::stop_translation,
             translate::translations_status,
             translate::translator,
+            translate::video_translations,
+            translate::use_translation,
             speech::set_speech,
             speech::delete_speech_model,
             speech::make_subtitles,

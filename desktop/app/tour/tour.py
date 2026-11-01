@@ -537,6 +537,14 @@ def translate(tour, clip):
               subtitles=tour.js(shown), head=tour.js("return document.getElementById('player-lines-head').textContent"),
               first=tour.js("return document.querySelector('#player-lines .player__line')?.innerText"),
               file=srt.exists(), file_start=srt.read_text(encoding='utf-8')[:80] if srt.exists() else '')
+    # Both at once: the original with its translation, at a moment with a line.
+    tour.js("[...document.querySelectorAll('#player-second button')].find(b => b.textContent === 'English')?.click(); return 1")
+    tour.js("const v = document.getElementById('player-video'); v.pause(); v.currentTime = 2; return 1")
+    time.sleep(1.5)
+    tour.shot('two-languages', top=tour.js("return document.getElementById('player-caption-top').textContent"),
+              under=tour.js("return document.getElementById('player-caption-under').textContent"),
+              versions=tour.js("return document.getElementById('player-versions').innerText"),
+              styles=tour.js("return document.querySelectorAll('#player-styles .styles__lang').length"))
     tour.press_in_player('Escape')
     tour.wait(lambda: tour.js("return document.getElementById('player').hidden"), 5)
 

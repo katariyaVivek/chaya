@@ -298,7 +298,10 @@
   <div class="player__body">
     <div class="player__stage" id="player-stage">
       <video class="player__video" id="player-video" tabindex="0" aria-label="Video" preload="metadata" disablepictureinpicture disableremoteplayback></video>
-      <p class="player__caption" id="player-caption" hidden></p>
+      <div class="player__caption" id="player-caption" hidden>
+        <p class="caption__line" id="player-caption-top"></p>
+        <p class="caption__line" id="player-caption-under"></p>
+      </div>
       <p class="player__note glass" id="player-resumed" role="status" hidden><span></span><button class="downloads__all" type="button" id="player-restart">Start over</button></p>
       <div class="player__problem" id="player-problem" hidden>
         <p>Chaya can't play this file. Another app on this PC may.</p>
@@ -356,6 +359,16 @@
       <section class="tabpanel" role="tabpanel" id="panel-subtitles" aria-labelledby="tab-subtitles" hidden>
         <p class="settings__label" id="player-subtitles-label">Show</p>
         <div class="seg seg--wrap" role="group" aria-labelledby="player-subtitles-label" id="player-subtitles"></div>
+        <div class="tabpanel__part" id="player-second-box" hidden>
+          <p class="settings__label" id="player-second-label">Also show</p>
+          <div class="seg seg--wrap" role="group" aria-labelledby="player-second-label" id="player-second"></div>
+        </div>
+        <div class="tabpanel__part" id="player-top-box" hidden>
+          <p class="settings__label" id="player-top-label">On top</p>
+          <div class="seg seg--wrap" role="group" aria-labelledby="player-top-label" id="player-top"></div>
+        </div>
+        <div class="tabpanel__part" id="player-versions" hidden></div>
+        <div class="tabpanel__part" id="player-styles" hidden></div>
         <div class="tabpanel__make" id="player-make-box" hidden>
           <p class="settings__label">Made on this PC</p>
           <p class="tabpanel__note" id="player-make-note"></p>

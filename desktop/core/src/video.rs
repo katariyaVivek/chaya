@@ -54,6 +54,9 @@ pub struct Translation {
     pub model: String,
     pub made: u64,
     pub lines: Vec<Option<String>>,
+    /// The version saved next to the video as "name.es.srt", of those into its language.
+    #[serde(default)]
+    pub in_file: bool,
 }
 
 impl Translation {
@@ -152,6 +155,21 @@ impl Videos {
         })
     }
 
+    /// Marks download `id`'s translation into `to` by `model` as the one saved next to the video, and no other into
+    /// that language; the version marked, or `None` when there is no whole one of that model.
+    pub fn in_file(&self, id: u64, to: &str, model: &str) -> std::io::Result<Option<Translation>> {
+        let mut chosen = None;
+        self.change(id, |data| {
+            let found = data.translations.iter().position(|t| t.to == to && t.model == model && t.is_whole());
+            let Some(found) = found else { return };
+            for (i, translation) in data.translations.iter_mut().enumerate().filter(|(_, t)| t.to == to) {
+                translation.in_file = i == found;
+            }
+            chosen = Some(data.translations[found].clone());
+        })?;
+        Ok(chosen)
+    }
+
     /// Forgets download `id`, and its poster, when it leaves the list: its number may be given to another download.
     pub fn forget(&self, id: u64) {
         let _ = std::fs::remove_file(self.path(id));
@@ -247,6 +265,7 @@ mod tests {
             model: "Gemini · flash-lite".into(),
             made: 1,
             lines: vec![Some("Hola".into()), None],
+            in_file: false,
         };
         videos.translated(7, &first).unwrap();
         assert!(!videos.load(7).translations[0].is_whole());
@@ -258,6 +277,19 @@ mod tests {
         assert_eq!(kept.len(), 2, "one version a model");
         assert!(kept[0].is_whole());
         assert_eq!(kept[1].model, "OpenAI · gpt-4.1");
+        // The one in the file: one of each language's at a time, and only a whole one.
+        assert_eq!(
+            videos.in_file(7, "es", "OpenAI · gpt-4.1").unwrap().map(|t| t.model),
+            Some("OpenAI · gpt-4.1".into())
+        );
+        let marked: Vec<bool> = videos.load(7).translations.iter().map(|t| t.in_file).collect();
+        assert_eq!(marked, [false, true]);
+        videos.in_file(7, "es", "Gemini · flash-lite").unwrap();
+        let marked: Vec<bool> = videos.load(7).translations.iter().map(|t| t.in_file).collect();
+        assert_eq!(marked, [true, false]);
+        let part = Translation { to: "de".into(), lines: vec![None], ..first.clone() };
+        videos.translated(7, &part).unwrap();
+        assert_eq!(videos.in_file(7, "de", "Gemini · flash-lite").unwrap(), None, "not one that isn't whole");
     }
 
     #[test]

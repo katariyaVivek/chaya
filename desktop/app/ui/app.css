@@ -449,6 +449,15 @@ body:has(.player:not([hidden]), .viewer:not([hidden])) .settings__panel { backgr
   pointer-events: none;
   transition: bottom var(--dur-enter) var(--ease-out);
 }
+/* Each language's own colour, font and size (the Subtitles tab), the original and its translation one over the other */
+.caption__line {
+  margin: 0;
+  color: var(--line-color, var(--subtitle-text));
+  font-family: var(--line-font, var(--font-ui));
+  font-size: calc(1em * var(--line-size, 1));
+}
+.caption__line:empty { display: none; }
+.caption__line + .caption__line { margin-top: 0.15em; }
 /* With the controls gone, the line sits lower, as on a television */
 .player--idle .player__caption { bottom: var(--space-4); }
 
@@ -930,3 +939,21 @@ body.showing-downloads .found { display: none !important; }
 .tabstrip__new { width: 32px; height: 32px; }
 .tabstrip__new svg { width: 18px; height: 18px; }
 
+
+/* The transcript's second language, under each line */
+.player__second { display: block; margin-top: 2px; color: var(--muted); }
+/* The Subtitles tab's parts, and a language's colours as swatches */
+.tabpanel__part { display: grid; gap: var(--space-1); }
+.styles__lang { display: grid; gap: var(--space-1); padding: var(--space-1); border-radius: var(--radius-md); background: var(--wash); }
+.styles__row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); }
+.swatch {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 2px solid var(--border);
+  border-radius: 50%;
+  background: var(--swatch);
+  cursor: pointer;
+}
+.swatch[aria-pressed="true"] { border-color: var(--text); box-shadow: 0 0 0 2px var(--surface); }
+.swatch:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
