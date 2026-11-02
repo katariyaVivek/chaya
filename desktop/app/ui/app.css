@@ -418,6 +418,8 @@ body:has(.player:not([hidden]), .viewer:not([hidden])) .settings__panel { backgr
   min-height: 0;
   padding: 0 var(--space-2) var(--space-2);
 }
+/* The picture, and under it the clip being trimmed */
+.player__main { display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: var(--space-1); min-height: 0; }
 .player__stage {
   position: relative;
   display: grid;
@@ -674,7 +676,7 @@ body:has(.player:not([hidden]), .viewer:not([hidden])) .settings__panel { backgr
 
 /* Full window (F, or a double-click): the video alone, over the whole window */
 .player--full { inset: 0; z-index: 60; grid-template-rows: minmax(0, 1fr); background: var(--screen); }
-.player--full .player__top, .player--full .player__panel { display: none; }
+.player--full .player__top, .player--full .player__panel, .player--full .cut { display: none; }
 .player--full .player__body { grid-template-columns: minmax(0, 1fr); padding: 0; }
 .player--full .player__stage { border-radius: 0; }
 .downloads__all {
@@ -990,3 +992,136 @@ body.showing-downloads .found { display: none !important; }
 .highlight__time { color: var(--muted); font-size: var(--text-sm); }
 .highlight__title { font-weight: 600; }
 .highlight__reason { color: var(--muted); font-size: var(--text-sm); }
+
+/* Lines chosen in the transcript, for a clip: lit, and a bar at the foot of the list to make it */
+.player__line.is-picked { border-color: var(--accent-edge); background: rgb(var(--accent-rgb) / 0.12); color: var(--text); }
+.pick {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-2);
+  border: 1px solid var(--accent-edge);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  box-shadow: var(--shadow);
+  animation: var(--anim-enter) var(--dur-enter) var(--ease-out) both;
+}
+.pick__text { flex: 1; font-size: var(--text-sm); }
+
+/* A list's head with an action at its end (Highlights: Add all to clips) */
+.tabpanel__headrow { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-1); }
+.tabpanel__headrow .tabpanel__head { flex: 1; }
+.tabpanel__headrow .downloads__all { color: var(--muted); font-size: var(--text-sm); }
+.tabpanel__headrow .downloads__all:hover { color: var(--text); }
+
+/* A highlight's Add to clips, and a clip's own actions, at the card's corner */
+.highlights > li { position: relative; }
+.highlights .highlight { padding-right: calc(var(--space-8) + var(--space-4)); }
+.card__act {
+  position: absolute;
+  top: var(--space-1);
+  right: var(--space-1);
+  padding: 2px var(--space-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text);
+  font: 500 var(--text-sm) / 1.4 var(--font-ui);
+  cursor: pointer;
+}
+.card__act:hover { background: var(--wash-strong); }
+.card__act:disabled { color: var(--muted); cursor: default; background: transparent; }
+.card__act:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.highlight[aria-pressed="true"] { border-color: var(--accent-edge); background: var(--surface); box-shadow: var(--shadow); }
+
+/* The clip being trimmed: its name and times, then a timeline of the lines around it, the clip lit between two
+   handles, the other clips under it, and the playhead */
+.cut {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2) var(--space-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  animation: var(--anim-enter) var(--dur-enter) var(--ease-out) both;
+}
+.cut__bar { display: flex; align-items: center; gap: var(--space-1); }
+.cut__name { flex: 0 1 18rem; min-width: 6rem; }
+.cut__times { min-width: 0; overflow: hidden; color: var(--muted); font-size: var(--text-sm); white-space: nowrap; text-overflow: ellipsis; }
+.cut__bar > button { flex: none; }
+.cut__gap { flex: 1; }
+.cut__bar .pill svg { width: 16px; height: 16px; margin-right: var(--space-half); }
+.cut__track {
+  position: relative;
+  height: calc(var(--space-6) + var(--space-3));
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--wash);
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+}
+.cut__lines, .cut__clips { position: absolute; inset-inline: 0; }
+.cut__lines { top: var(--space-half); height: var(--space-4); }
+.cut__clips { bottom: var(--space-half); height: var(--space-2); }
+.cut__line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  overflow: hidden;
+  padding: 2px var(--space-half);
+  border-radius: var(--radius-sm);
+  background: var(--wash-strong);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: 1.3;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.cut__other {
+  position: absolute;
+  height: calc(100% / var(--rows, 1));
+  top: calc(100% / var(--rows, 1) * var(--row, 0));
+  border-radius: var(--radius-pill);
+  background: var(--accent-edge);
+}
+.cut__region {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-inline: 2px solid var(--accent);
+  background: rgb(var(--accent-rgb) / 0.16);
+  pointer-events: none;
+}
+.cut__edge {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 14px;
+  pointer-events: auto;
+  cursor: ew-resize;
+}
+.cut__edge::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 6px;
+  height: 22px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  transform: translate(-50%, -50%);
+}
+.cut__edge--start { left: -8px; }
+.cut__edge--end { right: -8px; }
+.cut__edge:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.cut__head { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--text); pointer-events: none; }
+.cut__hint { margin: 0; color: var(--muted); font-size: var(--text-sm); }
+/* A small window keeps the picture: the hint goes (the edges say it too), and Play clip keeps only its icon */
+@media (max-height: 720px), (max-width: 1000px) {
+  .cut__hint { display: none; }
+  .cut__play-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .cut__bar .pill svg { margin-right: 0; }
+}

@@ -141,7 +141,9 @@ AI model sets up the person's own AI service or a model on their PC (the key in 
 *Test*. Step 5 is merged: the player's Subtitles tab translates a video's subtitles with the person's model (the
 whole transcript going with every batch) and shows the original and the translation together, each language in its
 own style, a version for each model. Step 6 is merged: the Highlights tab finds the moments worth watching with
-the person's model, lists them and marks them on the seek bar. Next: step 7, clips.
+the person's model, lists them and marks them on the seek bar. Step 7 is merged: clips, made from lines chosen in
+the transcript (Ctrl+B) or from highlights, listed in a Clips tab and trimmed on a timeline whose edges snap to the
+lines. Next: step 8, export.
 
 ## Known rough edges
 

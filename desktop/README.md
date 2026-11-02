@@ -175,6 +175,19 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
   a video past 60,000 characters of subtitles goes in parts, each asked for its share, and the best are kept. They
   are listed with their times, titles and reasons (the one playing marked), marked on the seek bar (its hover label
   names the one under the pointer), and kept in `videos/ID.json`; clicking one plays it from its start.
+- **Clips** (`core::clips`, `app/src-tauri/src/clips.rs`, `app/ui/clips.js`). In the transcript, a line clicked and
+  another Shift-clicked are chosen ("3 lines · 0:05–0:16 · 0:11"), and *Make clip* or Ctrl+B makes them a clip
+  named by its first words (with nothing chosen, the line on show; in a video with no subtitles, ten seconds from
+  the playhead). A highlight's *Add to clips*, or *Add all to clips*, makes clips of highlights; one already there is
+  marked *In clips*, never added twice. The Clips tab lists them with their times, length and *Play* (which stops at
+  the clip's end). The one chosen opens on a timeline under the picture: the lines around it, the other clips under
+  them (on rows of their own where they overlap), and the clip between two handles. A handle dragged snaps to a
+  line's start or end within 1.5 s (Alt places it anywhere, to a tenth of a second) and shows the frame there; ← and
+  → on a handle move it a line (Alt: a tenth); I and O set the start and end at the playhead (Shift: unsnapped).
+  The name is edited there, and *Remove clip* deletes it. The app puts every clip right before keeping it in
+  `videos/ID.json` (the right way round, at least half a second, inside the video, named, the same range kept
+  once; overlapping clips are both kept), and writes that file under a lock, so a translation's batch and a clip
+  changed at the same moment both stay. Saving clips as videos is step 8.
 - **The player.** A saved video or sound opens in Chaya, from the list (its name), the grid or a post's viewer,
   instead of another program (*Open in another app* is in its bar, and offered when WebView2 can't play the file).
   The file comes a part at a time, at most 4 MB per answer, by the HTTP ranges the player asks for
@@ -187,13 +200,15 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
     folder* and close; everything else has one place. The player draws its own controls over the picture (play,
     sound, the time, a seek bar that shows what has loaded and the time under the pointer, speed 0.5× to 2× in a
     small panel, CC, full window); they fade while it plays and the pointer rests, and the line moves down.
-  - **Beside it, two tabs** (a ground that slides to the one chosen; ← and → move between them): *Transcript*,
+  - **Beside it, tabs** (a ground that slides to the one chosen; ← and → move between them): *Transcript*,
     every line with its time, the one on show a card lit with the accent and kept in view, a click playing from
     there; with no subtitles yet, its one action is *Make subtitles*. *Subtitles*: which language is shown, and
     making them again on this PC. How making them goes shows over the tabs, with a thin line of light and *Stop*.
-    Highlights and subtitle styles join as tabs in later steps.
+    *Highlights*, *Clips* and subtitle styles are described above.
   - Keys: Space plays and pauses, ← and → go back and on 5 s, M mutes, C shows or hides the line, F or a
-    double-click fills the window, Esc leaves it (then closes the player). Speed, sound, subtitles on or off, the
+    double-click fills the window, Ctrl+B makes a clip, I and O set a clip's edges, Esc leaves full window, then
+    lets go of chosen lines, then closes the timeline, then closes the player. Keys typed in a field (a clip's
+    name) are the field's. Speed, sound, subtitles on or off, the
     language and the tab are kept in the window. Where playback stopped is kept in `videos/ID.json` in the app's data
   folder (`core::video`, one file per download, which later steps add to), and the video starts there next time,
   saying so with *Start over*; one barely started, or stopped in its last 10 s (its last twentieth if shorter),
@@ -416,6 +431,7 @@ cd desktop && cargo test --workspace     # chaya-core
 python -m pytest desktop/engine          # putting the engine together
 python -m pytest app/src/test/python     # chaya_engine, shared with the phone
 cd desktop/design && npm test            # the design system
+cd desktop/app && node --test test/clips.test.mjs   # the window's clip rules (ui/clips.js)
 ```
 
 `CHAYA_ENGINE_DIR=<an engine folder> cargo test` also runs the prepared engine for real

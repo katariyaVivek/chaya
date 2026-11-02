@@ -516,6 +516,10 @@ def ai_model(tour, clip):
         find_highlights(tour, clip)
     except Exception as e:
         tour.failed('highlights', e)
+    try:
+        make_clips(tour, clip)
+    except Exception as e:
+        tour.failed('clips', e)
     tour.click('#settings-button')
     time.sleep(0.8)
     # The key out of Credential Manager again, and no service chosen.
@@ -574,6 +578,56 @@ def find_highlights(tour, clip):
               head=tour.js("return document.getElementById('player-highlights-head').textContent"),
               marks=tour.js("return document.querySelectorAll('#player-marks .controls__mark').length"),
               playing_from=tour.js("return Math.round(document.getElementById('player-video').currentTime)"))
+    tour.press_in_player('Escape')
+    tour.wait(lambda: tour.js("return document.getElementById('player').hidden"), 5)
+
+
+def make_clips(tour, clip):
+    """Lines 2 to 4 chosen in the transcript (a click, then a Shift-click) and made into a clip with Ctrl+B; its end
+    dragged on the timeline near line 5's end, where it snaps; its start moved a line with the arrow key; renamed; the
+    highlights added to the clips; all kept in the video's file."""
+    tour.js(f"document.querySelector('#download-list .row[data-id=\"{clip}\"] .row__title').click(); return 1", gesture=True)
+    tour.wait(lambda: tour.js("return !document.getElementById('player').hidden"), 10)
+    tour.click('#tab-transcript')
+    tour.wait(lambda: tour.js("return document.querySelectorAll('#player-lines .player__line').length"), 15)
+    tour.click('#player-lines .player__line', 1)
+    tour.js("document.querySelectorAll('#player-lines .player__line')[3].dispatchEvent("
+            "new MouseEvent('click', {bubbles: true, cancelable: true, shiftKey: true})); return 1")
+    chosen = tour.js("return document.getElementById('player-pick-text').textContent")
+    tour.js("document.getElementById('player-video').dispatchEvent(new KeyboardEvent('keydown',"
+            " {key: 'b', ctrlKey: true, bubbles: true, cancelable: true})); return 1")
+    tour.wait(lambda: not tour.js("return document.getElementById('cut').hidden"), 10)
+    made = tour.js("return document.getElementById('cut-times').textContent")
+    # The end edge dragged to 19.3 s, 0.7 s short of line 5's end: it lets go at 20 s.
+    tour.js("""
+        const edge = document.getElementById('cut-end'), region = document.getElementById('cut-region').getBoundingClientRect();
+        const [start, end] = [5000, 16000], x = region.right + (19300 - end) * region.width / (end - start);
+        const r = edge.getBoundingClientRect(), y = r.top + r.height / 2;
+        const send = (type, clientX) => edge.dispatchEvent(new PointerEvent(type, {bubbles: true, cancelable: true, pointerId: 7, clientX, clientY: y}));
+        send('pointerdown', r.left + r.width / 2); send('pointermove', (r.left + x) / 2); send('pointermove', x); send('pointerup', x);
+        return 1""")
+    time.sleep(1)
+    dragged = tour.js("return document.getElementById('cut-times').textContent")
+    tour.js("const e = document.getElementById('cut-start'); e.focus(); e.dispatchEvent(new KeyboardEvent('keydown',"
+            " {key: 'ArrowLeft', bubbles: true, cancelable: true})); return 1")
+    time.sleep(1)
+    nudged = tour.js("return document.getElementById('cut-times').textContent")
+    tour.js("const n = document.getElementById('cut-name'); n.value = 'Counting the walk'; n.dispatchEvent(new Event('change')); return 1")
+    time.sleep(1)
+    tour.shot('clip-made', chosen=chosen, made=made, dragged=dragged, nudged=nudged,
+              lines_on_timeline=tour.js("return document.querySelectorAll('#cut-lines .cut__line').length"))
+    tour.click('#tab-highlights')
+    time.sleep(0.5)
+    tour.click('#player-highlights-all')
+    time.sleep(1)
+    tour.click('#tab-clips')
+    time.sleep(0.5)
+    listed = tour.js("return [...document.querySelectorAll('#player-clips .highlight')].map(h => h.innerText.replace(/\\n/g, ' | '))")
+    kept = data_folder() / 'videos' / f'{clip}.json'
+    in_file = json.loads(kept.read_text(encoding='utf-8')).get('clips', []) if kept.exists() else []
+    tour.shot('clips', listed=listed, head=tour.js("return document.getElementById('player-clips-head').textContent"),
+              kept=[f"{c['name']} {c['start']}-{c['end']}" for c in in_file])
+    tour.press_in_player('Escape')
     tour.press_in_player('Escape')
     tour.wait(lambda: tour.js("return document.getElementById('player').hidden"), 5)
 

@@ -173,6 +173,11 @@ jobs:
           chmod +x "$CHAYA_FFMPEG" "$CHAYA_WHISPER"
           cargo test -p chaya-core
 
+      # The rules the window follows as clips are cut (desktop/app/ui/clips.js): plain Node, a second.
+      - name: Window tests
+        working-directory: desktop/app
+        run: node --test test/clips.test.mjs
+
   windows:
     name: Windows build
     needs: [ffmpeg, whisper]

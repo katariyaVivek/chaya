@@ -4,6 +4,7 @@
 mod ads;
 mod ai;
 mod browser;
+mod clips;
 mod highlights;
 mod speech;
 mod translate;
@@ -532,6 +533,10 @@ pub fn run() {
             highlights::find_highlights,
             highlights::stop_highlights,
             highlights::video_highlights,
+            clips::video_clips,
+            clips::add_clips,
+            clips::change_clip,
+            clips::remove_clip,
             speech::set_speech,
             speech::delete_speech_model,
             speech::make_subtitles,

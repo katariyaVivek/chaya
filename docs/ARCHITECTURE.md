@@ -362,6 +362,11 @@ a built-in browser. [`../desktop/README.md`](../desktop/README.md) has the layou
 - **Highlights** (`chaya-core`'s `highlights`, `desktop/app/src-tauri/src/highlights.rs`): the subtitles' lines,
   numbered with their times, to the person's model, which answers with ranges of lines; checked and timed by lines,
   kept in `videos/ID.json` (`video::Highlights`).
+- **Clips** (`chaya-core`'s `clips`, `desktop/app/src-tauri/src/clips.rs`): parts of a video, each a name and its
+  times, kept in `videos/ID.json` (`video::VideoData::clips`) after being put right (order, length, inside the video,
+  no duplicates). The window's live rules (lines chosen as a range, edges snapped to lines, overlapping clips on rows)
+  are in `desktop/app/ui/clips.js`, tested with Node (`desktop/app/test`). `video::Videos` writes a video's file under
+  a lock, so changes from two places at once all stay.
 - `desktop/app/src-tauri` hands `chaya-core` to the window as commands (`recognise_link`, `look_up`,
   `download` and the download controls) and sends it `download` events. The window
   may call only those and set its title bar's theme (`capabilities/default.json`). Its content
