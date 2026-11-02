@@ -585,7 +585,8 @@ def find_highlights(tour, clip):
 def make_clips(tour, clip):
     """Lines 2 to 4 chosen in the transcript (a click, then a Shift-click) and made into a clip with Ctrl+B; its end
     dragged on the timeline near line 5's end, where it snaps; its start moved a line with the arrow key; renamed; the
-    highlights added to the clips; all kept in the video's file."""
+    timeline's picture track filled with frames and its sound read by the engine's ffmpeg (kept as videos/ID.peaks);
+    the highlights added to the clips; all kept in the video's file."""
     tour.js(f"document.querySelector('#download-list .row[data-id=\"{clip}\"] .row__title').click(); return 1", gesture=True)
     tour.wait(lambda: tour.js("return !document.getElementById('player').hidden"), 10)
     tour.click('#tab-transcript')
@@ -614,8 +615,18 @@ def make_clips(tour, clip):
     nudged = tour.js("return document.getElementById('cut-times').textContent")
     tour.js("const n = document.getElementById('cut-name'); n.value = 'Counting the walk'; n.dispatchEvent(new Event('change')); return 1")
     time.sleep(1)
+    # The timeline's picture track: the share of it covered by frames (opaque), not the empty slots' tint.
+    framed = ("const c = document.getElementById('cut-pictures'); if (!c.width) return 0;"
+              " const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0;"
+              " for (let i = 3; i < d.length; i += 4) if (d[i] === 255) n++; return Math.round(100 * n / (d.length / 4))")
+    tour.wait(lambda: (tour.js(framed) or 0) > 60, 20)
+    peaks = data_folder() / 'videos' / f'{clip}.peaks'
+    tour.wait(peaks.exists, 20)
     tour.shot('clip-made', chosen=chosen, made=made, dragged=dragged, nudged=nudged,
-              lines_on_timeline=tour.js("return document.querySelectorAll('#cut-lines .cut__line').length"))
+              lines_on_timeline=tour.js("return document.querySelectorAll('#cut-lines .cut__line').length"),
+              picture_framed_percent=tour.js(framed), peaks=peaks.stat().st_size if peaks.exists() else 0,
+              sound_note=tour.js("const n = document.getElementById('cut-sound-note'); return n.hidden ? '' : n.textContent"),
+              ruler=tour.js("return [...document.querySelectorAll('#cut-ruler .cut__tick')].map(t => t.textContent)"))
     tour.click('#tab-highlights')
     time.sleep(0.5)
     tour.click('#player-highlights-all')

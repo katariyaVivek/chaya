@@ -1,7 +1,7 @@
 // The Chaya window: the address bar, what it recognises, the built-in browser, downloads, and the appearance
 // settings.
 import { DownloadButton, setTheme, setMotion, stagger } from './design/chaya-motion.js';
-import { selection, moveEdge, stepEdge, rows, clipOf, nameFrom, view as clipView, exact } from './clips.js';
+import { selection, snap, moveEdge, stepEdge, rows, clipOf, nameFrom, view as clipView, exact } from './clips.js';
 
 const tauri = window.__TAURI__;
 
@@ -1099,7 +1099,7 @@ async function openPlayer(id) {
   const task = tasks.get(id);
   if (!task) return;
   if (!viewer.hidden) closeViewer();
-  playing = { id, tracks: [], shown: null, line: null, savedAt: 0, clips: [], anchor: null, pick: null, cut: null, until: null };
+  playing = { id, tracks: [], shown: null, line: null, savedAt: 0, clips: [], anchor: null, pick: null, cut: null, until: null, view: null, peaks: null };
   document.getElementById('player-title').textContent = task.title || task.fileName;
   playerProblem.hidden = true;
   playerResumed.hidden = true;
@@ -1168,6 +1168,8 @@ function closePlayer() {
   keepPosition(true);
   playing = null;
   dragging = null;
+  sweeping = null;
+  dropFrames();
   player.classList.remove('player--full', 'player--idle');
   openSpeeds(false);
   player.hidden = true;
@@ -1202,6 +1204,7 @@ function showTab(name, focus = false) {
   }
   remember('chaya.player.tab', name);
   placeTabLight();
+  if (playing) showCut();
 }
 
 /** The chosen tab's ground, under it; it slides there (`--dur-morph`, nothing under reduced motion). */
@@ -3124,11 +3127,8 @@ function markHighlightClips() {
 
 const cut = document.getElementById('cut');
 const cutName = document.getElementById('cut-name');
-const cutTrack = document.getElementById('cut-track');
-const cutRegion = document.getElementById('cut-region');
 const cutStart = document.getElementById('cut-start');
 const cutEnd = document.getElementById('cut-end');
-const cutHead = document.getElementById('cut-head');
 const cutPlay = document.getElementById('cut-play');
 const playerClips = document.getElementById('player-clips');
 
@@ -3175,8 +3175,9 @@ function makeClip() {
   addClips([wanted], true);
 }
 
-/** Adds `wanted` to the video's clips; with `open`, the first opens on the timeline. */
-async function addClips(wanted, open = false) {
+/** Adds `wanted` to the video's clips; with `open`, the first opens on the timeline (shown whole there, unless
+ *  `reframe` is false and it is in sight already). */
+async function addClips(wanted, open = false, reframe = true) {
   if (!playing || wanted.length === 0) return;
   const id = playing.id;
   try {
@@ -3185,7 +3186,7 @@ async function addClips(wanted, open = false) {
     if (playing?.id !== id) return;
     playing.clips = added.clips;
     const first = added.ids.find((clip) => clip !== null);
-    if (open && first !== undefined) openCut(first);
+    if (open && first !== undefined) openCut(first, reframe);
     else showClips();
   } catch (message) {
     if (playing?.id === id) sayClips(String(message));
@@ -3270,13 +3271,17 @@ function cutClip() {
   return playing?.clips.find((c) => c.id === playing.cut) ?? null;
 }
 
-/** Opens clip `clipId` on the timeline, at its start. */
-function openCut(clipId) {
+/** Opens clip `clipId` on the timeline, at its start; shown whole there unless `reframe` is false and it is in sight. */
+function openCut(clipId, reframe = true) {
   if (!playing) return;
   playing.cut = clipId;
   playing.until = null;
   const clip = cutClip();
-  if (clip) playerVideo.currentTime = clip.start / 1000;
+  if (clip) {
+    playerVideo.currentTime = clip.start / 1000;
+    const inSight = playing.view && clip.start >= playing.view.from && clip.end <= playing.view.to;
+    if (reframe || !inSight) playing.view = null;
+  }
   showClips();
 }
 
@@ -3310,82 +3315,397 @@ function showCutPlaying() {
   cutPlay.title = on ? 'Pause' : 'Play clip';
 }
 
-/** An edge being dragged: which, the part of the video the timeline showed when it began, and the clip as it is. */
+// ── The timeline ──
+//
+// Under the picture, as an editor has it: a ruler, the picture (frames taken from the video), the lines of the
+// subtitles shown, the sound, and the clips. It shows while the Clips tab is open or a clip is chosen. The wheel moves
+// along it and Ctrl+wheel (or − and +) zooms; it follows the playhead while the video plays. A clip chosen is lit
+// across every track between two handles; dragging across the timeline makes a new one.
+
+const cutEditor = document.getElementById('cut-editor');
+const cutRuler = document.getElementById('cut-ruler');
+const cutPictures = document.getElementById('cut-pictures');
+const cutSound = document.getElementById('cut-sound');
+const cutSweep = document.getElementById('cut-sweep');
+const cutHover = document.getElementById('cut-hover');
+const cutNote = document.getElementById('cut-sound-note');
+
+/** The shortest and longest parts of the video the timeline shows, in milliseconds. */
+const NARROWEST_VIEW = 2_000;
+/** An edge being dragged (which, and the clip as it is), or a sweep across the timeline (where it began). */
 let dragging = null;
+let sweeping = null;
+/** When the person last moved along the timeline themselves: it doesn't follow the playhead for a while after. */
+let viewMoved = 0;
+
+/** Whether the timeline shows: the Clips tab open, or a clip chosen. */
+function cutWanted() {
+  if (!playing) return false;
+  const clipsTab = document.getElementById('tab-clips').getAttribute('aria-selected') === 'true';
+  return clipsTab || cutClip() !== null;
+}
+
+/** The part of the video shown: kept in `playing.view`, inside the video. */
+function setView(from, to) {
+  const length = lengthMs();
+  const longest = Number.isFinite(length) ? Math.max(NARROWEST_VIEW, length) : Math.max(to, NARROWEST_VIEW);
+  let span = Math.min(longest, Math.max(NARROWEST_VIEW, to - from));
+  from = Math.max(0, Math.min(from, longest - span));
+  playing.view = { from, to: from + span };
+  drawView();
+}
+
+/** The part shown when there is none yet: around the clip chosen, or half a minute around the playhead. */
+function viewFor(clip) {
+  if (clip) return clipView(clip, lengthMs());
+  const at = playerVideo.currentTime * 1000;
+  return { from: at - 10_000, to: at + 20_000 };
+}
 
 function showCut() {
+  const shown = cutWanted();
+  cut.hidden = !shown;
+  if (!shown) return;
   const clip = dragging?.clip ?? cutClip();
-  cut.hidden = !clip;
-  if (!clip) return;
-  if (document.activeElement !== cutName) cutName.value = clip.name;
-  drawCut(clip);
+  document.getElementById('cut-clip').hidden = !clip;
+  document.getElementById('cut-title').hidden = !!clip;
+  for (const id of ['cut-play', 'cut-remove', 'cut-close']) document.getElementById(id).hidden = !clip;
+  if (clip && document.activeElement !== cutName) cutName.value = clip.name;
+  const audioOnly = tasks.get(playing.id)?.kind === 'audio';
+  for (const el of cut.querySelectorAll('[data-lane="picture"]')) el.hidden = audioOnly;
+  document.getElementById('cut-label-lines').textContent = playing.shown ? languageName(playing.shown.language) : 'Lines';
+  if (!playing.view) {
+    const { from, to } = viewFor(clip);
+    setView(from, to);
+  } else {
+    drawView();
+  }
+  loadPeaks();
   showCutPlaying();
 }
 
-/** The part of the video on the timeline: kept still while an edge is dragged. */
-function cutView(clip) {
-  return dragging?.view ?? clipView(clip, lengthMs());
+/** Milliseconds a CSS pixel, and where on the timeline a time is (0 to 1). */
+function scale() {
+  const { from, to } = playing.view;
+  const width = Math.max(1, cutRuler.clientWidth);
+  return { from, to, width, perPx: (to - from) / width, at: (ms) => (ms - from) / (to - from) };
 }
 
-/** The timeline for `clip`: the lines around it, the other clips under them, the clip between its edges. */
-function drawCut(clip) {
-  const { from, to } = cutView(clip);
-  const width = Math.max(1, to - from);
+/** The time at the pointer's place on the timeline. */
+function timeAt(e) {
+  const r = cutRuler.getBoundingClientRect();
+  const { from, to } = playing.view;
+  return from + Math.min(1, Math.max(0, (e.clientX - r.left) / Math.max(1, r.width))) * (to - from);
+}
+
+/** Every track for the part shown, then the clip and the playhead over them. */
+function drawView() {
+  if (!playing?.view || cut.hidden) return;
+  drawRuler();
+  drawLines();
+  drawClipsLane();
+  drawPictures();
+  drawRegion();
+}
+
+/** The ruler: a time every so often, at least 80 pixels apart, with small ticks between. */
+function drawRuler() {
+  const { from, to, perPx, at } = scale();
+  const steps = [100, 200, 500, 1_000, 2_000, 5_000, 10_000, 15_000, 30_000, 60_000, 120_000, 300_000, 600_000, 900_000, 1_800_000, 3_600_000];
+  const step = steps.find((s) => s / perPx >= 80) ?? steps[steps.length - 1];
+  const marks = [];
+  for (let t = Math.ceil(from / step) * step; t <= to; t += step) {
+    const mark = span('cut__tick num', step < 1_000 ? exact(t) : clock(t / 1000));
+    mark.style.left = `${at(t) * 100}%`;
+    marks.push(mark);
+  }
+  cutRuler.replaceChildren(...marks);
+  // Five small ticks to a step, drawn as a pattern lined up with the times.
+  const px = step / perPx / 5;
+  cutRuler.style.setProperty('--minor', `${px}px`);
+  cutRuler.style.setProperty('--minor-at', `${(-(from % (step / 5)) / perPx).toFixed(2)}px`);
+}
+
+/** The subtitles' lines, each a block with its text. */
+function drawLines() {
+  const { from, to, at } = scale();
   const place = (el, start, end) => {
-    el.style.left = `${((Math.max(start, from) - from) / width) * 100}%`;
-    el.style.width = `${((Math.min(end, to) - Math.max(start, from)) / width) * 100}%`;
+    el.style.left = `${at(Math.max(start, from)) * 100}%`;
+    el.style.width = `${(at(Math.min(end, to)) - at(Math.max(start, from))) * 100}%`;
   };
-  document.getElementById('cut-times').textContent =
-    `${exact(clip.start)} – ${exact(clip.end)} · ${exact(clip.end - clip.start)}`;
   const lines = shownLines().filter((l) => l.end > from && l.start < to);
   document.getElementById('cut-lines').replaceChildren(
     ...lines.map((line) => {
       const el = span('cut__line', line.text.replace(/\n/g, ' '));
+      el.title = line.text;
       place(el, line.start, line.end);
       return el;
     }),
   );
-  const others = playing.clips.filter((c) => c.id !== clip.id);
-  const placed = rows(others);
-  const shown = others.filter((c) => c.end > from && c.start < to);
-  const clipsEl = document.getElementById('cut-clips');
-  clipsEl.style.setProperty('--rows', String(Math.max(1, ...shown.map((c) => placed.get(c.id) + 1))));
-  clipsEl.replaceChildren(
+}
+
+/** Every clip, on rows of their own where they overlap; the one chosen lit. Clicking one chooses it. */
+function drawClipsLane() {
+  const { from, to, at } = scale();
+  const chosen = playing.cut;
+  const placed = rows(playing.clips);
+  const shown = playing.clips.filter((c) => c.end > from && c.start < to);
+  const lane = document.getElementById('cut-clips');
+  lane.style.setProperty('--rows', String(Math.max(1, ...[...placed.values()].map((r) => r + 1))));
+  lane.replaceChildren(
     ...shown.map((c) => {
-      const el = span('cut__other', '');
-      el.title = c.name;
+      const el = document.createElement('button');
+      el.type = 'button';
+      el.className = 'cut__other';
+      el.tabIndex = -1;
+      el.title = `${c.name} · ${exact(c.start)} – ${exact(c.end)}`;
+      el.textContent = c.name;
+      el.setAttribute('aria-pressed', String(c.id === chosen));
       el.style.setProperty('--row', String(placed.get(c.id)));
-      place(el, c.start, c.end);
+      el.style.left = `${at(Math.max(c.start, from)) * 100}%`;
+      el.style.width = `${(at(Math.min(c.end, to)) - at(Math.max(c.start, from))) * 100}%`;
+      el.addEventListener('pointerdown', (e) => e.stopPropagation());
+      el.addEventListener('click', () => openCut(c.id, false));
       return el;
     }),
   );
-  place(cutRegion, clip.start, clip.end);
-  for (const [el, at] of [[cutStart, clip.start], [cutEnd, clip.end]]) {
-    el.setAttribute('aria-valuemin', '0');
-    el.setAttribute('aria-valuemax', String(Math.round(lengthMs() || clip.end)));
-    el.setAttribute('aria-valuenow', String(at));
-    el.setAttribute('aria-valuetext', exact(at));
+}
+
+/** The clip chosen, or the one being swept, between its handles; its times; and the sound, lit inside it. */
+function drawRegion() {
+  const clip = dragging?.clip ?? cutClip();
+  const { from, to, at } = scale();
+  const region = document.getElementById('cut-region');
+  region.hidden = !clip || clip.end <= from || clip.start >= to;
+  if (clip) {
+    region.style.left = `${at(clip.start) * 100}%`;
+    region.style.width = `${(at(clip.end) - at(clip.start)) * 100}%`;
+    document.getElementById('cut-times').textContent =
+      `${exact(clip.start)} – ${exact(clip.end)} · ${exact(clip.end - clip.start)}`;
+    for (const [el, ms] of [[cutStart, clip.start], [cutEnd, clip.end]]) {
+      el.setAttribute('aria-valuemin', '0');
+      el.setAttribute('aria-valuemax', String(Math.round(lengthMs() || clip.end)));
+      el.setAttribute('aria-valuenow', String(Math.round(ms)));
+      el.setAttribute('aria-valuetext', exact(ms));
+    }
   }
+  drawSound();
   followCut();
 }
 
-/** The playhead on the timeline. */
-function followCut() {
-  if (!playing || cut.hidden) return;
+/** A canvas drawn sharp at the screen's pixel density; its 2D context in CSS pixels, and its size. */
+function sharp(canvas) {
+  const ratio = window.devicePixelRatio || 1;
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  if (canvas.width !== Math.round(width * ratio) || canvas.height !== Math.round(height * ratio)) {
+    canvas.width = Math.round(width * ratio);
+    canvas.height = Math.round(height * ratio);
+  }
+  const g = canvas.getContext('2d');
+  g.setTransform(ratio, 0, 0, ratio, 0, 0);
+  g.clearRect(0, 0, width, height);
+  return { g, width, height, ratio };
+}
+
+const cssColor = (name) => getComputedStyle(cut).getPropertyValue(name).trim();
+
+// ── The sound, as bars ──
+
+/** Reads the video's sound once (`sound_peaks`), and draws it. */
+async function loadPeaks() {
+  if (!playing || playing.peaks) return;
+  const id = playing.id;
+  playing.peaks = { loading: true };
+  cutNote.textContent = 'Reading the sound…';
+  cutNote.hidden = false;
+  try {
+    const { perSecond, peaks } = await tauri.core.invoke('sound_peaks', { id });
+    if (playing?.id !== id) return;
+    const bytes = Uint8Array.from(atob(peaks), (c) => c.charCodeAt(0));
+    let loudest = 1;
+    for (const b of bytes) loudest = Math.max(loudest, b);
+    playing.peaks = { perSecond, bytes, loudest };
+    cutNote.hidden = true;
+  } catch (message) {
+    if (playing?.id !== id) return;
+    playing.peaks = { failed: true };
+    cutNote.textContent = String(message);
+  }
+  drawSound();
+}
+
+function drawSound() {
+  if (!playing?.view || cut.hidden) return;
+  const { g, width, height } = sharp(cutSound);
+  const peaks = playing.peaks;
+  const middle = height / 2;
+  if (!peaks?.bytes) {
+    // Before it is read: a dashed line where it will be.
+    g.strokeStyle = cssColor('--editor-rule');
+    g.setLineDash([3, 3]);
+    g.beginPath();
+    g.moveTo(0, middle);
+    g.lineTo(width, middle);
+    g.stroke();
+    return;
+  }
+  const { from, perPx } = scale();
   const clip = dragging?.clip ?? cutClip();
-  if (!clip) return;
-  const { from, to } = cutView(clip);
+  const wave = cssColor('--editor-wave');
+  const lit = cssColor('--accent');
+  const BAR = 3;
+  const perPeak = 1000 / peaks.perSecond;
+  for (let x = 0; x < width; x += BAR) {
+    const start = from + x * perPx;
+    const end = start + BAR * perPx;
+    let loudest = 0;
+    const last = Math.min(peaks.bytes.length, Math.ceil(end / perPeak));
+    for (let i = Math.max(0, Math.floor(start / perPeak)); i < last; i++) loudest = Math.max(loudest, peaks.bytes[i]);
+    // Quiet sound still shows: the square root of how loud, against the loudest in the video.
+    const size = Math.max(1, Math.sqrt(loudest / peaks.loudest) * (middle - 1));
+    g.fillStyle = clip && start >= clip.start && start < clip.end ? lit : wave;
+    g.fillRect(x, middle - size, BAR - 1, size * 2);
+  }
+}
+
+// ── The picture, as frames ──
+//
+// Frames are taken by a second, silent copy of the video that seeks to each in turn, drawn small and kept for the
+// video (the newest 300). Each frame stands for its own stretch of time, lined up so that moving along reuses them.
+
+const frames = { id: null, video: null, ready: false, aspect: 16 / 9, kept: new Map(), wanted: [], busy: false };
+
+/** Lets go of the frames' video, and the frames: the player is closed. */
+function dropFrames() {
+  if (frames.video) {
+    frames.video.removeAttribute('src');
+    frames.video.load();
+  }
+  Object.assign(frames, { id: null, video: null, ready: false, kept: new Map(), wanted: [], busy: false });
+}
+
+function framesFor(id) {
+  if (frames.id === id) return;
+  dropFrames();
+  const video = document.createElement('video');
+  video.muted = true;
+  video.preload = 'auto';
+  video.crossOrigin = 'anonymous';
+  Object.assign(frames, { id, video, ready: false, kept: new Map(), wanted: [], busy: false });
+  video.addEventListener('loadedmetadata', () => {
+    if (frames.video !== video) return;
+    frames.ready = video.videoWidth > 0;
+    if (frames.ready) frames.aspect = video.videoWidth / video.videoHeight;
+    drawPictures();
+  });
+  video.src = tauri.core.convertFileSrc(String(id), 'chaya-file');
+}
+
+/** The frame kept nearest `ms`, within `within` milliseconds. */
+function frameNear(ms, within) {
+  let best = null;
+  let gap = within;
+  for (const [t, canvas] of frames.kept) {
+    if (Math.abs(t - ms) <= gap) {
+      gap = Math.abs(t - ms);
+      best = canvas;
+    }
+  }
+  return best;
+}
+
+function drawPictures() {
+  if (!playing?.view || cut.hidden || tasks.get(playing.id)?.kind === 'audio') return;
+  framesFor(playing.id);
+  const { g, width, height } = sharp(cutPictures);
+  if (!frames.ready) return;
+  const { from, to, perPx } = scale();
+  const slotPx = Math.max(24, Math.round(height * frames.aspect));
+  const slotMs = slotPx * perPx;
+  const wanted = [];
+  g.fillStyle = cssColor('--editor-lane');
+  for (let k = Math.floor(from / slotMs); k * slotMs < to; k++) {
+    const t = Math.round((k + 0.5) * slotMs);
+    const x = (k * slotMs - from) / perPx;
+    const frame = frameNear(t, slotMs / 2);
+    if (frame) g.drawImage(frame, x, 0, slotPx, height);
+    else {
+      g.fillRect(x, 0, slotPx - 1, height);
+      wanted.push(Math.min(t, (lengthMs() || t) - 50));
+    }
+  }
+  // Those nearest the playhead first.
+  const now = playerVideo.currentTime * 1000;
+  frames.wanted = wanted.sort((a, b) => Math.abs(a - now) - Math.abs(b - now));
+  takeFrames();
+}
+
+async function takeFrames() {
+  if (frames.busy) return;
+  frames.busy = true;
+  const { video } = frames;
+  try {
+    while (frames.video === video && frames.ready && frames.wanted.length) {
+      const t = frames.wanted.shift();
+      video.currentTime = t / 1000;
+      const seeked = await new Promise((resolve) => {
+        const done = (ok) => {
+          clearTimeout(timer);
+          video.removeEventListener('seeked', onSeeked);
+          resolve(ok);
+        };
+        const onSeeked = () => done(true);
+        const timer = setTimeout(() => done(false), 4000);
+        video.addEventListener('seeked', onSeeked);
+      });
+      if (!seeked || frames.video !== video) continue;
+      const height = Math.max(1, Math.round(cutPictures.clientHeight * (window.devicePixelRatio || 1)));
+      const canvas = document.createElement('canvas');
+      canvas.height = height;
+      canvas.width = Math.round(height * frames.aspect);
+      try {
+        canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+      } catch {
+        continue;
+      }
+      frames.kept.set(t, canvas);
+      if (frames.kept.size > 300) frames.kept.delete(frames.kept.keys().next().value);
+      drawPicturesSoon();
+    }
+  } finally {
+    if (frames.video === video) frames.busy = false;
+  }
+}
+
+/** Draws the picture track at the next frame, once however many arrive before it. */
+function drawPicturesSoon() {
+  if (drawPicturesSoon.asked) return;
+  drawPicturesSoon.asked = true;
+  requestAnimationFrame(() => {
+    drawPicturesSoon.asked = false;
+    drawPictures();
+  });
+}
+
+/** The playhead across the tracks, and the timeline following it while the video plays. */
+function followCut() {
+  if (!playing?.view || cut.hidden) return;
   const at = playerVideo.currentTime * 1000;
-  cutHead.hidden = at < from || at > to;
-  cutHead.style.left = `${((at - from) / Math.max(1, to - from)) * 100}%`;
+  const { from, to } = playing.view;
+  const span = to - from;
+  const free = !dragging && !sweeping && performance.now() - viewMoved > 3000;
+  if (free && !playerVideo.paused && (at > to || at < from)) {
+    // A page on, as an editor turns the page, with a little of the last one kept.
+    setView(at - span * 0.1, at + span * 0.9);
+    return;
+  }
+  const head = document.getElementById('cut-head');
+  head.hidden = at < from || at > to;
+  head.style.left = `${((at - from) / span) * 100}%`;
 }
 
-/** The time at the pointer's place on the timeline. */
-function timeAt(e, { from, to }) {
-  const r = cutTrack.getBoundingClientRect();
-  return from + Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) * (to - from);
-}
-
+// Handles: dragged, they snap to the lines (Alt: anywhere) and show the frame there.
 for (const [el, kind] of [[cutStart, 'start'], [cutEnd, 'end']]) {
   el.addEventListener('pointerdown', (e) => {
     const clip = cutClip();
@@ -3396,15 +3716,14 @@ for (const [el, kind] of [[cutStart, 'start'], [cutEnd, 'end']]) {
       el.setPointerCapture(e.pointerId);
     } catch {}
     playerVideo.pause();
-    dragging = { kind, el, view: clipView(clip, lengthMs()), clip };
+    dragging = { kind, el, clip };
     el.focus();
   });
   el.addEventListener('pointermove', (e) => {
     if (dragging?.el !== el) return;
-    dragging.clip = moveEdge(dragging.clip, kind, timeAt(e, dragging.view), shownLines(), lengthMs(), e.altKey);
-    // The frame at the edge, so the cut can be seen.
+    dragging.clip = moveEdge(dragging.clip, kind, timeAt(e), shownLines(), lengthMs(), e.altKey);
     playerVideo.currentTime = dragging.clip[kind] / 1000;
-    drawCut(dragging.clip);
+    drawRegion();
   });
   for (const end of ['pointerup', 'pointercancel']) {
     el.addEventListener(end, () => {
@@ -3416,15 +3735,85 @@ for (const [el, kind] of [[cutStart, 'start'], [cutEnd, 'end']]) {
   }
 }
 
-// Clicking the timeline plays from there.
-cutTrack.addEventListener('pointerdown', (e) => {
-  const clip = cutClip();
-  if (!clip || e.target.closest('.cut__edge')) return;
-  playing.until = null;
-  playerVideo.currentTime = timeAt(e, cutView(clip)) / 1000;
+// Across the tracks: a click plays from there; a drag sweeps out a new clip, its edges snapped to the lines.
+cutEditor.addEventListener('pointerdown', (e) => {
+  if (!playing?.view || e.button !== 0 || e.target.closest('.cut__edge, .cut__other')) return;
+  try {
+    cutEditor.setPointerCapture(e.pointerId);
+  } catch {}
+  sweeping = { x: e.clientX, at: timeAt(e), moved: false };
 });
+cutEditor.addEventListener('pointermove', (e) => {
+  if (!playing?.view) return;
+  const at = timeAt(e);
+  const r = cutRuler.getBoundingClientRect();
+  cutHover.hidden = e.clientX < r.left || e.clientX > r.right;
+  cutHover.style.left = `${((at - playing.view.from) / (playing.view.to - playing.view.from)) * 100}%`;
+  cutHover.dataset.time = exact(at);
+  if (!sweeping) return;
+  if (Math.abs(e.clientX - sweeping.x) > 4) sweeping.moved = true;
+  if (!sweeping.moved) return;
+  const [a, b] = [Math.min(sweeping.at, at), Math.max(sweeping.at, at)];
+  const lines = shownLines();
+  sweeping.range = { start: snap(lines, a, 'start', e.altKey), end: snap(lines, b, 'end', e.altKey) };
+  const { from, to } = playing.view;
+  cutSweep.hidden = false;
+  cutSweep.style.left = `${((sweeping.range.start - from) / (to - from)) * 100}%`;
+  cutSweep.style.width = `${(Math.max(0, sweeping.range.end - sweeping.range.start) / (to - from)) * 100}%`;
+});
+cutEditor.addEventListener('pointerleave', () => (cutHover.hidden = true));
+for (const end of ['pointerup', 'pointercancel']) {
+  cutEditor.addEventListener(end, (e) => {
+    if (!sweeping) return;
+    const done = sweeping;
+    sweeping = null;
+    cutSweep.hidden = true;
+    if (end === 'pointercancel') return;
+    if (!done.moved) {
+      playing.until = null;
+      playerVideo.currentTime = timeAt(e) / 1000;
+      return;
+    }
+    const range = done.range;
+    if (!range || range.end - range.start < 500) return;
+    const first = shownLines().find((l) => l.end > range.start);
+    addClips([{ name: first && first.start < range.end ? nameFrom(first.text) : '', ...range }], true, false);
+  });
+}
 
-/** The arrow keys on an edge: a line at a time, or a tenth of a second with Alt. */
+// The wheel moves along the timeline; Ctrl+wheel zooms around the pointer.
+cutEditor.addEventListener(
+  'wheel',
+  (e) => {
+    if (!playing?.view) return;
+    e.preventDefault();
+    viewMoved = performance.now();
+    const { from, to, perPx } = scale();
+    if (e.ctrlKey) {
+      const anchor = timeAt(e);
+      const factor = Math.exp(e.deltaY * 0.002);
+      setView(anchor - (anchor - from) * factor, anchor + (to - anchor) * factor);
+    } else {
+      const by = (Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY) * perPx;
+      setView(from + by, to + by);
+    }
+  },
+  { passive: false },
+);
+
+/** − and +: zooms out or in around the playhead, or the middle when it is out of sight. */
+function zoom(factor) {
+  if (!playing?.view) return;
+  viewMoved = performance.now();
+  const { from, to } = playing.view;
+  const at = playerVideo.currentTime * 1000;
+  const anchor = at >= from && at <= to ? at : (from + to) / 2;
+  setView(anchor - (anchor - from) * factor, anchor + (to - anchor) * factor);
+}
+document.getElementById('cut-zoom-out').addEventListener('click', () => zoom(2));
+document.getElementById('cut-zoom-in').addEventListener('click', () => zoom(0.5));
+
+/** The arrow keys on a handle: a line at a time, or a tenth of a second with Alt. */
 function nudgeEdge(kind, by, free) {
   const clip = cutClip();
   if (!clip) return;
@@ -3463,4 +3852,11 @@ document.getElementById('cut-remove').addEventListener('click', () => {
   if (playing?.cut != null) removeClip(playing.cut);
 });
 document.getElementById('cut-close').addEventListener('click', closeCut);
-new ResizeObserver(() => followCut()).observe(cutTrack);
+new ResizeObserver(() => drawView()).observe(cutEditor);
+// The timeline may show before the video's length is known: once it is, it frames the video again (a clip chosen
+// keeps its own framing).
+playerVideo.addEventListener('loadedmetadata', () => {
+  if (!playing || cut.hidden || cutClip()) return;
+  playing.view = null;
+  showCut();
+});

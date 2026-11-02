@@ -212,6 +212,10 @@ them; the timeline under the picture trims, names, plays and removes the one cho
 playhead. The Windows tour makes a clip from lines, drags and nudges its edges, renames it, adds the highlights,
 and reads them back from the video's file.
 
+**Then, asked for after trying it:** the timeline became an editor's, as Vimpo's Studio has it: dark, with a ruler
+and tracks for the picture (frames from the video), the lines, the sound (peaks read once by ffmpeg, `core::sound`)
+and the clips; zoom and scroll; a sweep across it makes a clip; it follows the playhead.
+
 ### 8. Export ☐
 
 **The person gets:** clips saved as videos with the subtitles burned in (Outline, Box or Large, one

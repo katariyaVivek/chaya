@@ -473,6 +473,7 @@ pub fn run() {
             manager.set_session(Some(Arc::new(move |url: &str| browser::session_headers(&browser, url))));
             let joiner = Joiner::find(&engine_dir);
             let joins = joiner.is_some();
+            app.manage(clips::Sound(joiner.as_ref().map(|j| j.ffmpeg.clone())));
             manager.set_joiner(joiner);
             // gallery-dl keeps its own cache, apart from yt-dlp's.
             let gallery_cache = app.path().app_cache_dir()?.join("gallery-dl");
@@ -537,6 +538,7 @@ pub fn run() {
             clips::add_clips,
             clips::change_clip,
             clips::remove_clip,
+            clips::sound_peaks,
             speech::set_speech,
             speech::delete_speech_model,
             speech::make_subtitles,

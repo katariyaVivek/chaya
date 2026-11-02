@@ -180,11 +180,19 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
   named by its first words (with nothing chosen, the line on show; in a video with no subtitles, ten seconds from
   the playhead). A highlight's *Add to clips*, or *Add all to clips*, makes clips of highlights; one already there is
   marked *In clips*, never added twice. The Clips tab lists them with their times, length and *Play* (which stops at
-  the clip's end). The one chosen opens on a timeline under the picture: the lines around it, the other clips under
-  them (on rows of their own where they overlap), and the clip between two handles. A handle dragged snaps to a
-  line's start or end within 1.5 s (Alt places it anywhere, to a tenth of a second) and shows the frame there; ← and
-  → on a handle move it a line (Alt: a tenth); I and O set the start and end at the playhead (Shift: unsnapped).
-  The name is edited there, and *Remove clip* deletes it. The app puts every clip right before keeping it in
+  the clip's end).
+- **The timeline**, under the picture while the Clips tab is open or a clip is chosen, dark as an editor's: a ruler,
+  then tracks named at the left. *Picture* is frames of the video, taken by a second, silent copy of it in the window
+  that seeks to each (the newest 300 kept while the player is open); *English* (the language shown) is the lines;
+  *Sound* is how loud it is, read once by the engine's ffmpeg (`core::sound`: the sound decoded to 8 kHz WAV on a
+  pipe, its loudest moment every fiftieth of a second kept as a byte in `videos/ID.peaks`, about 180 KB an hour) and
+  drawn as bars, lit inside the clip; *Clips* is every clip, on rows where they overlap, the one chosen lit (a click
+  chooses another). The wheel moves along it, Ctrl+wheel or − and + zoom (2 s to the whole video), and it turns the
+  page as the playhead passes while the video plays. A click plays from there; dragging across the tracks sweeps out
+  a new clip, its edges snapped to the lines. The clip chosen is lit across every track between two handles: a
+  handle dragged snaps to a line's start or end within 1.5 s (Alt places it anywhere, to a tenth of a second) and
+  shows the frame there; ← and → on a handle move it a line (Alt: a tenth); I and O set the start and end at the
+  playhead (Shift: unsnapped). The name is edited above the tracks, and *Remove clip* deletes it. The app puts every clip right before keeping it in
   `videos/ID.json` (the right way round, at least half a second, inside the video, named, the same range kept
   once; overlapping clips are both kept), and writes that file under a lock, so a translation's batch and a clip
   changed at the same moment both stay. Saving clips as videos is step 8.

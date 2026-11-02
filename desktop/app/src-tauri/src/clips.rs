@@ -1,10 +1,52 @@
 //! A saved video's clips (`chaya-core`'s `clips`), made in the player: from lines chosen in the transcript (Ctrl+B),
-//! from highlights, and trimmed on its timeline. Kept in the video's file (`videos/ID.json`).
+//! from highlights, and trimmed on its timeline. Kept in the video's file (`videos/ID.json`). And the video's sound as
+//! the timeline draws it (`chaya-core`'s `sound`), read once and kept beside it ("videos/ID.peaks").
+
+use std::path::PathBuf;
 
 use chaya_core::clips::{Clip, NewClip};
+use chaya_core::download::manager::State as TaskState;
+use chaya_core::sound::{self, SoundError};
 use chaya_core::video::Videos;
 use serde::Serialize;
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
+
+use crate::Downloads;
+
+/// The engine's ffmpeg, which reads a video's sound for the timeline; `None` when the engine has none.
+pub struct Sound(pub Option<PathBuf>);
+
+/// How loud a video's sound is, `per_second` times a second, each a byte (base64).
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Peaks {
+    per_second: u32,
+    peaks: String,
+}
+
+/// Download `id`'s sound peaks: kept ones, or read now (a few seconds for an hour of video) and kept.
+#[tauri::command]
+pub async fn sound_peaks(id: u64, app: AppHandle) -> Result<Peaks, String> {
+    use base64::Engine;
+    let videos = app.state::<Videos>();
+    let kept = std::fs::read(videos.peaks(id)).ok().filter(|p| !p.is_empty());
+    let peaks = match kept {
+        Some(peaks) => peaks,
+        None => {
+            let ffmpeg =
+                app.state::<Sound>().0.clone().ok_or("Chaya's ffmpeg is missing, so it can't read the sound.")?;
+            let task = app.state::<Downloads>().manager.get(id).filter(|t| t.state == TaskState::Completed);
+            let task = task.ok_or("This video isn't saved any more.")?;
+            let peaks = sound::peaks(&ffmpeg, &task.path).await.map_err(|error| match error {
+                SoundError::NoProgram => "Chaya's ffmpeg wouldn't start, so it can't read the sound.",
+                SoundError::NoSound => "This video has no sound.",
+            })?;
+            let _ = videos.keep_peaks(id, &peaks);
+            peaks
+        }
+    };
+    Ok(Peaks { per_second: sound::PER_SECOND, peaks: base64::engine::general_purpose::STANDARD.encode(peaks) })
+}
 
 /// A video's clips, and the ids of those just asked for (`None` for one that couldn't be made).
 #[derive(Serialize)]
