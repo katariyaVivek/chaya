@@ -1,6 +1,7 @@
 // The Chaya window: the address bar, what it recognises, the built-in browser, downloads, and the appearance
 // settings.
 import { DownloadButton, setTheme, setMotion, stagger } from './design/chaya-motion.js';
+import { selection, moveEdge, stepEdge, rows, clipOf, nameFrom, view as clipView, exact } from './clips.js';
 
 const tauri = window.__TAURI__;
 
@@ -1039,6 +1040,7 @@ const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 const TABS = {
   transcript: ['tab-transcript', 'panel-transcript'],
   highlights: ['tab-highlights', 'panel-highlights'],
+  clips: ['tab-clips', 'panel-clips'],
   subtitles: ['tab-subtitles', 'panel-subtitles'],
 };
 const languageNames = (() => {
@@ -1097,7 +1099,7 @@ async function openPlayer(id) {
   const task = tasks.get(id);
   if (!task) return;
   if (!viewer.hidden) closeViewer();
-  playing = { id, tracks: [], shown: null, line: null, savedAt: 0 };
+  playing = { id, tracks: [], shown: null, line: null, savedAt: 0, clips: [], anchor: null, pick: null, cut: null, until: null };
   document.getElementById('player-title').textContent = task.title || task.fileName;
   playerProblem.hidden = true;
   playerResumed.hidden = true;
@@ -1110,6 +1112,8 @@ async function openPlayer(id) {
   playerMaking.hidden = true;
   playerTranslating.hidden = true;
   document.getElementById('player-translate-box').hidden = true;
+  document.getElementById('player-pick').hidden = true;
+  cut.hidden = true;
   playerCc.hidden = true;
   player.hidden = false;
   showPageView();
@@ -1123,16 +1127,18 @@ async function openPlayer(id) {
   showPosition();
   playerVideo.focus();
 
-  const [tracks, start, made, highlights] = await Promise.all([
+  const [tracks, start, made, highlights, clips] = await Promise.all([
     tauri.core.invoke('video_subtitles', { id }).catch(() => []),
     tauri.core.invoke('playback_start', { id }).catch(() => 0),
     tauri.core.invoke('made_subtitles', { id }).catch(() => null),
     tauri.core.invoke('video_highlights', { id }).catch(() => null),
+    tauri.core.invoke('video_clips', { id }).catch(() => []),
   ]);
   if (playing?.id !== id) return;
   playing.tracks = tracks;
   playing.made = made;
   playing.highlights = highlights;
+  playing.clips = clips;
   const wanted = remembered('chaya.player.subtitles', '');
   showSubtitles(tracks.find((t) => t.language === wanted) ?? tracks[0] ?? null);
   whenReady(() => {
@@ -1161,6 +1167,7 @@ function closePlayer() {
   if (!playing) return;
   keepPosition(true);
   playing = null;
+  dragging = null;
   player.classList.remove('player--full', 'player--idle');
   openSpeeds(false);
   player.hidden = true;
@@ -1241,6 +1248,7 @@ function showPosition() {
   let loaded = 0;
   for (let i = 0; i < buffered.length; i++) if (buffered.start(i) <= at + 0.5) loaded = buffered.end(i);
   playerSeek.style.setProperty('--buffered', String(duration ? Math.min(1, loaded / duration) : 0));
+  followCut();
 }
 
 function showPlaying() {
@@ -1272,6 +1280,7 @@ function seekFraction(e) {
 }
 
 function seekTo(fraction) {
+  if (playing) playing.until = null;
   if (Number.isFinite(playerVideo.duration)) playerVideo.currentTime = fraction * playerVideo.duration;
   showPosition();
 }
@@ -1367,6 +1376,9 @@ document.addEventListener('click', (e) => {
 /** Shows `track`'s subtitles: its lines in the transcript, the line on show over the video; null shows none. */
 function showSubtitles(track) {
   playing.shown = track;
+  // Lines chosen are those of the track shown before.
+  playing.anchor = null;
+  playing.pick = null;
   // Drawn again from nothing, whatever was on show.
   playing.line = null;
   const { tracks } = playing;
@@ -1410,7 +1422,16 @@ function showSubtitles(track) {
       const second = playing.second ? lineAt(playing.second.spans, line.start + 1) : -1;
       if (second >= 0) text.append(span('player__second', playing.second.lines[second].text));
       button.append(span('num', clock(line.start / 1000)), text);
-      button.addEventListener('click', () => {
+      // Shift-click: the lines from the one clicked before to this one, chosen for a clip.
+      button.addEventListener('mousedown', (e) => e.shiftKey && e.preventDefault());
+      button.addEventListener('click', (e) => {
+        if (e.shiftKey && playing.anchor !== null) {
+          pickLines(playing.anchor, i);
+          return;
+        }
+        playing.anchor = i;
+        if (playing.pick) pickLines(null);
+        playing.until = null;
         playerVideo.currentTime = line.start / 1000;
         playerVideo.play().catch(() => {});
       });
@@ -1418,10 +1439,12 @@ function showSubtitles(track) {
       return li;
     }),
   );
+  showPick();
   showSecond();
   showMaking();
   showTranslate();
   showHighlights();
+  showClips();
   followLine();
 }
 
@@ -1657,6 +1680,7 @@ async function reloadSubtitles(id, language) {
 
 // While it plays, the line and the seek bar follow every frame; the video's own events cover seeking while paused.
 function followFrames() {
+  stopAtClipEnd();
   followLine();
   showPosition();
   if (playing && !playerVideo.paused) requestAnimationFrame(followFrames);
@@ -1667,13 +1691,19 @@ playerVideo.addEventListener('seeked', () => {
   showPosition();
 });
 playerVideo.addEventListener('timeupdate', () => {
+  stopAtClipEnd();
   if (playerVideo.paused) {
     followLine();
     showPosition();
   }
   keepPosition();
 });
-playerVideo.addEventListener('pause', () => keepPosition(true));
+playerVideo.addEventListener('pause', () => {
+  keepPosition(true);
+  if (playing) playing.until = null;
+  showCutPlaying();
+});
+playerVideo.addEventListener('play', showCutPlaying);
 playerVideo.addEventListener('ended', () => keepPosition(true));
 playerVideo.addEventListener('error', () => {
   if (playing && playerVideo.getAttribute('src')) playerProblem.hidden = false;
@@ -1765,11 +1795,25 @@ document.addEventListener(
     e.stopPropagation();
     showControls();
     const onButton = e.target instanceof Element && e.target.closest('button, [role="tab"]');
+    const typing = e.target instanceof Element && e.target.closest('input, textarea, select');
+    const edge = e.target instanceof Element && e.target.closest('.cut__edge');
     const key = e.key.toLowerCase();
     if (e.key === 'Escape') {
-      if (!playerSpeedPanel.hidden) openSpeeds(false);
+      if (typing) e.target.blur();
+      else if (!playerSpeedPanel.hidden) openSpeeds(false);
       else if (player.classList.contains('player--full')) fullWindow(false);
+      else if (playing?.pick) pickLines(null);
+      else if (playing?.cut !== null && playing?.cut !== undefined) closeCut();
       else closePlayer();
+    } else if (e.ctrlKey && key === 'b' && !e.shiftKey && !e.altKey) {
+      e.preventDefault();
+      makeClip();
+    } else if (typing) {
+      // The field's own: a name typed, Enter to keep it.
+      if (e.key === 'Enter' && e.target === cutName) cutName.blur();
+    } else if (edge && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+      e.preventDefault();
+      nudgeEdge(edge === cutStart ? 'start' : 'end', e.key === 'ArrowRight' ? 1 : -1, e.altKey);
     } else if (e.ctrlKey || e.altKey || e.metaKey) {
       // Not the player's.
     } else if (key === 'f') {
@@ -1778,6 +1822,8 @@ document.addEventListener(
       playerMute.click();
     } else if (key === 'c' && playing?.tracks.length) {
       setCaptions(!captionsOn);
+    } else if ((key === 'i' || key === 'o') && cutClip()) {
+      edgeAtPlayhead(key === 'i' ? 'start' : 'end', e.shiftKey);
     } else if (e.key === ' ' && !onButton) {
       e.preventDefault();
       togglePlay();
@@ -2942,7 +2988,7 @@ function showHighlights() {
   if (!playing) return;
   const found = playing.highlights?.items ?? [];
   const head = document.getElementById('player-highlights-head');
-  head.hidden = found.length === 0;
+  document.getElementById('player-highlights-top').hidden = found.length === 0;
   head.textContent = found.length ? `${count(found.length, 'highlight')} · found by ${playing.highlights.model}` : '';
   playerHighlights.replaceChildren(
     ...found.map((h, i) => {
@@ -2957,13 +3003,20 @@ function showHighlights() {
       );
       if (h.reason) button.append(span('highlight__reason', h.reason));
       button.addEventListener('click', () => {
+        playing.until = null;
         playerVideo.currentTime = h.start / 1000;
         playerVideo.play().catch(() => {});
       });
-      li.append(button);
+      const add = document.createElement('button');
+      add.type = 'button';
+      add.className = 'card__act';
+      add.dataset.add = String(i);
+      add.addEventListener('click', () => addClips([{ name: h.title, start: h.start, end: h.end }]));
+      li.append(button, add);
       return li;
     }),
   );
+  markHighlightClips();
   markHighlights();
 
   // Find: in the subtitles shown, with the person's model; again, in place of those found before.
@@ -3043,3 +3096,371 @@ document.getElementById('player-find-setup').addEventListener('click', () => {
   showSettings(true);
   document.getElementById('settings-ai').scrollIntoView({ block: 'start' });
 });
+
+document.getElementById('player-highlights-all').addEventListener('click', () => {
+  const found = playing?.highlights?.items ?? [];
+  addClips(found.map((h) => ({ name: h.title, start: h.start, end: h.end })));
+});
+
+/** Each highlight's Add to clips, or that it is in them already. */
+function markHighlightClips() {
+  const found = playing?.highlights?.items ?? [];
+  let all = true;
+  for (const add of playerHighlights.querySelectorAll('[data-add]')) {
+    const h = found[Number(add.dataset.add)];
+    const there = h && clipOf(playing.clips, h.start, h.end);
+    all &&= !!there;
+    add.textContent = there ? 'In clips' : 'Add to clips';
+    add.disabled = !!there;
+  }
+  document.getElementById('player-highlights-all').hidden = all;
+}
+
+// ── Clips ───────────────────────────────────────────────────────────────────────────────────
+//
+// Parts of the video cut out: lines chosen in the transcript (a click, then a Shift-click) made into a clip with
+// Ctrl+B, or a highlight added. The Clips tab lists them; the one chosen is trimmed on the timeline under the picture,
+// where its edges snap to the lines (`clips.js`). The app keeps them, put right, in the video's file.
+
+const cut = document.getElementById('cut');
+const cutName = document.getElementById('cut-name');
+const cutTrack = document.getElementById('cut-track');
+const cutRegion = document.getElementById('cut-region');
+const cutStart = document.getElementById('cut-start');
+const cutEnd = document.getElementById('cut-end');
+const cutHead = document.getElementById('cut-head');
+const cutPlay = document.getElementById('cut-play');
+const playerClips = document.getElementById('player-clips');
+
+/** The video's length in milliseconds, or NaN before it is known. */
+const lengthMs = () => (Number.isFinite(playerVideo.duration) ? playerVideo.duration * 1000 : NaN);
+/** The lines edges snap to: those shown. */
+const shownLines = () => playing?.shown?.lines ?? [];
+
+/** Chooses lines `a` to `b` of those shown for a clip; `a` null chooses none. */
+function pickLines(a, b = a) {
+  if (!playing) return;
+  playing.pick = a === null ? null : selection(shownLines(), a, b);
+  showPick();
+}
+
+function showPick() {
+  const pick = playing?.pick;
+  for (const el of playerLines.querySelectorAll('.is-picked')) el.classList.remove('is-picked');
+  document.getElementById('player-pick').hidden = !pick;
+  if (!pick) return;
+  for (let i = pick.first; i <= pick.last; i++) playerLines.querySelector(`[data-line="${i}"]`)?.classList.add('is-picked');
+  const length = clock(Math.round((pick.end - pick.start) / 1000));
+  document.getElementById('player-pick-text').textContent =
+    `${count(pick.count, 'line')} · ${clock(pick.start / 1000)}–${clock(pick.end / 1000)} · ${length}`;
+}
+document.getElementById('player-pick-make').addEventListener('click', () => makeClip());
+document.getElementById('player-pick-clear').addEventListener('click', () => pickLines(null));
+
+/** Ctrl+B: a clip of the lines chosen; with none, of the line on show; in a video without subtitles, ten seconds
+ *  from the playhead. It opens on the timeline. */
+function makeClip() {
+  if (!playing) return;
+  const lines = shownLines();
+  const at = playerVideo.currentTime * 1000;
+  let range = playing.pick;
+  if (!range && playing.shown) {
+    const line = lineAt(playing.shown.spans, at);
+    if (line >= 0) range = selection(lines, line, line);
+  }
+  const wanted = range
+    ? { name: nameFrom(lines[range.first]?.text), start: range.start, end: range.end }
+    : { name: '', start: Math.round(at), end: Math.round(at) + 10_000 };
+  pickLines(null);
+  addClips([wanted], true);
+}
+
+/** Adds `wanted` to the video's clips; with `open`, the first opens on the timeline. */
+async function addClips(wanted, open = false) {
+  if (!playing || wanted.length === 0) return;
+  const id = playing.id;
+  try {
+    const duration = Number.isFinite(playerVideo.duration) ? playerVideo.duration : null;
+    const added = await tauri.core.invoke('add_clips', { id, clips: wanted, duration });
+    if (playing?.id !== id) return;
+    playing.clips = added.clips;
+    const first = added.ids.find((clip) => clip !== null);
+    if (open && first !== undefined) openCut(first);
+    else showClips();
+  } catch (message) {
+    if (playing?.id === id) sayClips(String(message));
+  }
+}
+
+/** Keeps `clip`'s name and times. */
+async function saveClip(clip) {
+  if (!playing) return;
+  const id = playing.id;
+  try {
+    const clips = await tauri.core.invoke('change_clip', { id, clip });
+    if (playing?.id === id) playing.clips = clips;
+  } catch (message) {
+    if (playing?.id === id) sayClips(String(message));
+  }
+  if (playing?.id === id) showClips();
+}
+
+async function removeClip(clipId) {
+  if (!playing) return;
+  const id = playing.id;
+  try {
+    const clips = await tauri.core.invoke('remove_clip', { id, clip: clipId });
+    if (playing?.id !== id) return;
+    playing.clips = clips;
+    if (playing.cut === clipId) playing.cut = null;
+  } catch (message) {
+    if (playing?.id === id) sayClips(String(message));
+  }
+  if (playing?.id === id) showClips();
+}
+
+function sayClips(text) {
+  const head = document.getElementById('player-clips-head');
+  head.hidden = false;
+  head.textContent = text;
+  head.dataset.kept = 'yes';
+}
+
+/** The Clips tab's list, each highlight's Add to clips, and the timeline. */
+function showClips() {
+  if (!playing) return;
+  const clips = playing.clips;
+  const head = document.getElementById('player-clips-head');
+  if (!head.dataset.kept) {
+    const total = clips.reduce((sum, c) => sum + (c.end - c.start), 0);
+    head.hidden = clips.length === 0;
+    head.textContent = `${count(clips.length, 'clip')} · ${clock(Math.round(total / 1000))} in all`;
+  }
+  delete head.dataset.kept;
+  document.getElementById('player-clips-none').hidden = clips.length > 0;
+  playerClips.replaceChildren(
+    ...clips.map((clip) => {
+      const li = document.createElement('li');
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'highlight';
+      button.dataset.clip = String(clip.id);
+      button.setAttribute('aria-pressed', String(playing.cut === clip.id));
+      const length = exact(clip.end - clip.start);
+      button.append(
+        span('highlight__time num', `${clock(clip.start / 1000)} – ${clock(clip.end / 1000)} · ${length}`),
+        span('highlight__title', clip.name),
+      );
+      button.addEventListener('click', () => openCut(clip.id));
+      const play = document.createElement('button');
+      play.type = 'button';
+      play.className = 'card__act';
+      play.textContent = 'Play';
+      play.addEventListener('click', () => playClip(clip));
+      li.append(button, play);
+      return li;
+    }),
+  );
+  markHighlightClips();
+  showCut();
+}
+
+/** The clip on the timeline, if one is. */
+function cutClip() {
+  return playing?.clips.find((c) => c.id === playing.cut) ?? null;
+}
+
+/** Opens clip `clipId` on the timeline, at its start. */
+function openCut(clipId) {
+  if (!playing) return;
+  playing.cut = clipId;
+  playing.until = null;
+  const clip = cutClip();
+  if (clip) playerVideo.currentTime = clip.start / 1000;
+  showClips();
+}
+
+function closeCut() {
+  if (!playing) return;
+  playing.cut = null;
+  playing.until = null;
+  showClips();
+}
+
+/** Plays `clip` from its start, and stops at its end. */
+function playClip(clip) {
+  playerVideo.currentTime = clip.start / 1000;
+  playerVideo.play().catch(() => {});
+  playing.until = clip.end;
+  showCutPlaying();
+}
+
+function stopAtClipEnd() {
+  if (playing?.until != null && playerVideo.currentTime * 1000 >= playing.until) {
+    playerVideo.pause();
+    playerVideo.currentTime = playing.until / 1000;
+    playing.until = null;
+  }
+}
+
+function showCutPlaying() {
+  const on = !!playing && playing.until != null && !playerVideo.paused;
+  cutPlay.querySelector('use').setAttribute('href', on ? '#i-pause' : '#i-play');
+  cutPlay.lastChild.textContent = on ? 'Pause' : 'Play clip';
+  cutPlay.title = on ? 'Pause' : 'Play clip';
+}
+
+/** An edge being dragged: which, the part of the video the timeline showed when it began, and the clip as it is. */
+let dragging = null;
+
+function showCut() {
+  const clip = dragging?.clip ?? cutClip();
+  cut.hidden = !clip;
+  if (!clip) return;
+  if (document.activeElement !== cutName) cutName.value = clip.name;
+  drawCut(clip);
+  showCutPlaying();
+}
+
+/** The part of the video on the timeline: kept still while an edge is dragged. */
+function cutView(clip) {
+  return dragging?.view ?? clipView(clip, lengthMs());
+}
+
+/** The timeline for `clip`: the lines around it, the other clips under them, the clip between its edges. */
+function drawCut(clip) {
+  const { from, to } = cutView(clip);
+  const width = Math.max(1, to - from);
+  const place = (el, start, end) => {
+    el.style.left = `${((Math.max(start, from) - from) / width) * 100}%`;
+    el.style.width = `${((Math.min(end, to) - Math.max(start, from)) / width) * 100}%`;
+  };
+  document.getElementById('cut-times').textContent =
+    `${exact(clip.start)} – ${exact(clip.end)} · ${exact(clip.end - clip.start)}`;
+  const lines = shownLines().filter((l) => l.end > from && l.start < to);
+  document.getElementById('cut-lines').replaceChildren(
+    ...lines.map((line) => {
+      const el = span('cut__line', line.text.replace(/\n/g, ' '));
+      place(el, line.start, line.end);
+      return el;
+    }),
+  );
+  const others = playing.clips.filter((c) => c.id !== clip.id);
+  const placed = rows(others);
+  const shown = others.filter((c) => c.end > from && c.start < to);
+  const clipsEl = document.getElementById('cut-clips');
+  clipsEl.style.setProperty('--rows', String(Math.max(1, ...shown.map((c) => placed.get(c.id) + 1))));
+  clipsEl.replaceChildren(
+    ...shown.map((c) => {
+      const el = span('cut__other', '');
+      el.title = c.name;
+      el.style.setProperty('--row', String(placed.get(c.id)));
+      place(el, c.start, c.end);
+      return el;
+    }),
+  );
+  place(cutRegion, clip.start, clip.end);
+  for (const [el, at] of [[cutStart, clip.start], [cutEnd, clip.end]]) {
+    el.setAttribute('aria-valuemin', '0');
+    el.setAttribute('aria-valuemax', String(Math.round(lengthMs() || clip.end)));
+    el.setAttribute('aria-valuenow', String(at));
+    el.setAttribute('aria-valuetext', exact(at));
+  }
+  followCut();
+}
+
+/** The playhead on the timeline. */
+function followCut() {
+  if (!playing || cut.hidden) return;
+  const clip = dragging?.clip ?? cutClip();
+  if (!clip) return;
+  const { from, to } = cutView(clip);
+  const at = playerVideo.currentTime * 1000;
+  cutHead.hidden = at < from || at > to;
+  cutHead.style.left = `${((at - from) / Math.max(1, to - from)) * 100}%`;
+}
+
+/** The time at the pointer's place on the timeline. */
+function timeAt(e, { from, to }) {
+  const r = cutTrack.getBoundingClientRect();
+  return from + Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) * (to - from);
+}
+
+for (const [el, kind] of [[cutStart, 'start'], [cutEnd, 'end']]) {
+  el.addEventListener('pointerdown', (e) => {
+    const clip = cutClip();
+    if (!clip) return;
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      el.setPointerCapture(e.pointerId);
+    } catch {}
+    playerVideo.pause();
+    dragging = { kind, el, view: clipView(clip, lengthMs()), clip };
+    el.focus();
+  });
+  el.addEventListener('pointermove', (e) => {
+    if (dragging?.el !== el) return;
+    dragging.clip = moveEdge(dragging.clip, kind, timeAt(e, dragging.view), shownLines(), lengthMs(), e.altKey);
+    // The frame at the edge, so the cut can be seen.
+    playerVideo.currentTime = dragging.clip[kind] / 1000;
+    drawCut(dragging.clip);
+  });
+  for (const end of ['pointerup', 'pointercancel']) {
+    el.addEventListener(end, () => {
+      if (dragging?.el !== el) return;
+      const { clip } = dragging;
+      dragging = null;
+      saveClip(clip);
+    });
+  }
+}
+
+// Clicking the timeline plays from there.
+cutTrack.addEventListener('pointerdown', (e) => {
+  const clip = cutClip();
+  if (!clip || e.target.closest('.cut__edge')) return;
+  playing.until = null;
+  playerVideo.currentTime = timeAt(e, cutView(clip)) / 1000;
+});
+
+/** The arrow keys on an edge: a line at a time, or a tenth of a second with Alt. */
+function nudgeEdge(kind, by, free) {
+  const clip = cutClip();
+  if (!clip) return;
+  const moved = stepEdge(clip, kind, by, shownLines(), lengthMs(), free);
+  playerVideo.currentTime = moved[kind] / 1000;
+  playing.clips = playing.clips.map((c) => (c.id === moved.id ? moved : c));
+  showCut();
+  saveClip(moved);
+}
+
+/** I and O: the clip's start or end at the playhead, snapped to a line unless Shift is held. */
+function edgeAtPlayhead(kind, free) {
+  const clip = cutClip();
+  if (!clip) return;
+  const at = playerVideo.currentTime * 1000;
+  const length = clip.end - clip.start;
+  // An edge put past the other takes the clip with it, as long as it was, so I and O work in either order.
+  let from = clip;
+  if (kind === 'start' && at >= clip.end) from = { ...clip, end: at + length };
+  if (kind === 'end' && at <= clip.start) from = { ...clip, start: Math.max(0, at - length) };
+  saveClip(moveEdge(from, kind, at, shownLines(), lengthMs(), free));
+}
+
+cutName.addEventListener('change', () => {
+  const clip = cutClip();
+  if (clip && cutName.value.trim() && cutName.value.trim() !== clip.name) saveClip({ ...clip, name: cutName.value });
+  else if (clip) cutName.value = clip.name;
+});
+cutPlay.addEventListener('click', () => {
+  const clip = cutClip();
+  if (!clip) return;
+  if (playing.until != null && !playerVideo.paused) playerVideo.pause();
+  else playClip(clip);
+});
+document.getElementById('cut-remove').addEventListener('click', () => {
+  if (playing?.cut != null) removeClip(playing.cut);
+});
+document.getElementById('cut-close').addEventListener('click', closeCut);
+new ResizeObserver(() => followCut()).observe(cutTrack);

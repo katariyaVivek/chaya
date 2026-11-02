@@ -195,13 +195,22 @@ start. The person picks how many.
 turned round, overlaps dropped by score, timed by lines; long videos in parts), kept as `video::Highlights`. The
 Highlights tab lists them, the seek bar marks them, and the Windows tour finds and plays them with a stand-in service.
 
-### 7. Clips ☐
+### 7. Clips ☑
 
 **The person gets:** a clip view: click a line and Shift-click another, *Make clip* (Ctrl+B), trim it on a
 timeline whose edges snap to the lines, name it. Highlights become clips in one click.
 
 - Clips are kept in the video's JSON file.
 - **Tests:** selection to range, snapping, overlaps.
+
+**Done.** `core::clips` (each clip put right before it is kept: turned round, at least 0.5 s, inside the video,
+named, the same range once; overlapping clips both kept) in `video::VideoData::clips`, written under a lock. The
+window's rules in `ui/clips.js`, tested with Node: lines chosen as one range, an edge snapped to a line's start or
+end within 1.5 s (Alt: anywhere), arrow keys a line at a time, overlapping clips on rows. The transcript chooses
+lines (click, Shift-click) and Ctrl+B makes the clip; highlights are added one at a time or all; the Clips tab lists
+them; the timeline under the picture trims, names, plays and removes the one chosen; I and O set its edges at the
+playhead. The Windows tour makes a clip from lines, drags and nudges its edges, renames it, adds the highlights,
+and reads them back from the video's file.
 
 ### 8. Export ☐
 

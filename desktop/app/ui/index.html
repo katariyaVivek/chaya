@@ -36,6 +36,7 @@
   <symbol id="i-sound" viewBox="0 0 24 24"><path d="M4.5 9.5h3l4.5-4v13l-4.5-4h-3z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
   <symbol id="i-muted" viewBox="0 0 24 24"><path d="M4.5 9.5h3l4.5-4v13l-4.5-4h-3z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M16 9.5l5 5M21 9.5l-5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
   <symbol id="i-cc" viewBox="0 0 24 24"><rect x="3.5" y="5.5" width="17" height="13" rx="3" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10.5 10.2a2.2 2.2 0 1 0 0 3.6M16.5 10.2a2.2 2.2 0 1 0 0 3.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M5 7h14M10 4.5h4M7 7l.8 11a2 2 0 0 0 2 1.8h4.4a2 2 0 0 0 2-1.8L17 7M10.5 10.5v6M13.5 10.5v6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="16" cy="7" r="2" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="8" cy="17" r="2" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
 </svg>
 
@@ -286,8 +287,9 @@
     <button class="icon-btn pressable viewer__step" type="button" id="viewer-next" aria-label="Next" title="Next (→)"><svg><use href="#i-forward"/></svg></button>
   </div>
 </div>
-<!-- A saved video or sound, played in Chaya. Its own controls over the picture; beside it, tabs: the transcript to read
-     and jump through, and the subtitles to choose or make. -->
+<!-- A saved video or sound, played in Chaya. Its own controls over the picture, and under it the clip being trimmed;
+     beside it, tabs: the transcript to read, jump through and choose lines from, highlights, clips, and the subtitles
+     to choose or make. -->
 <div class="player" id="player" role="dialog" aria-modal="true" aria-label="Player" hidden>
   <div class="viewer__top player__top">
     <p class="viewer__title" id="player-title"></p>
@@ -296,6 +298,7 @@
     <button class="icon-btn pressable" type="button" id="player-close" aria-label="Close (Esc)" title="Close (Esc)"><svg><use href="#i-close"/></svg></button>
   </div>
   <div class="player__body">
+    <div class="player__main">
     <div class="player__stage" id="player-stage">
       <video class="player__video" id="player-video" tabindex="0" aria-label="Video" preload="metadata" disablepictureinpicture disableremoteplayback></video>
       <div class="player__caption" id="player-caption" hidden>
@@ -333,11 +336,35 @@
         </div>
       </div>
     </div>
-    <aside class="player__panel" id="player-panel" aria-label="Transcript and subtitles">
+    <!-- The clip chosen in the Clips tab, on a timeline of the lines around it: its edges dragged (they snap to the
+         lines), or set at the playhead with I and O -->
+    <section class="cut" id="cut" aria-label="Clip" hidden>
+      <div class="cut__bar">
+        <input class="field cut__name" id="cut-name" maxlength="80" spellcheck="false" autocomplete="off" aria-label="Clip name">
+        <span class="cut__times num" id="cut-times"></span>
+        <span class="cut__gap"></span>
+        <button class="pill glass pressable" type="button" id="cut-play" title="Play clip"><svg><use href="#i-play"/></svg><span class="cut__play-label">Play clip</span></button>
+        <button class="icon-btn pressable" type="button" id="cut-remove" aria-label="Remove clip" title="Remove clip"><svg><use href="#i-trash"/></svg></button>
+        <button class="icon-btn pressable" type="button" id="cut-close" aria-label="Close timeline" title="Close timeline"><svg><use href="#i-close"/></svg></button>
+      </div>
+      <div class="cut__track" id="cut-track">
+        <div class="cut__lines" id="cut-lines" aria-hidden="true"></div>
+        <div class="cut__clips" id="cut-clips" aria-hidden="true"></div>
+        <div class="cut__region" id="cut-region">
+          <span class="cut__edge cut__edge--start" id="cut-start" role="slider" tabindex="0" aria-label="Clip start (I)" title="Clip start: drag, or press I at the playhead"></span>
+          <span class="cut__edge cut__edge--end" id="cut-end" role="slider" tabindex="0" aria-label="Clip end (O)" title="Clip end: drag, or press O at the playhead"></span>
+        </div>
+        <span class="cut__head" id="cut-head" aria-hidden="true"></span>
+      </div>
+      <p class="cut__hint">Drag an edge: it snaps to the lines; hold Alt to place it anywhere. I and O set them at the playhead.</p>
+    </section>
+    </div>
+    <aside class="player__panel" id="player-panel" aria-label="Transcript, highlights, clips and subtitles">
       <div class="tabs" role="tablist" id="player-tabs">
         <span class="tabs__light" aria-hidden="true"></span>
         <button class="tabs__tab" type="button" role="tab" id="tab-transcript" aria-controls="panel-transcript" aria-selected="true">Transcript</button>
         <button class="tabs__tab" type="button" role="tab" id="tab-highlights" aria-controls="panel-highlights" aria-selected="false" tabindex="-1">Highlights</button>
+        <button class="tabs__tab" type="button" role="tab" id="tab-clips" aria-controls="panel-clips" aria-selected="false" tabindex="-1">Clips</button>
         <button class="tabs__tab" type="button" role="tab" id="tab-subtitles" aria-controls="panel-subtitles" aria-selected="false" tabindex="-1">Subtitles</button>
       </div>
       <!-- How making subtitles is going, whichever tab is open -->
@@ -352,6 +379,12 @@
       <section class="tabpanel" role="tabpanel" id="panel-transcript" aria-labelledby="tab-transcript">
         <p class="tabpanel__head num" id="player-lines-head"></p>
         <ol class="player__lines" id="player-lines"></ol>
+        <!-- Lines chosen: a line clicked, and another Shift-clicked -->
+        <div class="pick glass" id="player-pick" role="status" hidden>
+          <span class="pick__text num" id="player-pick-text"></span>
+          <button class="pill pill--primary glass pressable" type="button" id="player-pick-make" title="Make clip (Ctrl+B)">Make clip</button>
+          <button class="downloads__all" type="button" id="player-pick-clear">Clear</button>
+        </div>
         <div class="tabpanel__empty" id="player-none" hidden>
           <p class="tabpanel__title">No subtitles yet</p>
           <p class="tabpanel__note" id="player-none-note"></p>
@@ -359,7 +392,10 @@
         </div>
       </section>
       <section class="tabpanel" role="tabpanel" id="panel-highlights" aria-labelledby="tab-highlights" hidden>
-        <p class="tabpanel__head num" id="player-highlights-head" hidden></p>
+        <div class="tabpanel__headrow" id="player-highlights-top" hidden>
+          <p class="tabpanel__head num" id="player-highlights-head"></p>
+          <button class="downloads__all" type="button" id="player-highlights-all">Add all to clips</button>
+        </div>
         <ol class="highlights" id="player-highlights"></ol>
         <div class="tabpanel__make" id="player-find-box">
           <p class="settings__label" id="player-find-label">Find highlights</p>
@@ -374,6 +410,14 @@
             <button class="pill glass pressable" type="button" id="player-find">Find</button>
           </div>
           <button class="pill glass pressable" type="button" id="player-find-setup" hidden>Set up an AI model</button>
+        </div>
+      </section>
+      <section class="tabpanel" role="tabpanel" id="panel-clips" aria-labelledby="tab-clips" hidden>
+        <p class="tabpanel__head num" id="player-clips-head" hidden></p>
+        <ol class="highlights" id="player-clips"></ol>
+        <div class="tabpanel__empty" id="player-clips-none">
+          <p class="tabpanel__title">No clips yet</p>
+          <p class="tabpanel__note">In the transcript, click the line a clip starts with and Shift-click the one it ends with, then <b>Make clip</b> (Ctrl+B). Highlights become clips in one click too.</p>
         </div>
       </section>
       <section class="tabpanel" role="tabpanel" id="panel-subtitles" aria-labelledby="tab-subtitles" hidden>

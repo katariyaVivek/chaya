@@ -1,14 +1,16 @@
 //! What only Chaya keeps about a saved video, in its own data folder: one JSON file per video, named by the download's
 //! number as `downloads.json` numbers them ("videos/12.json"): where playback stopped, and what whisper.cpp heard in it,
-//! each word with its time, when Chaya made its subtitles. Later steps add translations, highlights and clips. What a later Chaya wrote that this one does not know
-//! is kept as it was. Beside it, "videos/12.jpg" is the video's poster: a frame of it, which the window takes from the
+//! each word with its time, when Chaya made its subtitles; its translations, highlights and clips. What a later Chaya
+//! wrote that this one does not know is kept as it was. Beside it, "videos/12.jpg" is the video's poster: a frame of it, which the window takes from the
 //! saved file, as a site's thumbnail address may stop working (Instagram's and TikTok's do within hours) or never was.
 
 use std::path::PathBuf;
+use std::sync::{Mutex, PoisonError};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
+use crate::clips::{self, Clip, NewClip};
 use crate::highlights::Highlight;
 use crate::speech::whisper::{Device, Transcript};
 
@@ -44,6 +46,9 @@ pub struct VideoData {
     /// Its highlights, the last time the person's AI model found them.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub highlights: Option<Highlights>,
+    /// The parts of it the person cut out (`clips`), in order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub clips: Vec<Clip>,
     #[serde(flatten)]
     pub other: Map<String, Value>,
 }
@@ -93,11 +98,13 @@ impl VideoData {
 /// The folder of videos' files: `videos` in Chaya's data folder.
 pub struct Videos {
     folder: PathBuf,
+    /// Held while a file is changed: a translation's batch and a clip changed at the same moment both stay.
+    changing: Mutex<()>,
 }
 
 impl Videos {
     pub fn in_folder(folder: PathBuf) -> Videos {
-        Videos { folder }
+        Videos { folder, changing: Mutex::new(()) }
     }
 
     fn path(&self, id: u64) -> PathBuf {
@@ -111,6 +118,7 @@ impl Videos {
 
     /// Changes what is kept about download `id`, written whole to a file beside it first so a crash never leaves half.
     pub fn change(&self, id: u64, change: impl FnOnce(&mut VideoData)) -> std::io::Result<()> {
+        let _changing = self.changing.lock().unwrap_or_else(PoisonError::into_inner);
         let mut data = self.load(id);
         change(&mut data);
         std::fs::create_dir_all(&self.folder)?;
@@ -186,6 +194,41 @@ impl Videos {
     /// Keeps `highlights` of download `id`, in place of any before.
     pub fn highlighted(&self, id: u64, highlights: Highlights) -> std::io::Result<()> {
         self.change(id, |data| data.highlights = Some(highlights))
+    }
+
+    /// Adds `wanted` to download `id`'s clips (`clips::add`), in a video `duration` milliseconds long when that is
+    /// known: its clips after, and the ids of those asked for.
+    pub fn add_clips(
+        &self,
+        id: u64,
+        wanted: &[NewClip],
+        duration: Option<u64>,
+    ) -> std::io::Result<(Vec<Clip>, Vec<Option<u32>>)> {
+        let mut out = (Vec::new(), Vec::new());
+        self.change(id, |data| {
+            let duration = duration.or(data.duration.map(|d| (d * 1000.0) as u64));
+            out.1 = clips::add(&mut data.clips, wanted, duration);
+            out.0 = data.clips.clone();
+        })?;
+        Ok(out)
+    }
+
+    /// Changes one of download `id`'s clips (`clips::change`), or removes it when `changed` is `None`: its clips after.
+    pub fn change_clip(&self, id: u64, clip: u32, changed: Option<&Clip>) -> std::io::Result<Vec<Clip>> {
+        let mut out = Vec::new();
+        self.change(id, |data| {
+            let duration = data.duration.map(|d| (d * 1000.0) as u64);
+            match changed {
+                Some(changed) => {
+                    clips::change(&mut data.clips, &Clip { id: clip, ..changed.clone() }, duration);
+                }
+                None => {
+                    clips::remove(&mut data.clips, clip);
+                }
+            }
+            out = data.clips.clone();
+        })?;
+        Ok(out)
     }
 
     /// Forgets download `id`, and its poster, when it leaves the list: its number may be given to another download.
@@ -339,13 +382,57 @@ mod tests {
     }
 
     #[test]
+    fn clips_are_kept_put_right_inside_the_video_and_removed() {
+        let dir = tempfile::tempdir().unwrap();
+        let videos = Videos::in_folder(dir.path().to_path_buf());
+        videos.stopped(8, 30.0, Some(60.0)).unwrap();
+        let wanted = [NewClip { name: "The end".into(), start: 55_000, end: 70_000 }];
+        // The video's length, as kept, keeps the clip inside it.
+        let (clips, ids) = videos.add_clips(8, &wanted, None).unwrap();
+        assert_eq!(ids, [Some(1)]);
+        assert_eq!((clips[0].start, clips[0].end), (55_000, 60_000));
+        let changed = Clip { id: 0, name: "Last words".into(), start: 50_000, end: 58_000 };
+        let clips = videos.change_clip(8, 1, Some(&changed)).unwrap();
+        assert_eq!(clips, [Clip { id: 1, name: "Last words".into(), start: 50_000, end: 58_000 }]);
+        assert_eq!(videos.load(8).clips, clips);
+        assert_eq!(videos.load(8).resume_at(), 30.0, "the rest kept");
+        assert!(videos.change_clip(8, 1, None).unwrap().is_empty());
+    }
+
+    #[test]
+    fn changes_made_at_the_same_moment_all_stay() {
+        let dir = tempfile::tempdir().unwrap();
+        let videos = std::sync::Arc::new(Videos::in_folder(dir.path().to_path_buf()));
+        let writers: Vec<_> = (0..4u64)
+            .map(|w| {
+                let videos = videos.clone();
+                std::thread::spawn(move || {
+                    for i in 0..25u64 {
+                        let wanted = [NewClip {
+                            name: String::new(),
+                            start: (w * 100 + i) * 1_000,
+                            end: (w * 100 + i) * 1_000 + 900,
+                        }];
+                        videos.add_clips(1, &wanted, None).unwrap();
+                    }
+                })
+            })
+            .collect();
+        for writer in writers {
+            writer.join().unwrap();
+        }
+        assert_eq!(videos.load(1).clips.len(), 100);
+    }
+
+    #[test]
     fn what_a_later_chaya_wrote_is_kept() {
         let dir = tempfile::tempdir().unwrap();
         let videos = Videos::in_folder(dir.path().to_path_buf());
-        std::fs::write(dir.path().join("5.json"), r#"{"stopped_at": 9.5, "clips": [{"from": 1, "to": 2}]}"#).unwrap();
+        std::fs::write(dir.path().join("5.json"), r#"{"stopped_at": 9.5, "chapters": [{"from": 1, "to": 2}]}"#)
+            .unwrap();
         videos.stopped(5, 30.0, Some(90.0)).unwrap();
         let kept: Value = serde_json::from_slice(&std::fs::read(dir.path().join("5.json")).unwrap()).unwrap();
-        assert_eq!(kept["clips"][0]["to"], 2);
+        assert_eq!(kept["chapters"][0]["to"], 2);
         assert_eq!(kept["stopped_at"], 30.0);
         std::fs::write(dir.path().join("6.json"), "not json").unwrap();
         assert_eq!(videos.load(6), VideoData::default());

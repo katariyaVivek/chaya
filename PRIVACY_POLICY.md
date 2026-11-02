@@ -139,7 +139,8 @@ Chaya for Windows keeps the same promises, with these differences:
   Ollama or LM Studio is running at its usual address on your PC (127.0.0.1); that request never leaves your PC.
   What the service does with what it receives is up to its own privacy policy.
 - **The player.** Chaya plays what you saved on your PC, and remembers where each video stopped, in a small file
-  per video in Chaya's own folder, so it starts there next time. The file is deleted when the download leaves
+  per video in Chaya's own folder, so it starts there next time. The clips you cut from a video (their names and
+  times) are kept in the same file; making them sends nothing anywhere. The file is deleted when the download leaves
   Chaya's list. Nothing about what you watch leaves your PC.
 - **The ad blocker** works as the phone's: it decides on your PC, its settings (whether it is on, and
   the sites you let show ads) stay on your PC, and about once a week it fetches fresh EasyList and
