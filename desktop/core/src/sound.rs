@@ -99,11 +99,11 @@ pub async fn read_wav(mut wav: impl AsyncRead + Unpin) -> Option<Vec<u8>> {
             sample(low, bytes[0]);
             bytes = &bytes[1..];
         }
-        let mut pairs = bytes.chunks_exact(2);
-        for pair in &mut pairs {
-            sample(pair[0], pair[1]);
+        let (pairs, rest) = bytes.as_chunks::<2>();
+        for [low, high] in pairs {
+            sample(*low, *high);
         }
-        odd = pairs.remainder().first().copied();
+        odd = rest.first().copied();
     }
     if samples > 0 {
         peaks.push(byte(loudest));
