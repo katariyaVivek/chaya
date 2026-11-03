@@ -18,6 +18,8 @@ serde_json = "1"
 # Speech models are checked against the SHA-256 Chaya pins.
 sha2 = "0.10"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "io-util", "process", "sync", "time"] }
+# The search across every video's lines matches letters without their accents ("ecole" finds "École").
+unicode-normalization = "0.1.26"
 url = "2"
 # Accounts saved as one ZIP: their pictures and videos stored as they are, ZIP64 for the very large.
 zip = { version = "9", default-features = false }

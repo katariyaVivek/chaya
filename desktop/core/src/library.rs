@@ -23,6 +23,8 @@ pub enum Site {
     X,
     Pinterest,
     Other,
+    /// The person's own file, listed where it is on this PC (`own`).
+    Pc,
 }
 
 /// The site of a download found at `page` (the link looked up, or the page it was on), or, without one, at the

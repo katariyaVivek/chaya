@@ -728,6 +728,69 @@ def export_clips(tour, clip):
     tour.wait(lambda: tour.js("return document.getElementById('player').hidden"), 5)
 
 
+def own_video(tour):
+    """A video of the person's own, in a folder outside Downloads, dropped on the window: Tauri's drop event is sent
+    from the window's content as Windows would send it (or, if that cannot be sent, `add_own_videos` is asked as a drop
+    asks it). It is listed where it is, opens in the player, and taken off the list again leaves the file as it was."""
+    folder = Path.home() / 'Videos' / 'Chaya tour'
+    folder.mkdir(parents=True, exist_ok=True)
+    video = folder / 'Our meeting.mp4'
+    video.write_bytes((FIXTURES / f'{SPEECH}.mp4').read_bytes())
+    before = (video.stat().st_size, video.stat().st_mtime)
+    row = "[...document.querySelectorAll('#download-list .row')].find(r => r.querySelector('.row__title').textContent === 'Our meeting.mp4')"
+    tour.js("window.__TAURI__.event.emit('tauri://drag-drop', { paths: [" + json.dumps(str(video)) + "], position: { x: 400, y: 400 } });"
+            " return 1", gesture=True)
+    via = 'drop event'
+    if not tour.wait(lambda: tour.js(f"return !!{row}"), 8):
+        via = 'add_own_videos'
+        tour.js("window.__TAURI__.core.invoke('add_own_videos', { paths: [" + json.dumps(str(video)) + "] }); return 1")
+    listed = tour.wait(lambda: tour.js(f"const r = {row}; return r ? r.dataset.id + ' ' + r.querySelector('.row__meta').textContent : ''"), 10)
+    # One file dropped opens in the player; added by the command alone, it is opened from the list.
+    if tour.js("return document.getElementById('player').hidden") and listed:
+        tour.js(f"{row}.querySelector('.row__title').click(); return 1", gesture=True)
+    opened = tour.wait(lambda: not tour.js("return document.getElementById('player').hidden"), 10)
+    playing = tour.wait(lambda: tour.js("return document.getElementById('player-video').currentTime > 1"), 15)
+    tour.shot('own-video', via=via, listed=listed, opened=bool(opened), playing=bool(playing),
+              title=tour.js("return document.getElementById('player-title').textContent"),
+              note=tour.js("return document.querySelector('#own-note span')?.textContent ?? ''"))
+    tour.js("document.getElementById('player-close').click(); return 1")
+    tour.wait(lambda: tour.js("return document.getElementById('player').hidden"), 5)
+
+    # Off the list: the row goes, the file stays as it was.
+    label = tour.js(f"return {row}?.querySelector('.row__close').title ?? ''")
+    tour.js(f"{row}?.querySelector('.row__close').click(); return 1")
+    gone = tour.wait(lambda: tour.js(f"return !{row}"), 5)
+    after = (video.stat().st_size, video.stat().st_mtime) if video.exists() else None
+    tour.steps.append({'step': 'own-video-removed', 'remove_label': label, 'row_gone': bool(gone),
+                       'file_kept': after == before, 'others_in_folder': sorted(p.name for p in folder.iterdir())})
+    print(f'own video removed: row gone {bool(gone)}, file kept {after == before}', flush=True)
+
+
+def search_lines(tour, clip):
+    """Ctrl+F in the Downloads list, then "walk": the tour clip's lines that say it, marked, below the titles; the
+    last ("The end of the walk.", at 25 s) clicked opens the clip in the player there."""
+    tour.js("if (document.body.classList.contains('browsing')) document.getElementById('page-home').click();"
+            " document.getElementById('address').blur(); return 1")
+    time.sleep(0.5)
+    tour.js("document.dispatchEvent(new KeyboardEvent('keydown', {key: 'f', ctrlKey: true, bubbles: true})); return 1")
+    focused = tour.js("return document.activeElement?.id")
+    tour.js("const f = document.getElementById('downloads-find'); f.value = 'walk'; f.dispatchEvent(new Event('input')); return 1")
+    group = f".lines__video[data-id=\"{clip}\"]"
+    found = tour.wait(lambda: tour.js(f"return document.querySelectorAll('{group} .lines__line').length"), 10)
+    lines = tour.js(f"return [...document.querySelectorAll('{group} .lines__line')].map(l => l.dataset.start + ' ' +"
+                    " [...l.querySelectorAll('mark')].map(m => m.textContent).join(','))")
+    tour.shot('search-lines', ctrl_f_focus=focused, found=found, lines=lines,
+              summary=tour.js("return document.querySelector('.lines__summary').textContent"))
+    tour.js(f"document.querySelector('{group} .lines__line[data-start=\"25000\"]').click(); return 1", gesture=True)
+    tour.wait(lambda: not tour.js("return document.getElementById('player').hidden"), 10)
+    at = tour.wait(lambda: tour.js("const t = document.getElementById('player-video').currentTime; return t >= 25 && t < 30 ? t : 0"), 15)
+    tour.shot('search-line-opened', at=at, title=tour.js("return document.getElementById('player-title').textContent"),
+              current=tour.js("return document.querySelector('#player-lines [aria-current=\"true\"]')?.innerText ?? ''"))
+    tour.js("document.getElementById('player-close').click(); return 1")
+    tour.wait(lambda: tour.js("return document.getElementById('player').hidden"), 5)
+    tour.js("const f = document.getElementById('downloads-find'); f.value = ''; f.dispatchEvent(new Event('input')); return 1")
+
+
 def looked_up(tour):
     """Whether the card's lookup has ended: its state holds an answer, not the "Finding…" pill, and is not still empty
     from the moment before the lookup began."""
@@ -761,6 +824,17 @@ def run(tour, sites, seeded=None):
             ai_model(tour, clip)
         except Exception as e:
             tour.failed('ai-model', e)
+        # Step 9: a video of the person's own, and the search across every video's lines.
+        try:
+            own_video(tour)
+        except Exception as e:
+            tour.failed('own-video', e)
+            tour.js("document.getElementById('player-close').click(); return 1")
+        try:
+            search_lines(tour, clip)
+        except Exception as e:
+            tour.failed('search-lines', e)
+            tour.js("document.getElementById('player-close').click(); return 1")
 
     # A link: looked up by the bundled engine, its qualities offered.
     try:

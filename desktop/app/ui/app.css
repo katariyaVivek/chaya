@@ -1385,3 +1385,54 @@ body.browsing .toast, body:has(.player:not([hidden])) .toast { background: var(-
 .toast--exports .toast__text { font-size: var(--text-sm); color: var(--muted); }
 .toast--exports .exports { margin: 0; }
 .toast--exports .export-job { padding: 0; border: 0; background: none; animation: none; }
+/* ── Your own videos, and what is said in them (own.js, search.js) ─────────────────────────────── */
+
+/* The Downloads heading: the title, then its controls packed at the right */
+.downloads__head > .title { margin-right: auto; }
+.downloads__head > .downloads__view { margin-left: 0; }
+.downloads__add { flex: none; height: var(--space-4); padding: 0 var(--space-2) 0 var(--space-1); gap: var(--space-half); font-size: var(--text-sm); }
+.downloads__add svg { width: 16px; height: 16px; }
+.own-note { display: flex; align-items: baseline; gap: var(--space-1); margin: 0; color: var(--muted); font-size: var(--text-sm); }
+.own-note[hidden] { display: none; }
+
+/* Files dragged over the window: an edge of light around it, and what a drop does. Over a page (drawn over the
+   window), the words sit in the bar's place, where the window can still show them. */
+.drop {
+  position: fixed;
+  inset: var(--space-1);
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  border: 2px dashed var(--accent-edge);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  backdrop-filter: blur(var(--surface-blur));
+  box-shadow: inset 0 0 48px rgb(var(--accent-rgb) / 0.18);
+  pointer-events: none;
+  animation: var(--anim-enter) var(--dur-enter) var(--ease-out) both;
+}
+.drop[hidden] { display: none; }
+body.browsing .drop { place-items: start center; padding-top: var(--space-1); }
+.drop__card { display: flex; align-items: center; gap: var(--space-2); max-width: 30rem; padding: var(--space-2) var(--space-3); border-radius: var(--radius-lg); box-shadow: var(--shadow), var(--accent-glow); }
+.drop__title { margin: 0; font: 600 var(--text-lg) / var(--leading-lg) var(--font-ui); color: var(--text); }
+.drop__note { margin: 0; color: var(--muted); font-size: var(--text-sm); line-height: var(--leading-sm); }
+
+/* The lines found, by video, each with its time; the words found marked */
+.lines { display: grid; gap: var(--space-1); }
+.lines[hidden] { display: none; }
+.lines .list__head { margin: 0; }
+.lines__list { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.lines__video { display: grid; gap: var(--space-half); }
+.lines__title { margin: 0; padding: 0 var(--space-1); font: 600 var(--text-md) / var(--leading-md) var(--font-ui); color: var(--text); }
+.lines__line { color: var(--text); }
+.lines__line:hover { background: var(--surface); box-shadow: var(--shadow); }
+.lines__line:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.lines__language { margin-right: var(--space-1); color: var(--muted); font-size: var(--text-sm); }
+.lines__line mark {
+  padding: 0 1px;
+  border-radius: 3px;
+  background: rgb(var(--accent-rgb) / 0.22);
+  box-shadow: inset 0 -1px 0 var(--accent-edge);
+  color: inherit;
+  font-weight: 600;
+}

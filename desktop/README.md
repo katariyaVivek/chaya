@@ -28,7 +28,7 @@ found and named in a pill in the bar; its panel lists them, the main video first
 | Path | What it is |
 |---|---|
 | `design/` | The design system: tokens, fonts, components, motion. Plain CSS and an ES module |
-| `core/` | `chaya-core`, plain Rust with no window or web view in it, so it builds and tests anywhere. `links` recognises links (the phone's `PlatformMatcher` and `ProfileMatcher`); `engine` runs the engine; `media` reads its answer (`PlatformMedia`); `formats` picks one choice per quality (`FormatSelector`); `lookup` is what the window is sent. Each is ported with the phone's tests. `download` saves files: `http` fetches one with resume (`HttpDownloader`), `manager` keeps every download and its state (`DownloadManager`), `plan` turns a choice into downloads, `names` makes Windows-safe names, `error` explains failures (`DownloadError`), `join` joins picture and sound, and turns a stream into an MP4, with ffmpeg, `pieces` fetches YouTube's files in pieces (`PieceLog`), `stream` fetches a stream's pieces (HLS, DASH). `browse` holds the browser's rules: what typed text opens, where a page may go, and which page downloads Chaya keeps. `found` turns what a page's detector saw into the list the window shows (`MediaUrlClassifier`, `AdHosts`, and the core of `MediaRanker` and `MediaNamer`). `adblock` is the phone's ad blocker (`FilterEngine`, `CosmeticRules`, `FilterLists`, `AdBlockSettings`) with its tests |
+| `core/` | `chaya-core`, plain Rust with no window or web view in it, so it builds and tests anywhere. `links` recognises links (the phone's `PlatformMatcher` and `ProfileMatcher`); `engine` runs the engine; `media` reads its answer (`PlatformMedia`); `formats` picks one choice per quality (`FormatSelector`); `lookup` is what the window is sent. Each is ported with the phone's tests. `download` saves files: `http` fetches one with resume (`HttpDownloader`), `manager` keeps every download and its state (`DownloadManager`), `plan` turns a choice into downloads, `names` makes Windows-safe names, `error` explains failures (`DownloadError`), `join` joins picture and sound, and turns a stream into an MP4, with ffmpeg, `pieces` fetches YouTube's files in pieces (`PieceLog`), `stream` fetches a stream's pieces (HLS, DASH). `browse` holds the browser's rules: what typed text opens, where a page may go, and which page downloads Chaya keeps. `found` turns what a page's detector saw into the list the window shows (`MediaUrlClassifier`, `AdHosts`, and the core of `MediaRanker` and `MediaNamer`). `adblock` is the phone's ad blocker (`FilterEngine`, `CosmeticRules`, `FilterLists`, `AdBlockSettings`) with its tests. `own` checks the person's own videos and sounds before they are listed where they are; `search` finds words in every saved video's lines |
 | `engine/` | `prepare.py` puts together the engine the installer carries, in `app/src-tauri/engine/` (not in git); `run.py` starts it; `build_ffmpeg.sh` builds the cut-down ffmpeg |
 | `app/ui/` | The window: `index.html`, `app.css`, `main.js` |
 | `app/scripts/assemble-ui.mjs` | Puts `ui/` and the design system together in `app/dist/`, which Tauri serves. Runs before every dev run and build |
@@ -226,6 +226,31 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
   there says *Saved "Clip name"* with *Show in folder* and how it was encoded, or *Couldn't export "Clip name"*
   with why and *Retry*; saved ones go after 8 s (not while the pointer or the focus is on them), failed ones stay.
   Over a page, the page is made shorter so the notices sit below it.
+- **Your own videos** (`core::own`, `app/src-tauri/src/own.rs`, `app/ui/own.js`). A video or sound already on the PC
+  (a meeting, an interview) dragged from Explorer onto any part of the window, or picked with *Add from this PC*
+  beside the Downloads heading (Windows' own file picker, through `tauri-plugin-dialog`, opened by the app so the
+  window is granted none of the plugin's commands), is listed where it is: a finished entry (`Manager::add_own`)
+  whose source is the file itself (`file:///…`), so nothing ever fetches it and an older Chaya keeps it as it is. It
+  opens in the player like any download, where making subtitles, translating, highlights, clips and export work on
+  it; what those write for others to find (subtitles as "name.en.srt", exported clips) goes next to it, as for a
+  download, and what only Chaya needs (its poster, where playback stopped) in Chaya's own folder. The file is never
+  copied, moved or changed, and *Remove from the list (the file stays)* leaves it where it is. Each file is checked:
+  it is there, it is a file, and it is a video (MP4, M4V, MOV, MKV, WebM, AVI, WMV) or a sound (MP3, M4A, AAC, WAV,
+  FLAC, OGG, Opus) by its extension; one already listed, as the person's own or as a download, keeps its entry; the
+  rest are named with why. While files are over the window it says what a drop does; one file dropped opens in the
+  player, several are listed with a note. Over a page in the built-in browser, Tauri's drop handler takes the drop from
+  WebView2, so the page neither opens the file nor learns its name; the app hands it to the window (`page-drop`).
+  The list's site chips name them *This PC*, and their row says *On this PC* and the folder. *For every download*
+  (making subtitles) leaves them be: their subtitles are made when the person asks.
+- **Finding what was said** (`core::search`, `app/src-tauri/src/search.rs`, `app/ui/search.js`). The Downloads list's
+  find box (Ctrl+F) narrows the list by name, as before, and below the downloads it matches lists the lines of
+  every saved video and sound (in every language next to it) that hold all its words, in any order: by video,
+  newest first, then by time, each with its time and the words found marked; a click opens the video in the player
+  at that line, with that language's subtitles. Case and accents do not count ("ecole" finds "École", "strasse"
+  "Straße"). At most 200 lines come back, and the rest are counted. The lines are kept in memory by the app, folded
+  once as they are read; before a search it looks again at the subtitle files only when the list changed or a
+  second has passed, listing each folder once and reading again only a file whose size or time changed, so making
+  or translating subtitles shows up in the next search. The chips' kind and site narrow the lines too.
 - **The player.** A saved video or sound opens in Chaya, from the list (its name), the grid or a post's viewer,
   instead of another program (*Open in another app* is in its bar, and offered when WebView2 can't play the file).
   The file comes a part at a time, at most 4 MB per answer, by the HTTP ranges the player asks for
@@ -469,7 +494,7 @@ cd desktop && cargo test --workspace     # chaya-core
 python -m pytest desktop/engine          # putting the engine together
 python -m pytest app/src/test/python     # chaya_engine, shared with the phone
 cd desktop/design && npm test            # the design system
-cd desktop/app && node --test test/clips.test.mjs test/export.test.mjs   # the window's clip and export rules (ui/clips.js, ui/export.js)
+cd desktop/app && node --test test/*.test.mjs   # the window's rules (ui/clips.js, export.js, search.js, own.js)
 ```
 
 `CHAYA_ENGINE_DIR=<an engine folder> cargo test` also runs the prepared engine for real
@@ -488,7 +513,8 @@ there. `core` needs nothing beyond Rust.
 starts the app with WebView2's DevTools port open, driving the window through it. CI runs elevated, where
 WebView2 ignores `WEBVIEW2_*` variables (and so msedgedriver never attaches), so the job opens the port with
 the machine's WebView2 policy for `chaya-desktop.exe`. It takes a real link looked up and a download cancelled, a real Pinterest pin looked up, three pages in the built-in browser, two tabs switched and one closed, a page fullscreen and back, the window maximized and restored by its own button, the Downloads list narrowed by a chip and by a name, the ad blocker's panel,
-Night. At each step it photographs the whole screen, so the page's place in the window, Windows' fonts and
+Night. With `--seed` it also drops a video of its own from `~/Videos/Chaya tour/` on the window, plays it and takes it
+off the list (the file must stay as it was), and finds "walk" in the clip's lines and opens the clip at the line. At each step it photographs the whole screen, so the page's place in the window, Windows' fonts and
 frame are seen; the pictures and `steps.json` (what each step found) are the run's `chaya-windows-tour`
 artifact. A site that refuses the machine is noted, not failed on. Off Windows it runs with `--via webdriver`:
 `tauri-driver` and WebKitWebDriver (`webkit2gtk-driver`) on a virtual display, and `--sites` pointing at
@@ -511,7 +537,9 @@ saying which page asked (`referrerpolicy="no-referrer"`); and a download fetches
 site's server with the headers yt-dlp names for it, and a video's subtitles, when the site has any, from the
 address yt-dlp names for them, with the same headers. No sign-in is used for a link and nothing is sent
 anywhere else. The list of downloads stays on the PC, and so does where playback of each video stopped
-(`videos/` in the app's data folder). Subtitles made on the PC are listened to on the PC; the speech model is the
+(`videos/` in the app's data folder). The person's own videos are read where they are, never copied, moved,
+changed or uploaded, and the search across every video's lines reads the subtitle files on the PC into memory
+only. Subtitles made on the PC are listened to on the PC; the speech model is the
 only thing fetched for them, once, from Hugging Face (`ggerganov/whisper.cpp`), and checked against its pinned
 SHA-256. Pages the person opens in the built-in browser load
 as in any browser, and keep their cookies in the app's own WebView2 folder on the PC; they cannot reach

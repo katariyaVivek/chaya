@@ -68,6 +68,11 @@ These are deliberate scope decisions, not open bugs.
   no way yet to bring them in from another browser or take them out, and nothing is synced.
 - **Browser extensions.** Android's WebView, which Chaya's browser is built on, cannot run them, so
   uBlock Origin itself cannot be added; the built-in blocker uses its lists instead.
+- **Following your own videos when they move (Chaya for Windows).** A video or sound added from the PC is
+  listed where it was, and Chaya keeps no copy: moved, renamed or deleted, it can no longer be played from
+  Chaya's list; add it again from where it is now. Subtitles made or translated for it are written next to it,
+  as for a download, replacing a file of the same name ("name.en.srt"); a folder Windows does not let Chaya
+  write to can't hold them.
 - **What uBlock Origin does beyond its lists.** Its scriptlets and procedural filters are not
   applied, so ads a site serves from its own servers inside the video (YouTube's, for one) still
   play, and some pages keep an empty space where an ad was.

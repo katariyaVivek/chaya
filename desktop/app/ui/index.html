@@ -187,9 +187,12 @@
       </div>
       <label class="find" id="downloads-find-field" hidden>
         <svg><use href="#i-search"/></svg>
-        <input class="find__input" id="downloads-find" type="search" spellcheck="false" placeholder="Find in downloads" aria-label="Find in downloads">
+        <input class="find__input" id="downloads-find" type="search" spellcheck="false" placeholder="Find in names and subtitles" aria-label="Find in names and subtitles (Ctrl+F)" title="Ctrl+F">
       </label>
+      <!-- Your own videos (own.js): picked here, or dropped anywhere on the window -->
+      <button class="pill glass pressable downloads__add" type="button" id="downloads-add" title="Add videos and sounds from this PC. They stay where they are."><svg><use href="#i-plus"/></svg>Add from this PC</button>
     </div>
+    <p class="own-note" id="own-note" role="status" hidden><span></span><button class="downloads__all" type="button">OK</button></p>
     <div class="narrow" id="downloads-narrow" role="group" aria-label="Show only" hidden>
       <div class="narrow__group" id="narrow-kind"></div>
       <span class="narrow__rule" aria-hidden="true"></span>
@@ -201,13 +204,29 @@
       <button class="pill glass pressable grid__running" type="button" id="grid-running" hidden></button>
       <ul class="grid" id="download-grid" aria-labelledby="downloads-title"></ul>
     </div>
+    <!-- The lines said in the videos that hold the words in the find box (search.js) -->
+    <section class="lines" id="downloads-lines" aria-labelledby="lines-head" hidden>
+      <h2 class="list__head" id="lines-head">Said in your videos · <span class="lines__summary"></span></h2>
+      <ul class="lines__list"></ul>
+    </section>
     <p class="downloads__none" id="downloads-none" hidden>Nothing here matches. <button class="downloads__all" type="button" id="narrow-clear">Show everything</button></p>
     <div class="empty" id="downloads-empty">
       <span class="empty__icon"><svg><use href="#i-download"/></svg></span>
-      <p>What you download appears here. Paste a link above to start.</p>
+      <p>What you download appears here. Paste a link above to start, or drop a video from this PC to make subtitles for it, translate it or cut it.</p>
     </div>
   </section>
 </main>
+
+<!-- While files from Explorer are dragged over the window (own.js) -->
+<div class="drop" id="drop" aria-hidden="true" hidden>
+  <div class="drop__card glass">
+    <span class="empty__icon"><svg><use href="#i-plus"/></svg></span>
+    <div>
+      <p class="drop__title">Drop to add to Chaya</p>
+      <p class="drop__note">Videos and sounds stay where they are on this PC, and nothing is uploaded.</p>
+    </div>
+  </div>
+</div>
 
 <template id="lookup-template">
   <article class="card card--media glass">

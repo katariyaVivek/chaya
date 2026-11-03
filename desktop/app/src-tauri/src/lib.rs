@@ -7,6 +7,8 @@ mod browser;
 mod clips;
 mod export;
 mod highlights;
+mod own;
+mod search;
 mod speech;
 mod translate;
 mod update;
@@ -431,6 +433,9 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        // Windows' file picker, for *Add from this PC*: opened by the app (`own::choose_own_videos`), so the window
+        // is granted none of the plugin's commands.
+        .plugin(tauri_plugin_dialog::init())
         .register_asynchronous_uri_scheme_protocol("chaya-file", |ctx, request, responder| {
             let (app, from) = (ctx.app_handle().clone(), ctx.webview_label().to_string());
             // Read off the window's thread: a picture, or a part of a video, can be many megabytes.
@@ -456,6 +461,7 @@ pub fn run() {
             app.manage(translate::Translating::default());
             app.manage(highlights::Finding::default());
             tauri::async_runtime::spawn(translate::Translating::work(app.handle().clone()));
+            app.manage(search::Searching::default());
             app.manage(export::Exporting::default());
             tauri::async_runtime::spawn(export::Exporting::work(app.handle().clone()));
             let handle = app.handle().clone();
@@ -517,6 +523,9 @@ pub fn run() {
             retry_download,
             open_download,
             show_download,
+            own::add_own_videos,
+            own::choose_own_videos,
+            search::search_lines,
             video_subtitles,
             playback_start,
             playback_stopped,

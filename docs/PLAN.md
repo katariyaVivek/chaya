@@ -241,11 +241,22 @@ picture in the language's colours) and the quality. Exports in progress are list
 one ends a notice says so, with *Show in folder* and the encoder in words, or why it failed, with *Retry*. The
 dialog's rules are in `ui/export.js`, tested with Node; the Windows tour exports through the dialog.
 
-### 9. Your own videos, and search ☐
+### 9. Your own videos, and search ☑
 
 **The person gets:** drop a video from the PC into Chaya to make subtitles for it, translate it or cut it
 (a meeting, an interview), without uploading anything; and a search across every line of every video,
 which opens the video at that line.
+
+**Done.** `core::own` checks a file (there, a file, a video or sound by its extension) and `Manager::add_own` lists it
+where it is, as a finished task whose source is its own `file:///` address, so it keeps its place in `downloads.json`
+for older versions too and nothing fetches it; a file already listed keeps its entry, and removing it keeps the
+file. Files come from a drop anywhere on the window (over a page too: the page's webview hands it on, and the page
+never gets it) or from *Add from this PC* (`tauri-plugin-dialog`, opened by the app, so the window gets no dialog
+permission); one file opens in the player. `core::search` keeps every video's subtitle lines in memory, folded for
+case and accents, re-reading only files whose size or time changed; the Downloads find box (Ctrl+F) lists the lines
+with every word under the names it matches, and a line opens the player there (`openPlayer(id, { at, language })`).
+The Windows tour drops a video from `~/Videos/Chaya tour/`, plays it and removes it (the file stays as it was), and
+finds "walk" in the clip's lines and opens it at 0:25.
 
 ## Later, perhaps
 

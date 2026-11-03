@@ -95,8 +95,11 @@ impl Speaking {
     }
 
     /// A video downloaded: its subtitles are made when the person asked for every download's, and it came without any.
+    /// A video of the person's own is not a download: its subtitles are made when they ask, so a folder of videos
+    /// dropped on the window does not keep the PC busy for hours.
     pub fn downloaded(&self, app: &AppHandle, task: &Task) {
         let wanted = task.kind == Kind::Video
+            && !task.is_own()
             && task.state == TaskState::Completed
             && self.speech.settings().every_download
             && subtitles::files_for(&task.path).is_empty();
