@@ -13,8 +13,9 @@ use tauri::{AppHandle, Manager, State};
 
 use crate::Downloads;
 
-/// The engine's ffmpeg, which reads a video's sound for the timeline; `None` when the engine has none.
-pub struct Sound(pub Option<PathBuf>);
+/// The engine's ffmpeg, which reads a video's sound for the timeline and exports clips; `None` when the engine has
+/// none.
+pub struct Ffmpeg(pub Option<PathBuf>);
 
 /// How loud a video's sound is, `per_second` times a second, each a byte (base64).
 #[derive(Serialize)]
@@ -34,7 +35,7 @@ pub async fn sound_peaks(id: u64, app: AppHandle) -> Result<Peaks, String> {
         Some(peaks) => peaks,
         None => {
             let ffmpeg =
-                app.state::<Sound>().0.clone().ok_or("Chaya's ffmpeg is missing, so it can't read the sound.")?;
+                app.state::<Ffmpeg>().0.clone().ok_or("Chaya's ffmpeg is missing, so it can't read the sound.")?;
             let task = app.state::<Downloads>().manager.get(id).filter(|t| t.state == TaskState::Completed);
             let task = task.ok_or("This video isn't saved any more.")?;
             let peaks = sound::peaks(&ffmpeg, &task.path).await.map_err(|error| match error {

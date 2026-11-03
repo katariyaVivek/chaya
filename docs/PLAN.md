@@ -227,6 +227,13 @@ language or two), at 720p, 1080p or the original size; or as SRT files timed fro
 - FCPXML (for Final Cut, Premiere and DaVinci Resolve) only if it is asked for.
 - **Tests:** an exported clip's length, size and subtitle stream; the ASS file Chaya writes for each style.
 
+**First part (8a), the engine:** `build_ffmpeg.sh` builds FreeType, FriBidi, HarfBuzz and libass from pinned
+releases and links them into ffmpeg, with FFmpeg's own SIMD code (nasm; without it the scaler garbled pictures),
+the decoders for H.264, HEVC, VP8 and VP9, `h264_mf` with Direct3D 11, MPEG-4 and AAC. `core::export` writes the ASS
+for each look and language pair, cuts exactly, picks the size, falls back from the graphics card to the processor to
+MPEG-4, and writes clips' SRTs; the app queues jobs and reports them as `export` events; the Windows tour exports a
+clip through the app and says which encoder Windows used. The Export dialog is the second part (8b).
+
 ### 9. Your own videos, and search ☐
 
 **The person gets:** drop a video from the PC into Chaya to make subtitles for it, translate it or cut it

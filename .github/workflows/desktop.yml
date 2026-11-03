@@ -51,7 +51,7 @@ jobs:
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq mingw-w64
+          sudo apt-get install -y -qq mingw-w64 meson ninja-build nasm pkg-config
           desktop/engine/build_ffmpeg.sh windows ffmpeg-out/windows
           desktop/engine/build_ffmpeg.sh host ffmpeg-out/host
 

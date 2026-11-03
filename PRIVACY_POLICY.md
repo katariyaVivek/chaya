@@ -142,7 +142,8 @@ Chaya for Windows keeps the same promises, with these differences:
   per video in Chaya's own folder, so it starts there next time. The clips you cut from a video (their names and
   times) are kept in the same file; making them sends nothing anywhere. To draw a video's sound on the clip
   timeline, Chaya reads it once on your PC and keeps how loud it is, moment by moment, in a small file beside it;
-  that file is deleted with the others when the download leaves the list. The file is deleted when the download leaves
+  that file is deleted with the others when the download leaves the list. Exporting a clip makes a new video or
+  subtitle file next to the original, on your PC, with Windows' own video encoder; nothing is sent anywhere. The file is deleted when the download leaves
   Chaya's list. Nothing about what you watch leaves your PC.
 - **The ad blocker** works as the phone's: it decides on your PC, its settings (whether it is on, and
   the sites you let show ads) stay on your PC, and about once a week it fetches fresh EasyList and

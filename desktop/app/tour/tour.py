@@ -520,6 +520,10 @@ def ai_model(tour, clip):
         make_clips(tour, clip)
     except Exception as e:
         tour.failed('clips', e)
+    try:
+        exported_by_app(tour, clip)
+    except Exception as e:
+        tour.failed('exported-by-app', e)
     tour.click('#settings-button')
     time.sleep(0.8)
     # The key out of Credential Manager again, and no service chosen.
@@ -641,6 +645,39 @@ def make_clips(tour, clip):
     tour.press_in_player('Escape')
     tour.press_in_player('Escape')
     tour.wait(lambda: tour.js("return document.getElementById('player').hidden"), 5)
+
+
+def exported_by_app(tour, clip):
+    """The app's own export, asked for straight (the Export dialog is the window's, next): the clip "Counting the
+    walk" as a 720p video with its English subtitles drawn on in the Box look, then as an SRT; each saved next to the
+    video in Downloads. Says which encoder Windows used: its H.264 encoder on the graphics card or the processor, or
+    MPEG-4 when it has none."""
+    tour.js(
+        "window.__exported = []; window.__exportError = null; (async () => {"
+        " const tauri = window.__TAURI__;"
+        " await tauri.event.listen('export', (e) => window.__exported.push(e.payload));"
+        f" const clips = await tauri.core.invoke('video_clips', {{ id: {clip} }});"
+        " const one = clips.find((c) => c.name === 'Counting the walk') ?? clips[0];"
+        " const style = { color: 'yellow', font: 'sans', size: 'M' };"
+        " const video = { saveAs: 'video', quality: 'p720', look: 'boxed', subtitles: [{ language: 'en', style }], secondOnTop: false };"
+        f" await tauri.core.invoke('export_clips', {{ id: {clip}, clips: [one.id], options: video }});"
+        f" await tauri.core.invoke('export_clips', {{ id: {clip}, clips: [one.id], options: {{ ...video, saveAs: 'srt' }} }});"
+        " })().catch((e) => (window.__exportError = String(e))); return 1"
+    )
+    # Each job's last word: done, failed or stopped, for both.
+    ended = ("const last = new Map(); for (const v of window.__exported) last.set(v.job, v);"
+             " const views = [...last.values()]; if (window.__exportError) return [{state: 'failed', message: window.__exportError}];"
+             " return views.length === 2 && views.every((v) => ['done', 'failed', 'stopped'].includes(v.state)) ? views : null")
+    views = tour.wait(lambda: tour.js(ended), 180) or tour.js("return window.__exported") or []
+    files = []
+    for view in views:
+        path = Path(view['path']) if view.get('path') else None
+        files.append({'state': view.get('state'), 'encoder': view.get('encoder'), 'message': view.get('message'),
+                      'file': path.name if path else None, 'bytes': path.stat().st_size if path and path.exists() else 0,
+                      'start': path.read_text(encoding='utf-8')[:120] if path and path.suffix == '.srt' and path.exists() else None})
+    progress = sorted({v.get('percent') for v in tour.js("return window.__exported") or [] if v.get('state') == 'exporting'})
+    tour.steps.append({'step': 'exported-by-app', 'files': files, 'progress_heard': progress[:12]})
+    print(f'exported by the app: {json.dumps(files, ensure_ascii=False)}; progress {progress[:12]}', flush=True)
 
 
 def looked_up(tour):

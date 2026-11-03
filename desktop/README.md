@@ -53,7 +53,7 @@ Put the engine together once, and again when `app/src/main/python` or the pins i
 python desktop/engine/prepare.py --ffmpeg path/to/ffmpeg.exe
 ```
 
-`ffmpeg.exe` is the cut-down build that joins picture and sound and saves streams. `desktop/engine/build_ffmpeg.sh windows
+`ffmpeg.exe` is the cut-down build that joins picture and sound, saves streams, reads sound and exports clips. `desktop/engine/build_ffmpeg.sh windows
 OUT_DIR` makes it on Linux or in WSL (it cross-compiles with mingw-w64); or take it from the `ffmpeg`
 artifact of any `desktop.yml` run. Without `--ffmpeg` the app works, but offers no quality that needs
 joining and no stream.
@@ -87,10 +87,15 @@ Python inside the app, so the installer carries one:
   `--fragments` adds each DASH format's pieces as yt-dlp listed them, which the phone, handing the manifest
   to Media3, never asks for.
 - `engine/ffmpeg.exe`: FFmpeg 8.1.3, built by `build_ffmpeg.sh` from the release's commit with
-  everything left out but copying tracks into an MP4: from MP4, M4A and WebM files, and from a stream's
-  pieces (MPEG-TS, fragmented MP4, bare AAC or MP3). No encoders, no network, no outside libraries; its
-  one decoder is AAC's, which MPEG-TS sound needs for its sample rate to be known. About 2.2 MB, under
-  the LGPL; its licence and source are in `engine/licenses/`.
+  everything left out but what Chaya asks of it: copying tracks into an MP4 (from MP4, M4A and WebM files, and
+  from a stream's pieces: MPEG-TS, fragmented MP4, bare AAC or MP3); turning sound into WAV for subtitles and the
+  clip timeline; and exporting clips: decoding H.264, HEVC, VP8 and VP9, scaling, drawing subtitles with libass,
+  and encoding H.264 with Windows' own encoder (`h264_mf`, Media Foundation, on the graphics card where it can),
+  MPEG-4 where Windows has none, and AAC. libass and the libraries it needs (FreeType, FriBidi, HarfBuzz) are
+  built from their pinned releases and linked in; fonts come from Windows (DirectWrite, with its fallback for
+  scripts a font lacks). No network, no x264. About 9 MB, under the LGPL; its licence, its libraries' licences and
+  the way to the source are in `engine/licenses/`. Building it needs mingw-w64, meson, ninja, nasm and
+  pkg-config.
 
 `chaya-core`'s `engine` starts it with no console window and without yt-dlp's plugins
 (`YTDLP_NO_PLUGINS`: an add-on in the person's own yt-dlp folders would otherwise run inside it and see what
@@ -195,7 +200,20 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
   playhead (Shift: unsnapped). The name is edited above the tracks, and *Remove clip* deletes it. The app puts every clip right before keeping it in
   `videos/ID.json` (the right way round, at least half a second, inside the video, named, the same range kept
   once; overlapping clips are both kept), and writes that file under a lock, so a translation's batch and a clip
-  changed at the same moment both stay. Saving clips as videos is step 8.
+  changed at the same moment both stay.
+- **Export, the engine** (`core::export`, `app/src-tauri/src/export.rs`). A clip saved as a video is cut exactly from
+  the clip's first moment (`-ss` before the input, decoded from the keyframe before and dropped up to it), scaled to
+  720p or 1080p (never larger than it was; a standing phone video is 720 wide) or left as it is, with its subtitles
+  drawn on by libass from an ASS file Chaya writes for the clip: timed from 0:00, in the look chosen (Outline: white
+  words outlined in black with a soft shadow; Box: the words on a box three quarters dark; Large: Outline, half as
+  big again), each language in the colour, font (Segoe UI, Georgia, Segoe UI Black or Consolas) and size it has in
+  the player, two languages drawn as one block so neither covers the other. The picture is encoded as H.264 by
+  Windows' own encoder, on the graphics card first, then on the processor, then as MPEG-4 when Windows has neither
+  (Windows N without its Media Feature Pack); an encoder that fails on this PC is not tried again this run. The
+  sound is AAC. Saved as an SRT, a clip's lines are timed from 0:00 and cut at its edges. Files go next to the video
+  as "Video title - Clip name.mp4" (or ".en.srt"), never over another. The app exports one clip at a time and tells
+  the window with `export` events (waiting, exporting with its percent, done with the file and the encoder, failed
+  with why, stopped).
 - **The player.** A saved video or sound opens in Chaya, from the list (its name), the grid or a post's viewer,
   instead of another program (*Open in another app* is in its bar, and offered when WebView2 can't play the file).
   The file comes a part at a time, at most 4 MB per answer, by the HTTP ranges the player asks for
