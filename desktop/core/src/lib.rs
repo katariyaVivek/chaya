@@ -16,6 +16,7 @@ pub mod media;
 pub mod placement;
 pub mod serve;
 pub mod session;
+pub mod sound;
 pub mod speech;
 pub mod subtitles;
 pub mod translate;

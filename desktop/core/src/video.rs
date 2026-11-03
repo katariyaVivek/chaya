@@ -2,7 +2,8 @@
 //! number as `downloads.json` numbers them ("videos/12.json"): where playback stopped, and what whisper.cpp heard in it,
 //! each word with its time, when Chaya made its subtitles; its translations, highlights and clips. What a later Chaya
 //! wrote that this one does not know is kept as it was. Beside it, "videos/12.jpg" is the video's poster: a frame of it, which the window takes from the
-//! saved file, as a site's thumbnail address may stop working (Instagram's and TikTok's do within hours) or never was.
+//! saved file, as a site's thumbnail address may stop working (Instagram's and TikTok's do within hours) or never was;
+//! and "videos/12.peaks", how loud its sound is (`sound`), which the clip timeline draws.
 
 use std::path::PathBuf;
 use std::sync::{Mutex, PoisonError};
@@ -163,6 +164,20 @@ impl Videos {
         std::fs::rename(&part, &path)
     }
 
+    /// Where download `id`'s sound peaks (`sound::peaks`) are kept.
+    pub fn peaks(&self, id: u64) -> PathBuf {
+        self.folder.join(format!("{id}.peaks"))
+    }
+
+    /// Keeps `peaks` as download `id`'s, written whole beside first.
+    pub fn keep_peaks(&self, id: u64, peaks: &[u8]) -> std::io::Result<()> {
+        std::fs::create_dir_all(&self.folder)?;
+        let path = self.peaks(id);
+        let part = path.with_extension("peaks.part");
+        std::fs::write(&part, peaks)?;
+        std::fs::rename(&part, &path)
+    }
+
     /// Keeps `translation` of download `id`, in place of the one from the same subtitles, into the same language, by
     /// the same model.
     pub fn translated(&self, id: u64, translation: &Translation) -> std::io::Result<()> {
@@ -235,6 +250,7 @@ impl Videos {
     pub fn forget(&self, id: u64) {
         let _ = std::fs::remove_file(self.path(id));
         let _ = std::fs::remove_file(self.poster(id));
+        let _ = std::fs::remove_file(self.peaks(id));
     }
 }
 
@@ -312,8 +328,11 @@ mod tests {
         assert!(videos.keep_poster(5, b"<svg onload=alert(1)>").is_err(), "only a JPEG");
         assert!(videos.keep_poster(5, &[&jpeg[..], &vec![0; LARGEST_POSTER]].concat()).is_err(), "not too big");
         assert!(!videos.poster(5).exists());
+        videos.keep_peaks(4, &[0, 9, 255]).unwrap();
+        assert_eq!(std::fs::read(videos.peaks(4)).unwrap(), [0, 9, 255]);
         videos.forget(4);
         assert!(!videos.poster(4).exists());
+        assert!(!videos.peaks(4).exists());
     }
 
     #[test]

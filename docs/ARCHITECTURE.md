@@ -367,6 +367,9 @@ a built-in browser. [`../desktop/README.md`](../desktop/README.md) has the layou
   no duplicates). The window's live rules (lines chosen as a range, edges snapped to lines, overlapping clips on rows)
   are in `desktop/app/ui/clips.js`, tested with Node (`desktop/app/test`). `video::Videos` writes a video's file under
   a lock, so changes from two places at once all stay.
+- **The timeline's sound** (`chaya-core`'s `sound`, `sound_peaks` in `desktop/app/src-tauri/src/clips.rs`): the
+  engine's ffmpeg decodes a video's sound to WAV on a pipe, read as it comes into peaks (50 a second, a byte each),
+  kept as `videos/ID.peaks`. The picture track's frames are taken in the window, by a second `<video>` that seeks.
 - `desktop/app/src-tauri` hands `chaya-core` to the window as commands (`recognise_link`, `look_up`,
   `download` and the download controls) and sends it `download` events. The window
   may call only those and set its title bar's theme (`capabilities/default.json`). Its content

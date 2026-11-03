@@ -1036,92 +1036,184 @@ body.showing-downloads .found { display: none !important; }
 .card__act:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .highlight[aria-pressed="true"] { border-color: var(--accent-edge); background: var(--surface); box-shadow: var(--shadow); }
 
-/* The clip being trimmed: its name and times, then a timeline of the lines around it, the clip lit between two
-   handles, the other clips under it, and the playhead */
+/* The timeline, as an editor has it: dark under the picture in both themes, a ruler, then the tracks (picture, lines,
+   sound, clips) each named at the left, the clip chosen lit across them all between two handles, and the playhead */
 .cut {
+  --label: 4.75rem;
+  --ruler: 22px;
+  --picture: 46px;
+  --lines: 26px;
+  --sound: 38px;
+  --clips: 18px;
   display: grid;
   gap: var(--space-1);
-  padding: var(--space-1) var(--space-2) var(--space-1);
-  border: 1px solid var(--border);
+  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-2);
   border-radius: var(--radius-lg);
-  background: var(--surface);
+  background: var(--editor);
+  color: var(--editor-text);
   animation: var(--anim-enter) var(--dur-enter) var(--ease-out) both;
 }
-.cut__bar { display: flex; align-items: center; gap: var(--space-1); }
-.cut__name { flex: 0 1 18rem; min-width: 6rem; }
-.cut__times { min-width: 0; overflow: hidden; color: var(--muted); font-size: var(--text-sm); white-space: nowrap; text-overflow: ellipsis; }
-.cut__bar > button { flex: none; }
+.cut__bar { display: flex; align-items: center; gap: var(--space-1); min-height: 32px; }
+.cut__clip { display: flex; align-items: center; gap: var(--space-1); min-width: 0; }
+.cut__clip[hidden], .cut__title[hidden], .cut__btn[hidden] { display: none; }
+.cut__name {
+  flex: 0 1 12rem;
+  min-width: 6rem;
+  height: 30px;
+  border-color: var(--editor-rule);
+  background: var(--editor-lane);
+  color: var(--editor-text);
+}
+.cut__times { min-width: 0; overflow: hidden; color: var(--editor-muted); font-size: var(--text-sm); white-space: nowrap; text-overflow: ellipsis; }
+.cut__title { display: flex; align-items: baseline; gap: var(--space-1); margin: 0; min-width: 0; font-size: var(--text-md); white-space: nowrap; }
+.cut__title span { overflow: hidden; color: var(--editor-muted); font-size: var(--text-sm); text-overflow: ellipsis; }
 .cut__gap { flex: 1; }
-.cut__bar .pill svg { width: 16px; height: 16px; margin-right: var(--space-half); }
-.cut__track {
-  position: relative;
-  height: calc(var(--space-6) + var(--space-3));
-  overflow: hidden;
-  border-radius: var(--radius-md);
-  background: var(--wash);
+.cut__btn {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-half);
+  height: 30px;
+  padding: 0 var(--space-1);
+  border: 1px solid var(--editor-rule);
+  border-radius: var(--radius-pill);
+  background: var(--editor-lane);
+  color: var(--editor-text);
+  font: 500 var(--text-sm) / 1 var(--font-ui);
   cursor: pointer;
+  transition: background-color var(--dur-hover) var(--ease-out);
+}
+.cut__btn:hover { background: var(--editor-block-hover); }
+.cut__btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.cut__btn svg { width: 16px; height: 16px; }
+.cut__btn--icon { width: 30px; justify-content: center; padding: 0; }
+.cut__zoom { display: inline-flex; gap: 2px; }
+
+.cut__editor {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--label) minmax(0, 1fr);
+  grid-template-rows: var(--ruler) var(--picture) var(--lines) var(--sound) var(--clips);
+  row-gap: 3px;
+  padding-right: var(--space-1);
+  cursor: crosshair;
   touch-action: none;
   user-select: none;
 }
-.cut__lines, .cut__clips { position: absolute; inset-inline: 0; }
-.cut__lines { top: var(--space-half); height: var(--space-4); }
-.cut__clips { bottom: var(--space-half); height: var(--space-2); }
-.cut__line {
+.cut__editor:has([data-lane="picture"][hidden]) { grid-template-rows: var(--ruler) var(--lines) var(--sound) var(--clips); }
+[data-lane][hidden] { display: none; }
+.cut__label { align-self: center; overflow: hidden; color: var(--editor-muted); font-size: var(--text-sm); white-space: nowrap; text-overflow: ellipsis; }
+.cut__lane { position: relative; width: 100%; height: 100%; overflow: hidden; border-radius: var(--radius-sm); background: var(--editor-lane); }
+.cut__pictures { display: block; }
+
+/* The ruler: its times, and five small ticks to a step drawn as a pattern under them */
+.cut__ruler {
+  position: relative;
+  overflow: hidden;
+  background-image: linear-gradient(to right, var(--editor-rule) 1px, transparent 1px);
+  background-size: var(--minor, 20px) 5px;
+  background-position: var(--minor-at, 0) 100%;
+  background-repeat: repeat-x;
+  border-bottom: 1px solid var(--editor-rule);
+}
+.cut__tick {
   position: absolute;
   top: 0;
   bottom: 0;
+  padding: 2px 0 0 4px;
+  border-left: 1px solid var(--editor-muted);
+  color: var(--editor-muted);
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.cut__line {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
   overflow: hidden;
-  padding: 2px var(--space-half);
+  padding: 0 var(--space-half);
   border-radius: var(--radius-sm);
-  background: var(--wash-strong);
-  color: var(--muted);
-  font-size: var(--text-sm);
-  line-height: 1.3;
+  background: var(--editor-block);
+  color: var(--editor-text);
+  font-size: 12px;
+  line-height: 22px;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+.cut__soundlane { display: block; }
+.cut__sound { display: block; width: 100%; height: 100%; }
+.cut__note { position: absolute; inset: 0 auto 0 var(--space-1); display: flex; align-items: center; color: var(--editor-muted); font-size: 12px; }
 .cut__other {
   position: absolute;
-  height: calc(100% / var(--rows, 1));
   top: calc(100% / var(--rows, 1) * var(--row, 0));
-  border-radius: var(--radius-pill);
+  height: calc(100% / var(--rows, 1) - 1px);
+  min-width: 3px;
+  overflow: hidden;
+  padding: 0 4px;
+  border: 0;
+  border-radius: var(--radius-sm);
   background: var(--accent-edge);
+  color: var(--editor-text);
+  font: 500 10px / 1.5 var(--font-ui);
+  text-align: left;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  cursor: pointer;
 }
+.cut__other[aria-pressed="true"] { background: var(--accent); color: var(--scrim-text); }
+
+/* Over the tracks, lined up with them */
+.cut__over { position: absolute; top: 0; bottom: 0; left: var(--label); right: var(--space-1); pointer-events: none; }
 .cut__region {
   position: absolute;
   top: 0;
   bottom: 0;
   border-inline: 2px solid var(--accent);
-  background: rgb(var(--accent-rgb) / 0.16);
-  pointer-events: none;
+  border-radius: var(--radius-sm);
+  background: rgb(var(--accent-rgb) / 0.14);
+  box-shadow: 0 0 0 1px rgb(var(--accent-rgb) / 0.25), var(--accent-glow);
 }
-.cut__edge {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 14px;
-  pointer-events: auto;
-  cursor: ew-resize;
-}
+.cut__sweep { position: absolute; top: 0; bottom: 0; border-inline: 1px dashed var(--accent); background: rgb(var(--accent-rgb) / 0.1); }
+.cut__edge { position: absolute; top: 0; bottom: 0; width: 16px; pointer-events: auto; cursor: ew-resize; }
 .cut__edge::after {
   content: '';
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 6px;
-  height: 22px;
+  width: 8px;
+  height: 30px;
   border-radius: var(--radius-pill);
   background: var(--accent);
+  box-shadow: 0 0 0 2px var(--editor);
   transform: translate(-50%, -50%);
 }
-.cut__edge--start { left: -8px; }
-.cut__edge--end { right: -8px; }
+.cut__edge--start { left: -9px; }
+.cut__edge--end { right: -9px; }
 .cut__edge:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
-.cut__head { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--text); pointer-events: none; }
-.cut__hint { margin: 0; color: var(--muted); font-size: var(--text-sm); }
-/* A small window keeps the picture: the hint goes (the edges say it too), and Play clip keeps only its icon */
-@media (max-height: 720px), (max-width: 1000px) {
-  .cut__hint { display: none; }
+.cut__head { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--accent); }
+/* Its marker on the ruler, pointing down */
+.cut__head::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 12px;
+  height: 12px;
+  background: var(--accent);
+  clip-path: polygon(0 0, 100% 0, 100% 55%, 50% 100%, 0 55%);
+  transform: translateX(-50%);
+}
+.cut__hover { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--editor-muted); }
+.cut__hover { color: var(--editor-text); font-size: 11px; line-height: 1; white-space: nowrap; }
+/* The time there, on a chip over the ruler's own */
+.cut__hover::before { content: attr(data-time); position: absolute; top: 2px; left: 3px; padding: 2px 4px; border-radius: var(--radius-sm); background: var(--editor); box-shadow: 0 0 0 1px var(--editor-rule); }
+.cut__hover[hidden], .cut__head[hidden], .cut__region[hidden], .cut__sweep[hidden] { display: none; }
+
+/* A small window keeps the picture: shorter tracks, and Play clip keeps only its icon */
+@media (max-height: 760px), (max-width: 1000px) {
+  .cut { --picture: 34px; --sound: 28px; --label: 3.75rem; }
   .cut__play-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-  .cut__bar .pill svg { margin-right: 0; }
+  .cut__title span { display: none; }
 }

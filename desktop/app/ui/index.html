@@ -26,6 +26,7 @@
   <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
   <symbol id="i-close" viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
   <symbol id="i-zip" viewBox="0 0 24 24"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M13 9.5h2M13 12h2M13 14.5h2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5.5 12h13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
   <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5.5v13M5.5 12h13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
   <symbol id="i-home" viewBox="0 0 24 24"><path d="M4.5 11L12 4.5l7.5 6.5M6.5 9.5v9h4v-5h3v5h4v-9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H5m0 0l6-6m-6 6l6 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
@@ -336,27 +337,50 @@
         </div>
       </div>
     </div>
-    <!-- The clip chosen in the Clips tab, on a timeline of the lines around it: its edges dragged (they snap to the
-         lines), or set at the playhead with I and O -->
-    <section class="cut" id="cut" aria-label="Clip" hidden>
+    <!-- The timeline, as an editor has it, while the Clips tab is open or a clip is chosen: a ruler, the picture, the
+         lines, the sound and the clips. A clip chosen is lit between two handles that snap to the lines; I and O set
+         them at the playhead; dragging across the tracks makes a new clip. -->
+    <section class="cut" id="cut" aria-label="Timeline" hidden>
       <div class="cut__bar">
-        <input class="field cut__name" id="cut-name" maxlength="80" spellcheck="false" autocomplete="off" aria-label="Clip name">
-        <span class="cut__times num" id="cut-times"></span>
-        <span class="cut__gap"></span>
-        <button class="pill glass pressable" type="button" id="cut-play" title="Play clip"><svg><use href="#i-play"/></svg><span class="cut__play-label">Play clip</span></button>
-        <button class="icon-btn pressable" type="button" id="cut-remove" aria-label="Remove clip" title="Remove clip"><svg><use href="#i-trash"/></svg></button>
-        <button class="icon-btn pressable" type="button" id="cut-close" aria-label="Close timeline" title="Close timeline"><svg><use href="#i-close"/></svg></button>
-      </div>
-      <div class="cut__track" id="cut-track">
-        <div class="cut__lines" id="cut-lines" aria-hidden="true"></div>
-        <div class="cut__clips" id="cut-clips" aria-hidden="true"></div>
-        <div class="cut__region" id="cut-region">
-          <span class="cut__edge cut__edge--start" id="cut-start" role="slider" tabindex="0" aria-label="Clip start (I)" title="Clip start: drag, or press I at the playhead"></span>
-          <span class="cut__edge cut__edge--end" id="cut-end" role="slider" tabindex="0" aria-label="Clip end (O)" title="Clip end: drag, or press O at the playhead"></span>
+        <div class="cut__clip" id="cut-clip">
+          <input class="field cut__name" id="cut-name" maxlength="80" spellcheck="false" autocomplete="off" aria-label="Clip name">
+          <span class="cut__times num" id="cut-times"></span>
         </div>
-        <span class="cut__head" id="cut-head" aria-hidden="true"></span>
+        <p class="cut__title" id="cut-title"><b>Timeline</b><span>Drag across it to make a clip</span></p>
+        <span class="cut__gap"></span>
+        <button class="cut__btn" type="button" id="cut-play" title="Play clip"><svg><use href="#i-play"/></svg><span class="cut__play-label">Play clip</span></button>
+        <button class="cut__btn cut__btn--icon" type="button" id="cut-remove" aria-label="Remove clip" title="Remove clip"><svg><use href="#i-trash"/></svg></button>
+        <span class="cut__zoom" role="group" aria-label="Zoom">
+          <button class="cut__btn cut__btn--icon" type="button" id="cut-zoom-out" aria-label="Zoom out" title="Zoom out (Ctrl+wheel)"><svg><use href="#i-minus"/></svg></button>
+          <button class="cut__btn cut__btn--icon" type="button" id="cut-zoom-in" aria-label="Zoom in" title="Zoom in (Ctrl+wheel)"><svg><use href="#i-plus"/></svg></button>
+        </span>
+        <button class="cut__btn cut__btn--icon" type="button" id="cut-close" aria-label="Done with this clip" title="Done with this clip"><svg><use href="#i-close"/></svg></button>
       </div>
-      <p class="cut__hint">Drag an edge: it snaps to the lines; hold Alt to place it anywhere. I and O set them at the playhead.</p>
+      <div class="cut__editor" id="cut-editor">
+        <span class="cut__label cut__label--ruler" aria-hidden="true"></span>
+        <div class="cut__ruler" id="cut-ruler" aria-hidden="true"></div>
+        <span class="cut__label" data-lane="picture">Picture</span>
+        <canvas class="cut__lane cut__pictures" id="cut-pictures" data-lane="picture" aria-hidden="true"></canvas>
+        <span class="cut__label" id="cut-label-lines">Lines</span>
+        <div class="cut__lane cut__lines" id="cut-lines" aria-hidden="true"></div>
+        <span class="cut__label">Sound</span>
+        <div class="cut__lane cut__soundlane">
+          <canvas class="cut__sound" id="cut-sound" aria-hidden="true"></canvas>
+          <span class="cut__note" id="cut-sound-note" hidden></span>
+        </div>
+        <span class="cut__label">Clips</span>
+        <div class="cut__lane cut__clips" id="cut-clips"></div>
+        <!-- Over the tracks: a clip being swept out, the clip chosen with its handles, the time under the pointer, the playhead -->
+        <div class="cut__over">
+          <div class="cut__sweep" id="cut-sweep" hidden></div>
+          <div class="cut__region" id="cut-region" hidden>
+            <span class="cut__edge cut__edge--start" id="cut-start" role="slider" tabindex="0" aria-label="Clip start (I)" title="Clip start: drag, or press I at the playhead"></span>
+            <span class="cut__edge cut__edge--end" id="cut-end" role="slider" tabindex="0" aria-label="Clip end (O)" title="Clip end: drag, or press O at the playhead"></span>
+          </div>
+          <span class="cut__hover num" id="cut-hover" hidden></span>
+          <span class="cut__head" id="cut-head" hidden></span>
+        </div>
+      </div>
     </section>
     </div>
     <aside class="player__panel" id="player-panel" aria-label="Transcript, highlights, clips and subtitles">
@@ -417,7 +441,7 @@
         <ol class="highlights" id="player-clips"></ol>
         <div class="tabpanel__empty" id="player-clips-none">
           <p class="tabpanel__title">No clips yet</p>
-          <p class="tabpanel__note">In the transcript, click the line a clip starts with and Shift-click the one it ends with, then <b>Make clip</b> (Ctrl+B). Highlights become clips in one click too.</p>
+          <p class="tabpanel__note">Drag across the timeline under the picture, or in the transcript click the line a clip starts with and Shift-click the one it ends with, then <b>Make clip</b> (Ctrl+B). Highlights become clips in one click too.</p>
         </div>
       </section>
       <section class="tabpanel" role="tabpanel" id="panel-subtitles" aria-labelledby="tab-subtitles" hidden>
