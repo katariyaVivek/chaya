@@ -147,9 +147,13 @@ impl Speaking {
         let model = settings.model();
         let mut told = Instant::now() - PROGRESS_EVERY;
         let mut began = None;
+        // Next to the person's own video, a subtitle file they made is never written over.
+        let videos = app.state::<Videos>();
+        let own = task.is_own();
+        let may_write = |path: &Path| videos.may_write(id, path, own);
         let made = self
             .speech
-            .make(id, &task.path, &settings, tools, &self.client, stop, &mut |step| {
+            .make(id, &task.path, &settings, tools, &self.client, stop, &may_write, &mut |step| {
                 if !matches!(step, Step::Model { .. }) {
                     began.get_or_insert_with(Instant::now);
                 }
@@ -172,7 +176,8 @@ impl Speaking {
         let language = made.path.file_stem().and_then(|s| s.to_str()).and_then(|s| s.rsplit_once('.')).map(|(_, l)| l);
         let language = language.map(str::to_string);
         let seconds = began.map(|began| began.elapsed().as_secs());
-        let _ = app.state::<Videos>().heard(id, made.transcript, &model.id, made.on);
+        let _ = videos.wrote(id, &made.path);
+        let _ = videos.heard(id, made.transcript, &model.id, made.on);
         let model = Some(model.name.clone());
         Ok(JobView { id, language, model, on: made.on, seconds, ..JobView::default() })
     }

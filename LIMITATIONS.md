@@ -71,8 +71,9 @@ These are deliberate scope decisions, not open bugs.
 - **Following your own videos when they move (Chaya for Windows).** A video or sound added from the PC is
   listed where it was, and Chaya keeps no copy: moved, renamed or deleted, it can no longer be played from
   Chaya's list; add it again from where it is now. Subtitles made or translated for it are written next to it,
-  as for a download, replacing a file of the same name ("name.en.srt"); a folder Windows does not let Chaya
-  write to can't hold them.
+  as for a download ("name.en.srt"), but never over a subtitle file Chaya didn't write: when one of that name is
+  already there, Chaya leaves it and says so, and the person renames or moves it to have Chaya make its own. A
+  folder Windows does not let Chaya write to can't hold them.
 - **What uBlock Origin does beyond its lists.** Its scriptlets and procedural filters are not
   applied, so ads a site serves from its own servers inside the video (YouTube's, for one) still
   play, and some pages keep an empty space where an ad was.

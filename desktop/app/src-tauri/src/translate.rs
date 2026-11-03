@@ -155,24 +155,40 @@ impl Translating {
             (error, message)
         })?;
 
-        save(&videos, wanted.id, &task.path, &source.lines, &translation).map_err(|message| failed(&message))?;
+        save(&videos, wanted.id, &task.path, task.is_own(), &source.lines, &translation)
+            .map_err(|message| failed(&message))?;
         Ok(view(&translation.lines))
     }
 }
 
 /// Saves whole `translation` next to the video at `video` as "name.es.srt", timed as the original's `lines`, and
 /// marks it as the version there.
-fn save(videos: &Videos, id: u64, video: &Path, lines: &[Line], translation: &Translation) -> Result<(), String> {
+fn save(
+    videos: &Videos,
+    id: u64,
+    video: &Path,
+    own: bool,
+    lines: &[Line],
+    translation: &Translation,
+) -> Result<(), String> {
     if lines.len() != translation.lines.len() || !translation.is_whole() {
         return Err("The original subtitles have changed since. Translate them again.".into());
+    }
+    let path = subtitles::file_for(video, &translation.to);
+    // Next to the person's own video, a subtitle file they made is never written over.
+    if !videos.may_write(id, &path, own) {
+        return Err("There's already a subtitle file in that language next to this video that Chaya didn't make, so \
+                    Chaya left it as it is. Rename or move it, then use this translation again."
+            .into());
     }
     let translated: Vec<Line> = lines
         .iter()
         .zip(&translation.lines)
         .map(|(line, text)| Line { text: text.clone().unwrap_or_default(), ..line.clone() })
         .collect();
-    std::fs::write(subtitles::file_for(video, &translation.to), subtitles::to_srt(&translated))
+    std::fs::write(&path, subtitles::to_srt(&translated))
         .map_err(|_| "Chaya couldn't write the translation next to the video.".to_string())?;
+    let _ = videos.wrote(id, &path);
     let _ = videos.in_file(id, &translation.to, &translation.model);
     Ok(())
 }
@@ -228,7 +244,7 @@ pub fn use_translation(
         .ok_or("That version isn't whole. Translate again with that model.")?;
     let source = subtitles::tracks_for(&task.path).into_iter().find(|t| t.language == translation.from);
     let source = source.ok_or("The original subtitles aren't next to the video any more.")?;
-    save(&videos, id, &task.path, &source.lines, translation)
+    save(&videos, id, &task.path, task.is_own(), &source.lines, translation)
 }
 
 /// Translates download `id`'s subtitles in `from` into `to` ("es", named `into`, "Spanish"), after any asked for

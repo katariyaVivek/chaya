@@ -50,6 +50,9 @@ pub struct VideoData {
     /// The parts of it the person cut out (`clips`), in order.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub clips: Vec<Clip>,
+    /// The subtitle files Chaya wrote next to the video (their names), which it may write again.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub written: Vec<String>,
     #[serde(flatten)]
     pub other: Map<String, Value>,
 }
@@ -162,6 +165,27 @@ impl Videos {
         let part = path.with_extension("jpg.part");
         std::fs::write(&part, jpeg)?;
         std::fs::rename(&part, &path)
+    }
+
+    /// Whether Chaya may write `path` next to download `id`: always next to a download (Chaya saved what is there), and
+    /// next to the person's own video (`own`) only where no file is, or a file Chaya wrote itself. A subtitle file the
+    /// person made is never written over.
+    pub fn may_write(&self, id: u64, path: &std::path::Path, own: bool) -> bool {
+        if !own || !path.exists() {
+            return true;
+        }
+        let name = path.file_name().map(|n| n.to_string_lossy().into_owned());
+        name.is_some_and(|name| self.load(id).written.contains(&name))
+    }
+
+    /// Notes that Chaya wrote `path` next to download `id`.
+    pub fn wrote(&self, id: u64, path: &std::path::Path) -> std::io::Result<()> {
+        let Some(name) = path.file_name().map(|n| n.to_string_lossy().into_owned()) else { return Ok(()) };
+        self.change(id, |data| {
+            if !data.written.contains(&name) {
+                data.written.push(name);
+            }
+        })
     }
 
     /// Where download `id`'s sound peaks (`sound::peaks`) are kept.
@@ -416,6 +440,24 @@ mod tests {
         assert_eq!(videos.load(8).clips, clips);
         assert_eq!(videos.load(8).resume_at(), 30.0, "the rest kept");
         assert!(videos.change_clip(8, 1, None).unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_subtitle_file_the_person_made_next_to_their_own_video_is_never_written_over() {
+        let dir = tempfile::tempdir().unwrap();
+        let videos = Videos::in_folder(dir.path().join("videos"));
+        let theirs = dir.path().join("Meeting.en.srt");
+        let ours = dir.path().join("Meeting.fr.srt");
+        assert!(videos.may_write(9, &theirs, true), "nothing there yet");
+        std::fs::write(&theirs, "1\n00:00:00,000 --> 00:00:01,000\nTheirs\n").unwrap();
+        assert!(!videos.may_write(9, &theirs, true), "the person's own file");
+        assert!(videos.may_write(9, &theirs, false), "next to a download, Chaya saved what is there");
+        std::fs::write(&ours, "made by Chaya").unwrap();
+        videos.wrote(9, &ours).unwrap();
+        videos.wrote(9, &ours).unwrap();
+        assert!(videos.may_write(9, &ours, true), "one Chaya wrote, written again");
+        assert_eq!(videos.load(9).written, ["Meeting.fr.srt"]);
+        assert!(!videos.may_write(10, &ours, true), "another video's record is its own");
     }
 
     #[test]
