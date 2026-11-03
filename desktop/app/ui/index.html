@@ -23,6 +23,7 @@
   <symbol id="i-pause" viewBox="0 0 24 24"><path d="M9 6v12M15 6v12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
   <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l10-6.5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
   <symbol id="i-retry" viewBox="0 0 24 24"><path d="M19 12a7 7 0 1 1-2.05-4.95M19 4.5V8h-3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-export" viewBox="0 0 24 24"><path d="M12 14.5V4m0 0L7.5 8.5M12 4l4.5 4.5M5 13v4.5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
   <symbol id="i-close" viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
   <symbol id="i-zip" viewBox="0 0 24 24"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M13 9.5h2M13 12h2M13 14.5h2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
@@ -437,8 +438,16 @@
         </div>
       </section>
       <section class="tabpanel" role="tabpanel" id="panel-clips" aria-labelledby="tab-clips" hidden>
-        <p class="tabpanel__head num" id="player-clips-head" hidden></p>
+        <div class="tabpanel__headrow clips__top">
+          <p class="tabpanel__head num" id="player-clips-head" hidden></p>
+          <button class="pill glass pressable clips__export" type="button" id="player-export" title="Export (Ctrl+E)" aria-haspopup="dialog" hidden><svg><use href="#i-export"/></svg>Export</button>
+        </div>
         <ol class="highlights" id="player-clips"></ol>
+        <!-- Clips being exported from this video: each with how far it is, and Stop -->
+        <div class="exports-box" id="player-exports-box" hidden>
+          <p class="tabpanel__head" id="player-exports-head">Exporting</p>
+          <ul class="exports" id="player-exports" aria-labelledby="player-exports-head"></ul>
+        </div>
         <div class="tabpanel__empty" id="player-clips-none">
           <p class="tabpanel__title">No clips yet</p>
           <p class="tabpanel__note">Drag across the timeline under the picture, or in the transcript click the line a clip starts with and Shift-click the one it ends with, then <b>Make clip</b> (Ctrl+B). Highlights become clips in one click too.</p>
@@ -475,5 +484,50 @@
     </aside>
   </div>
 </div>
+<!-- Export: the clips chosen saved as videos with their subtitles burned in, or as SRT files, next to the video -->
+<div class="export" id="export" hidden>
+  <section class="export__sheet" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="export-title" aria-describedby="export-where">
+    <div class="export__head">
+      <h2 class="export__title" id="export-title">Export</h2>
+      <button class="icon-btn pressable" type="button" id="export-close" aria-label="Close (Esc)" title="Close (Esc)"><svg><use href="#i-close"/></svg></button>
+    </div>
+    <div class="export__form">
+      <p class="settings__label" id="export-clips-label">Clips</p>
+      <div class="export__field" id="export-clips"></div>
+      <p class="settings__label" id="export-as-label">Save as</p>
+      <div class="seg" role="group" aria-labelledby="export-as-label" id="export-as">
+        <button type="button" data-save-as="video">Video</button>
+        <button type="button" data-save-as="srt">Subtitle files (SRT)</button>
+      </div>
+      <p class="settings__label" id="export-subtitles-label" data-for="video">Subtitles</p>
+      <div class="export__field" id="export-subtitles" data-for="video"></div>
+      <p class="settings__label" id="export-first-label" data-for="video">Language</p>
+      <div class="seg seg--wrap" role="group" aria-labelledby="export-first-label" id="export-first" data-for="video"></div>
+      <p class="settings__label" id="export-second-label" data-for="video">Second language</p>
+      <div class="seg seg--wrap" role="group" aria-labelledby="export-second-label" id="export-second" data-for="video"></div>
+      <p class="settings__label" id="export-top-label" data-for="video">On top</p>
+      <div class="seg seg--wrap" role="group" aria-labelledby="export-top-label" id="export-top" data-for="video"></div>
+      <p class="settings__label" id="export-look-label" data-for="video">Look</p>
+      <div class="looks" role="group" aria-labelledby="export-look-label" id="export-look" data-for="video"></div>
+      <p class="settings__label" id="export-quality-label" data-for="video">Quality</p>
+      <div class="seg" role="group" aria-labelledby="export-quality-label" id="export-quality" data-for="video">
+        <button type="button" data-quality="p720">720p</button>
+        <button type="button" data-quality="p1080">1080p</button>
+        <button type="button" data-quality="original">Original</button>
+      </div>
+      <p class="settings__label" id="export-srt-label" data-for="srt">Languages</p>
+      <div class="seg seg--wrap" role="group" aria-labelledby="export-srt-label" id="export-srt" data-for="srt"></div>
+    </div>
+    <p class="export__where" id="export-where"></p>
+    <p class="export__error" id="export-error" role="alert" hidden></p>
+    <div class="export__foot">
+      <button class="pill glass pressable" type="button" id="export-cancel">Cancel</button>
+      <button class="pill pill--primary glass pressable" type="button" id="export-go">Export</button>
+    </div>
+  </section>
+</div>
+<!-- Notices that stay whatever is shown: an export saved or failed, and exports still going while their list is out of
+     sight. Over a page they sit below it: the page is drawn over the window, so it is made shorter for them. -->
+<section class="toasts" id="toasts" aria-label="Notices" aria-live="polite"></section>
 </body>
 </html>

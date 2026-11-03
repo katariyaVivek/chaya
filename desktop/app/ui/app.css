@@ -1217,3 +1217,171 @@ body.showing-downloads .found { display: none !important; }
   .cut__play-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   .cut__title span { display: none; }
 }
+
+/* ── Export: a sheet over the player, the jobs going under the clips, and notices that stay whatever is shown ── */
+
+/* The Clips tab's head: how many clips and how long, and Export */
+.clips__top { align-items: center; }
+.clips__export { gap: var(--space-half); height: var(--space-4); padding: 0 var(--space-2) 0 var(--space-1); font-size: var(--text-sm); }
+.clips__export svg { width: 16px; height: 16px; color: var(--muted); }
+
+/* The sheet, over the player, which shows softened behind it */
+.export {
+  position: fixed;
+  inset: var(--titlebar-height) 0 0;
+  z-index: 65;
+  display: grid;
+  place-items: center;
+  padding: var(--space-2);
+  background: var(--wash-strong);
+  -webkit-backdrop-filter: blur(var(--surface-blur));
+  backdrop-filter: blur(var(--surface-blur));
+}
+.export__sheet {
+  display: grid;
+  gap: var(--space-2);
+  width: min(600px, 100%);
+  max-height: 100%;
+  box-sizing: border-box;
+  overflow-y: auto;
+  padding: var(--space-2) var(--space-3) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg);
+  box-shadow: var(--shadow);
+  animation: var(--anim-enter) var(--dur-enter) var(--ease-out) both;
+}
+.export__sheet:focus { outline: none; }
+.export__head { display: flex; align-items: center; justify-content: space-between; margin-right: calc(var(--space-1) * -1); }
+.export__title { margin: 0; font: 600 var(--text-lg) / var(--leading-lg) var(--font-ui); }
+/* Each choice on a row: its name at the left, its buttons beside it */
+.export__form { display: grid; grid-template-columns: 8.5rem minmax(0, 1fr); align-items: center; gap: var(--space-1) var(--space-2); }
+.export__form > .settings__label { margin: 0; }
+.export__form > .seg, .export__form > .looks { justify-self: start; }
+.export__field { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); min-height: var(--control-height); }
+.export__value { font-weight: 500; }
+.export__meta { color: var(--muted); font-size: var(--text-sm); }
+.export .seg button { max-width: 26ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.seg button:disabled { opacity: 0.45; cursor: default; }
+.seg button:disabled:hover { color: var(--muted); }
+.export__where { margin: 0; color: var(--muted); font-size: var(--text-sm); line-height: var(--leading-sm); overflow-wrap: anywhere; }
+.export__error { margin: 0; color: var(--text); font-size: var(--text-sm); line-height: var(--leading-sm); }
+.export__foot { display: flex; justify-content: flex-end; gap: var(--space-1); }
+.export__foot .pill:disabled { opacity: 0.6; cursor: default; }
+/* A short window keeps the whole sheet in sight */
+@media (max-height: 720px) {
+  .export__sheet { gap: var(--space-1); padding: var(--space-1) var(--space-3) var(--space-2); }
+  .export__form { row-gap: var(--space-half); }
+  .look__picture { height: 52px; }
+}
+
+/* A look to choose: a small dark picture with the first words drawn in it, as the video will have them */
+.looks { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.look {
+  display: grid;
+  gap: var(--space-half);
+  padding: var(--space-half);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--muted);
+  font: 500 var(--text-sm) / var(--leading-sm) var(--font-ui);
+  cursor: pointer;
+  transition: background-color var(--dur-hover) var(--ease-out), color var(--dur-hover) var(--ease-out);
+}
+.look:hover { background: var(--wash); color: var(--text); }
+.look[aria-pressed="true"] { border-color: var(--accent-edge); background: var(--surface); box-shadow: var(--shadow); color: var(--text); }
+.look:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.look__picture {
+  display: grid;
+  place-items: end center;
+  width: 116px;
+  height: 66px;
+  box-sizing: border-box;
+  padding: 0 var(--space-half) var(--space-1);
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background:
+    radial-gradient(70% 90% at 25% 15%, rgb(var(--accent-rgb) / 0.32), transparent 70%),
+    radial-gradient(60% 80% at 90% 100%, var(--screen-hover), transparent 70%),
+    var(--editor);
+}
+.look__words { display: grid; justify-items: center; gap: 2px; max-width: 100%; font-size: 11px; font-weight: 600; line-height: 1.25; }
+.look__line {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--line-color, var(--subtitle-text));
+  font-family: var(--line-font, var(--font-ui));
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.look__words--outline .look__line, .look__words--large .look__line {
+  text-shadow:
+    -1px -1px 0 var(--subtitle-outline), 1px -1px 0 var(--subtitle-outline),
+    -1px 1px 0 var(--subtitle-outline), 1px 1px 0 var(--subtitle-outline);
+}
+.look__words--large { font-size: 14px; font-weight: 700; }
+.look__words--boxed .look__line { padding: 1px var(--space-half); border-radius: 3px; background: var(--subtitle); }
+
+/* The jobs going, under the clips: each with how far, a thin line of light, and Stop; waiting ones are not lit */
+.exports-box { display: grid; gap: var(--space-1); margin-top: var(--space-1); }
+.exports { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
+.export-job[data-state="waiting"] { border-color: var(--border); }
+.export-job__name { flex: 1; min-width: 0; overflow: hidden; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.export-job__pct { color: var(--muted); }
+
+/* Notices, at the window's lower right, over whatever is shown (a page is made shorter for them) */
+.toasts {
+  position: fixed;
+  right: var(--space-2);
+  bottom: var(--space-2);
+  z-index: 70;
+  display: grid;
+  gap: var(--space-1);
+  width: min(380px, calc(100vw - var(--space-4)));
+  pointer-events: none;
+}
+.toasts:empty { display: none; }
+/* Over the player, over the panel beside the video and as wide as it, so the timeline's buttons stay in sight */
+body:has(.player:not([hidden])) .toasts { width: clamp(280px, 32vw, 400px); }
+.toast {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-half) var(--space-1) var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  -webkit-backdrop-filter: blur(var(--surface-blur));
+  backdrop-filter: blur(var(--surface-blur));
+  box-shadow: var(--shadow);
+  pointer-events: auto;
+  animation: var(--anim-enter) var(--dur-enter) var(--ease-out) both;
+}
+/* Over a page or a playing video, which can be anything, a notice gets the ground, as a panel does */
+body.browsing .toast, body:has(.player:not([hidden])) .toast { background: var(--bg); }
+.toast.is-leaving { animation: var(--anim-exit) var(--dur-exit) var(--ease-out) forwards; }
+.toast[data-state="done"] { border-color: var(--accent-edge); }
+.toast__body { display: grid; flex: 1; gap: 2px; min-width: 0; }
+.toast__text { margin: 0; font-weight: 500; overflow-wrap: anywhere; }
+.toast__detail { margin: 0; color: var(--muted); font-size: var(--text-sm); line-height: var(--leading-sm); overflow-wrap: anywhere; }
+.toast__action {
+  flex: none;
+  padding: var(--space-half) var(--space-1);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--wash);
+  color: var(--text);
+  font: 600 var(--text-sm) / var(--leading-sm) var(--font-ui);
+  cursor: pointer;
+  transition: background-color var(--dur-hover) var(--ease-out);
+}
+.toast__action:hover { background: var(--wash-strong); }
+.toast__action:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.toast__close { flex: none; width: var(--space-4); height: var(--space-4); }
+.toast__close svg { width: 14px; height: 14px; }
+/* Exports going while their list is out of sight */
+.toast--exports { display: grid; gap: var(--space-1); padding: var(--space-1) var(--space-2) var(--space-2); }
+.toast--exports .toast__text { font-size: var(--text-sm); color: var(--muted); }
+.toast--exports .exports { margin: 0; }
+.toast--exports .export-job { padding: 0; border: 0; background: none; animation: none; }

@@ -1,7 +1,24 @@
 // The Chaya window: the address bar, what it recognises, the built-in browser, downloads, and the appearance
 // settings.
-import { DownloadButton, setTheme, setMotion, stagger } from './design/chaya-motion.js';
+import { DownloadButton, setTheme, setMotion, stagger, leave } from './design/chaya-motion.js';
 import { selection, snap, moveEdge, stepEdge, rows, clipOf, nameFrom, view as clipView, exact } from './clips.js';
+import {
+  LOOKS,
+  LOOK_NAMES,
+  firstChoice,
+  changed,
+  toggledSrt,
+  clipIds,
+  optionsOf,
+  keptOf,
+  exportLabel,
+  whereNote,
+  sampleWords,
+  isRunning,
+  progressWords,
+  noticeOf,
+  keyOf,
+} from './export.js';
 
 const tauri = window.__TAURI__;
 
@@ -1119,6 +1136,7 @@ async function openPlayer(id) {
   showPageView();
   showTab(remembered('chaya.player.tab', 'transcript'));
   showSpeeds();
+  loadExports();
   playerVideo.poster = posterOf(id);
   playerVideo.src = tauri.core.convertFileSrc(String(id), 'chaya-file');
   playerVideo.playbackRate = Number(remembered('chaya.player.speed', '1')) || 1;
@@ -1165,6 +1183,7 @@ function showResumed(at) {
 
 function closePlayer() {
   if (!playing) return;
+  closeExport();
   keepPosition(true);
   playing = null;
   dragging = null;
@@ -1178,6 +1197,7 @@ function closePlayer() {
   playerVideo.load();
   playerLines.replaceChildren();
   showPageView();
+  showExports();
 }
 
 /** Tells the app where playback is, at most every few seconds unless `now`. */
@@ -1205,6 +1225,7 @@ function showTab(name, focus = false) {
   remember('chaya.player.tab', name);
   placeTabLight();
   if (playing) showCut();
+  showExports();
 }
 
 /** The chosen tab's ground, under it; it slides there (`--dur-morph`, nothing under reduced motion). */
@@ -1719,6 +1740,7 @@ playerVideo.addEventListener('dblclick', (e) => {
 function fullWindow(on = !player.classList.contains('player--full')) {
   player.classList.toggle('player--full', on);
   showControls();
+  showExports();
 }
 
 // ── Making subtitles, from the player ──
@@ -1796,6 +1818,11 @@ document.addEventListener(
   (e) => {
     if (player.hidden) return;
     e.stopPropagation();
+    // The Export dialog, while it is open, has the keys to itself.
+    if (!exportBox.hidden) {
+      exportKey(e);
+      return;
+    }
     showControls();
     const onButton = e.target instanceof Element && e.target.closest('button, [role="tab"]');
     const typing = e.target instanceof Element && e.target.closest('input, textarea, select');
@@ -1811,6 +1838,9 @@ document.addEventListener(
     } else if (e.ctrlKey && key === 'b' && !e.shiftKey && !e.altKey) {
       e.preventDefault();
       makeClip();
+    } else if (e.ctrlKey && key === 'e' && !e.shiftKey && !e.altKey) {
+      e.preventDefault();
+      openExport();
     } else if (typing) {
       // The field's own: a name typed, Enter to keep it.
       if (e.key === 'Enter' && e.target === cutName) cutName.blur();
@@ -2248,11 +2278,20 @@ function openPanel() {
 /** Where the page goes: its place in the window, narrowed to what an open panel leaves beside it; null when that is
  * too narrow to be of use. */
 function pageBounds() {
-  const bounds = boundsOf(pageEl);
+  const bounds = aboveToasts(boundsOf(pageEl));
   const panel = openPanel();
   if (!panel) return bounds;
   const width = Math.min(bounds.width, panel.getBoundingClientRect().left - 8 - bounds.x);
   return width >= NARROWEST_PAGE ? { ...bounds, width } : null;
+}
+
+/** `bounds` made shorter, where notices are shown, to end above them: the page is drawn over the window, so a
+ *  notice can't lie over it. */
+function aboveToasts(bounds) {
+  if (!toasts.childElementCount) return bounds;
+  const top = toasts.getBoundingClientRect().top - 8;
+  if (top >= bounds.y + bounds.height) return bounds;
+  return { ...bounds, height: Math.max(NARROWEST_PAGE / 2, top - bounds.y) };
 }
 
 /**
@@ -3239,6 +3278,11 @@ function showClips() {
   }
   delete head.dataset.kept;
   document.getElementById('player-clips-none').hidden = clips.length > 0;
+  playerExport.hidden = clips.length === 0;
+  if (exporting) {
+    if (clips.length) showExport();
+    else closeExport();
+  }
   playerClips.replaceChildren(
     ...clips.map((clip) => {
       const li = document.createElement('li');
@@ -3860,3 +3904,482 @@ playerVideo.addEventListener('loadedmetadata', () => {
   playing.view = null;
   showCut();
 });
+
+// ── Export ──────────────────────────────────────────────────────────────────────────────────
+//
+// The Clips tab's Export (Ctrl+E): the clip chosen, or all of them, saved next to the video as videos with their
+// subtitles burned in (one language or two, in the look chosen, at the quality chosen), or as SRT files timed from
+// 0:00 for each clip. The app does the work, a job at a time (`export_clips`), and tells of each change with an
+// `export` event. The jobs still going are listed under the clips; when one ends, a notice says so, whatever is shown.
+// The rules are in `export.js`.
+
+const exportBox = document.getElementById('export');
+const exportSheet = exportBox.querySelector('.export__sheet');
+const exportGo = document.getElementById('export-go');
+const exportError = document.getElementById('export-error');
+const playerExport = document.getElementById('player-export');
+const playerExports = document.getElementById('player-exports');
+const toasts = document.getElementById('toasts');
+/** Every export this run, by job number, as the app last told of it. */
+const exportJobs = new Map();
+/** While the dialog is open: what is chosen in it, and what had the focus before it opened. */
+let exporting = null;
+
+/** The playing video's subtitles, by key (export.js). */
+const exportTracks = () => playing.tracks.map(keyOf);
+/** A key's track, its player style, and its name. */
+const trackOf = (key) => playing.tracks.find((t) => keyOf(t) === key) ?? null;
+const keyStyle = (key) => styleOf(key === '' ? null : key);
+const keyName = (key) => languageName(key === '' ? null : key);
+
+function openExport() {
+  if (!playing || !exportBox.hidden) return;
+  if (playing.clips.length === 0) {
+    showTab('clips');
+    sayClips('Make a clip first, then export it.');
+    return;
+  }
+  let kept = {};
+  try {
+    kept = JSON.parse(remembered('chaya.export', '{}')) ?? {};
+  } catch {
+    kept = {};
+  }
+  exporting = {
+    back: document.activeElement,
+    choice: firstChoice({
+      clips: playing.clips,
+      cut: playing.cut,
+      tracks: exportTracks(),
+      shown: playing.shown ? keyOf(playing.shown) : null,
+      second: playing.second ? keyOf(playing.second) : null,
+      top: remembered('chaya.player.top', 'second'),
+      captions: captionsOn,
+      kept,
+    }),
+  };
+  openSpeeds(false);
+  fullWindow(false);
+  exportError.hidden = true;
+  exportGo.disabled = false;
+  exportBox.hidden = false;
+  showExport();
+  exportGo.focus();
+}
+
+function closeExport() {
+  if (exportBox.hidden) return;
+  exportBox.hidden = true;
+  const back = exporting?.back;
+  exporting = null;
+  if (back instanceof HTMLElement && back.isConnected && !player.hidden) back.focus();
+}
+
+/** Makes a change to what is chosen, and shows it. */
+function chooseExport(change) {
+  if (!exporting) return;
+  exporting.choice = changed(exporting.choice, change, exportTracks());
+  showExport();
+}
+
+/** A group of buttons, one pressed: `options` are [value, words]; `pick` is called with the value clicked. */
+function exportSeg(group, labelledBy, options, current, pick) {
+  const seg = document.createElement('div');
+  seg.className = 'seg seg--wrap';
+  seg.setAttribute('role', 'group');
+  seg.setAttribute('aria-labelledby', labelledBy);
+  seg.append(...options.map(([value, words]) => exportButton(group, value, words, value === current, () => pick(value))));
+  return seg;
+}
+
+/** One of the dialog's buttons, named `group:value` so the focus finds it again once the dialog is drawn anew. */
+function exportButton(group, value, words, pressed, onClick) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.textContent = words;
+  button.dataset.pick = `${group}:${value}`;
+  button.setAttribute('aria-pressed', String(pressed));
+  button.addEventListener('click', onClick);
+  return button;
+}
+
+/** Shows or hides one of the dialog's rows: its label and what it holds. */
+function exportRow(id, on) {
+  document.getElementById(id).hidden = !on;
+  document.getElementById(`${id}-label`).hidden = !on;
+}
+
+/** Draws the dialog for what is chosen. */
+function showExport() {
+  if (!exporting || !playing) return;
+  const focused = exportSheet.contains(document.activeElement) ? document.activeElement.dataset.pick : undefined;
+  const { choice } = exporting;
+  const tracks = exportTracks();
+  const ids = clipIds(choice, playing.clips, playing.cut);
+  const chosen = cutClip();
+  const video = choice.saveAs === 'video';
+  const length = (list) => clock(Math.round(list.reduce((sum, c) => sum + (c.end - c.start), 0) / 1000));
+
+  // Clips: the one chosen on the timeline, or all of them.
+  const clipsBox = document.getElementById('export-clips');
+  const all = `All ${playing.clips.length} clips`;
+  if (chosen && playing.clips.length > 1) {
+    const seg = exportSeg('clips', 'export-clips-label', [['chosen', `“${chosen.name}”`], ['all', all]], choice.which, (which) =>
+      chooseExport({ which }),
+    );
+    clipsBox.replaceChildren(seg, span('export__meta num', length(playing.clips.filter((c) => ids.includes(c.id)))));
+  } else {
+    const only = playing.clips.length === 1 ? `“${playing.clips[0].name}”` : all;
+    clipsBox.replaceChildren(span('export__value', only), span('export__meta num', length(playing.clips)));
+  }
+
+  // Save as: a video, or subtitle files, which need subtitles.
+  for (const button of document.querySelectorAll('#export-as [data-save-as]')) {
+    button.setAttribute('aria-pressed', String(button.dataset.saveAs === choice.saveAs));
+    const offered = button.dataset.saveAs === 'video' || tracks.length > 0;
+    button.disabled = !offered;
+    button.title = offered ? '' : 'This video has no subtitles yet';
+  }
+
+  // A video's subtitles: none, one language or two; which, and which goes on top.
+  const subtitlesBox = document.getElementById('export-subtitles');
+  if (tracks.length === 0) {
+    subtitlesBox.replaceChildren(span('export__value muted', 'None: this video has no subtitles yet'));
+  } else {
+    const options = [
+      ['none', 'None'],
+      ['one', tracks.length === 1 ? keyName(tracks[0]) : 'One language'],
+      ...(tracks.length > 1 ? [['two', 'Two languages']] : []),
+    ];
+    subtitlesBox.replaceChildren(
+      exportSeg('subtitles', 'export-subtitles-label', options, choice.subtitles, (subtitles) => chooseExport({ subtitles })),
+    );
+  }
+  const burned = video && choice.subtitles !== 'none';
+  exportRow('export-subtitles', video);
+  exportRow('export-first', burned && tracks.length > 1);
+  exportRow('export-second', video && choice.subtitles === 'two' && tracks.length > 2);
+  exportRow('export-top', video && choice.subtitles === 'two');
+  exportRow('export-look', burned);
+  exportRow('export-quality', video);
+  exportRow('export-srt', !video && tracks.length > 1);
+  document.getElementById('export-first-label').textContent = choice.subtitles === 'two' ? 'Main language' : 'Language';
+  refill(
+    document.getElementById('export-first'),
+    tracks.map((key) => exportButton('first', key, keyName(key), key === choice.first, () => chooseExport({ first: key }))),
+  );
+  refill(
+    document.getElementById('export-second'),
+    tracks
+      .filter((key) => key !== choice.first)
+      .map((key) => exportButton('second', key, keyName(key), key === choice.second, () => chooseExport({ second: key }))),
+  );
+  refill(
+    document.getElementById('export-top'),
+    choice.second === null
+      ? []
+      : [
+          exportButton('top', 'first', keyName(choice.first), !choice.secondOnTop, () => chooseExport({ secondOnTop: false })),
+          exportButton('top', 'second', keyName(choice.second), choice.secondOnTop, () => chooseExport({ secondOnTop: true })),
+        ],
+  );
+  document.getElementById('export-look').replaceChildren(...LOOKS.map((look) => lookTile(look, choice)));
+  for (const button of document.querySelectorAll('#export-quality [data-quality]')) {
+    button.setAttribute('aria-pressed', String(button.dataset.quality === choice.quality));
+  }
+
+  // Subtitle files: one for each language turned on.
+  refill(
+    document.getElementById('export-srt'),
+    tracks.map((key) =>
+      exportButton('srt', key, keyName(key), choice.srt.includes(key), () => {
+        exporting.choice = toggledSrt(exporting.choice, key, exportTracks());
+        showExport();
+      }),
+    ),
+  );
+
+  const task = tasks.get(playing.id);
+  const title = task?.title || (task?.fileName ?? '').replace(/\.[^.]+$/, '');
+  const first = playing.clips.find((c) => c.id === ids[0]);
+  document.getElementById('export-where').textContent = whereNote(choice, title, first?.name ?? '');
+  exportGo.textContent = exportLabel(choice, ids.length);
+
+  // The focus back on the button it was on, drawn anew; on the sheet, if that button has gone.
+  if (focused !== undefined) {
+    const again = focused && exportSheet.querySelector(`[data-pick="${CSS.escape(focused)}"]`);
+    if (again && again.offsetParent !== null) again.focus();
+    else if (!exportSheet.contains(document.activeElement) || document.activeElement.offsetParent === null) exportSheet.focus();
+  }
+}
+
+/** A look to choose, with a small picture of the main language's first words drawn in it (both languages, for two). */
+function lookTile(look, choice) {
+  const button = exportButton('look', look, '', choice.look === look, () => chooseExport({ look }));
+  button.className = 'look';
+  button.setAttribute('aria-label', LOOK_NAMES[look]);
+  const picture = span('look__picture', '');
+  picture.setAttribute('aria-hidden', 'true');
+  const keys = choice.subtitles === 'two' && choice.second !== null ? [choice.first, choice.second] : [choice.first];
+  if (keys.length === 2 && choice.secondOnTop) keys.reverse();
+  const words = span(`look__words look__words--${look}`, '');
+  for (const key of keys) {
+    const line = span('look__line', sampleWords(trackOf(key)?.lines[0]?.text));
+    styleLine(line, key === '' ? null : key);
+    words.append(line);
+  }
+  picture.append(words);
+  button.append(picture, span('look__name', LOOK_NAMES[look]));
+  return button;
+}
+
+async function startExport() {
+  if (!exporting || !playing || exportGo.disabled) return;
+  const { choice } = exporting;
+  const id = playing.id;
+  exportGo.disabled = true;
+  exportError.hidden = true;
+  try {
+    await tauri.core.invoke('export_clips', {
+      id,
+      clips: clipIds(choice, playing.clips, playing.cut),
+      options: optionsOf(choice, keyStyle),
+    });
+    remember('chaya.export', JSON.stringify(keptOf(choice)));
+    closeExport();
+  } catch (message) {
+    exportError.textContent = String(message);
+    exportError.hidden = false;
+    exportGo.disabled = false;
+  }
+}
+
+/** The dialog's keys: Esc closes it, and Tab goes round inside it. */
+function exportKey(e) {
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    closeExport();
+  } else if (e.key === 'Tab') {
+    const stops = [...exportSheet.querySelectorAll('button')].filter((el) => !el.disabled && el.offsetParent !== null);
+    if (!stops.length) return;
+    const at = stops.indexOf(document.activeElement);
+    if (e.shiftKey && at <= 0) {
+      e.preventDefault();
+      stops.at(-1).focus();
+    } else if (!e.shiftKey && (at === -1 || at === stops.length - 1)) {
+      e.preventDefault();
+      stops[0].focus();
+    }
+  } else if (e.ctrlKey && e.key.toLowerCase() === 'e') {
+    e.preventDefault();
+  }
+}
+
+playerExport.addEventListener('click', openExport);
+exportGo.addEventListener('click', startExport);
+document.getElementById('export-close').addEventListener('click', closeExport);
+document.getElementById('export-cancel').addEventListener('click', closeExport);
+// A click beside the sheet closes it, as Esc does.
+exportBox.addEventListener('click', (e) => {
+  if (e.target === exportBox) closeExport();
+});
+document.getElementById('export-as').addEventListener('click', (e) => {
+  const button = e.target.closest('[data-save-as]');
+  if (button && !button.disabled) chooseExport({ saveAs: button.dataset.saveAs });
+});
+document.getElementById('export-quality').addEventListener('click', (e) => {
+  const button = e.target.closest('[data-quality]');
+  if (button) chooseExport({ quality: button.dataset.quality });
+});
+
+// ── Exports going, and the notices when they end ──
+
+/** The jobs the app has from this run (the window may have been opened again since they began). */
+function loadExports() {
+  tauri?.core
+    .invoke('exports_status')
+    .then((list) => {
+      for (const job of list ?? []) exportJobs.set(job.job, job);
+      showExports();
+    })
+    .catch(() => {});
+}
+
+/** An `export` event: how one job is now. */
+function exportChanged(job) {
+  const before = exportJobs.get(job.job);
+  exportJobs.set(job.job, job);
+  if (before?.state !== job.state) {
+    const notice = noticeOf(job);
+    if (notice) noticeFor(job, notice);
+  }
+  showExports();
+}
+
+/** The jobs still going: those of the video playing under its clips; the rest, and all of them while that list is
+ *  out of sight, in a small card with the notices. */
+function showExports() {
+  const running = [...exportJobs.values()].filter(isRunning).sort((a, b) => a.job - b.job);
+  const here = (job) => !!playing && !player.hidden && job.id === playing.id;
+  const listed = running.filter(here);
+  document.getElementById('player-exports-box').hidden = listed.length === 0;
+  fillJobs(playerExports, listed);
+  const inSight = !player.hidden && !document.getElementById('panel-clips').hidden && !player.classList.contains('player--full');
+  showExportsCard(running.filter((job) => !(here(job) && inSight)));
+}
+
+/** Fills `list` with a row for each of `jobs`, keeping the rows already there (and the focus on their Stop). */
+function fillJobs(list, jobs) {
+  const wanted = new Set(jobs.map((job) => String(job.job)));
+  for (const row of [...list.children]) if (!wanted.has(row.dataset.job)) row.remove();
+  for (const job of jobs) {
+    let row = list.querySelector(`[data-job="${job.job}"]`);
+    if (!row) {
+      row = jobRow(job.job);
+      list.append(row);
+    }
+    row.dataset.state = job.state;
+    row.style.setProperty('--p', String(job.state === 'waiting' ? 0 : job.percent ?? 0));
+    row.querySelector('.export-job__name').textContent = job.name;
+    row.querySelector('.export-job__pct').textContent = progressWords(job);
+    row.querySelector('.export-job__stop').setAttribute('aria-label', `Stop exporting “${job.name}”`);
+  }
+}
+
+function jobRow(job) {
+  const row = document.createElement('li');
+  row.className = 'making export-job';
+  row.dataset.job = String(job);
+  const text = document.createElement('div');
+  text.className = 'making__text';
+  const stop = document.createElement('button');
+  stop.type = 'button';
+  stop.className = 'downloads__all export-job__stop';
+  stop.textContent = 'Stop';
+  stop.addEventListener('click', () =>
+    tauri.core.invoke('stop_export', { job }).catch((message) => noticeFor(null, { text: String(message), detail: '', failed: true })),
+  );
+  text.append(span('export-job__name', ''), span('export-job__pct num', ''), stop);
+  const bar = span('making__bar', '');
+  bar.append(document.createElement('span'));
+  row.append(text, bar);
+  return row;
+}
+
+/** At most this many jobs in the card; it counts the rest. */
+const CARD_JOBS = 3;
+
+function showExportsCard(jobs) {
+  let card = document.getElementById('toast-exports');
+  if (jobs.length === 0) {
+    card?.remove();
+    return;
+  }
+  if (!card) {
+    card = document.createElement('div');
+    card.id = 'toast-exports';
+    card.className = 'toast toast--exports';
+    // Each percent is not read out; the notice when each ends is.
+    card.setAttribute('aria-live', 'off');
+    const list = document.createElement('ul');
+    list.className = 'exports';
+    list.setAttribute('aria-label', 'Exporting');
+    card.append(paragraph('Exporting', 'toast__text'), list, paragraph('', 'toast__detail'));
+    toasts.append(card);
+  }
+  fillJobs(card.querySelector('.exports'), jobs.slice(0, CARD_JOBS));
+  const more = jobs.length - CARD_JOBS;
+  const rest = card.querySelector('.toast__detail');
+  rest.hidden = more <= 0;
+  rest.textContent = more > 0 ? `and ${more} more` : '';
+}
+
+/** How long a notice stays, unless it says something failed, or the pointer or the focus is on it. */
+const NOTICE_MS = 8000;
+/** At most this many notices at once; the oldest goes. */
+const NOTICES = 4;
+
+/** A notice, for `job` (or for no job, with no action): its words, the small words under them, and its action. */
+function noticeFor(job, notice) {
+  if (job) toasts.querySelector(`.toast[data-job="${job.job}"]`)?.remove();
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.setAttribute('role', notice.failed ? 'alert' : 'status');
+  if (job) {
+    toast.dataset.job = String(job.job);
+    toast.dataset.state = job.state;
+  }
+  const body = document.createElement('div');
+  body.className = 'toast__body';
+  const detail = paragraph(notice.detail, 'toast__detail');
+  detail.hidden = !notice.detail;
+  body.append(paragraph(notice.text, 'toast__text'), detail);
+  toast.append(body);
+  if (job && notice.action) {
+    const action = document.createElement('button');
+    action.type = 'button';
+    action.className = 'toast__action';
+    action.textContent = notice.action;
+    action.addEventListener('click', () => (notice.failed ? retryExport(job.job, toast) : showExported(job.job, toast)));
+    toast.append(action);
+  }
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'icon-btn pressable toast__close';
+  close.setAttribute('aria-label', 'Dismiss');
+  close.title = 'Dismiss';
+  close.innerHTML = '<svg><use href="#i-close"/></svg>';
+  close.addEventListener('click', () => dismiss(toast));
+  toast.append(close);
+  toasts.insertBefore(toast, document.getElementById('toast-exports'));
+  const shown = toasts.querySelectorAll('.toast:not(.toast--exports):not(.is-leaving)');
+  if (shown.length > NOTICES) dismiss(shown[0]);
+  if (!notice.failed) dismissLater(toast, NOTICE_MS);
+  return toast;
+}
+
+function dismissLater(toast, ms) {
+  setTimeout(() => {
+    if (!toast.isConnected) return;
+    if (toast.matches(':hover, :focus-within')) dismissLater(toast, 2000);
+    else dismiss(toast);
+  }, ms);
+}
+
+/** Takes a notice away; the focus, if it was in it, goes to the next one, or back to the window. */
+function dismiss(toast) {
+  if (!toast.isConnected || toast.classList.contains('is-leaving')) return;
+  if (toast.contains(document.activeElement)) {
+    const next = [...toasts.querySelectorAll('.toast:not(.is-leaving)')].find((t) => t !== toast);
+    const button = next?.querySelector('button');
+    if (button) button.focus();
+    else if (!player.hidden) playerVideo.focus();
+    else document.activeElement.blur();
+  }
+  leave(toast);
+}
+
+/** Says, in place of a notice's small words, why its action did not work. */
+function sayInNotice(toast, message) {
+  const detail = toast.querySelector('.toast__detail');
+  detail.textContent = String(message);
+  detail.hidden = false;
+}
+
+function showExported(job, toast) {
+  tauri.core.invoke('show_export', { job }).catch((message) => sayInNotice(toast, message));
+}
+
+async function retryExport(job, toast) {
+  try {
+    await tauri.core.invoke('retry_export', { job });
+    dismiss(toast);
+  } catch (message) {
+    sayInNotice(toast, message);
+  }
+}
+
+// The page is made shorter for the notices while they show (`aboveToasts`), and longer again after.
+new ResizeObserver(placePage).observe(toasts);
+tauri?.event.listen('export', ({ payload }) => exportChanged(payload));
+loadExports();

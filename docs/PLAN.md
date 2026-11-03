@@ -216,7 +216,7 @@ and reads them back from the video's file.
 and tracks for the picture (frames from the video), the lines, the sound (peaks read once by ffmpeg, `core::sound`)
 and the clips; zoom and scroll; a sweep across it makes a clip; it follows the playhead.
 
-### 8. Export ☐
+### 8. Export ☑
 
 **The person gets:** clips saved as videos with the subtitles burned in (Outline, Box or Large, one
 language or two), at 720p, 1080p or the original size; or as SRT files timed from 0:00 for each clip.
@@ -232,7 +232,14 @@ releases and links them into ffmpeg, with FFmpeg's own SIMD code (nasm; without 
 the decoders for H.264, HEVC, VP8 and VP9, `h264_mf` with Direct3D 11, MPEG-4 and AAC. `core::export` writes the ASS
 for each look and language pair, cuts exactly, picks the size, falls back from the graphics card to the processor to
 MPEG-4, and writes clips' SRTs; the app queues jobs and reports them as `export` events; the Windows tour exports a
-clip through the app and says which encoder Windows used. The Export dialog is the second part (8b).
+clip through the app and says which encoder Windows used (on CI's runner, with no graphics card: Windows' H.264
+encoder on the processor).
+
+**Second part (8b), the window:** *Export* (or Ctrl+E) opens a dialog over the player: the chosen clip or all, a
+video or SRT files, the subtitles (none, one language or two and which on top), the look (each shown as a small
+picture in the language's colours) and the quality. Exports in progress are listed under the clips with Stop; when
+one ends a notice says so, with *Show in folder* and the encoder in words, or why it failed, with *Retry*. The
+dialog's rules are in `ui/export.js`, tested with Node; the Windows tour exports through the dialog.
 
 ### 9. Your own videos, and search ☐
 
