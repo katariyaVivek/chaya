@@ -311,6 +311,31 @@ fn emit(app: &AppHandle, tab: u64, event: PageEvent) {
     let _ = app.emit("page", TabEvent { tab, event });
 }
 
+/// Files dragged from Explorer over a page, as the window hears them (`page-drop` events): `kind` "enter", "over",
+/// "drop" or "leave", and the files' paths on "enter" and "drop".
+#[derive(Clone, Serialize)]
+struct PageDrop {
+    #[serde(rename = "type")]
+    kind: &'static str,
+    paths: Vec<PathBuf>,
+}
+
+/// Hands files dropped on a page to the window, as if dropped on it: they are the person's own videos to list
+/// (`own`). Tauri's drop handler takes the drop from WebView2, so the page never opens the file or learns its name.
+fn forward_drop(app: AppHandle) -> impl Fn(&tauri::WebviewEvent) + Send + 'static {
+    use tauri::DragDropEvent;
+    move |event| {
+        let tauri::WebviewEvent::DragDrop(event) = event else { return };
+        let drop = match event {
+            DragDropEvent::Enter { paths, .. } => PageDrop { kind: "enter", paths: paths.clone() },
+            DragDropEvent::Over { .. } => PageDrop { kind: "over", paths: Vec::new() },
+            DragDropEvent::Drop { paths, .. } => PageDrop { kind: "drop", paths: paths.clone() },
+            _ => PageDrop { kind: "leave", paths: Vec::new() },
+        };
+        let _ = app.emit_to("main", "page-drop", drop);
+    }
+}
+
 /// Opens what `text` names (an address, a site, an account, or words to search for): in the tab shown, or in a new
 /// tab when `new_tab` asks for one or none is shown (from the window's home). `bounds` is where the page goes. Returns
 /// the address opened, for the address bar.
@@ -462,6 +487,7 @@ fn make_page(app: &AppHandle, id: u64, url: &str, bounds: Option<Bounds>) -> Res
         .map_err(|_| "The page couldn't be opened.".to_string())?;
     let _ = ads::block_requests(&page, blocker);
     let _ = page_input::attach(&page, app.clone(), id);
+    page.on_webview_event(forward_drop(app.clone()));
     page.navigate(url).map_err(|_| "The page couldn't be opened.".to_string())?;
     tauri::async_runtime::spawn(learn_agent(app.clone()));
     tauri::async_runtime::spawn(ads::hide_ads(app.clone(), hide_key, id));

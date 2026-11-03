@@ -41,6 +41,8 @@ pub enum SpeechError {
     /// Nothing was said, or nothing whisper.cpp could make out.
     NothingHeard,
     CantWrite,
+    /// A subtitle file in that language is next to the person's own video, and Chaya did not write it.
+    Taken,
     /// The person stopped it.
     Stopped,
 }
@@ -57,6 +59,9 @@ impl SpeechError {
                 "The speech model that arrived isn't the one Chaya expects, so it wasn't kept. Try again.".into()
             }
             SpeechError::NoSound => "This file has no sound Chaya can read.".into(),
+            SpeechError::Taken => "There's already a subtitle file in that language next to this video that Chaya \
+                                   didn't make, so Chaya left it as it is. Rename or move it, then make subtitles again."
+                .into(),
             SpeechError::CouldNotListen | SpeechError::Unreadable => "Speech recognition stopped with an error.".into(),
             SpeechError::NothingHeard => "No speech was heard in this video.".into(),
             SpeechError::CantWrite => "Chaya couldn't write the subtitles next to the video.".into(),
@@ -166,8 +171,8 @@ impl Speech {
 
     /// Makes subtitles for download `id`, the video at `video`, as `settings` say: fetches their model if it is not
     /// here yet, listens in their language (or detects it), on the graphics card if they allow it, and saves what was
-    /// heard next to the video as "name.LANGUAGE.srt", replacing a file of that name. `stop` turning true stops it;
-    /// what a model fetch had brought is kept for next time.
+    /// heard next to the video as "name.LANGUAGE.srt", replacing a file of that name when `may_write` allows it.
+    /// `stop` turning true stops it; what a model fetch had brought is kept for next time.
     #[allow(clippy::too_many_arguments)]
     pub async fn make(
         &self,
@@ -177,6 +182,7 @@ impl Speech {
         tools: &Tools,
         client: &Client,
         stop: &watch::Receiver<bool>,
+        may_write: &(dyn Fn(&Path) -> bool + Send + Sync),
         on_step: &mut (dyn FnMut(Step) + Send),
     ) -> Result<Made, SpeechError> {
         let (model, language) = (settings.model(), settings.language.as_deref());
@@ -210,6 +216,9 @@ impl Speech {
         }
         let tag = language.or(Some(transcript.language.as_str())).and_then(subtitles::file_language);
         let path = subtitles::file_for(video, tag.as_deref().unwrap_or("und"));
+        if !may_write(&path) {
+            return Err(SpeechError::Taken);
+        }
         tokio::fs::write(&path, subtitles::to_srt(&lines)).await.map_err(|_| SpeechError::CantWrite)?;
         Ok(Made { path, transcript, on })
     }
@@ -295,8 +304,10 @@ mod tests {
         let (_tx, stop) = watch::channel(false);
         let mut steps = Vec::new();
 
-        let made =
-            speech.make(1, &video, &settings, &tools, &Client::new(), &stop, &mut |s| steps.push(s)).await.unwrap();
+        let made = speech
+            .make(1, &video, &settings, &tools, &Client::new(), &stop, &|_| true, &mut |s| steps.push(s))
+            .await
+            .unwrap();
 
         assert_eq!(made.transcript.language, "en");
         assert_eq!(made.on == Device::GraphicsCard, card, "on the graphics card when one was expected");
@@ -312,5 +323,11 @@ mod tests {
         assert_eq!(steps.first(), Some(&Step::Sound));
         assert!(steps.iter().any(|s| matches!(s, Step::Listening { .. })));
         assert!(!dir.path().join("speech").join("work").join("1").exists(), "its work folder is gone");
+
+        // A file Chaya may not write (the person's own, next to their own video) is left as it is.
+        std::fs::write(&made.path, "theirs").unwrap();
+        let taken = speech.make(1, &video, &settings, &tools, &Client::new(), &stop, &|_| false, &mut |_| {}).await;
+        assert_eq!(taken.err(), Some(SpeechError::Taken));
+        assert_eq!(std::fs::read_to_string(&made.path).unwrap(), "theirs");
     }
 }

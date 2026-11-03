@@ -375,6 +375,20 @@ a built-in browser. [`../desktop/README.md`](../desktop/README.md) has the layou
   its subtitles drawn on by libass from an ASS file written for it (`export::ass`, a style per language and look),
   encoded with Windows' `h264_mf` (graphics card, then processor) or MPEG-4; or an SRT timed from 0:00. The app
   runs one job at a time and reports each as `export` events.
+- **Your own videos** (`chaya-core`'s `own`, `Manager::add_own`, `desktop/app/src-tauri/src/own.rs`,
+  `desktop/app/ui/own.js`): a file dropped on the window (Tauri's drag-and-drop events; over a page, the page's
+  webview's, handed on by `browser.rs` as `page-drop`) or picked in Windows' file picker (`tauri-plugin-dialog`,
+  opened from Rust, so the window has no dialog permission) is checked (there, a file, a video or sound by its
+  extension, not listed already) and listed as a finished task pointing at it, its source the file's own `file:///`
+  address. Everything that works from a download's number then works on it; removing it keeps the file.
+- **Search across every line** (`chaya-core`'s `search`, `desktop/app/src-tauri/src/search.rs`,
+  `desktop/app/ui/search.js`): an in-memory index of every finished video's subtitle files (`subtitles::belongs_to`
+  names them), each track folded once (case, accents; `unicode-normalization`) into one string with its lines'
+  offsets. Before a search the app looks again only when the list changed or a second has passed, listing each folder
+  once and re-reading a file only when its size or time changed. A search finds the longest word across a track at
+  once and checks the others in each line found; at most 200 lines come back with the ranges matched, in UTF-16
+  units. Tested in the core (folding, words, marks, order, the cap, the refresh) and with Node (marks into pieces,
+  grouping, the heading).
 - `desktop/app/src-tauri` hands `chaya-core` to the window as commands (`recognise_link`, `look_up`,
   `download` and the download controls) and sends it `download` events. The window
   may call only those and set its title bar's theme (`capabilities/default.json`). Its content

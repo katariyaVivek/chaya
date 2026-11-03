@@ -145,6 +145,15 @@ Chaya for Windows keeps the same promises, with these differences:
   that file is deleted with the others when the download leaves the list. Exporting a clip makes a new video or
   subtitle file next to the original, on your PC, with Windows' own video encoder; nothing is sent anywhere. The file is deleted when the download leaves
   Chaya's list. Nothing about what you watch leaves your PC.
+- **Your own videos.** A video or sound you drop on Chaya, or add with *Add from this PC*, is read where it is on your
+  PC. Chaya never copies, moves, changes or uploads it, and removing it from Chaya's list leaves it where it is.
+  Subtitles, translations and clips you make from it are saved next to it, as they are for a download, and what only
+  Chaya needs (where playback stopped, its poster, its clips) is kept in Chaya's own folder. Where the file is (its
+  folder and name) is kept in Chaya's list of downloads on your PC. A file dropped on a page in Chaya's browser goes
+  to Chaya, never to the page.
+- **Searching what was said.** The find box over your downloads searches the subtitle files next to your saved
+  videos, on your PC. Their lines are held in Chaya's memory while it runs, never written anywhere else and never
+  sent anywhere.
 - **The ad blocker** works as the phone's: it decides on your PC, its settings (whether it is on, and
   the sites you let show ads) stay on your PC, and about once a week it fetches fresh EasyList and
   EasyPrivacy lists from easylist.to, sending nothing about you. To hide a page's ad boxes, a script of

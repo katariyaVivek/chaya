@@ -6,6 +6,10 @@
 //! change of state (progress stays in memory). A download that was running when the app closed comes back
 //! paused, its `.part` file ready to continue. Cancelling deletes what arrived; removing a finished download
 //! from the list keeps its file.
+//!
+//! The person's own videos and sounds (`own`) are listed here too, as finished entries pointing at the file where it
+//! is: their source is the file itself (`file:///…`), so nothing ever fetches them, and an older Chaya that reads the
+//! list keeps them as they are.
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -27,6 +31,7 @@ use super::join::Joiner;
 use super::names;
 use super::pieces;
 use super::stream;
+use crate::own;
 
 pub const AT_ONCE: usize = 3;
 /// How often progress reaches the window.
@@ -110,6 +115,11 @@ pub enum Step {
 }
 
 impl Task {
+    /// One of the person's own files, listed where it is (`Manager::add_own`), not downloaded.
+    pub fn is_own(&self) -> bool {
+        self.source.url.starts_with("file:")
+    }
+
     pub fn part_path(&self) -> PathBuf {
         with_suffix(&self.path, ".part")
     }
@@ -168,6 +178,8 @@ pub struct TaskView {
     pub step: Option<Step>,
     /// For a ZIP of an account's posts, while it runs: files found, and saved so far.
     pub archive: Option<ArchiveProgress>,
+    /// One of the person's own files, listed where it is: taking it off the list never touches it.
+    pub own: bool,
 }
 
 impl From<&Task> for TaskView {
@@ -184,7 +196,7 @@ impl From<&Task> for TaskView {
             title: task.title.clone(),
             choice: task.choice.clone(),
             kind: task.kind,
-            site: site_of(&task.page_url, &task.source.url),
+            site: if task.is_own() { Site::Pc } else { site_of(&task.page_url, &task.source.url) },
             added: task.added,
             ended: task.ended,
             file_name: task.path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
@@ -198,6 +210,7 @@ impl From<&Task> for TaskView {
             total: task.total,
             step: task.step.filter(|_| task.state == State::Downloading),
             archive: task.archive.filter(|_| task.state == State::Downloading),
+            own: task.is_own(),
         }
     }
 }
@@ -368,6 +381,46 @@ impl Manager {
 
     pub fn add(&self, new: NewDownload) -> Task {
         self.add_task(new, None)
+    }
+
+    /// Lists the person's own file at `path` (checked first with `own::check`) as a finished entry, where it is: it is
+    /// never copied, moved or changed. A file already on the list, as their own or as a download, is not listed twice:
+    /// that entry is given back, with false.
+    pub fn add_own(&self, path: &Path, title: String, kind: Kind) -> (Task, bool) {
+        let task = {
+            let mut tasks = lock(&self.inner.tasks);
+            if let Some(known) = tasks.iter().find(|t| t.state == State::Completed && own::same_file(&t.path, path)) {
+                return (known.clone(), false);
+            }
+            let size = file_size(path);
+            let at = now();
+            let url = url::Url::from_file_path(path).map_or_else(|_| format!("file:{}", path.display()), String::from);
+            let task = Task {
+                id: tasks.iter().map(|t| t.id).max().unwrap_or(0) + 1,
+                title,
+                page_url: String::new(),
+                choice: if kind == Kind::Audio { "Sound".into() } else { "Video".into() },
+                kind,
+                path: path.to_path_buf(),
+                source: Source { url, ..Source::default() },
+                thumbnail: None,
+                group: None,
+                state: State::Completed,
+                done: size,
+                total: Some(size),
+                added: at,
+                ended: Some(at),
+                sound: None,
+                step: None,
+                account: None,
+                archive: None,
+                subtitles: None,
+            };
+            tasks.push(task.clone());
+            task
+        };
+        self.changed(task.id);
+        (task, true)
     }
 
     fn add_task(&self, new: NewDownload, account: Option<Account>) -> Task {
@@ -1279,6 +1332,104 @@ mod tests {
 
         assert!(s.manager.list().is_empty());
         assert!(done.path.exists());
+    }
+
+    /// The person's own video, somewhere outside Downloads.
+    fn own_video(s: &Setup, name: &str) -> PathBuf {
+        let folder = s.folder.path().join("Videos").join("Meetings");
+        std::fs::create_dir_all(&folder).unwrap();
+        let path = folder.join(name);
+        std::fs::write(&path, body(12_345)).unwrap();
+        path
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn the_persons_own_video_is_listed_finished_where_it_is() {
+        let s = setup(AT_ONCE);
+        let path = own_video(&s, "Team meeting.mp4");
+        let before = std::fs::metadata(&path).unwrap().modified().unwrap();
+
+        let (task, added) = s.manager.add_own(&path, "Team meeting".into(), Kind::Video);
+
+        assert!(added);
+        assert_eq!(task.state, State::Completed);
+        assert_eq!(task.path, path, "the file where it is, not a copy");
+        assert_eq!((task.done, task.total), (12_345, Some(12_345)));
+        assert!(task.is_own());
+        assert!(task.ended.is_some());
+        assert_eq!(s.manager.get(task.id), Some(task.clone()));
+        // Nothing was written into its folder, and the file is as it was.
+        assert_eq!(std::fs::read_dir(path.parent().unwrap()).unwrap().count(), 1);
+        assert_eq!(std::fs::read(&path).unwrap(), body(12_345));
+        assert_eq!(std::fs::metadata(&path).unwrap().modified().unwrap(), before);
+        assert!(!s.folder.path().join("Downloads").exists());
+        // The window is told, as of any download that changed.
+        assert!(s.events.lock().unwrap().iter().any(|e| matches!(e, Event::Changed(t) if t.id == task.id)));
+
+        let view = serde_json::to_value(TaskView::from(&task)).unwrap();
+        assert_eq!(view["own"], true);
+        assert_eq!(view["site"], "pc");
+        assert_eq!(view["state"], "completed");
+        assert_eq!(view["fileName"], "Team meeting.mp4");
+        // A download is not the person's own.
+        let download = Task { source: Source { url: "https://example.com/a.mp4".into(), ..Source::default() }, ..task };
+        assert_eq!(serde_json::to_value(TaskView::from(&download)).unwrap()["own"], false);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn a_file_already_listed_is_not_listed_twice() {
+        let s = setup(AT_ONCE);
+        let path = own_video(&s, "Interview.mkv");
+        let (first, _) = s.manager.add_own(&path, "Interview".into(), Kind::Video);
+        let roundabout = path.parent().unwrap().join("..").join("Meetings").join("Interview.mkv");
+
+        let (again, added) = s.manager.add_own(&roundabout, "Interview".into(), Kind::Video);
+
+        assert!(!added);
+        assert_eq!(again, first);
+        assert_eq!(s.manager.list().len(), 1);
+
+        // Nor is a file Chaya downloaded, dropped on it again.
+        let server = TestServer::start(body(1_000), Behaviour::default());
+        let task = s.manager.add(new_download(&s, &server, "Clip.m4a"));
+        let done = wait_for(&s.manager, task.id, |st| *st == State::Completed).await;
+        let (known, added) = s.manager.add_own(&done.path, "Clip".into(), Kind::Audio);
+        assert!(!added);
+        assert_eq!(known.id, done.id);
+        assert!(!known.is_own());
+        assert_eq!(s.manager.list().len(), 2);
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn the_persons_own_video_is_kept_on_the_list_across_a_restart_and_removing_it_keeps_the_file() {
+        let s = setup(AT_ONCE);
+        let path = own_video(&s, "Lecture.mov");
+        let (task, _) = s.manager.add_own(&path, "Lecture".into(), Kind::Video);
+        let store = s.folder.path().join("data").join("downloads.json");
+
+        let again = Manager::open(store.clone(), Client::new(), Handle::current(), Box::new(|_| {}));
+        assert_eq!(again.list(), vec![task.clone()]);
+        assert!(again.get(task.id).unwrap().is_own());
+        // Kept as a download is, with nothing an older Chaya would not read: its source is the file itself.
+        let kept: serde_json::Value = serde_json::from_slice(&std::fs::read(&store).unwrap()).unwrap();
+        assert_eq!(kept[0]["state"], "completed");
+        assert!(kept[0]["source"]["url"].as_str().unwrap().starts_with("file:///"), "{}", kept[0]["source"]);
+        assert!(kept[0].get("own").is_none());
+
+        // Neither taking it off the list nor cancelling it touches the file.
+        again.remove(task.id);
+        assert!(again.list().is_empty());
+        assert_eq!(std::fs::read(&path).unwrap(), body(12_345));
+        let (task, _) = again.add_own(&path, "Lecture".into(), Kind::Video);
+        again.cancel(task.id);
+        assert_eq!(std::fs::read(&path).unwrap(), body(12_345));
+        // Nor do pause, resume and retry, which have nothing to do for a finished file.
+        let (task, _) = again.add_own(&path, "Lecture".into(), Kind::Video);
+        again.pause(task.id);
+        again.resume(task.id);
+        again.retry(task.id, None);
+        assert_eq!(again.get(task.id).unwrap().state, State::Completed);
+        assert_eq!(std::fs::read(&path).unwrap(), body(12_345));
     }
 
     #[test]

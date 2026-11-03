@@ -144,7 +144,9 @@ own style, a version for each model. Step 6 is merged: the Highlights tab finds 
 the person's model, lists them and marks them on the seek bar. Step 7 is merged: clips, made from lines chosen in
 the transcript (Ctrl+B) or from highlights, listed in a Clips tab and trimmed on a timeline whose edges snap to the
 lines. Step 8 is merged: clips saved as videos with their subtitles drawn on (Windows' own H.264 encoder) or as
-SRT files, from an Export dialog. Next: step 9, your own videos and a search across every line.
+SRT files, from an Export dialog. Step 9 is built: a video from the PC dropped on the window (or added from
+Windows' file picker) is listed where it is and works as a download does, and the Downloads find box finds every
+line said in every video and opens the player there.
 
 ## Known rough edges
 

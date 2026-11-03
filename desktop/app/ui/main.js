@@ -19,6 +19,8 @@ import {
   noticeOf,
   keyOf,
 } from './export.js';
+import { lineSearch } from './search.js';
+import { ownVideos } from './own.js';
 
 const tauri = window.__TAURI__;
 
@@ -622,7 +624,8 @@ function metaOf(task) {
     case 'completed': {
       const job = speechJobs.get(task.id);
       if (job && !['done', 'failed'].includes(job.state)) return speechText(job);
-      return `Saved · ${fileSize(task.total ?? task.done)} · ${task.folder.split(/[\\/]/).pop()}`;
+      // The person's own file is listed where it is, not saved by Chaya.
+      return `${task.own ? 'On this PC' : 'Saved'} · ${fileSize(task.total ?? task.done)} · ${task.folder.split(/[\\/]/).pop()}`;
     }
     case 'failed':
       return task.error ?? 'The download failed.';
@@ -654,12 +657,43 @@ function showEmpty() {
 // As the phone's library: a kind, a site (`core::library`) and words in the name, each optional, all together.
 
 const KINDS = [['video', 'Videos'], ['picture', 'Pictures'], ['audio', 'Audio'], ['archive', 'ZIPs']];
-const SITES = [['youtube', 'YouTube'], ['instagram', 'Instagram'], ['tiktok', 'TikTok'], ['x', 'X'], ['pinterest', 'Pinterest'], ['other', 'Other']];
+const SITES = [['youtube', 'YouTube'], ['instagram', 'Instagram'], ['tiktok', 'TikTok'], ['x', 'X'], ['pinterest', 'Pinterest'], ['other', 'Other'], ['pc', 'This PC']];
 const narrowing = { kind: null, site: null, words: '' };
 const narrowEl = document.getElementById('downloads-narrow');
 const findField = document.getElementById('downloads-find-field');
 const findInput = document.getElementById('downloads-find');
 const downloadsNone = document.getElementById('downloads-none');
+
+// ── Searching what is said, and your own videos ──
+//
+// The find box also searches every saved video's lines (search.js); a line found opens the player there. Videos and
+// sounds dropped on the window, or picked with *Add from this PC*, are listed where they are (own.js).
+
+const said = lineSearch({
+  invoke: (command, args) => tauri.core.invoke(command, args),
+  box: document.getElementById('downloads-lines'),
+  // The chips' kind and site narrow the lines too; the words are what is searched.
+  among: () =>
+    narrowing.kind || narrowing.site
+      ? [...tasks.values()]
+          .filter((t) => (!narrowing.kind || t.kind === narrowing.kind) && (!narrowing.site || t.site === narrowing.site))
+          .map((t) => t.id)
+      : null,
+  open: (id, from) => openPlayer(id, from),
+  clock,
+  languageName,
+  changed: () => showNarrowing(),
+});
+
+ownVideos({
+  tauri,
+  drop: document.getElementById('drop'),
+  button: document.getElementById('downloads-add'),
+  note: document.getElementById('own-note'),
+  added: (list) => list.filter((t) => !tasks.has(t.id)).forEach(taskChanged),
+  open: (id) => openSaved(id),
+  shown: () => browsing && showDownloads(true),
+});
 
 function keeps(task) {
   if (narrowing.kind && task.kind !== narrowing.kind) return false;
@@ -697,9 +731,11 @@ function showNarrowing() {
   chips(sites, 'site', SITES);
   narrowEl.querySelector('.narrow__rule').hidden = kinds.hidden || sites.hidden;
   narrowEl.hidden = kinds.hidden && sites.hidden;
-  findField.hidden = tasks.size < 2 && !narrowing.words;
+  // With one saved video, the box still finds what is said in it.
+  const saidIn = [...tasks.values()].some((t) => t.state === 'completed' && (t.kind === 'video' || t.kind === 'audio'));
+  findField.hidden = tasks.size < 2 && !narrowing.words && !saidIn;
   const kept = [...tasks.values()].filter(keeps).length;
-  downloadsNone.hidden = tasks.size === 0 || kept > 0;
+  downloadsNone.hidden = tasks.size === 0 || kept > 0 || said.shown > 0;
   // The grid holds what was saved: offered once something has been.
   viewSwitch.hidden = ![...tasks.values()].some((t) => t.state === 'completed');
   showView(viewSwitch.hidden ? 'list' : view, false);
@@ -707,6 +743,7 @@ function showNarrowing() {
 
 function narrow(change) {
   Object.assign(narrowing, change);
+  said.run(narrowing.words);
   for (const row of downloadList.querySelectorAll('.row')) {
     const task = tasks.get(Number(row.dataset.id));
     row.hidden = !task || !keeps(task);
@@ -1112,7 +1149,9 @@ function languageName(code) {
   }
 }
 
-async function openPlayer(id) {
+/** Plays saved video `id` from where it stopped, or, with `from` (a line found by the search), from `from.at`
+ * seconds with the subtitles in `from.language` shown. */
+async function openPlayer(id, from = null) {
   const task = tasks.get(id);
   if (!task) return;
   if (!viewer.hidden) closeViewer();
@@ -1157,10 +1196,12 @@ async function openPlayer(id) {
   playing.made = made;
   playing.highlights = highlights;
   playing.clips = clips;
-  const wanted = remembered('chaya.player.subtitles', '');
+  const wanted = from ? from.language : remembered('chaya.player.subtitles', '');
   showSubtitles(tracks.find((t) => t.language === wanted) ?? tracks[0] ?? null);
   whenReady(() => {
-    if (start > 0) {
+    if (from) {
+      playerVideo.currentTime = from.at;
+    } else if (start > 0) {
       playerVideo.currentTime = start;
       showResumed(start);
     }
@@ -2714,6 +2755,12 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     address.focus();
     address.select();
+  } else if (e.ctrlKey && !e.altKey && e.key.toLowerCase() === 'f' && !findField.hidden && viewer.hidden &&
+    (!browsing || document.body.classList.contains('showing-downloads'))) {
+    // The Downloads list's find box, which also finds what is said in the videos.
+    e.preventDefault();
+    findInput.focus();
+    findInput.select();
   } else if (e.ctrlKey && !e.altKey && tabKeyOf(e)) {
     e.preventDefault();
     tabKey(tabKeyOf(e));

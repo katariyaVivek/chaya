@@ -296,21 +296,26 @@ pub fn files_for(video: &Path) -> Vec<Found> {
         .filter_map(Result::ok)
         .filter_map(|entry| {
             let name = entry.file_name().into_string().ok()?;
-            let (rest, ext) = name.rsplit_once('.')?;
-            if !(ext.eq_ignore_ascii_case("srt") || ext.eq_ignore_ascii_case("vtt")) {
-                return None;
-            }
-            let language = if rest == stem {
-                None
-            } else {
-                let tag = rest.strip_prefix(stem)?.strip_prefix('.')?;
-                Some(file_language(tag).filter(|l| l.len() == tag.len())?)
-            };
+            let language = belongs_to(&name, stem)?;
             entry.file_type().ok()?.is_file().then(|| Found { language, path: entry.path() })
         })
         .collect();
     found.sort_by(|a, b| a.language.cmp(&b.language).then(a.path.cmp(&b.path)));
     found
+}
+
+/// Whether the file `name` holds subtitles for the video whose name without its extension is `stem` ("Clip.srt",
+/// "Clip.en.srt", "Clip.pt-BR.vtt"), and in which language (None for "Clip.srt"); None when it does not.
+pub fn belongs_to(name: &str, stem: &str) -> Option<Option<String>> {
+    let (rest, ext) = name.rsplit_once('.')?;
+    if !(ext.eq_ignore_ascii_case("srt") || ext.eq_ignore_ascii_case("vtt")) {
+        return None;
+    }
+    if rest == stem {
+        return Some(None);
+    }
+    let tag = rest.strip_prefix(stem)?.strip_prefix('.')?;
+    Some(Some(file_language(tag).filter(|l| l.len() == tag.len())?))
 }
 
 /// One language's subtitles for a video, as the player gets them: the lines, and which shows when.
