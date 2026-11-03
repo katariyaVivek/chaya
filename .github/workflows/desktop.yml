@@ -176,7 +176,7 @@ jobs:
       # The rules the window follows as clips are cut (desktop/app/ui/clips.js): plain Node, a second.
       - name: Window tests
         working-directory: desktop/app
-        run: node --test test/clips.test.mjs
+        run: node --test test/clips.test.mjs test/export.test.mjs
 
   windows:
     name: Windows build

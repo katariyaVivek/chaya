@@ -214,6 +214,18 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
   as "Video title - Clip name.mp4" (or ".en.srt"), never over another. The app exports one clip at a time and tells
   the window with `export` events (waiting, exporting with its percent, done with the file and the encoder, failed
   with why, stopped).
+- **Export** (`app/ui/export.js`). *Export* by the Clips tab's head, or Ctrl+E in the player, opens a dialog over
+  it: the clip chosen on the timeline or all of them; saved as a video or as subtitle files (SRT, timed from 0:00
+  for each clip, one file for each language turned on); for a video, its subtitles (none, one language or two, which
+  and which on top), its look (Outline, Box or Large, each shown in a small dark picture with the language's own
+  colour and font) and its quality (720p, 1080p or the original size). It opens on what the player shows; the save,
+  look and quality chosen last are kept in the window. Files go next to the video, named "Video title - Clip
+  name". Esc closes the dialog before anything else, and Tab stays inside it. Exports still going are listed
+  under the clips with how far each is, *Waiting* for those in line, and *Stop*; while that list is out of sight
+  (another tab, the player closed), a small card at the window's lower right shows them. When one ends, a notice
+  there says *Saved "Clip name"* with *Show in folder* and how it was encoded, or *Couldn't export "Clip name"*
+  with why and *Retry*; saved ones go after 8 s (not while the pointer or the focus is on them), failed ones stay.
+  Over a page, the page is made shorter so the notices sit below it.
 - **The player.** A saved video or sound opens in Chaya, from the list (its name), the grid or a post's viewer,
   instead of another program (*Open in another app* is in its bar, and offered when WebView2 can't play the file).
   The file comes a part at a time, at most 4 MB per answer, by the HTTP ranges the player asks for
@@ -457,7 +469,7 @@ cd desktop && cargo test --workspace     # chaya-core
 python -m pytest desktop/engine          # putting the engine together
 python -m pytest app/src/test/python     # chaya_engine, shared with the phone
 cd desktop/design && npm test            # the design system
-cd desktop/app && node --test test/clips.test.mjs   # the window's clip rules (ui/clips.js)
+cd desktop/app && node --test test/clips.test.mjs test/export.test.mjs   # the window's clip and export rules (ui/clips.js, ui/export.js)
 ```
 
 `CHAYA_ENGINE_DIR=<an engine folder> cargo test` also runs the prepared engine for real

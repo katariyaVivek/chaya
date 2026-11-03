@@ -521,9 +521,12 @@ def ai_model(tour, clip):
     except Exception as e:
         tour.failed('clips', e)
     try:
-        exported_by_app(tour, clip)
+        export_clips(tour, clip)
     except Exception as e:
-        tour.failed('exported-by-app', e)
+        tour.failed('exported', e)
+        tour.press_in_player('Escape')
+        tour.press_in_player('Escape')
+        tour.press_in_player('Escape')
     tour.click('#settings-button')
     time.sleep(0.8)
     # The key out of Credential Manager again, and no service chosen.
@@ -647,37 +650,82 @@ def make_clips(tour, clip):
     tour.wait(lambda: tour.js("return document.getElementById('player').hidden"), 5)
 
 
-def exported_by_app(tour, clip):
-    """The app's own export, asked for straight (the Export dialog is the window's, next): the clip "Counting the
-    walk" as a 720p video with its English subtitles drawn on in the Box look, then as an SRT; each saved next to the
-    video in Downloads. Says which encoder Windows used: its H.264 encoder on the graphics card or the processor, or
-    MPEG-4 when it has none."""
-    tour.js(
-        "window.__exported = []; window.__exportError = null; (async () => {"
-        " const tauri = window.__TAURI__;"
-        " await tauri.event.listen('export', (e) => window.__exported.push(e.payload));"
-        f" const clips = await tauri.core.invoke('video_clips', {{ id: {clip} }});"
-        " const one = clips.find((c) => c.name === 'Counting the walk') ?? clips[0];"
-        " const style = { color: 'yellow', font: 'sans', size: 'M' };"
-        " const video = { saveAs: 'video', quality: 'p720', look: 'boxed', subtitles: [{ language: 'en', style }], secondOnTop: false };"
-        f" await tauri.core.invoke('export_clips', {{ id: {clip}, clips: [one.id], options: video }});"
-        f" await tauri.core.invoke('export_clips', {{ id: {clip}, clips: [one.id], options: {{ ...video, saveAs: 'srt' }} }});"
-        " })().catch((e) => (window.__exportError = String(e))); return 1"
-    )
-    # Each job's last word: done, failed or stopped, for both.
-    ended = ("const last = new Map(); for (const v of window.__exported) last.set(v.job, v);"
-             " const views = [...last.values()]; if (window.__exportError) return [{state: 'failed', message: window.__exportError}];"
-             " return views.length === 2 && views.every((v) => ['done', 'failed', 'stopped'].includes(v.state)) ? views : null")
-    views = tour.wait(lambda: tour.js(ended), 180) or tour.js("return window.__exported") or []
-    files = []
-    for view in views:
-        path = Path(view['path']) if view.get('path') else None
-        files.append({'state': view.get('state'), 'encoder': view.get('encoder'), 'message': view.get('message'),
-                      'file': path.name if path else None, 'bytes': path.stat().st_size if path and path.exists() else 0,
-                      'start': path.read_text(encoding='utf-8')[:120] if path and path.suffix == '.srt' and path.exists() else None})
-    progress = sorted({v.get('percent') for v in tour.js("return window.__exported") or [] if v.get('state') == 'exporting'})
-    tour.steps.append({'step': 'exported-by-app', 'files': files, 'progress_heard': progress[:12]})
-    print(f'exported by the app: {json.dumps(files, ensure_ascii=False)}; progress {progress[:12]}', flush=True)
+def exports_now(tour):
+    """Every export of this run, as the app has them (`exports_status`)."""
+    tour.js("window.__tourExports = null; window.__TAURI__.core.invoke('exports_status')"
+            ".then(jobs => window.__tourExports = {jobs}, e => window.__tourExports = {jobs: [], error: String(e)}); return 1")
+    answer = tour.wait(lambda: tour.js("return window.__tourExports"), 10, every=0.2)
+    return (answer or {}).get('jobs', [])
+
+
+def export_from_dialog(tour, choose, seconds=120):
+    """Ctrl+E in the player, `choose` (selectors clicked in turn, those not there passed by), Export, and the jobs it
+    made once each has ended (or `seconds` have gone): the dialog's words, any error it gave, and those jobs."""
+    before = {job['job'] for job in exports_now(tour)}
+    tour.js("document.getElementById('player-video').dispatchEvent(new KeyboardEvent('keydown',"
+            " {key: 'e', ctrlKey: true, bubbles: true, cancelable: true})); return 1")
+    tour.wait(lambda: tour.js("return !document.getElementById('export').hidden"), 10)
+    for selector in choose:
+        tour.click(selector)
+        time.sleep(0.3)
+    dialog = tour.js("return [...document.querySelectorAll('#export .export__form > :not([hidden]), #export-where, #export-go')]"
+                     ".map(e => e.innerText.replace(/\\n/g, ' ')).join(' / ')")
+    tour.click('#export-go')
+    tour.wait(lambda: tour.js("return document.getElementById('export').hidden"
+                              " || !document.getElementById('export-error').hidden"), 15)
+    error = tour.js("const e = document.getElementById('export-error'); return e.hidden ? '' : e.textContent")
+    if error:
+        tour.press_in_player('Escape')
+        return dialog, error, []
+
+    def ended():
+        jobs = [job for job in exports_now(tour) if job['job'] not in before]
+        return jobs if jobs and all(job['state'] in ('done', 'failed', 'stopped') for job in jobs) else None
+
+    jobs = tour.wait(ended, seconds, every=1) or [job for job in exports_now(tour) if job['job'] not in before]
+    return dialog, error, jobs
+
+
+def export_clips(tour, clip):
+    """The clips exported from the Clips tab (Ctrl+E): all of them as videos with one language burned in, Outline, at
+    720p, each saved next to the video in Downloads and told of by a notice, with the encoder used; then one clip's
+    subtitles as an SRT file timed from 0:00."""
+    downloads = Path.home() / 'Downloads'
+    tour.js(f"document.querySelector('#download-list .row[data-id=\"{clip}\"] .row__title').click(); return 1", gesture=True)
+    tour.wait(lambda: tour.js("return !document.getElementById('player').hidden"), 10)
+    tour.click('#tab-clips')
+    tour.wait(lambda: tour.js("return !document.getElementById('player-export').hidden"), 15)
+    tour.js("document.getElementById('player-video').pause(); return 1")
+
+    def files(jobs, read=0):
+        """Each job's file: whether it is in Downloads, next to the video, its size, and its first `read` characters."""
+        seen = []
+        for job in jobs:
+            path = Path(job['path']) if job.get('path') else None
+            there = bool(path and path.exists())
+            seen.append({'name': path.name if path else None, 'next_to_video': bool(path and path.parent == downloads),
+                         'exists': there, 'bytes': path.stat().st_size if there else 0,
+                         **({'start': path.read_text(encoding='utf-8-sig')[:read]} if read and there else {})})
+        return seen
+
+    toasts = "return [...document.querySelectorAll('#toasts .toast')].map(t => t.innerText.replace(/\\n+/g, ' | '))"
+    dialog, error, jobs = export_from_dialog(tour, [
+        '[data-pick="clips:all"]', '#export-as [data-save-as="video"]', '[data-pick="subtitles:one"]',
+        '[data-pick="look:outline"]', '#export-quality [data-quality="p720"]'])
+    tour.shot('exported', dialog=dialog, error=error, notices=tour.js(toasts),
+              jobs=[{k: job.get(k) for k in ('job', 'name', 'state', 'encoder', 'message', 'percent')} for job in jobs],
+              files=files([job for job in jobs if job['state'] == 'done']))
+
+    # One clip's subtitles: the first clip chosen on the timeline, and SRT.
+    tour.click('#player-clips .highlight')
+    time.sleep(0.5)
+    dialog, error, jobs = export_from_dialog(tour, ['[data-pick="clips:chosen"]', '#export-as [data-save-as="srt"]'], 60)
+    tour.shot('exported-srt', dialog=dialog, error=error, notices=tour.js(toasts),
+              jobs=[{k: job.get(k) for k in ('job', 'name', 'state', 'message')} for job in jobs],
+              files=files([job for job in jobs if job['state'] == 'done'], read=120))
+    tour.press_in_player('Escape')
+    tour.press_in_player('Escape')
+    tour.wait(lambda: tour.js("return document.getElementById('player').hidden"), 5)
 
 
 def looked_up(tour):
