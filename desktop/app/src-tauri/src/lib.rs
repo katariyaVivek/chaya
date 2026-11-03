@@ -5,6 +5,7 @@ mod ads;
 mod ai;
 mod browser;
 mod clips;
+mod export;
 mod highlights;
 mod speech;
 mod translate;
@@ -455,6 +456,8 @@ pub fn run() {
             app.manage(translate::Translating::default());
             app.manage(highlights::Finding::default());
             tauri::async_runtime::spawn(translate::Translating::work(app.handle().clone()));
+            app.manage(export::Exporting::default());
+            tauri::async_runtime::spawn(export::Exporting::work(app.handle().clone()));
             let handle = app.handle().clone();
             let manager = DownloadManager::open(
                 app.path().app_data_dir()?.join("downloads.json"),
@@ -473,7 +476,7 @@ pub fn run() {
             manager.set_session(Some(Arc::new(move |url: &str| browser::session_headers(&browser, url))));
             let joiner = Joiner::find(&engine_dir);
             let joins = joiner.is_some();
-            app.manage(clips::Sound(joiner.as_ref().map(|j| j.ffmpeg.clone())));
+            app.manage(clips::Ffmpeg(joiner.as_ref().map(|j| j.ffmpeg.clone())));
             manager.set_joiner(joiner);
             // gallery-dl keeps its own cache, apart from yt-dlp's.
             let gallery_cache = app.path().app_cache_dir()?.join("gallery-dl");
@@ -539,6 +542,11 @@ pub fn run() {
             clips::change_clip,
             clips::remove_clip,
             clips::sound_peaks,
+            export::export_clips,
+            export::stop_export,
+            export::retry_export,
+            export::show_export,
+            export::exports_status,
             speech::set_speech,
             speech::delete_speech_model,
             speech::make_subtitles,

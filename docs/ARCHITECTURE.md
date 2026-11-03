@@ -308,8 +308,9 @@ a built-in browser. [`../desktop/README.md`](../desktop/README.md) has the layou
   for a link's lookup when the person taps *Use my sign-in* (the phone's `WebViewSignIn`). The engine runs
   with yt-dlp's plugins off.
 - **Joining** (`download/join.rs`) runs the ffmpeg in the engine folder, built by
-  `desktop/engine/build_ffmpeg.sh` with no encoders (copying only), where the phone uses `MediaMuxer` for
-  H.264 only. **Pieces** (`download/pieces.rs`) port the phone's 10 MB, three-at-a-time fetching of
+  `desktop/engine/build_ffmpeg.sh` (it copies tracks as they are when joining), where the phone uses `MediaMuxer`
+  for H.264 only. The same ffmpeg exports clips (`export.rs`: libass, the scaler, Windows' `h264_mf`, MPEG-4 and
+  AAC; see below). **Pieces** (`download/pieces.rs`) port the phone's 10 MB, three-at-a-time fetching of
   YouTube's files and its log of whole pieces.
 - **Streams** (`download/stream.rs`) are fetched by the app itself, not by Media3 as on the phone nor by
   ffmpeg. An HLS playlist is read (RFC 8216: byte ranges, initialization sections, AES-128 keys;
@@ -370,6 +371,10 @@ a built-in browser. [`../desktop/README.md`](../desktop/README.md) has the layou
 - **The timeline's sound** (`chaya-core`'s `sound`, `sound_peaks` in `desktop/app/src-tauri/src/clips.rs`): the
   engine's ffmpeg decodes a video's sound to WAV on a pipe, read as it comes into peaks (50 a second, a byte each),
   kept as `videos/ID.peaks`. The picture track's frames are taken in the window, by a second `<video>` that seeks.
+- **Export** (`chaya-core`'s `export`, `desktop/app/src-tauri/src/export.rs`): a clip cut exactly by ffmpeg, scaled,
+  its subtitles drawn on by libass from an ASS file written for it (`export::ass`, a style per language and look),
+  encoded with Windows' `h264_mf` (graphics card, then processor) or MPEG-4; or an SRT timed from 0:00. The app
+  runs one job at a time and reports each as `export` events.
 - `desktop/app/src-tauri` hands `chaya-core` to the window as commands (`recognise_link`, `look_up`,
   `download` and the download controls) and sends it `download` events. The window
   may call only those and set its title bar's theme (`capabilities/default.json`). Its content

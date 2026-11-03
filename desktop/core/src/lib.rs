@@ -6,6 +6,7 @@ pub mod browse;
 pub mod clips;
 pub mod download;
 pub mod engine;
+pub mod export;
 pub mod formats;
 pub mod found;
 pub mod highlights;
