@@ -14,8 +14,13 @@ pause, resume and retry throughout.
 [![Build APK](https://github.com/katariyaVivek/chaya/actions/workflows/build.yml/badge.svg)](https://github.com/katariyaVivek/chaya/actions/workflows/build.yml)
 ![Latest release](https://img.shields.io/github/v/release/katariyaVivek/chaya)
 
-**Install:** download `app-release.apk` from [Releases](https://github.com/katariyaVivek/chaya/releases)
-and allow installs from unknown apps when asked.
+## Download
+
+- **Android:** `app-release.apk` from the newest `v*` release on
+  [Releases](https://github.com/katariyaVivek/chaya/releases/latest); allow installs from unknown apps when asked.
+- **Windows:** `Chaya-Windows-VERSION-setup.exe` from the newest `windows-v*` release on
+  [Releases](https://github.com/katariyaVivek/chaya/releases). It installs for you alone (no administrator), and
+  Chaya then offers its own updates in its settings. See the [code signing policy](#code-signing-policy).
 
 ---
 
@@ -111,6 +116,31 @@ What Chaya carries from others keeps its own licence, and its licence travels wi
   EasyList authors, used under the
   [Creative Commons Attribution-ShareAlike 3.0](https://creativecommons.org/licenses/by-sa/3.0/) licence.
 - The Geist fonts the Windows app uses are under the SIL Open Font License (`desktop/design/fonts/OFL-Geist.txt`).
+
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by
+[SignPath Foundation](https://signpath.org/).
+
+What is signed: Chaya for Windows' own program and its installer, built from this repository's source by GitHub
+Actions ([`desktop.yml`](.github/workflows/desktop.yml)) when a `windows-v*` release is tagged. The open-source
+programs the installer carries from others (Python, yt-dlp, gallery-dl, QuickJS-ng, FFmpeg, whisper.cpp; see
+[Licence](#licence)) are included as their own projects publish them or as `desktop/engine/` builds them,
+unmodified, and are not signed with Chaya's certificate. Until signing is in place, the installer is unsigned and
+Windows SmartScreen asks before it runs.
+
+Team roles:
+
+- Committers and reviewers: [katariyaVivek](https://github.com/katariyaVivek) (the maintainer). Every change goes in
+  through a pull request on GitHub, with CI's tests and the Windows tour run on it.
+- Approvers: [katariyaVivek](https://github.com/katariyaVivek), who approves each release before it is signed.
+
+Privacy policy: [PRIVACY_POLICY.md](PRIVACY_POLICY.md). Chaya has no account, no analytics and no server of its own.
+On its own it only checks GitHub for a newer version (at most once a day) and fetches fresh ad lists from
+easylist.to (about once a week), sending nothing about you. Everything else it sends, it sends because you asked: a
+link you look up, to the site it belongs to; a speech model, from Hugging Face, the first time you make subtitles;
+and, only if you set one up, a video's title and subtitles to the AI service you chose. The privacy policy says what
+each sends, and to whom.
 
 ## Docs
 

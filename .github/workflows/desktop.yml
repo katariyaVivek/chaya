@@ -516,6 +516,8 @@ jobs:
             echo "installer is not signed with a certificate yet, so choose *More info*, then *Run anyway*. Chaya"
             echo "installs for you alone (no administrator needed), and an earlier Chaya is updated in place: your"
             echo "downloads, settings and sign-ins stay. From now on Chaya offers its own updates in its settings."
+            echo
+            echo "**Code signing policy:** https://github.com/$GITHUB_REPOSITORY#code-signing-policy"
           } > release-notes.md
           # The release may already exist: GitHub's website makes a tag only by publishing a release with it, and a
           # failed run may be run again. Then the installer and notes go onto that release.
