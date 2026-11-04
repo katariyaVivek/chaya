@@ -19,6 +19,9 @@
   --muted: #6B6862;
   --wash: rgb(26 25 23 / 0.04); /* hover tint on a control */
   --wash-strong: rgb(26 25 23 / 0.07); /* pressed, or a selected item */
+  /* A scrollbar's thumb, and under the pointer */
+  --scroll-thumb: rgb(26 25 23 / 0.2);
+  --scroll-thumb-hover: rgb(26 25 23 / 0.36);
   --shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 8px 24px rgb(0 0 0 / 0.06);
   --focus: var(--text); /* the accent is too pale on Day for a focus ring (1.9:1) */
 
@@ -132,6 +135,8 @@
     --muted: #8A8883;
     --wash: rgb(255 255 255 / 0.05);
     --wash-strong: rgb(255 255 255 / 0.09);
+    --scroll-thumb: rgb(255 255 255 / 0.18);
+    --scroll-thumb-hover: rgb(255 255 255 / 0.32);
     --shadow: 0 8px 32px rgb(0 0 0 / 0.5);
     --focus: var(--accent);
   }
@@ -148,6 +153,8 @@
   --muted: #8A8883;
   --wash: rgb(255 255 255 / 0.05);
   --wash-strong: rgb(255 255 255 / 0.09);
+  --scroll-thumb: rgb(255 255 255 / 0.18);
+  --scroll-thumb-hover: rgb(255 255 255 / 0.32);
   --shadow: 0 8px 32px rgb(0 0 0 / 0.5);
   --focus: var(--accent);
 }

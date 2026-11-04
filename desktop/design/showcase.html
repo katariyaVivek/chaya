@@ -335,12 +335,26 @@
           <button class="icon-btn pressable" type="button" id="demo-row-toggle" aria-label="Pause"><svg><use href="#i-pause"/></svg></button>
         </div>
       </div>
+      <div class="card glass">
+        <h3>Drop-down</h3>
+        <p>A choice from a list, drawn as Chaya's own over a native select: readable in both themes, in Geist, with the theme's scrollbar. The arrow keys, Home, End, Enter, Escape and typing all work.</p>
+        <label class="text-sm muted" for="demo-picker">Language spoken</label>
+        <select class="select" id="demo-picker">
+          <option value="">Detected</option><option value="ar">Arabic</option><option value="bn">Bangla</option>
+          <option value="de">German</option><option value="en">English</option><option value="es">Spanish</option>
+          <option value="fr">French</option><option value="hi">Hindi</option><option value="ja" disabled>Japanese (not yet)</option>
+          <option value="pt">Portuguese</option><option value="ta">Tamil</option><option value="zh">Chinese</option>
+        </select>
+      </div>
     </div>
   </section>
 </main>
 
 <script type="module">
 import { DownloadButton, springEasing, PRESS_SPRING, replayEntrance, setTheme, setMotion } from './chaya-motion.js';
+import { enhanceSelects } from './chaya-picker.js';
+
+enhanceSelects();
 
 // Theme and motion switches
 const pressGroup = (attr, value) =>

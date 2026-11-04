@@ -23,6 +23,11 @@ import {
 } from './export.js';
 import { lineSearch } from './search.js';
 import { ownVideos } from './own.js';
+import { enhanceSelects } from './design/chaya-picker.js';
+
+// Every drop-down drawn as Chaya's own, not Windows' list (unreadable in Night, in Windows' font). The <select>s stay
+// underneath, so what follows reads and sets them as before.
+enhanceSelects();
 
 const tauri = window.__TAURI__;
 
