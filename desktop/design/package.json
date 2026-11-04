@@ -1,6 +1,7 @@
 {
   "name": "chaya-desktop-design",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "description": "Chaya desktop's design system: tokens, fonts, components and motion helpers.",
   "scripts": {

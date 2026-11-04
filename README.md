@@ -92,9 +92,25 @@ app/src/main/assets/detection/      the injected page scanner
 app/src/main/assets/adblock/        EasyList and EasyPrivacy as shipped
 ```
 
-The ad lists in `app/src/main/assets/adblock/` are [EasyList and EasyPrivacy](https://easylist.to/),
-by The EasyList authors, used under the
-[Creative Commons Attribution-ShareAlike 3.0](https://creativecommons.org/licenses/by-sa/3.0/) licence.
+## Licence
+
+Chaya's own code is released under the [MIT License](LICENSE): use it, change it and share it, keeping the
+copyright notice.
+
+What Chaya carries from others keeps its own licence, and its licence travels with it:
+
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp) (Unlicense) and [gallery-dl](https://github.com/mikf/gallery-dl)
+  (GPL-2.0), which Chaya's engine runs. They are shipped unmodified, each with its licence inside its package, and
+  their source is at those addresses. Chaya's code is MIT, which the GPL-2.0 allows alongside it; an app or
+  installer that includes gallery-dl is shared on the GPL-2.0's terms for that part.
+- On Windows, [FFmpeg](https://ffmpeg.org/) (LGPL-2.1) with FreeType, FriBidi, HarfBuzz and libass,
+  [whisper.cpp](https://github.com/ggml-org/whisper.cpp) (MIT) and [QuickJS-ng](https://github.com/quickjs-ng/quickjs)
+  (MIT), each built from its pinned release by the scripts in `desktop/engine/`, with its licence and the way to its
+  source in the installer's `engine/licenses/`.
+- The ad lists in `app/src/main/assets/adblock/` are [EasyList and EasyPrivacy](https://easylist.to/), by The
+  EasyList authors, used under the
+  [Creative Commons Attribution-ShareAlike 3.0](https://creativecommons.org/licenses/by-sa/3.0/) licence.
+- The Geist fonts the Windows app uses are under the SIL Open Font License (`desktop/design/fonts/OFL-Geist.txt`).
 
 ## Docs
 
