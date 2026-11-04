@@ -28,3 +28,8 @@ zip = { version = "9", default-features = false }
 
 [dev-dependencies]
 tempfile = "3"
+
+# Which graphics card whisper.cpp listens on (`speech::card`): Vulkan's own list of them, read from Windows'
+# vulkan-1.dll when it is first needed (loaded, not linked, so a PC without Vulkan still starts).
+[target.'cfg(windows)'.dependencies]
+ash = { version = "0.38", default-features = false, features = ["loaded", "std"] }

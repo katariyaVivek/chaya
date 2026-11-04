@@ -188,6 +188,14 @@ pub async fn transcribe(
     // Milliseconds of sound: 16,000 two-byte samples a second, after the WAV's 44-byte header.
     let length = tokio::fs::metadata(&sound).await.map_or(0, |m| m.len().saturating_sub(44) / 32);
     let card = whisper.on_card().filter(|_| request.card);
+    // On a PC with integrated graphics and a card of its own, the card (`card`); read from Vulkan once, off the async
+    // threads, and only when the card is to be used. A device named by the person (the variable set) is left as it is.
+    let device = match card {
+        Some(_) if std::env::var_os(super::card::VISIBLE).is_none() => {
+            tokio::task::spawn_blocking(super::card::chosen).await.ok().flatten()
+        }
+        _ => None,
+    };
     let programs = card.into_iter().chain([whisper.program.as_path()]);
     let mut card_failed = false;
     for program in programs {
@@ -208,8 +216,14 @@ pub async fn transcribe(
             .args(["-dtw", request.dtw, "-nfa"])
             // Each 30 seconds heard afresh, not led by the text before (-mc 0): led by it, whisper falls into saying
             // one line over and over through music or noise, for minutes.
-            .args(["-mc", "0", "-of"])
+            .args(["-mc", "0"])
+            // Greedy, not a beam of five: as good to read (a two-minute test said the same, word for word but one), a
+            // third faster on the processor, and more on a graphics card, where decoding is most of the time.
+            .args(["-bs", "1", "-of"])
             .arg(relative(&out));
+        if let (Some(device), true) = (device, program != whisper.program) {
+            command.env(super::card::VISIBLE, device.to_string());
+        }
         let (mut on, mut percent) = (first, 0);
         // What it says of itself, for graphics-card.log: not the stretches of speech it heard.
         let mut said = Vec::new();
