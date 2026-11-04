@@ -528,6 +528,10 @@ def ai_model(tour, clip):
         tour.press_in_player('Escape')
         tour.press_in_player('Escape')
     try:
+        export_options(tour, clip)
+    except Exception as e:
+        tour.failed('export-options', e)
+    try:
         fix_subtitles(tour, clip)
     except Exception as e:
         tour.failed('subtitles-fixed', e)
@@ -795,6 +799,41 @@ def search_lines(tour, clip):
     tour.js("document.getElementById('player-close').click(); return 1")
     tour.wait(lambda: tour.js("return document.getElementById('player').hidden"), 5)
     tour.js("const f = document.getElementById('downloads-find'); f.value = ''; f.dispatchEvent(new Event('input')); return 1")
+
+
+def export_options(tour, clip):
+    """The export options, asked of the app for the clip "Counting the walk": a GIF with its English subtitles drawn
+    on; a video made to fit in 10 MB with its loudness evened; and one SRT with English and French together. Each
+    file is looked at next to the video: the GIF is one, the video fits, the SRT has both languages."""
+    tour.js(
+        "window.__options = []; window.__optionsError = null; (async () => {"
+        " const tauri = window.__TAURI__;"
+        " await tauri.event.listen('export', (e) => window.__options.push(e.payload));"
+        f" const clips = await tauri.core.invoke('video_clips', {{ id: {clip} }});"
+        " const one = clips.find((c) => c.name === 'Counting the walk') ?? clips[0];"
+        " const style = { color: 'white', font: 'sans', size: 'M' };"
+        " const base = { quality: 'p720', look: 'outline', subtitles: [{ language: 'en', style }], secondOnTop: false };"
+        f" await tauri.core.invoke('export_clips', {{ id: {clip}, clips: [one.id], options: {{ ...base, saveAs: 'gif' }} }});"
+        f" await tauri.core.invoke('export_clips', {{ id: {clip}, clips: [one.id], options: {{ ...base, saveAs: 'video', fit: 10, evenLoudness: true }} }});"
+        f" await tauri.core.invoke('export_clips', {{ id: {clip}, clips: [one.id], options: {{ ...base, saveAs: 'srt', together: true,"
+        " subtitles: [{ language: 'en', style }, { language: 'fr', style }] } });"
+        " })().catch((e) => (window.__optionsError = String(e))); return 1"
+    )
+    ended = ("const last = new Map(); for (const v of window.__options) last.set(v.job, v);"
+             " const views = [...last.values()]; if (window.__optionsError) return [{state: 'failed', message: window.__optionsError}];"
+             " return views.length === 3 && views.every((v) => ['done', 'failed', 'stopped'].includes(v.state)) ? views : null")
+    views = tour.wait(lambda: tour.js(ended), 180) or tour.js("return window.__options") or []
+    files = []
+    for view in views:
+        path = Path(view['path']) if view.get('path') else None
+        there = path is not None and path.exists()
+        head = path.read_bytes()[:6] if there else b''
+        files.append({'state': view.get('state'), 'encoder': view.get('encoder'), 'message': view.get('message'),
+                      'file': path.name if path else None, 'bytes': path.stat().st_size if there else 0,
+                      'gif': head == b'GIF89a' if path and path.suffix == '.gif' else None,
+                      'srt': path.read_text(encoding='utf-8')[:140] if there and path.suffix == '.srt' else None})
+    tour.steps.append({'step': 'export-options', 'files': files})
+    print(f'export options: {json.dumps(files, ensure_ascii=False)}', flush=True)
 
 
 def fix_subtitles(tour, clip):

@@ -151,6 +151,8 @@ pub enum Encoder {
     Windows,
     /// MPEG-4, where Windows has no H.264 encoder.
     Mpeg4,
+    /// A GIF, which has no sound.
+    Gif,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -163,6 +165,8 @@ pub enum ExportError {
     CantWrite,
     /// Every encoder failed; what ffmpeg said last.
     Failed(String),
+    /// What was asked can't be made of this clip, and why.
+    Unfit(String),
     Stopped,
 }
 
@@ -174,6 +178,7 @@ impl ExportError {
             ExportError::CantWrite => "Chaya couldn't write the clip next to the video.".into(),
             ExportError::Failed(said) if said.is_empty() => "ffmpeg couldn't make this clip.".into(),
             ExportError::Failed(said) => format!("ffmpeg couldn't make this clip: {said}"),
+            ExportError::Unfit(why) => why.clone(),
             ExportError::Stopped => "Stopped.".into(),
         }
     }
@@ -252,24 +257,9 @@ pub fn ass(burn: &Burn<'_>, start: u64, end: u64, width: u32, height: u32) -> St
         out.push('\n');
     }
     out += "\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n";
-
-    // The moments anything changes, in either language, inside the clip; between each two, what shows.
-    let first = subtitles::timeline(burn.first.lines);
-    let second = burn.second.as_ref().map(|s| subtitles::timeline(s.lines)).unwrap_or_default();
-    let mut moments = vec![start, end];
-    for span in first.iter().chain(&second) {
-        moments.extend([span.start, span.end].into_iter().filter(|t| (start..=end).contains(t)));
-    }
-    moments.sort_unstable();
-    moments.dedup();
-    let text_at = |spans: &[Span], lines: &[Line], at: u64| {
-        subtitles::line_at(spans, at).map(|i| ass_text(&lines[i].text)).filter(|t| !t.is_empty())
-    };
-    let mut events: Vec<(u64, u64, String)> = Vec::new();
-    for pair in moments.windows(2) {
-        let (from, to) = (pair[0], pair[1]);
-        let one = text_at(&first, burn.first.lines, from);
-        let two = burn.second.as_ref().and_then(|s| text_at(&second, s.lines, from));
+    let second = burn.second.as_ref().map(|s| s.lines).unwrap_or(&[]);
+    for slice in slices(burn.first.lines, second, start, end) {
+        let (one, two) = (slice.first.as_deref().map(ass_text), slice.second.as_deref().map(ass_text));
         let text = match (one, two) {
             (None, None) => continue,
             (Some(one), None) => format!("{{\\rFirst}}{one}"),
@@ -277,16 +267,63 @@ pub fn ass(burn: &Burn<'_>, start: u64, end: u64, width: u32, height: u32) -> St
             (Some(one), Some(two)) if burn.second_on_top => format!("{{\\rSecond}}{two}\\N{{\\rFirst}}{one}"),
             (Some(one), Some(two)) => format!("{{\\rFirst}}{one}\\N{{\\rSecond}}{two}"),
         };
-        // The same words straight on are one event, not a flicker between two.
-        match events.last_mut() {
-            Some(last) if last.1 == from && last.2 == text => last.1 = to,
-            _ => events.push((from, to, text)),
-        }
-    }
-    for (from, to, text) in events {
-        out += &format!("Dialogue: 0,{},{},First,,0,0,0,,{text}\n", ass_time(from - start), ass_time(to - start));
+        out += &format!("Dialogue: 0,{},{},First,,0,0,0,,{text}\n", ass_time(slice.start), ass_time(slice.end));
     }
     out
+}
+
+/// A stretch of a clip (milliseconds from its start) and what shows in it, in each of two languages.
+#[derive(Debug, PartialEq, Eq)]
+struct Slice {
+    start: u64,
+    end: u64,
+    first: Option<String>,
+    second: Option<String>,
+}
+
+/// What shows when in a clip from `start` to `end`, in `first` and `second` (which may hold no lines): a slice for
+/// every stretch in which neither changes, timed from the clip's start, the same words straight on one slice.
+fn slices(first: &[Line], second: &[Line], start: u64, end: u64) -> Vec<Slice> {
+    let (one, two) = (subtitles::timeline(first), subtitles::timeline(second));
+    let mut moments = vec![start, end];
+    for span in one.iter().chain(&two) {
+        moments.extend([span.start, span.end].into_iter().filter(|t| (start..=end).contains(t)));
+    }
+    moments.sort_unstable();
+    moments.dedup();
+    let text_at = |spans: &[Span], lines: &[Line], at: u64| {
+        subtitles::line_at(spans, at).map(|i| lines[i].text.trim().to_string()).filter(|t| !t.is_empty())
+    };
+    let mut out: Vec<Slice> = Vec::new();
+    for pair in moments.windows(2) {
+        let (from, to) = (pair[0], pair[1]);
+        let (a, b) = (text_at(&one, first, from), text_at(&two, second, from));
+        if a.is_none() && b.is_none() {
+            continue;
+        }
+        match out.last_mut() {
+            Some(last) if last.end == from - start && last.first == a && last.second == b => last.end = to - start,
+            _ => out.push(Slice { start: from - start, end: to - start, first: a, second: b }),
+        }
+    }
+    out
+}
+
+/// One SRT for a clip in two languages: each line with the other language's under it (or `second_on_top`, over it),
+/// timed from 0:00.
+pub fn srt_together(first: &[Line], second: &[Line], second_on_top: bool, start: u64, end: u64) -> String {
+    let lines: Vec<Line> = slices(first, second, start, end)
+        .into_iter()
+        .map(|slice| {
+            let text = match (slice.first, slice.second) {
+                (Some(a), Some(b)) if second_on_top => format!("{b}\n{a}"),
+                (Some(a), Some(b)) => format!("{a}\n{b}"),
+                (a, b) => a.or(b).unwrap_or_default(),
+            };
+            Line { start: slice.start, end: slice.end, text }
+        })
+        .collect();
+    subtitles::to_srt(&lines)
 }
 
 /// The SRT for a clip from `start` to `end`: the lines that show in it, timed from 0:00 and cut at its edges.
@@ -382,9 +419,75 @@ pub struct Job<'a> {
     pub end: u64,
     pub quality: Quality,
     pub burn: Option<Burn<'a>>,
+    /// The most bytes the video may take (a size to fit, 10 or 25 MB), when one was chosen.
+    pub fit: Option<u64>,
+    /// The sound's loudness evened (EBU R128, as streaming services and podcasts expect it).
+    pub even_loudness: bool,
+    /// A GIF instead of a video: no sound, its own frame rate and palette.
+    pub gif: bool,
     pub out: &'a Path,
     pub work: &'a Path,
 }
+
+/// A size to fit worked out for a clip: its picture's size, and the bit rates of picture and sound.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Fit {
+    pub width: u32,
+    pub height: u32,
+    pub video: u32,
+    pub audio: u32,
+}
+
+/// How a clip `length` milliseconds long, its picture `width` by `height`, fits in `bytes`: the bit rate that leaves
+/// room for the file's own parts, the sound's share (less for a small file), and the picture made smaller (1080, 720,
+/// 540, 480, 360, 240 on its narrow side) until each pixel has enough. `None` when even the smallest wouldn't look of
+/// anything: the clip is too long for that size.
+pub fn fit(bytes: u64, length: u64, width: u32, height: u32, sound: bool) -> Option<Fit> {
+    let seconds = (length as f64 / 1000.0).max(0.5);
+    // A twentieth for the MP4's own parts and the encoder's slips.
+    let total = bytes as f64 * 8.0 * 0.95 / seconds;
+    let audio = match (sound, total) {
+        (false, _) => 0.0,
+        (true, t) if t < 1_000_000.0 => 64_000.0,
+        (true, t) if t < 2_500_000.0 => 96_000.0,
+        _ => 128_000.0,
+    };
+    let video = (total - audio).min(24_000_000.0);
+    if video < 150_000.0 {
+        return None;
+    }
+    let narrow = width.min(height);
+    let sizes = [narrow, 1080, 720, 540, 480, 360, 240];
+    let mut candidates = sizes.iter().copied().filter(|&n| n <= narrow).peekable();
+    let mut last = (width, height);
+    while let Some(n) = candidates.next() {
+        let scale = n as f64 / narrow.max(1) as f64;
+        let even = |v: f64| ((v / 2.0).round() as u32).max(1) * 2;
+        let (w, h) = (even(width as f64 * scale), even(height as f64 * scale));
+        last = (w, h);
+        // Bits for each pixel of each frame, at 30 a second: under 0.05 H.264 falls apart.
+        if video / (w as f64 * h as f64 * 30.0) >= 0.05 || candidates.peek().is_none() {
+            break;
+        }
+    }
+    Some(Fit { width: last.0, height: last.1, video: video as u32, audio: audio as u32 })
+}
+
+/// The longest clip made into a GIF, in milliseconds: longer, a GIF grows past what anyone would send.
+pub const LONGEST_GIF: u64 = 60_000;
+
+/// A GIF's width for `quality` (480 or 640 pixels, never wider than the video), and its frames a second.
+fn gif_size(quality: Quality, width: u32, height: u32) -> (u32, u32) {
+    let widest = match quality {
+        Quality::P720 => 480,
+        Quality::P1080 => 640,
+        Quality::Original => width.min(960),
+    };
+    let w = widest.min(width).max(2) / 2 * 2;
+    let h = ((height as f64 * w as f64 / width.max(1) as f64 / 2.0).round() as u32).max(1) * 2;
+    (w, h)
+}
+const GIF_FRAMES: u32 = 12;
 
 /// Inside a filter's options, a path quoted: '...' with its quotes escaped, as ffmpeg's filter syntax reads it.
 fn filter_path(path: &Path) -> String {
@@ -393,8 +496,9 @@ fn filter_path(path: &Path) -> String {
 }
 
 /// Saves `job` as a video with `ffmpeg`, trying `encoders` in turn: on to the next when one fails (the graphics card
-/// may have no H.264 encoder, or Windows none at all). `fonts` is a folder of fonts for libass to use (the tests'; on
-/// Windows its own are found). `on_progress` hears how far, 0 to 100. The encoder used.
+/// may have no H.264 encoder, or Windows none at all); or as a GIF. With a size to fit, the bit rate and size come from
+/// `fit`, and a file that still comes out too big is made again with less. `fonts` is a folder of fonts for libass to
+/// use (the tests'; on Windows its own are found). `on_progress` hears how far, 0 to 100. The encoder used.
 pub async fn export(
     ffmpeg: &Path,
     job: &Job<'_>,
@@ -404,10 +508,40 @@ pub async fn export(
     on_progress: &mut (dyn FnMut(u32) + Send),
 ) -> Result<Encoder, ExportError> {
     let probe = probe(ffmpeg, job.video).await?;
-    let (width, height) = size_for(job.quality, probe.width, probe.height);
     let length = job.end.saturating_sub(job.start).max(1);
+    if job.gif && length > LONGEST_GIF {
+        return Err(ExportError::Unfit(
+            "A GIF is for a short clip: one minute at most. Trim it, or export it as a video.".into(),
+        ));
+    }
+    let plan = match job.fit.filter(|_| !job.gif) {
+        Some(bytes) => Some(fit(bytes, length, probe.width, probe.height, probe.sound).ok_or_else(|| {
+            ExportError::Unfit(format!(
+                "This clip is too long to fit in {} MB. Trim it, or choose a bigger size.",
+                bytes / 1_000_000
+            ))
+        })?),
+        None => None,
+    };
+    let (width, height) = match (&plan, job.gif) {
+        (_, true) => gif_size(job.quality, probe.width, probe.height),
+        (Some(plan), _) => {
+            // Never larger than the quality asked for.
+            let asked = size_for(job.quality, probe.width, probe.height);
+            if plan.width * plan.height < asked.0 * asked.1 {
+                (plan.width, plan.height)
+            } else {
+                asked
+            }
+        }
+        (None, _) => size_for(job.quality, probe.width, probe.height),
+    };
     tokio::fs::create_dir_all(job.work).await.map_err(|_| ExportError::CantWrite)?;
-    let mut filters = vec![format!("scale={width}:{height}:flags=lanczos"), "setsar=1".to_string()];
+    let mut filters = Vec::new();
+    if job.gif {
+        filters.push(format!("fps={GIF_FRAMES}"));
+    }
+    filters.extend([format!("scale={width}:{height}:flags=lanczos"), "setsar=1".to_string()]);
     if let Some(burn) = &job.burn {
         let ass_path = job.work.join("clip.ass");
         tokio::fs::write(&ass_path, ass(burn, job.start, job.end, width, height))
@@ -419,99 +553,163 @@ pub async fn export(
         }
         filters.push(filter);
     }
-    filters.push("format=yuv420p".into());
-    let part = job.out.with_extension("mp4.part");
-    let mut said = String::new();
-    for &encoder in encoders {
-        let mut command = Command::new(ffmpeg);
+    let picture = filters.join(",");
+    let input = |command: &mut Command| {
         command
-            .args(["-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-ss"])
+            .args(["-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-progress", "pipe:1", "-nostats", "-ss"])
             .arg(seconds(job.start))
             .arg("-i")
             .arg(job.video)
             .arg("-t")
             .arg(seconds(length))
-            .args(["-map", "0:v:0", "-map", "0:a:0?", "-sn", "-dn", "-map_metadata", "-1"])
-            .arg("-vf")
-            .arg(filters.join(","));
-        match encoder {
-            Encoder::GraphicsCard | Encoder::Windows => {
-                command.args(["-c:v", "h264_mf", "-b:v"]).arg(bit_rate(width, height).to_string());
-                if encoder == Encoder::GraphicsCard {
-                    command.args(["-hw_encoding", "1"]);
-                }
-            }
-            Encoder::Mpeg4 => {
-                command.args(["-c:v", "mpeg4", "-q:v", "3", "-tag:v", "mp4v"]);
-            }
-        }
+            .args(["-sn", "-dn", "-map_metadata", "-1"]);
+    };
+
+    if job.gif {
+        let part = job.out.with_extension("gif.part");
+        let mut command = Command::new(ffmpeg);
+        input(&mut command);
+        // A palette made for this clip, so its colours aren't muddy, and a fine pattern where they blend.
         command
-            .args([
-                "-c:a",
-                "aac",
-                "-b:a",
-                "160k",
-                "-movflags",
-                "+faststart",
-                "-f",
-                "mp4",
-                "-progress",
-                "pipe:1",
-                "-nostats",
-            ])
-            .arg(&part)
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .kill_on_drop(true);
-        let mut child = command.spawn().map_err(|_| ExportError::NoProgram)?;
-        let stdout = child.stdout.take().ok_or(ExportError::NoProgram)?;
-        let mut stderr = child.stderr.take().ok_or(ExportError::NoProgram)?;
-        let errors = tokio::spawn(async move {
-            let mut text = String::new();
-            let _ = stderr.read_to_string(&mut text).await;
-            text
-        });
-        let mut lines = BufReader::new(stdout).lines();
-        let mut stop = stop.clone();
-        let mut shown = 0;
-        // How it ended: true when ffmpeg finished well, false when not, None when stopped.
-        let finished = loop {
-            let line = tokio::select! {
-                line = lines.next_line() => line,
-                _ = stop.wait_for(|stopped| *stopped) => break None,
-            };
-            match line {
-                Ok(Some(line)) => {
-                    // "out_time_us=5320000": how much of the clip is made.
-                    if let Some(us) = line.strip_prefix("out_time_us=").and_then(|v| v.trim().parse::<u64>().ok()) {
-                        let percent = ((us / 1000) * 100 / length).min(99) as u32;
-                        if percent > shown {
-                            shown = percent;
-                            on_progress(percent);
-                        }
+            .arg("-filter_complex")
+            .arg(format!("[0:v:0]{picture},split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4"))
+            .args(["-an", "-loop", "0", "-f", "gif"])
+            .arg(&part);
+        let (finished, said) = run(command, &part, length, stop, on_progress).await?;
+        if !finished {
+            let _ = tokio::fs::remove_file(&part).await;
+            return Err(ExportError::Failed(last_said(&said)));
+        }
+        tokio::fs::rename(&part, job.out).await.map_err(|_| ExportError::CantWrite)?;
+        on_progress(100);
+        return Ok(Encoder::Gif);
+    }
+
+    let picture = format!("{picture},format=yuv420p");
+    let sound =
+        if job.even_loudness && probe.sound { Some("loudnorm=I=-16:TP=-1.5:LRA=11,aresample=48000") } else { None };
+    let part = job.out.with_extension("mp4.part");
+    let mut said = String::new();
+    for &encoder in encoders.iter().filter(|e| **e != Encoder::Gif) {
+        // With a size to fit, at most three tries, each with less where the last came out too big.
+        // A size to fit is a ceiling: with room to spare, the usual bit rate, not the whole allowance.
+        let mut rate = plan.map(|p| p.video.min(bit_rate(width, height)));
+        for _ in 0..3 {
+            let mut command = Command::new(ffmpeg);
+            input(&mut command);
+            command.args(["-map", "0:v:0", "-map", "0:a:0?", "-vf"]).arg(&picture);
+            if let Some(sound) = sound {
+                command.arg("-af").arg(sound);
+            }
+            let bits = rate.unwrap_or_else(|| bit_rate(width, height)).to_string();
+            match (encoder, rate) {
+                (Encoder::GraphicsCard | Encoder::Windows, _) => {
+                    command.args(["-c:v", "h264_mf", "-b:v"]).arg(&bits);
+                    if rate.is_some() {
+                        command.args(["-rate_control", "cbr"]);
+                    }
+                    if encoder == Encoder::GraphicsCard {
+                        command.args(["-hw_encoding", "1"]);
                     }
                 }
-                _ => break Some(child.wait().await.map(|s| s.success()).unwrap_or(false)),
+                (_, Some(_)) => {
+                    command
+                        .args(["-c:v", "mpeg4", "-tag:v", "mp4v", "-b:v"])
+                        .arg(&bits)
+                        .arg("-maxrate")
+                        .arg(&bits)
+                        .arg("-bufsize")
+                        .arg(&bits);
+                }
+                (_, None) => {
+                    command.args(["-c:v", "mpeg4", "-q:v", "3", "-tag:v", "mp4v"]);
+                }
             }
-        };
-        let Some(finished) = finished else {
-            let _ = child.kill().await;
-            let _ = tokio::fs::remove_file(&part).await;
-            return Err(ExportError::Stopped);
-        };
-        said = errors.await.unwrap_or_default();
-        if finished {
+            let audio = plan.map_or(160_000, |p| p.audio.max(32_000)).to_string();
+            command.args(["-c:a", "aac", "-b:a"]).arg(audio).args(["-movflags", "+faststart", "-f", "mp4"]).arg(&part);
+            let (finished, last) = run(command, &part, length, stop, on_progress).await?;
+            said = last;
+            if !finished {
+                let _ = tokio::fs::remove_file(&part).await;
+                break;
+            }
+            let made = tokio::fs::metadata(&part).await.map(|m| m.len()).unwrap_or(0);
+            match (job.fit, rate) {
+                (Some(bytes), Some(was)) if made > bytes => {
+                    // Too big: again, with as much less as it was over, and a little more.
+                    rate = Some((was as f64 * bytes as f64 / made as f64 * 0.92) as u32);
+                    continue;
+                }
+                _ => {}
+            }
             tokio::fs::rename(&part, job.out).await.map_err(|_| ExportError::CantWrite)?;
             on_progress(100);
             return Ok(encoder);
         }
-        let _ = tokio::fs::remove_file(&part).await;
+        if job.fit.is_some() && tokio::fs::metadata(&part).await.is_ok() {
+            let _ = tokio::fs::remove_file(&part).await;
+            return Err(ExportError::Unfit(
+                "Chaya couldn't make this clip small enough. Trim it, or choose a bigger size.".into(),
+            ));
+        }
         // Give the encoder that failed a moment to let go of the graphics card before the next one.
         tokio::time::sleep(Duration::from_millis(200)).await;
     }
-    let last = said.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("").trim().chars().take(200).collect();
-    Err(ExportError::Failed(last))
+    Err(ExportError::Failed(last_said(&said)))
+}
+
+/// The last thing ffmpeg said, for the window.
+fn last_said(said: &str) -> String {
+    said.lines().rev().find(|l| !l.trim().is_empty()).unwrap_or("").trim().chars().take(200).collect()
+}
+
+/// Runs `command` (one ffmpeg, writing `part`), telling `on_progress` how far through a clip `length` milliseconds long
+/// it is. Whether it finished well, and what it said; stopped, it is killed and `part` deleted.
+async fn run(
+    mut command: Command,
+    part: &Path,
+    length: u64,
+    stop: &watch::Receiver<bool>,
+    on_progress: &mut (dyn FnMut(u32) + Send),
+) -> Result<(bool, String), ExportError> {
+    command.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
+    let mut child = command.spawn().map_err(|_| ExportError::NoProgram)?;
+    let stdout = child.stdout.take().ok_or(ExportError::NoProgram)?;
+    let mut stderr = child.stderr.take().ok_or(ExportError::NoProgram)?;
+    let errors = tokio::spawn(async move {
+        let mut text = String::new();
+        let _ = stderr.read_to_string(&mut text).await;
+        text
+    });
+    let mut lines = BufReader::new(stdout).lines();
+    let mut stop = stop.clone();
+    let mut shown = 0;
+    // How it ended: true when ffmpeg finished well, false when not, None when stopped.
+    let finished = loop {
+        let line = tokio::select! {
+            line = lines.next_line() => line,
+            _ = stop.wait_for(|stopped| *stopped) => break None,
+        };
+        match line {
+            Ok(Some(line)) => {
+                // "out_time_us=5320000": how much of the clip is made.
+                if let Some(us) = line.strip_prefix("out_time_us=").and_then(|v| v.trim().parse::<u64>().ok()) {
+                    let percent = ((us / 1000) * 100 / length).min(99) as u32;
+                    if percent > shown {
+                        shown = percent;
+                        on_progress(percent);
+                    }
+                }
+            }
+            _ => break Some(child.wait().await.map(|s| s.success()).unwrap_or(false)),
+        }
+    };
+    let Some(finished) = finished else {
+        let _ = child.kill().await;
+        let _ = tokio::fs::remove_file(part).await;
+        return Err(ExportError::Stopped);
+    };
+    Ok((finished, errors.await.unwrap_or_default()))
 }
 
 /// "12.345": milliseconds as ffmpeg takes a time.
@@ -632,6 +830,41 @@ mod tests {
     }
 
     #[test]
+    fn a_size_to_fit_sets_the_bit_rates_and_makes_the_picture_smaller_until_each_pixel_has_enough() {
+        // A minute in 10 MB: 1.27 Mb/s, 96 kb/s of it sound; 1080p and 720p would be too thin, 540p is not.
+        assert_eq!(
+            fit(10_000_000, 60_000, 1920, 1080, true),
+            Some(Fit { width: 960, height: 540, video: 1_170_666, audio: 96_000 })
+        );
+        // Twenty seconds in 25 MB, no sound: room enough for 720p as it is.
+        assert_eq!(
+            fit(25_000_000, 20_000, 1280, 720, false),
+            Some(Fit { width: 1280, height: 720, video: 9_500_000, audio: 0 })
+        );
+        // A standing phone video keeps its shape.
+        let standing = fit(10_000_000, 60_000, 1080, 1920, true).unwrap();
+        assert_eq!((standing.width, standing.height), (540, 960));
+        // Half an hour in 10 MB is not a video any more.
+        assert_eq!(fit(10_000_000, 1_800_000, 1920, 1080, true), None);
+    }
+
+    #[test]
+    fn two_languages_go_in_one_srt_line_by_line_either_on_top() {
+        let english = walk();
+        let french: Vec<Line> =
+            english.iter().take(2).map(|l| Line { text: format!("FR {}", l.text), ..l.clone() }).collect();
+        let srt = srt_together(&english, &french, false, 1_000, 12_000);
+        assert_eq!(
+            srt,
+            "1\n00:00:00,000 --> 00:00:03,000\nThis is a walk in the park.\nFR This is a walk in the park.\n\n\
+             2\n00:00:04,000 --> 00:00:07,000\nThe numbers count the seconds.\nFR The numbers count the seconds.\n\n\
+             3\n00:00:08,000 --> 00:00:11,000\nChaya draws these lines itself,\n\n"
+        );
+        let on_top = srt_together(&english, &french, true, 1_000, 4_000);
+        assert!(on_top.contains("FR This is a walk in the park.\nThis is a walk in the park."), "{on_top}");
+    }
+
+    #[test]
     fn an_srt_for_a_clip_is_timed_from_its_start_and_cut_at_its_edges() {
         let srt = srt(&walk(), 6_000, 13_500);
         assert_eq!(
@@ -688,6 +921,9 @@ mod tests {
                 second: None,
                 second_on_top: false,
             }),
+            fit: None,
+            even_loudness: false,
+            gif: false,
             out: &out,
             work: &dir.path().join("work"),
         };
@@ -721,6 +957,72 @@ mod tests {
         assert!(!gone.exists() && !gone.with_extension("mp4.part").exists());
     }
 
+    /// With CI's ffmpeg: a GIF, a clip fitted to a size, and a clip with its loudness evened, each made.
+    #[tokio::test]
+    async fn a_gif_a_size_to_fit_and_even_loudness() {
+        let Some(ffmpeg) = std::env::var_os("CHAYA_FFMPEG").map(PathBuf::from) else {
+            eprintln!("skipped: no CHAYA_FFMPEG");
+            return;
+        };
+        let video = Path::new(env!("CARGO_MANIFEST_DIR")).join("../app/tour/fixtures/A walk in the park.mp4");
+        let dir = tempfile::tempdir().unwrap();
+        let (_tx, stop) = watch::channel(false);
+        let lines = walk();
+        let base = |out: &'static str| Job {
+            video: &video,
+            start: 5_000,
+            end: 11_000,
+            quality: Quality::P720,
+            burn: None,
+            fit: None,
+            even_loudness: false,
+            gif: false,
+            out: Box::leak(Box::new(dir.path().join(out))),
+            work: Box::leak(Box::new(dir.path().join(format!("work-{out}")))),
+        };
+
+        let gif = Job {
+            gif: true,
+            burn: Some(Burn {
+                look: Look::Outline,
+                first: Language { lines: &lines, style: Style::default() },
+                second: None,
+                second_on_top: false,
+            }),
+            ..base("clip.gif")
+        };
+        assert_eq!(export(&ffmpeg, &gif, &[Encoder::Mpeg4], None, &stop, &mut |_| {}).await, Ok(Encoder::Gif));
+        let bytes = std::fs::read(gif.out).unwrap();
+        assert!(bytes.starts_with(b"GIF89a"), "a GIF");
+        // As wide as the video (320 is less than 480), at its own shape.
+        assert_eq!((u16::from_le_bytes([bytes[6], bytes[7]]), u16::from_le_bytes([bytes[8], bytes[9]])), (320, 180));
+        let long = Job { gif: true, end: 5_000 + LONGEST_GIF + 1_000, ..base("long.gif") };
+        assert!(matches!(
+            export(&ffmpeg, &long, &[Encoder::Mpeg4], None, &stop, &mut |_| {}).await,
+            Err(ExportError::Unfit(_))
+        ));
+
+        // Room to spare: no bigger than the usual bit rate makes it, not the whole 50 MB.
+        let roomy = Job { fit: Some(50_000_000), ..base("roomy.mp4") };
+        export(&ffmpeg, &roomy, &[Encoder::Mpeg4], None, &stop, &mut |_| {}).await.unwrap();
+        let roomy = std::fs::metadata(roomy.out).unwrap().len();
+        assert!(roomy < 5_000_000, "{roomy} bytes");
+        let fitted = Job { fit: Some(250_000), ..base("fitted.mp4") };
+        assert_eq!(export(&ffmpeg, &fitted, &[Encoder::Mpeg4], None, &stop, &mut |_| {}).await, Ok(Encoder::Mpeg4));
+        let size = std::fs::metadata(fitted.out).unwrap().len();
+        assert!(size <= 250_000, "{size} bytes");
+        assert!(probe(&ffmpeg, fitted.out).await.unwrap().duration.is_some_and(|d| (5_800..=6_200).contains(&d)));
+        let too_long = Job { fit: Some(20_000), ..base("too-long.mp4") };
+        assert!(matches!(
+            export(&ffmpeg, &too_long, &[Encoder::Mpeg4], None, &stop, &mut |_| {}).await,
+            Err(ExportError::Unfit(_))
+        ));
+
+        let even = Job { even_loudness: true, ..base("even.mp4") };
+        assert_eq!(export(&ffmpeg, &even, &[Encoder::Mpeg4], None, &stop, &mut |_| {}).await, Ok(Encoder::Mpeg4));
+        assert!(probe(&ffmpeg, even.out).await.unwrap().sound);
+    }
+
     /// With CI's ffmpeg: every encoder it has tried in turn, an encoder that fails handing on to the next. On Linux
     /// there is no h264_mf, so the first two fail as on a PC without them; on Windows, the one that worked is said.
     #[tokio::test]
@@ -738,6 +1040,9 @@ mod tests {
             end: 2_000,
             quality: Quality::Original,
             burn: None,
+            fit: None,
+            even_loudness: false,
+            gif: false,
             out: &out,
             work: dir.path(),
         };

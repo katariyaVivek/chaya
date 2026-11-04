@@ -201,6 +201,15 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
   `videos/ID.json` (the right way round, at least half a second, inside the video, named, the same range kept
   once; overlapping clips are both kept), and writes that file under a lock, so a translation's batch and a clip
   changed at the same moment both stay.
+- **Export options** (`core::export::fit`, `srt_together`, the GIF path). *Fit in* 10, 25 or 50 MB makes a video fit:
+  the bit rate from the clip's length (a twentieth kept for the file's own parts; 64, 96 or 128 kb/s of sound, less
+  for a small file), the picture made smaller (1080, 720, 540, 480, 360, 240 on its narrow side) until each pixel has
+  enough, and a file still too big made again with as much less as it was over (three tries). It is a ceiling: with
+  room to spare the usual bit rate is kept. A clip too long for the size says so. *Even loudness* brings the sound to
+  -16 LUFS (EBU R128, `loudnorm`), as podcasts and streaming services have it. *GIF* saves a clip up to a minute long
+  as an animated GIF at 12 frames a second, 480 (720p) or 640 (1080p) pixels wide, its subtitles drawn on, with a
+  palette made for that clip so it isn't muddy, and no sound. *Subtitle files* in two languages may be *One with
+  both*: each line with the other language's under it, "Video - Clip (en + fr).srt".
 - **Export, the engine** (`core::export`, `app/src-tauri/src/export.rs`). A clip saved as a video is cut exactly from
   the clip's first moment (`-ss` before the input, decoded from the keyframe before and dropped up to it), scaled to
   720p or 1080p (never larger than it was; a standing phone video is 720 wide) or left as it is, with its subtitles

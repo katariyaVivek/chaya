@@ -21,6 +21,7 @@ import {
   baseName,
   keyOf,
   isRunning,
+  gifTooLong,
 } from '../ui/export.js';
 
 const clips = [
@@ -67,7 +68,49 @@ test('the save, look and quality chosen last time come back; anything else is th
   const plain = firstChoice({ clips, tracks: ['en'], shown: 'en', kept: { look: 'neon', quality: '4k' } });
   assert.deepEqual([plain.saveAs, plain.look, plain.quality], ['video', 'outline', 'p1080']);
   assert.equal(firstChoice({ clips, tracks: [], kept }).saveAs, 'video', 'no subtitles to save as SRT');
-  assert.deepEqual(keptOf({ ...choice, subtitles: 'two' }), { saveAs: 'srt', subtitles: 'some', look: 'large', quality: 'p720' });
+  assert.deepEqual(keptOf({ ...choice, subtitles: 'two' }), {
+    saveAs: 'srt',
+    subtitles: 'some',
+    look: 'large',
+    quality: 'p720',
+    fit: null,
+    even: false,
+    together: false,
+  });
+});
+
+test('a size to fit and even loudness go with a video, and are remembered', () => {
+  const choice = firstChoice({ clips, tracks: ['en'], shown: 'en', kept: { fit: 25, even: true } });
+  assert.deepEqual([choice.fit, choice.even], [25, true]);
+  assert.deepEqual([optionsOf(choice, styleOf).fit, optionsOf(choice, styleOf).evenLoudness], [25, true]);
+  assert.equal(firstChoice({ clips, kept: { fit: 13 } }).fit, null, 'only the sizes offered');
+  const gif = changed(choice, { saveAs: 'gif' }, ['en']);
+  assert.deepEqual([optionsOf(gif, styleOf).fit, optionsOf(gif, styleOf).evenLoudness], [null, false], 'a GIF has neither');
+  assert.deepEqual([keptOf(choice).fit, keptOf(choice).even], [25, true]);
+});
+
+test('a GIF keeps its subtitles, says so, and is refused for a clip longer than a minute', () => {
+  const choice = changed(firstChoice({ clips, tracks: ['en'], shown: 'en' }), { saveAs: 'gif' }, ['en']);
+  assert.equal(optionsOf(choice, styleOf).subtitles[0].language, 'en');
+  assert.equal(exportLabel(choice, 1), 'Export GIF');
+  assert.equal(exportLabel(choice, 3), 'Export 3 GIFs');
+  assert.match(whereNote(choice, 'A walk', 'Into the park'), /“A walk - Into the park\.gif”/);
+  assert.equal(firstChoice({ clips, tracks: [], kept: { saveAs: 'gif' } }).saveAs, 'gif', 'no subtitles needed');
+  assert.equal(gifTooLong(clips), null);
+  assert.match(gifTooLong([{ name: 'Whole talk', start: 0, end: 61_000 }]), /Whole talk/);
+  assert.equal(encoderWords('gif'), 'GIF');
+});
+
+test('two languages as subtitle files go in one file when asked, both named', () => {
+  let choice = firstChoice({ clips, tracks: ['en', 'fr'], shown: 'en', second: 'fr', kept: { saveAs: 'srt' } });
+  assert.deepEqual(choice.srt, ['en', 'fr']);
+  assert.equal(exportLabel(choice, 2), 'Export 4 subtitle files');
+  choice = changed(choice, { together: true }, ['en', 'fr']);
+  assert.equal(optionsOf(choice, styleOf).together, true);
+  assert.equal(exportLabel(choice, 2), 'Export 2 subtitle files', 'one for each clip');
+  assert.match(whereNote(choice, 'A walk', 'Into the park'), /“A walk - Into the park \(en \+ fr\)\.srt”/);
+  choice = toggledSrt(choice, 'fr', ['en', 'fr']);
+  assert.equal(optionsOf(choice, styleOf).together, false, 'one language is one file anyway');
 });
 
 test('SRT offers the languages shown, and keeps one at least', () => {
@@ -107,6 +150,9 @@ test('the options for a video name its languages and their styles as the app tak
       { language: 'fr', style: { color: 'white', font: 'sans', size: 'M' } },
     ],
     secondOnTop: true,
+    fit: null,
+    evenLoudness: false,
+    together: false,
   });
   choice = changed(choice, { subtitles: 'one' }, tracks);
   assert.deepEqual(optionsOf(choice, styleOf).subtitles.map((s) => s.language), ['en']);

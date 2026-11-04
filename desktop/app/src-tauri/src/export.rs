@@ -32,12 +32,22 @@ pub struct Options {
     pub subtitles: Vec<Chosen>,
     #[serde(default)]
     pub second_on_top: bool,
+    /// A size the video must fit in, in megabytes (10 for Discord, 25 for e-mail), when one was chosen.
+    #[serde(default)]
+    pub fit: Option<u32>,
+    /// The sound's loudness evened.
+    #[serde(default)]
+    pub even_loudness: bool,
+    /// For SRT in two languages: one file with both, each line over the other, in place of a file for each.
+    #[serde(default)]
+    pub together: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum SaveAs {
     Video,
+    Gif,
     Srt,
 }
 
@@ -189,6 +199,19 @@ impl Exporting {
                 .ok_or_else(|| failed("Those subtitles aren't next to the video any more."))
         };
 
+        if options.save_as == SaveAs::Srt && options.together && options.subtitles.len() == 2 {
+            let (one, two) = (track(&options.subtitles[0])?, track(&options.subtitles[1])?);
+            let both = format!(
+                "{} ({} + {})",
+                clip.name,
+                language_or(&options.subtitles[0]),
+                language_or(&options.subtitles[1])
+            );
+            let path = export::file_for(&folder, &task.title, &both, "srt");
+            let text = export::srt_together(&one.lines, &two.lines, options.second_on_top, clip.start, clip.end);
+            std::fs::write(&path, text).map_err(|_| ExportError::CantWrite)?;
+            return Ok((path, None));
+        }
         if options.save_as == SaveAs::Srt {
             let chosen = options.subtitles.first().ok_or_else(|| failed("Choose the subtitles to save."))?;
             let lines = &track(chosen)?.lines;
@@ -217,7 +240,8 @@ impl Exporting {
             second: second.map(|second| Language { lines: &second.lines, style: options.subtitles[1].style }),
             second_on_top: options.second_on_top,
         });
-        let out = export::file_for(&folder, &task.title, &clip.name, "mp4");
+        let gif = options.save_as == SaveAs::Gif;
+        let out = export::file_for(&folder, &task.title, &clip.name, if gif { "gif" } else { "mp4" });
         let work = app.path().app_cache_dir().map_err(|_| ExportError::CantWrite)?.join("export").join(job.to_string());
         let job_of = Job {
             video: &task.path,
@@ -225,6 +249,10 @@ impl Exporting {
             end: clip.end,
             quality: options.quality,
             burn,
+            // Megabytes as a size limit is said: a million bytes each, under what a site means by it either way.
+            fit: options.fit.filter(|_| !gif).map(|mb| u64::from(mb.clamp(1, 4_000)) * 1_000_000),
+            even_loudness: options.even_loudness,
+            gif,
             out: &out,
             work: &work,
         };
@@ -240,6 +268,15 @@ impl Exporting {
             encoders.retain(|e| e == &encoder || !preceding(encoders_order(), e, &encoder));
         }
         Ok((out, Some(encoder)))
+    }
+}
+
+/// A language's code for a file's name ("en"), or "subtitles" for a file that names none.
+fn language_or(chosen: &Chosen) -> &str {
+    if chosen.language.is_empty() {
+        "subtitles"
+    } else {
+        &chosen.language
     }
 }
 
@@ -268,7 +305,7 @@ pub fn export_clips(
     if options.save_as == SaveAs::Srt && options.subtitles.is_empty() {
         return Err("Choose the subtitles to save.".into());
     }
-    if options.subtitles.len() > 2 && options.save_as == SaveAs::Video {
+    if options.subtitles.len() > 2 && options.save_as != SaveAs::Srt {
         return Err("A video shows two languages at most.".into());
     }
     let kept = videos.load(id).clips;
@@ -276,7 +313,10 @@ pub fn export_clips(
     for clip in clips {
         let Some(found) = kept.iter().find(|c| c.id == clip) else { continue };
         match options.save_as {
-            SaveAs::Video => jobs.push(exporting.queue(&app, id, clip, &found.name, options.clone())),
+            SaveAs::Video | SaveAs::Gif => jobs.push(exporting.queue(&app, id, clip, &found.name, options.clone())),
+            SaveAs::Srt if options.together && options.subtitles.len() == 2 => {
+                jobs.push(exporting.queue(&app, id, clip, &found.name, options.clone()))
+            }
             SaveAs::Srt => {
                 for chosen in &options.subtitles {
                     let one = Options { subtitles: vec![chosen.clone()], ..options.clone() };
@@ -348,7 +388,13 @@ mod tests {
         assert!(options.second_on_top);
         assert_eq!(options.subtitles[0].style.size, export::Size::Xl);
         assert_eq!(options.subtitles[1].style, Style::default());
-        assert!(serde_json::from_str::<Options>(r#"{"saveAs": "gif", "quality": "p720", "look": "outline"}"#).is_err());
+        assert!(serde_json::from_str::<Options>(r#"{"saveAs": "webm", "quality": "p720", "look": "outline"}"#).is_err());
+        let gif: Options = serde_json::from_str(
+            r#"{"saveAs": "gif", "quality": "p720", "look": "outline", "fit": 10, "evenLoudness": true, "together": true}"#,
+        )
+        .unwrap();
+        assert_eq!((gif.save_as, gif.fit, gif.even_loudness, gif.together), (SaveAs::Gif, Some(10), true, true));
+        assert_eq!(options.fit, None, "no size to fit unless chosen");
     }
 
     #[test]

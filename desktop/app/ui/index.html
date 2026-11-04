@@ -539,6 +539,7 @@
       <p class="settings__label" id="export-as-label">Save as</p>
       <div class="seg" role="group" aria-labelledby="export-as-label" id="export-as">
         <button type="button" data-save-as="video">Video</button>
+        <button type="button" data-save-as="gif" title="An animated GIF, without sound, for a clip up to a minute">GIF</button>
         <button type="button" data-save-as="srt">Subtitle files (SRT)</button>
       </div>
       <p class="settings__label" id="export-subtitles-label" data-for="video">Subtitles</p>
@@ -557,8 +558,25 @@
         <button type="button" data-quality="p1080">1080p</button>
         <button type="button" data-quality="original">Original</button>
       </div>
+      <p class="settings__label" id="export-fit-label">Fit in</p>
+      <div class="seg seg--wrap" role="group" aria-labelledby="export-fit-label" id="export-fit">
+        <button type="button" data-fit="">Any size</button>
+        <button type="button" data-fit="10" title="Discord's limit: the picture is made smaller if it must be">10 MB</button>
+        <button type="button" data-fit="25" title="E-mail's limit: the picture is made smaller if it must be">25 MB</button>
+        <button type="button" data-fit="50" title="The picture is made smaller if it must be">50 MB</button>
+      </div>
+      <p class="settings__label" id="export-sound-label">Sound</p>
+      <div class="seg" role="group" aria-labelledby="export-sound-label" id="export-sound">
+        <button type="button" data-even="no">As it is</button>
+        <button type="button" data-even="yes" title="Brought to a steady level, as streaming services and podcasts have it">Even loudness</button>
+      </div>
       <p class="settings__label" id="export-srt-label" data-for="srt">Languages</p>
       <div class="seg seg--wrap" role="group" aria-labelledby="export-srt-label" id="export-srt" data-for="srt"></div>
+      <p class="settings__label" id="export-together-label">Files</p>
+      <div class="seg" role="group" aria-labelledby="export-together-label" id="export-together">
+        <button type="button" data-together="no">One for each language</button>
+        <button type="button" data-together="yes">One with both</button>
+      </div>
     </div>
     <p class="export__where" id="export-where"></p>
     <p class="export__error" id="export-error" role="alert" hidden></p>

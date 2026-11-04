@@ -18,6 +18,7 @@ import {
   progressWords,
   noticeOf,
   keyOf,
+  gifTooLong,
 } from './export.js';
 import { lineSearch } from './search.js';
 import { ownVideos } from './own.js';
@@ -4073,6 +4074,8 @@ function showExport() {
   const ids = clipIds(choice, playing.clips, playing.cut);
   const chosen = cutClip();
   const video = choice.saveAs === 'video';
+  // A GIF has a picture, and so subtitles drawn on it and a look, but no sound, size or quality to choose.
+  const picture = choice.saveAs !== 'srt';
   const length = (list) => clock(Math.round(list.reduce((sum, c) => sum + (c.end - c.start), 0) / 1000));
 
   // Clips: the one chosen on the timeline, or all of them.
@@ -4091,7 +4094,7 @@ function showExport() {
   // Save as: a video, or subtitle files, which need subtitles.
   for (const button of document.querySelectorAll('#export-as [data-save-as]')) {
     button.setAttribute('aria-pressed', String(button.dataset.saveAs === choice.saveAs));
-    const offered = button.dataset.saveAs === 'video' || tracks.length > 0;
+    const offered = button.dataset.saveAs !== 'srt' || tracks.length > 0;
     button.disabled = !offered;
     button.title = offered ? '' : 'This video has no subtitles yet';
   }
@@ -4110,14 +4113,26 @@ function showExport() {
       exportSeg('subtitles', 'export-subtitles-label', options, choice.subtitles, (subtitles) => chooseExport({ subtitles })),
     );
   }
-  const burned = video && choice.subtitles !== 'none';
-  exportRow('export-subtitles', video);
+  const burned = picture && choice.subtitles !== 'none';
+  exportRow('export-subtitles', picture);
   exportRow('export-first', burned && tracks.length > 1);
-  exportRow('export-second', video && choice.subtitles === 'two' && tracks.length > 2);
-  exportRow('export-top', video && choice.subtitles === 'two');
+  exportRow('export-second', picture && choice.subtitles === 'two' && tracks.length > 2);
+  exportRow('export-top', picture && choice.subtitles === 'two');
   exportRow('export-look', burned);
   exportRow('export-quality', video);
-  exportRow('export-srt', !video && tracks.length > 1);
+  exportRow('export-fit', video);
+  exportRow('export-sound', video);
+  exportRow('export-srt', choice.saveAs === 'srt' && tracks.length > 1);
+  exportRow('export-together', choice.saveAs === 'srt' && choice.srt.length === 2);
+  for (const button of document.querySelectorAll('#export-fit [data-fit]')) {
+    button.setAttribute('aria-pressed', String(button.dataset.fit === String(choice.fit ?? '')));
+  }
+  for (const button of document.querySelectorAll('#export-sound [data-even]')) {
+    button.setAttribute('aria-pressed', String((button.dataset.even === 'yes') === choice.even));
+  }
+  for (const button of document.querySelectorAll('#export-together [data-together]')) {
+    button.setAttribute('aria-pressed', String((button.dataset.together === 'yes') === choice.together));
+  }
   document.getElementById('export-first-label').textContent = choice.subtitles === 'two' ? 'Main language' : 'Language';
   refill(
     document.getElementById('export-first'),
@@ -4159,6 +4174,17 @@ function showExport() {
   const first = playing.clips.find((c) => c.id === ids[0]);
   document.getElementById('export-where').textContent = whereNote(choice, title, first?.name ?? '');
   exportGo.textContent = exportLabel(choice, ids.length);
+  // A GIF of a clip longer than a minute is refused here, before the app would.
+  const tooLong = choice.saveAs === 'gif' ? gifTooLong(playing.clips.filter((c) => ids.includes(c.id))) : null;
+  if (tooLong) {
+    exportError.textContent = tooLong;
+    exportError.hidden = false;
+    exportError.dataset.gif = 'yes';
+  } else if (exportError.dataset.gif) {
+    exportError.hidden = true;
+    delete exportError.dataset.gif;
+  }
+  exportGo.disabled = !!tooLong;
 
   // The focus back on the button it was on, drawn anew; on the sheet, if that button has gone.
   if (focused !== undefined) {
@@ -4245,6 +4271,18 @@ document.getElementById('export-as').addEventListener('click', (e) => {
 document.getElementById('export-quality').addEventListener('click', (e) => {
   const button = e.target.closest('[data-quality]');
   if (button) chooseExport({ quality: button.dataset.quality });
+});
+document.getElementById('export-fit').addEventListener('click', (e) => {
+  const button = e.target.closest('[data-fit]');
+  if (button) chooseExport({ fit: button.dataset.fit ? Number(button.dataset.fit) : null });
+});
+document.getElementById('export-sound').addEventListener('click', (e) => {
+  const button = e.target.closest('[data-even]');
+  if (button) chooseExport({ even: button.dataset.even === 'yes' });
+});
+document.getElementById('export-together').addEventListener('click', (e) => {
+  const button = e.target.closest('[data-together]');
+  if (button) chooseExport({ together: button.dataset.together === 'yes' });
 });
 
 // ── Exports going, and the notices when they end ──
