@@ -392,6 +392,16 @@ a built-in browser. [`../desktop/README.md`](../desktop/README.md) has the layou
   once and checks the others in each line found; at most 200 lines come back with the ranges matched, in UTF-16
   units. Tested in the core (folding, words, marks, order, the cap, the refresh) and with Node (marks into pieces,
   grouping, the heading).
+- **Chapters** (`chaya-core`'s `chapters`, `desktop/app/ui/chapters.js`): the engine lists a video's chapters with its
+  subtitles (`--subtitles`, so the phone never gets them); `chapters::read` puts them in order and inside the video,
+  `Videos::keep_chapters` keeps them in `videos/ID.json` when a link's video is saved, and the window draws them on the
+  seek bar and the timeline, where clip edges snap to them (`snapEdges`). Tested in the core, the engine and with Node.
+- **Copied links** (`chaya-core`'s `copied`, `desktop/app/src-tauri/src/copied.rs`): an opt-in Ctrl+Alt+D, Windows'
+  own global key through `tauri-plugin-global-shortcut`, registered from Rust only while it is on (the window has none
+  of the plugin's commands). Pressed, the clipboard's text is read with Windows' clipboard calls, `copied::link_in`
+  finds the link, `copied::choose` the quality, and `save_media` (shared with the Download button) saves it; the
+  window hears `copied-link` events. Tested in the core (links in text, the quality chosen, the setting), with the
+  window in Chromium, and on the Windows runner, where the tour presses the key itself.
 - `desktop/app/src-tauri` hands `chaya-core` to the window as commands (`recognise_link`, `look_up`,
   `download` and the download controls) and sends it `download` events. The window
   may call only those and set its title bar's theme (`capabilities/default.json`). Its content

@@ -201,6 +201,15 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
   `videos/ID.json` (the right way round, at least half a second, inside the video, named, the same range kept
   once; overlapping clips are both kept), and writes that file under a lock, so a translation's batch and a clip
   changed at the same moment both stay.
+- **Copied links** (`core::copied`, `app/src-tauri/src/copied.rs`). Settings › Copied links, off until the person
+  turns it on: then Ctrl+Alt+D, from anywhere in Windows (`tauri-plugin-global-shortcut`, registered only while it is
+  on), reads the text on the clipboard (Windows' own clipboard calls, at that moment only), finds the first link to a
+  video or post in it, even in a sentence or brackets, and saves it at the quality chosen: *Best*, *Up to 1080p*, *Up
+  to 720p* (the smallest there is when every quality is larger) or *Sound only*; a post with pictures is saved whole.
+  A notice says what is being saved, and Chaya's taskbar button lights up when it is not in front. With nothing to
+  save the notice says so; a link the setting can't save on its own (a sign-in, a video without its sound alone) comes
+  forward as if pasted, its card offering what it can. When another app holds Ctrl+Alt+D, Settings says so. The
+  Windows tour presses the key itself (with words, the pin's link, and the YouTube link copied).
 - **Chapters** (`core::chapters`, `app/ui/chapters.js`). A video's chapters as its maker named them on the site
   (YouTube's, from the times in its description), which the engine lists with the video's subtitles, are kept with the
   saved video (`videos/ID.json`) when a link's video is saved; the sound alone has none, and a video saved from a page,

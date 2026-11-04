@@ -85,6 +85,24 @@
         </div>
         <p class="settings__credit">Chaya listens on this PC; nothing is uploaded. A model is fetched once, from Hugging Face, the first time it's used.</p>
       </div>
+      <div class="settings__copied" id="settings-copied">
+        <p class="settings__label" id="copied-label">Copied links</p>
+        <div class="seg" role="group" aria-labelledby="copied-label" id="copied-on">
+          <button type="button" data-copied="false">Off</button>
+          <button type="button" data-copied="true"><span class="num" id="copied-key">Ctrl+Alt+D</span> saves them</button>
+        </div>
+        <div id="copied-quality-box" hidden>
+          <p class="settings__label" id="copied-quality-label">At</p>
+          <div class="seg" role="group" aria-labelledby="copied-quality-label" id="copied-quality">
+            <button type="button" data-wanted="best">Best</button>
+            <button type="button" data-wanted="upTo1080">Up to 1080p</button>
+            <button type="button" data-wanted="upTo720">Up to 720p</button>
+            <button type="button" data-wanted="sound">Sound only</button>
+          </div>
+        </div>
+        <p class="settings__note text-sm" id="copied-note" aria-live="polite" hidden></p>
+        <p class="settings__credit">Copy a link to a video or post anywhere, press the key, and Chaya saves it without coming to the front. What you copied is read only when you press it.</p>
+      </div>
       <div class="settings__ai" id="settings-ai">
         <label class="settings__label" for="ai-service">AI model</label>
         <select class="select" id="ai-service"></select>

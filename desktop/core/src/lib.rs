@@ -5,6 +5,7 @@ pub mod ai;
 pub mod browse;
 pub mod chapters;
 pub mod clips;
+pub mod copied;
 pub mod download;
 pub mod engine;
 pub mod export;

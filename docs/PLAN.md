@@ -265,7 +265,8 @@ finds "walk" in the clip's lines and opens it at 0:25.
 - **Export options:** a size to fit (10, 25 or 50 MB), a GIF, even loudness, both languages in one subtitle file. Done.
 - **Chapters:** a video's chapters from the site, on the seek bar (Ctrl+← and Ctrl+→ between them) and on the
   timeline, where clip edges snap to them, and made into clips in one click. Done.
-- Next from the same list: an opt-in hotkey that downloads the link just copied.
+- **Copied links:** an opt-in Ctrl+Alt+D that saves the link just copied, from anywhere in Windows, at the quality
+  chosen. Done; that list is finished.
 
 ## Later, perhaps
 

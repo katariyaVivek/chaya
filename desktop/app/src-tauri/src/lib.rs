@@ -5,6 +5,7 @@ mod ads;
 mod ai;
 mod browser;
 mod clips;
+mod copied;
 mod export;
 mod fix;
 mod highlights;
@@ -180,20 +181,28 @@ async fn download(
 ) -> Result<Vec<TaskView>, String> {
     let link = links::match_media(&url).ok_or_else(|| FailureKind::Unsupported.message().to_string())?;
     let media = lookups.media(link.url.clone(), false).await.map_err(|f| f.kind.message().to_string())?;
-    let plans = plan(&media, &choice, &link.url, &downloads.folder, |f| downloads.can_join(f), downloads.joins)
-        .ok_or_else(|| "This choice can't be saved any more. Look the link up again.".to_string())?;
-    Ok(plans
-        .into_iter()
-        .map(|p| {
-            let video = p.kind == Kind::Video;
-            let task = downloads.manager.add(p);
-            // A video's chapters, for its seek bar and timeline; the sound alone has neither.
-            if video {
-                let _ = videos.keep_chapters(task.id, &media.chapters);
-            }
-            TaskView::from(&task)
-        })
-        .collect())
+    save_media(&media, &choice, &link.url, &downloads, &videos)
+        .ok_or_else(|| "This choice can't be saved any more. Look the link up again.".to_string())
+}
+
+/// Starts saving `choice` of `media`, looked up at `url`: what the Download button and the copied-link key both do.
+/// `None` when there is no such choice, or not one the app can save.
+fn save_media(media: &Media, choice: &str, url: &str, downloads: &Downloads, videos: &Videos) -> Option<Vec<TaskView>> {
+    let plans = plan(media, choice, url, &downloads.folder, |f| downloads.can_join(f), downloads.joins)?;
+    Some(
+        plans
+            .into_iter()
+            .map(|p| {
+                let video = p.kind == Kind::Video;
+                let task = downloads.manager.add(p);
+                // A video's chapters, for its seek bar and timeline; the sound alone has neither.
+                if video {
+                    let _ = videos.keep_chapters(task.id, &media.chapters);
+                }
+                TaskView::from(&task)
+            })
+            .collect(),
+    )
 }
 
 /// Whether the browser holds the person's sign-in for the account's site at `url`, for the account card to offer
@@ -456,6 +465,9 @@ pub fn run() {
         // Windows' file picker, for *Add from this PC*: opened by the app (`own::choose_own_videos`), so the window
         // is granted none of the plugin's commands.
         .plugin(tauri_plugin_dialog::init())
+        // The copied-link key (`copied.rs`), registered by the app only while the person has it on; the window is
+        // granted none of the plugin's commands.
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .register_asynchronous_uri_scheme_protocol("chaya-file", |ctx, request, responder| {
             let (app, from) = (ctx.app_handle().clone(), ctx.webview_label().to_string());
             // Read off the window's thread: a picture, or a part of a video, can be many megabytes.
@@ -523,6 +535,7 @@ pub fn run() {
             if let Some(main) = app.get_webview_window("main") {
                 window::place(&main, app.path().app_data_dir()?.join("window.json"));
             }
+            app.manage(copied::Copied::start(app.handle(), app.path().app_data_dir()?));
             app.manage(update::Updates::default());
             update::start(app.handle(), app.path().app_data_dir()?.join("update.json"));
             Ok(())
@@ -605,6 +618,8 @@ pub fn run() {
             ads::ad_blocking,
             ads::block_ads,
             ads::allow_ads_on,
+            copied::copied_link,
+            copied::set_copied_link,
         ])
         .run(tauri::generate_context!())
         .expect("the window could not be opened");

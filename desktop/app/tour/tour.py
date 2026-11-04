@@ -832,6 +832,67 @@ def chapters(tour, id):
     tour.wait(lambda: tour.js("return document.getElementById('player').hidden"), 5)
 
 
+def copy_text(text):
+    """Puts `text` on Windows' clipboard, as copying it would."""
+    subprocess.run(['powershell', '-NoProfile', '-Command', 'Set-Clipboard -Value $env:CHAYA_COPIED'],
+                   env={**os.environ, 'CHAYA_COPIED': text}, check=True, timeout=30)
+
+
+def press_copied_key():
+    """Ctrl+Alt+D, pressed on the keyboard: Windows hands it to whichever app registered it."""
+    import ctypes
+    user32 = ctypes.windll.user32
+    for key in (0x11, 0x12, 0x44):  # Ctrl, Alt, D
+        user32.keybd_event(key, 0, 0, 0)
+    for key in (0x44, 0x12, 0x11):
+        user32.keybd_event(key, 0, 2, 0)  # KEYEVENTF_KEYUP
+
+
+def copied_links(tour, sites):
+    """Settings › Copied links turned on, at 720p at most; then the key pressed three times: with words copied (nothing
+    to save), with the pin's link (saved: a row in the list, the notice says so) and with the YouTube video's (the
+    runner's lookup meets YouTube's bot check, so the link is shown as if pasted, its card offering the sign-in). The
+    pin's download is cancelled, and the setting turned off, so the steps after see the list as it was."""
+    tour.click('#settings-button')
+    tour.wait(lambda: tour.js("return !document.getElementById('settings-panel').hidden"), 5)
+    tour.click('#settings-copied [data-copied="true"]')
+    tour.wait(lambda: tour.js("return !document.getElementById('copied-quality-box').hidden"), 5)
+    tour.click('#settings-copied [data-wanted="upTo720"]')
+    time.sleep(0.5)
+    setting = tour.js("return [...document.querySelectorAll('#settings-copied [aria-pressed=\"true\"]')].map(b => b.textContent)")
+    problem = tour.js("const n = document.getElementById('copied-note'); return n.hidden ? '' : n.textContent")
+    tour.js("document.getElementById('settings-copied').scrollIntoView(); return 1")
+    tour.shot('copied-links-setting', setting=setting, problem=problem)
+    tour.click('#settings-button')
+    toasts = "return [...document.querySelectorAll('#toasts .toast')].map(t => t.innerText.replace(/\\n+/g, ' / '))"
+    rows = "return [...document.querySelectorAll('#download-list .row')].map(r => r.dataset.id)"
+    before = tour.js(rows) or []
+
+    copy_text('Nothing to save in these words')
+    press_copied_key()
+    nothing = tour.wait(lambda: [t for t in tour.js(toasts) or [] if t.startswith('Nothing to save')], 15)
+
+    copy_text(f"Look at this pin: {sites['pin']}")
+    press_copied_key()
+    saving = tour.wait(lambda: [t for t in tour.js(toasts) or [] if t.startswith('Saving')], 120)
+    added = tour.wait(lambda: [r for r in tour.js(rows) or [] if r not in before], 20) or []
+    row = tour.js(f"return document.querySelector('#download-list .row[data-id=\"{added[0]}\"]')?.innerText ?? ''") if added else ''
+    tour.shot('copied-link-saved', nothing=nothing, saving=saving, row=row)
+    for id in added:
+        tour.js(f"window.__TAURI__.core.invoke('cancel_download', {{ id: {id} }}); return 1")
+
+    copy_text(sites['youtube'])
+    press_copied_key()
+    shown = tour.wait(lambda: tour.js("return document.getElementById('address').value") == sites['youtube'], 120)
+    card = tour.wait(lambda: looked_up(tour) and tour.card_text(), 120) or ''
+    tour.shot('copied-link-shown', address=bool(shown), card=card[:300])
+
+    tour.click('#settings-button')
+    tour.click('#settings-copied [data-copied="false"]')
+    tour.click('#settings-button')
+    tour.js("document.getElementById('result').replaceChildren(); document.getElementById('address').value = ''; return 1")
+
+
 def search_lines(tour, clip):
     """Ctrl+F in the Downloads list, then "walk": the tour clip's lines that say it, marked, below the titles; the
     last ("The end of the walk.", at 25 s) clicked opens the clip in the player there."""
@@ -1015,6 +1076,13 @@ def run(tour, sites, seeded=None):
         tour.shot('pin-looked-up', card=tour.card_text()[:400], found=found)
     except Exception as e:
         tour.failed('pin-looked-up', e)
+
+    # Ctrl+Alt+D, turned on in Settings, saves the link just copied, from anywhere in Windows.
+    if os.name == 'nt':
+        try:
+            copied_links(tour, sites)
+        except Exception as e:
+            tour.failed('copied-links', e)
 
     # A page in the built-in browser: where it sits in the window.
     for name, key, wait in (('page', 'page', 8), ('page-with-video', 'video_page', 12), ('news', 'news', 12)):
