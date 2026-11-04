@@ -20,8 +20,8 @@ pictures.
 
 `--sites` swaps the internet's addresses for others (a local test site, when trying the tour off Windows). `--seed`
 puts two saved videos in place before the app starts (`fixtures/`: a 30-second clip with its English subtitles, and
-the JFK sample whisper.cpp ships, with none; and their entries in the Downloads list), for the player's step and for
-making subtitles on the PC. It writes into the person's own Downloads folder and Chaya's own
+the JFK sample whisper.cpp ships, with none but with three chapters, as a site would have named them; and their
+entries in the Downloads list), for the player's step, for making subtitles on the PC, and for the chapters. It writes into the person's own Downloads folder and Chaya's own
 data folder, so only on a machine kept for the tour (CI's).
 """
 
@@ -257,7 +257,25 @@ class Tour:
 def seed_saved_videos():
     """The tour's clips in Downloads, the first with its subtitles, each listed as a finished download in Chaya's data
     folder (as the app keeps them: `downloads.json` in %APPDATA%\\com.chaya.desktop). Their numbers."""
-    return seed_saved_video(CLIP, [f'{CLIP}.en.srt']), seed_saved_video(SPEECH, [])
+    clip = seed_saved_video(CLIP, [f'{CLIP}.en.srt'])
+    speech = seed_saved_video(SPEECH, [])
+    seed_chapters(speech)
+    return clip, speech
+
+
+# The JFK sample's chapters, as YouTube would list them from times in its description (milliseconds).
+CHAPTERS = [
+    {'start': 0, 'end': 3_000, 'title': 'And so'},
+    {'start': 3_000, 'end': 7_500, 'title': 'Ask not'},
+    {'start': 7_500, 'end': 11_000, 'title': 'Ask what you can do'},
+]
+
+
+def seed_chapters(id):
+    """Chapters kept for download `id`, as the app keeps them when it saves a video that has some (`videos/ID.json`)."""
+    folder = data_folder() / 'videos'
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / f'{id}.json').write_text(json.dumps({'chapters': CHAPTERS}), encoding='utf-8')
 
 
 def data_folder():
@@ -776,6 +794,44 @@ def own_video(tour):
     print(f'own video removed: row gone {bool(gone)}, file kept {after == before}', flush=True)
 
 
+def chapters(tour, id):
+    """A saved video's chapters (seeded on the JFK sample): the seek bar broken where each begins, the one playing named
+    after the time, Ctrl+→ to the next and Ctrl+← back, their lane on the timeline in the Clips tab, and Add chapters to
+    clips making a clip of each."""
+    tour.js(f"document.querySelector('#download-list .row[data-id=\"{id}\"] .row__title').click(); return 1", gesture=True)
+    tour.wait(lambda: not tour.js("return document.getElementById('player').hidden"), 10)
+    tour.wait(lambda: tour.js("return document.querySelectorAll('#player-chapters .controls__divider').length"), 10)
+    tour.js("const v = document.getElementById('player-video'); v.pause(); v.currentTime = 1; return 1")
+    time.sleep(0.5)
+    label = "return document.getElementById('player-chapter').hidden ? '' : document.getElementById('player-chapter').textContent"
+    first = tour.js(label)
+    ctrl = ("document.getElementById('player-video').dispatchEvent(new KeyboardEvent('keydown',"
+            " {{key: '{}', ctrlKey: true, bubbles: true, cancelable: true}})); return 1")
+    tour.js(ctrl.format('ArrowRight'))
+    time.sleep(0.5)
+    after_next = (tour.js("return document.getElementById('player-video').currentTime"), tour.js(label))
+    tour.js(ctrl.format('ArrowRight'))
+    tour.js(ctrl.format('ArrowLeft'))
+    time.sleep(0.5)
+    after_back = tour.js("return document.getElementById('player-video').currentTime")
+    tour.click('#tab-clips')
+    tour.wait(lambda: tour.js("return !document.getElementById('cut-chapters').hidden"), 10)
+    lane = tour.js("return [...document.querySelectorAll('#cut-chapters .cut__chapter')].map(b => b.textContent)")
+    tour.shot('chapters', dividers=tour.js("return [...document.querySelectorAll('#player-chapters .controls__divider')]"
+                                           ".map(d => d.style.left)"),
+              first=first, next=after_next, back=after_back, lane=lane)
+    tour.click('#player-chapter-clips')
+    tour.wait(lambda: tour.js("return document.querySelectorAll('#player-clips .highlight').length >= 3"), 10)
+    clips = tour.js("return [...document.querySelectorAll('#player-clips .highlight')].map(b => b.innerText.replace(/\\n/g, ' | '))")
+    kept = json.loads((data_folder() / 'videos' / f'{id}.json').read_text(encoding='utf-8'))
+    tour.steps.append({'step': 'chapters-to-clips', 'clips': clips, 'chapters_kept': len(kept.get('chapters', []))})
+    print(f'chapters to clips: {json.dumps(clips, ensure_ascii=False)}, chapters kept {len(kept.get("chapters", []))}', flush=True)
+    tour.click('#tab-transcript')
+    tour.press_in_player('Escape')
+    tour.press_in_player('Escape')
+    tour.wait(lambda: tour.js("return document.getElementById('player').hidden"), 5)
+
+
 def search_lines(tour, clip):
     """Ctrl+F in the Downloads list, then "walk": the tour clip's lines that say it, marked, below the titles; the
     last ("The end of the walk.", at 25 s) clicked opens the clip in the player there."""
@@ -899,6 +955,11 @@ def run(tour, sites, seeded=None):
             make_subtitles(tour, speech)
         except Exception as e:
             tour.failed('make-subtitles', e)
+            tour.js("document.getElementById('player-close').click(); return 1")
+        try:
+            chapters(tour, speech)
+        except Exception as e:
+            tour.failed('chapters', e)
             tour.js("document.getElementById('player-close').click(); return 1")
         try:
             restored_tab(tour)

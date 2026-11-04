@@ -1,6 +1,7 @@
 //! What only Chaya keeps about a saved video, in its own data folder: one JSON file per video, named by the download's
 //! number as `downloads.json` numbers them ("videos/12.json"): where playback stopped, and what whisper.cpp heard in it,
-//! each word with its time, when Chaya made its subtitles; its translations, highlights and clips. What a later Chaya
+//! each word with its time, when Chaya made its subtitles; its translations, highlights and clips; and its chapters, as
+//! the site named them when it was saved. What a later Chaya
 //! wrote that this one does not know is kept as it was. Beside it, "videos/12.jpg" is the video's poster: a frame of it, which the window takes from the
 //! saved file, as a site's thumbnail address may stop working (Instagram's and TikTok's do within hours) or never was;
 //! and "videos/12.peaks", how loud its sound is (`sound`), which the clip timeline draws.
@@ -11,6 +12,7 @@ use std::sync::{Mutex, PoisonError};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
+use crate::chapters::Chapter;
 use crate::clips::{self, Clip, NewClip};
 use crate::highlights::Highlight;
 use crate::speech::whisper::{Device, Transcript};
@@ -50,6 +52,9 @@ pub struct VideoData {
     /// The parts of it the person cut out (`clips`), in order.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub clips: Vec<Clip>,
+    /// Its chapters, as the site listed them when it was saved (`chapters`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub chapters: Vec<Chapter>,
     /// The subtitle files Chaya wrote next to the video (their names), which it may write again.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub written: Vec<String>,
@@ -139,6 +144,15 @@ impl Videos {
             data.stopped_at = Some(at).filter(|at| at.is_finite() && *at >= 0.0);
             data.duration = duration.filter(|d| d.is_finite() && *d > 0.0).or(data.duration);
         })
+    }
+
+    /// Keeps the chapters of download `id`, as the site listed them when it was saved; a video without any keeps no file
+    /// for them.
+    pub fn keep_chapters(&self, id: u64, chapters: &[Chapter]) -> std::io::Result<()> {
+        if chapters.is_empty() {
+            return Ok(());
+        }
+        self.change(id, |data| data.chapters = chapters.to_vec())
     }
 
     /// Keeps what whisper.cpp heard in download `id`, listening with `model` `on` the graphics card or not.
@@ -486,14 +500,29 @@ mod tests {
     }
 
     #[test]
+    fn a_videos_chapters_are_kept_and_none_writes_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let videos = Videos::in_folder(dir.path().to_path_buf());
+        videos.keep_chapters(3, &[]).unwrap();
+        assert!(!dir.path().join("3.json").exists());
+        let chapters = vec![
+            Chapter { start: 0, end: 42_000, title: "Intro".into() },
+            Chapter { start: 42_000, end: 90_000, title: "The walk".into() },
+        ];
+        videos.keep_chapters(3, &chapters).unwrap();
+        videos.stopped(3, 12.0, Some(90.0)).unwrap();
+        assert_eq!(videos.load(3).chapters, chapters, "kept beside where playback stopped");
+    }
+
+    #[test]
     fn what_a_later_chaya_wrote_is_kept() {
         let dir = tempfile::tempdir().unwrap();
         let videos = Videos::in_folder(dir.path().to_path_buf());
-        std::fs::write(dir.path().join("5.json"), r#"{"stopped_at": 9.5, "chapters": [{"from": 1, "to": 2}]}"#)
+        std::fs::write(dir.path().join("5.json"), r#"{"stopped_at": 9.5, "bookmarks": [{"from": 1, "to": 2}]}"#)
             .unwrap();
         videos.stopped(5, 30.0, Some(90.0)).unwrap();
         let kept: Value = serde_json::from_slice(&std::fs::read(dir.path().join("5.json")).unwrap()).unwrap();
-        assert_eq!(kept["chapters"][0]["to"], 2);
+        assert_eq!(kept["bookmarks"][0]["to"], 2);
         assert_eq!(kept["stopped_at"], 30.0);
         std::fs::write(dir.path().join("6.json"), "not json").unwrap();
         assert_eq!(videos.load(6), VideoData::default());

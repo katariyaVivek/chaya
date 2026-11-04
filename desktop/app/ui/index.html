@@ -338,6 +338,7 @@
         <div class="controls__seek" id="player-seek" role="slider" tabindex="0" aria-label="Position" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
           <span class="controls__buffered" id="player-buffered"></span>
           <span class="controls__played" id="player-played"></span>
+          <span class="controls__chapters" id="player-chapters" aria-hidden="true"></span>
           <span class="controls__marks" id="player-marks" aria-hidden="true"></span>
           <span class="controls__thumb" id="player-thumb"></span>
           <span class="controls__hover num" id="player-hover" hidden></span>
@@ -346,6 +347,7 @@
           <button class="controls__play" type="button" id="player-play" aria-label="Play (Space)" title="Play (Space)"><svg><use href="#i-play"/></svg></button>
           <button class="controls__btn" type="button" id="player-mute" aria-label="Mute (M)" title="Mute (M)"><svg><use href="#i-sound"/></svg></button>
           <span class="controls__time num" id="player-time">0:00 / 0:00</span>
+          <span class="controls__chapter" id="player-chapter" title="Ctrl+← and Ctrl+→ go between chapters" hidden></span>
           <span class="controls__gap"></span>
           <div class="player__speed">
             <button class="controls__btn controls__speed num" type="button" id="player-speed-button" aria-expanded="false" aria-controls="player-speed-panel" title="Speed">1×</button>
@@ -359,8 +361,8 @@
         </div>
       </div>
     </div>
-    <!-- The timeline, as an editor has it, while the Clips tab is open or a clip is chosen: a ruler, the picture, the
-         lines, the sound and the clips. A clip chosen is lit between two handles that snap to the lines; I and O set
+    <!-- The timeline, as an editor has it, while the Clips tab is open or a clip is chosen: a ruler, the chapters (when
+         the site named any), the picture, the lines, the sound and the clips. A clip chosen is lit between two handles that snap to the lines; I and O set
          them at the playhead; dragging across the tracks makes a new clip. -->
     <section class="cut" id="cut" aria-label="Timeline" hidden>
       <div class="cut__bar">
@@ -381,6 +383,8 @@
       <div class="cut__editor" id="cut-editor">
         <span class="cut__label cut__label--ruler" aria-hidden="true"></span>
         <div class="cut__ruler" id="cut-ruler" aria-hidden="true"></div>
+        <span class="cut__label" data-lane="chapters" hidden>Chapters</span>
+        <div class="cut__lane cut__chapters" id="cut-chapters" data-lane="chapters" aria-hidden="true" hidden></div>
         <span class="cut__label" data-lane="picture">Picture</span>
         <canvas class="cut__lane cut__pictures" id="cut-pictures" data-lane="picture" aria-hidden="true"></canvas>
         <span class="cut__label" id="cut-label-lines">Lines</span>
@@ -467,6 +471,7 @@
       <section class="tabpanel" role="tabpanel" id="panel-clips" aria-labelledby="tab-clips" hidden>
         <div class="tabpanel__headrow clips__top">
           <p class="tabpanel__head num" id="player-clips-head" hidden></p>
+          <button class="downloads__all" type="button" id="player-chapter-clips" hidden>Add chapters to clips</button>
           <button class="pill glass pressable clips__export" type="button" id="player-export" title="Export (Ctrl+E)" aria-haspopup="dialog" hidden><svg><use href="#i-export"/></svg>Export</button>
         </div>
         <ol class="highlights" id="player-clips"></ol>
@@ -477,7 +482,7 @@
         </div>
         <div class="tabpanel__empty" id="player-clips-none">
           <p class="tabpanel__title">No clips yet</p>
-          <p class="tabpanel__note">Drag across the timeline under the picture, or in the transcript click the line a clip starts with and Shift-click the one it ends with, then <b>Make clip</b> (Ctrl+B). Highlights become clips in one click too.</p>
+          <p class="tabpanel__note">Drag across the timeline under the picture, or in the transcript click the line a clip starts with and Shift-click the one it ends with, then <b>Make clip</b> (Ctrl+B). Highlights and chapters become clips in one click too.</p>
         </div>
       </section>
       <section class="tabpanel" role="tabpanel" id="panel-subtitles" aria-labelledby="tab-subtitles" hidden>

@@ -19,10 +19,11 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
+use chaya_core::chapters::Chapter;
 use chaya_core::download::archive::{Account, ListRequest, Lister};
 use chaya_core::download::error::DownloadError;
 use chaya_core::download::join::Joiner;
-use chaya_core::download::manager::{Event, Fresh, Manager as DownloadManager, NewArchive, TaskView};
+use chaya_core::download::manager::{Event, Fresh, Kind, Manager as DownloadManager, NewArchive, TaskView};
 use chaya_core::download::plan::plan;
 use chaya_core::engine::{AnswerCache, Engine};
 use chaya_core::library;
@@ -175,12 +176,24 @@ async fn download(
     choice: String,
     lookups: State<'_, Lookups>,
     downloads: State<'_, Downloads>,
+    videos: State<'_, Videos>,
 ) -> Result<Vec<TaskView>, String> {
     let link = links::match_media(&url).ok_or_else(|| FailureKind::Unsupported.message().to_string())?;
     let media = lookups.media(link.url.clone(), false).await.map_err(|f| f.kind.message().to_string())?;
     let plans = plan(&media, &choice, &link.url, &downloads.folder, |f| downloads.can_join(f), downloads.joins)
         .ok_or_else(|| "This choice can't be saved any more. Look the link up again.".to_string())?;
-    Ok(plans.into_iter().map(|p| TaskView::from(&downloads.manager.add(p))).collect())
+    Ok(plans
+        .into_iter()
+        .map(|p| {
+            let video = p.kind == Kind::Video;
+            let task = downloads.manager.add(p);
+            // A video's chapters, for its seek bar and timeline; the sound alone has neither.
+            if video {
+                let _ = videos.keep_chapters(task.id, &media.chapters);
+            }
+            TaskView::from(&task)
+        })
+        .collect())
 }
 
 /// Whether the browser holds the person's sign-in for the account's site at `url`, for the account card to offer
@@ -311,6 +324,12 @@ fn video_subtitles(id: u64, downloads: State<'_, Downloads>) -> Vec<Track> {
 #[tauri::command]
 fn playback_start(id: u64, videos: State<'_, Videos>) -> f64 {
     videos.load(id).resume_at()
+}
+
+/// The chapters of saved video `id`, as the site named them when it was saved: none for most.
+#[tauri::command]
+fn video_chapters(id: u64, videos: State<'_, Videos>) -> Vec<Chapter> {
+    videos.load(id).chapters
 }
 
 /// Keeps `jpeg` (base64) as saved video `id`'s poster: a frame the window took from it, for the list and the grid.
@@ -530,6 +549,7 @@ pub fn run() {
             search::search_lines,
             video_subtitles,
             playback_start,
+            video_chapters,
             playback_stopped,
             keep_poster,
             speech::speech_status,

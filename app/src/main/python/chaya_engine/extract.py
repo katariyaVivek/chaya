@@ -41,7 +41,8 @@ def extract(url, cache_dir, cookie_file=None, js_runtime=None, fragments=False, 
     listing a stream's qualities): its server may answer only the page's player.
 
     With [subtitles], the video's language and the subtitles the site has for it are listed too (`_subtitle_tracks`):
-    Chaya for Windows saves them next to the video. The phone never asks.
+    Chaya for Windows saves them next to the video. So are its chapters (`_chapters`), which it marks on the seek bar
+    and the clip timeline. The phone never asks.
     """
     options = {
         'quiet': True,
@@ -191,7 +192,23 @@ def _shape(info, fragments=False, subtitles=False):
     if subtitles:
         shaped['language'] = info.get('language')
         shaped['subtitles'] = _subtitle_tracks(info)
+        shaped['chapters'] = _chapters(info)
     return shaped
+
+
+def _chapters(info):
+    """The video's chapters, as its maker named them (YouTube's, from the description's times), in order: each with its
+    start and end in seconds and its title. Chapters without a time, or ending before they start, are left out."""
+    chapters = []
+    for chapter in info.get('chapters') or []:
+        if not isinstance(chapter, dict):
+            continue
+        start, end = chapter.get('start_time'), chapter.get('end_time')
+        if not isinstance(start, (int, float)) or not isinstance(end, (int, float)) or end <= start:
+            continue
+        title = chapter.get('title')
+        chapters.append({'start': float(start), 'end': float(end), 'title': title.strip() if isinstance(title, str) else ''})
+    return chapters
 
 
 # The kinds of subtitle file Chaya reads, best first.

@@ -3,6 +3,7 @@
 pub mod adblock;
 pub mod ai;
 pub mod browse;
+pub mod chapters;
 pub mod clips;
 pub mod download;
 pub mod engine;
