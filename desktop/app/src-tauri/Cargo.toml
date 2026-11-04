@@ -31,11 +31,13 @@ keyring = { version = "3", features = ["windows-native"] }
 # Windows' own TLS (Schannel), as the core's downloads use, and the PC's proxy; an update is the NSIS installer
 # itself, so no archive formats.
 tauri-plugin-updater = { version = "2.14", default-features = false, features = ["native-tls", "system-proxy"] }
+# Ctrl+Alt+D from anywhere in Windows, when the person turns it on: saves the link just copied (`copied.rs`).
+tauri-plugin-global-shortcut = "2.4"
 
 # The page's requests, for the ad blocker: the same WebView2 bindings Tauri uses.
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.39"
-windows = { version = "0.62", features = ["Win32_Foundation", "Win32_System_Com", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_Shell"] }
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_System_Com", "Win32_System_DataExchange", "Win32_System_Memory", "Win32_System_Ole", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_Shell"] }
 windows-core = "0.62"
 
 # The update key's check (update.rs): what the updater itself verifies with.

@@ -151,6 +151,10 @@ Chaya for Windows keeps the same promises, with these differences:
   Chaya needs (where playback stopped, its poster, its clips) is kept in Chaya's own folder. Where the file is (its
   folder and name) is kept in Chaya's list of downloads on your PC. A file dropped on a page in Chaya's browser goes
   to Chaya, never to the page.
+- **Copied links.** Off until you turn it on in Settings › Copied links. While it is on, Chaya asks Windows for
+  Ctrl+Alt+D, and reads the text you copied only at the moment you press it, never before or after; it looks for a
+  link to a video or post in that text and looks up that link alone, as if you had pasted it. Nothing else you copied
+  is kept or sent anywhere. Whether it is on, and the quality it saves, are kept in a small file in Chaya's own folder.
 - **Searching what was said.** The find box over your downloads searches the subtitle files next to your saved
   videos, on your PC. Their lines are held in Chaya's memory while it runs, never written anywhere else and never
   sent anywhere.

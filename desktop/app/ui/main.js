@@ -2147,6 +2147,80 @@ function saveSpeech(change) {
   tauri.core.invoke('set_speech', { settings: speech.settings }).catch(() => loadSpeech());
 }
 
+// ── Copied links ──
+//
+// Ctrl+Alt+D from anywhere in Windows saves the link just copied, when the person turns it on (`copied.rs`): off or
+// on, and the quality it saves. The app says how each press went as `copied-link` events: nothing to save, looking
+// it up, saving it, or a link to show as if pasted (a sign-in, or a choice the setting can't make).
+
+const copiedOn = document.getElementById('copied-on');
+const copiedQuality = document.getElementById('copied-quality');
+/** The setting as the app has it: on, the quality, the key, and why the key couldn't be had. */
+let copied = null;
+
+function showCopied() {
+  if (!copied) return;
+  document.getElementById('copied-key').textContent = copied.key;
+  for (const b of copiedOn.querySelectorAll('[data-copied]')) b.setAttribute('aria-pressed', String(b.dataset.copied === String(copied.on)));
+  for (const b of copiedQuality.querySelectorAll('[data-wanted]')) b.setAttribute('aria-pressed', String(b.dataset.wanted === copied.quality));
+  document.getElementById('copied-quality-box').hidden = !copied.on;
+  const note = document.getElementById('copied-note');
+  note.hidden = !copied.problem;
+  note.textContent = copied.problem ?? '';
+}
+
+async function setCopied(change) {
+  if (!copied) return;
+  const wanted = { on: copied.on, quality: copied.quality, ...change };
+  copied = { ...copied, ...wanted };
+  showCopied();
+  try {
+    copied = await tauri.core.invoke('set_copied_link', wanted);
+  } catch (message) {
+    copied = { ...copied, problem: String(message) };
+  }
+  showCopied();
+}
+
+copiedOn.addEventListener('click', (e) => {
+  const on = e.target.closest('[data-copied]')?.dataset.copied;
+  if (on) setCopied({ on: on === 'true' });
+});
+copiedQuality.addEventListener('click', (e) => {
+  const quality = e.target.closest('[data-wanted]')?.dataset.wanted;
+  if (quality) setCopied({ quality });
+});
+tauri?.core.invoke('copied_link').then((view) => {
+  copied = view;
+  showCopied();
+}).catch(() => (document.getElementById('settings-copied').hidden = true));
+
+/** The notice for the press being looked up, replaced by what comes of it. */
+let copiedNotice = null;
+tauri?.event.listen('copied-link', ({ payload }) => {
+  copiedNotice?.remove();
+  copiedNotice = null;
+  switch (payload.kind) {
+    case 'nothing':
+      noticeFor(null, { text: 'Nothing to save', detail: 'Copy a link to a video or post, then press ' + (copied?.key ?? 'the key') + '.' });
+      break;
+    case 'looking':
+      copiedNotice = noticeFor(null, { text: 'Looking up the copied link…', detail: payload.url });
+      break;
+    case 'saving':
+      noticeFor(null, {
+        text: `Saving “${payload.title}”`,
+        detail: payload.choice === 'post' ? 'Every picture and video in it, to Downloads' : `${payload.choice}, to Downloads`,
+      });
+      break;
+    case 'show':
+      // As if pasted: the card says what the site wants, or offers the choices.
+      address.value = payload.url;
+      recognise();
+      break;
+  }
+});
+
 speechLanguage.addEventListener('change', () => saveSpeech({ language: speechLanguage.value || null }));
 speechEvery.addEventListener('click', (e) => {
   const every = e.target.closest('[data-every]')?.dataset.every;
