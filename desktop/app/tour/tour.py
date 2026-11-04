@@ -527,6 +527,12 @@ def ai_model(tour, clip):
         tour.press_in_player('Escape')
         tour.press_in_player('Escape')
         tour.press_in_player('Escape')
+    try:
+        fix_subtitles(tour, clip)
+    except Exception as e:
+        tour.failed('subtitles-fixed', e)
+        tour.press_in_player('Escape')
+        tour.press_in_player('Escape')
     tour.click('#settings-button')
     time.sleep(0.8)
     # The key out of Credential Manager again, and no service chosen.
@@ -789,6 +795,45 @@ def search_lines(tour, clip):
     tour.js("document.getElementById('player-close').click(); return 1")
     tour.wait(lambda: tour.js("return document.getElementById('player').hidden"), 5)
     tour.js("const f = document.getElementById('downloads-find'); f.value = ''; f.dispatchEvent(new Event('input')); return 1")
+
+
+def fix_subtitles(tour, clip):
+    """The clip's English subtitles put right in the transcript: line 2's words corrected (a double-click, new words,
+    Enter), then "said now" on line 2 with the playhead at 6.2 s, which moves every line 1.2 s later; each change is
+    in the file next to the video. Undo twice puts the file back exactly as it was, for the steps after."""
+    srt = Path.home() / 'Downloads' / f'{CLIP}.en.srt'
+    original = srt.read_bytes()
+    tour.js(f"document.querySelector('#download-list .row[data-id=\"{clip}\"] .row__title').click(); return 1", gesture=True)
+    tour.wait(lambda: tour.js("return !document.getElementById('player').hidden"), 10)
+    tour.click('#tab-transcript')
+    tour.js("[...document.querySelectorAll('#player-subtitles button')].find(b => b.textContent === 'English')?.click(); return 1")
+    tour.wait(lambda: tour.js("return document.querySelectorAll('#player-lines .player__line').length"), 15)
+    tour.js("const v = document.getElementById('player-video'); v.pause(); return 1")
+    tour.js("document.querySelectorAll('#player-lines .player__line')[1].dispatchEvent(new MouseEvent('dblclick', {bubbles: true})); return 1")
+    tour.wait(lambda: tour.js("return !!document.querySelector('#player-lines .line__edit')"), 5)
+    tour.js("const f = document.querySelector('#player-lines .line__edit'); f.value = 'The numbers count every second.';"
+            " f.dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', bubbles: true, cancelable: true})); return 1")
+    tour.wait(lambda: 'every second' in srt.read_text(encoding='utf-8'), 10)
+    edited = srt.read_text(encoding='utf-8')
+    tour.js("document.getElementById('player-video').currentTime = 6.2; return 1")
+    time.sleep(0.8)
+    tour.js("document.querySelectorAll('#player-lines li')[1].querySelectorAll('.line__act')[1].click(); return 1")
+    tour.wait(lambda: '00:00:06,200' in srt.read_text(encoding='utf-8'), 10)
+    moved = srt.read_text(encoding='utf-8')
+    bar = tour.js("const f = document.getElementById('player-fixed'); return f.hidden ? '' : f.innerText")
+    tour.shot('subtitles-fixed', edited='every second' in edited, moved_start=moved.split('\n')[1] if moved else '',
+              line_2=moved.split('\n\n')[1].replace('\n', ' | ') if moved.count('\n\n') > 1 else '', bar=bar,
+              transcript=tour.js("return [...document.querySelectorAll('#player-lines .player__line')].slice(0, 2).map(b => b.innerText.replace(/\\n/g, ' '))"))
+    tour.click('#player-fixed-undo')
+    time.sleep(1)
+    tour.click('#player-fixed-undo')
+    tour.wait(lambda: srt.read_bytes() == original, 10)
+    restored = srt.read_bytes() == original
+    tour.steps.append({'step': 'subtitles-undone', 'restored': restored})
+    print(f'subtitles undone: file as it was {restored}', flush=True)
+    tour.press_in_player('Escape')
+    tour.press_in_player('Escape')
+    tour.wait(lambda: tour.js("return document.getElementById('player').hidden"), 5)
 
 
 def looked_up(tour):

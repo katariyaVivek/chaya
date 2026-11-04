@@ -39,6 +39,8 @@
   <symbol id="i-muted" viewBox="0 0 24 24"><path d="M4.5 9.5h3l4.5-4v13l-4.5-4h-3z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M16 9.5l5 5M21 9.5l-5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
   <symbol id="i-cc" viewBox="0 0 24 24"><rect x="3.5" y="5.5" width="17" height="13" rx="3" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10.5 10.2a2.2 2.2 0 1 0 0 3.6M16.5 10.2a2.2 2.2 0 1 0 0 3.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
   <symbol id="i-trash" viewBox="0 0 24 24"><path d="M5 7h14M10 4.5h4M7 7l.8 11a2 2 0 0 0 2 1.8h4.4a2 2 0 0 0 2-1.8L17 7M10.5 10.5v6M13.5 10.5v6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M5 19l1-4L15.5 5.5a2.1 2.1 0 0 1 3 3L9 18zM13.5 7.5l3 3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-sync" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 3.5v4M12 16.5v4M3.5 12h4M16.5 12h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/></symbol>
   <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="16" cy="7" r="2" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="8" cy="17" r="2" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
 </svg>
 
@@ -416,6 +418,12 @@
         <div class="making__text"><span id="player-making-text"></span><button class="downloads__all" type="button" id="player-making-action">Stop</button></div>
         <span class="making__bar"><span id="player-making-bar"></span></span>
       </div>
+      <!-- After subtitles are put right: what changed, and Undo -->
+      <div class="fixed" id="player-fixed" role="status" hidden>
+        <span class="fixed__text" id="player-fixed-text"></span>
+        <button class="downloads__all" type="button" id="player-fixed-undo">Undo</button>
+        <button class="icon-btn pressable fixed__close" type="button" id="player-fixed-close" aria-label="Done" title="Done"><svg><use href="#i-close"/></svg></button>
+      </div>
       <div class="making" id="player-translating" role="status" hidden>
         <div class="making__text"><span id="player-translating-text"></span><button class="downloads__all" type="button" id="player-translating-action">Stop</button></div>
         <span class="making__bar"><span></span></span>
@@ -482,6 +490,21 @@
         <div class="tabpanel__part" id="player-top-box" hidden>
           <p class="settings__label" id="player-top-label">On top</p>
           <div class="seg seg--wrap" role="group" aria-labelledby="player-top-label" id="player-top"></div>
+        </div>
+        <!-- Timing: lines that come early or late, moved -->
+        <div class="tabpanel__part" id="player-timing" hidden>
+          <p class="settings__label" id="player-timing-label">Timing</p>
+          <p class="tabpanel__note">Lines early or late? Move them a little at a time, or press <svg class="inline-icon" aria-label="Said now"><use href="#i-sync"/></svg> on a line in the transcript as it is said. Do it on a second line further on to fix lines that drift.</p>
+          <div class="seg seg--wrap" role="group" aria-labelledby="player-timing-label" id="player-timing-nudge">
+            <button type="button" data-by="-500" title="Lines 0.5 s earlier">−0.5 s</button>
+            <button type="button" data-by="-100" title="Lines 0.1 s earlier">−0.1 s</button>
+            <button type="button" data-by="100" title="Lines 0.1 s later">+0.1 s</button>
+            <button type="button" data-by="500" title="Lines 0.5 s later">+0.5 s</button>
+          </div>
+          <div class="seg" role="group" aria-label="Which subtitles move" id="player-timing-which">
+            <button type="button" data-every="no">This language</button>
+            <button type="button" data-every="yes">Every language</button>
+          </div>
         </div>
         <div class="tabpanel__part" id="player-versions" hidden></div>
         <div class="tabpanel__part" id="player-styles" hidden></div>

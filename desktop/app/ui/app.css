@@ -1436,3 +1436,62 @@ body.browsing .drop { place-items: start center; padding-top: var(--space-1); }
   color: inherit;
   font-weight: 600;
 }
+
+/* ── Subtitles put right: each line's own buttons, a line being corrected, and what changed with Undo ── */
+#player-lines > li { position: relative; }
+.line__acts {
+  position: absolute;
+  top: var(--space-half);
+  right: var(--space-half);
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity var(--dur-hover) var(--ease-out);
+}
+#player-lines > li:hover .line__acts,
+#player-lines > li:focus-within .line__acts,
+#player-lines > li:has([aria-current="true"]) .line__acts { opacity: 1; }
+.line__act {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+}
+.line__act:hover { background: var(--wash-strong); color: var(--text); }
+.line__act:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; opacity: 1; }
+.line__act svg { width: 15px; height: 15px; }
+/* Room for the buttons at the end of the line's words */
+.player__line { padding-right: calc(var(--space-1) + 58px); }
+#player-lines > li.is-editing .player__line, #player-lines > li.is-editing .line__acts { display: none; }
+.line__edit {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 2.6em;
+  padding: var(--space-1);
+  resize: vertical;
+  font: var(--text-md) / var(--leading-md) var(--font-ui);
+}
+.line__hint { display: block; padding: var(--space-half) var(--space-1) var(--space-1); color: var(--muted); font-size: var(--text-sm); }
+.fixed {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-half) var(--space-half) var(--space-half) var(--space-2);
+  border: 1px solid var(--accent-edge);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  font-size: var(--text-sm);
+  animation: var(--anim-enter) var(--dur-enter) var(--ease-out) both;
+}
+.fixed[hidden] { display: none; }
+.fixed__text { flex: 1; }
+.fixed__close { width: 28px; height: 28px; }
+.fixed__close svg { width: 14px; height: 14px; }
+.inline-icon { width: 1.1em; height: 1.1em; vertical-align: -0.2em; }
