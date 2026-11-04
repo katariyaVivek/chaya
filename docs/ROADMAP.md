@@ -53,6 +53,33 @@ Also in v0.4.0, merged after that stack:
 | [#48](https://github.com/katariyaVivek/chaya/pull/48) | A page that draws its name after loading is named (#47 kept the first, empty look), and the quality sheet estimates each quality's size from the stream's own length when the page's player is embedded from another server |
 | [#49](https://github.com/katariyaVivek/chaya/pull/49) | Pinterest pins, pasted, shared or browsed (any country site, `pin.it` links): a picture or GIF saves the original, a video offers its qualities, a story pin saves each page's pictures and videos; a Pinterest filter in the library |
 
+**Chaya for Windows 0.1.0** (28 October 2026, notes in [`releases/windows-0.1.0.md`](releases/windows-0.1.0.md)):
+the phone's downloader on the PC, #50 to #78, described under *Next* below.
+
+**Chaya for Windows 0.2.0** (November 2026, notes in [`releases/windows-0.2.0.md`](releases/windows-0.2.0.md); the
+`windows-v0.2.0` tag is made on `main` once the PR that adds those notes is merged): watch, understand and clip, the
+plan in [`PLAN.md`](PLAN.md) and the ideas after it:
+
+| PR | What it adds |
+|---|---|
+| [#81](https://github.com/katariyaVivek/chaya/pull/81) | A saved video plays in Chaya with its subtitles, a line clicked plays from there, and it starts where it stopped |
+| [#82](https://github.com/katariyaVivek/chaya/pull/82), [#84](https://github.com/katariyaVivek/chaya/pull/84), [#85](https://github.com/katariyaVivek/chaya/pull/85), [#86](https://github.com/katariyaVivek/chaya/pull/86), [#90](https://github.com/katariyaVivek/chaya/pull/90) | Subtitles made on the PC by whisper.cpp, in short lines that follow the speech, on the graphics card where it can; the models in Settings |
+| [#83](https://github.com/katariyaVivek/chaya/pull/83), [#89](https://github.com/katariyaVivek/chaya/pull/89), [#91](https://github.com/katariyaVivek/chaya/pull/91) | The player organised as Vimpo's is, and fixes from testing it |
+| [#87](https://github.com/katariyaVivek/chaya/pull/87) | A tab kept from the last run no longer freezes the app when clicked |
+| [#92](https://github.com/katariyaVivek/chaya/pull/92) | The person's own AI model (a service with their key, or Ollama or LM Studio), the key in Windows Credential Manager |
+| [#93](https://github.com/katariyaVivek/chaya/pull/93), [#95](https://github.com/katariyaVivek/chaya/pull/95) | A video's subtitles translated with that model, the original and the translation shown together |
+| [#96](https://github.com/katariyaVivek/chaya/pull/96) | Highlights found by that model, listed and marked on the seek bar |
+| [#97](https://github.com/katariyaVivek/chaya/pull/97), [#98](https://github.com/katariyaVivek/chaya/pull/98) | Clips, from the transcript or highlights, trimmed on an editor's timeline with the picture and the sound |
+| [#99](https://github.com/katariyaVivek/chaya/pull/99), [#100](https://github.com/katariyaVivek/chaya/pull/100), [#104](https://github.com/katariyaVivek/chaya/pull/104) | Export: videos with subtitles drawn on (Windows' H.264), GIFs, SRT; a size to fit, even loudness, two languages in one SRT |
+| [#101](https://github.com/katariyaVivek/chaya/pull/101) | The person's own videos, and a search across every line said |
+| [#102](https://github.com/katariyaVivek/chaya/pull/102) | Chaya's code under the MIT License |
+| [#103](https://github.com/katariyaVivek/chaya/pull/103) | Subtitles put right in the player: a line's words, a track's timing, with Undo |
+| [#105](https://github.com/katariyaVivek/chaya/pull/105) | A video's chapters on the seek bar and the timeline |
+| [#106](https://github.com/katariyaVivek/chaya/pull/106) | An opt-in Ctrl+Alt+D that saves the link just copied |
+
+Also in that time: [#80](https://github.com/katariyaVivek/chaya/pull/80) the plan, [#88](https://github.com/katariyaVivek/chaya/pull/88) a core test fix, and
+[#94](https://github.com/katariyaVivek/chaya/pull/94) a test installer from every pull request.
+
 ## Next
 
 The six-part plan after v0.4.0 has shipped (#34 to #39); it is in
@@ -92,9 +119,11 @@ The six-part plan after v0.4.0 has shipped (#34 to #39); it is in
   Releases are `windows-v*` tags (#77): a release page each, and Chaya offers its own updates in its settings,
   checked once a day and signed. The installer is not signed with a certificate yet, so SmartScreen asks before
   it runs; a certificate can be added later without other changes (docs/BUILD_AND_TEST.md). The first release,
-  `windows-v0.1.0`, went out on 28 October 2026, started from GitHub's website (#78). Next: watch, understand
-  and clip, step by step in [`PLAN.md`](PLAN.md). The phone's last library pieces (choosing several in the
-  grid, looking inside a saved ZIP) can come in between.
+  `windows-v0.1.0`, went out on 28 October 2026, started from GitHub's website (#78). Watch, understand and clip
+  followed, step by step in [`PLAN.md`](PLAN.md), and is Chaya for Windows 0.2.0 (#80 to #106, under *Released*).
+  Next for Windows: signing the installer (SignPath's free certificate for open-source projects, once the owner's
+  application is approved), then perhaps *Later, perhaps* in `PLAN.md`. The phone's last library pieces (choosing
+  several in the grid, looking inside a saved ZIP) can come in between.
 
 0. **First: check #48 on the phone.** #47's name search kept its first look for 3 seconds, so a page
    that drew its name late and then went quiet (7movies) kept no name; #48 looks again when the kept
@@ -120,7 +149,7 @@ The six-part plan after v0.4.0 has shipped (#34 to #39); it is in
 7. Ads inside YouTube's own videos need uBlock Origin's scriptlets, which the blocker does not run.
    Revisit only if a safe, narrow way appears.
 
-## Now: watch, understand and clip
+## Done: watch, understand and clip (Chaya for Windows 0.2.0)
 
 Chaya for Windows learns what [Vimpo](https://vimpo.app/) does on a Mac: a player for what was saved,
 subtitles made on the PC, translation beside the original with the person's own model, highlights, and clips
@@ -144,9 +173,10 @@ own style, a version for each model. Step 6 is merged: the Highlights tab finds 
 the person's model, lists them and marks them on the seek bar. Step 7 is merged: clips, made from lines chosen in
 the transcript (Ctrl+B) or from highlights, listed in a Clips tab and trimmed on a timeline whose edges snap to the
 lines. Step 8 is merged: clips saved as videos with their subtitles drawn on (Windows' own H.264 encoder) or as
-SRT files, from an Export dialog. Step 9 is built: a video from the PC dropped on the window (or added from
+SRT files, from an Export dialog. Step 9 is merged: a video from the PC dropped on the window (or added from
 Windows' file picker) is listed where it is and works as a download does, and the Downloads find box finds every
-line said in every video and opens the player there.
+line said in every video and opens the player there. After the plan came subtitles put right (#103), more export
+options (#104), chapters (#105) and the copied-link key (#106).
 
 ## Known rough edges
 
