@@ -497,6 +497,16 @@ body:has(.player:not([hidden]), .viewer:not([hidden])) .settings__panel { backgr
 .controls__btn[aria-pressed="false"] { opacity: 0.55; }
 .controls__speed { padding: 0 var(--space-1); font-size: var(--text-sm); }
 .controls__time { margin-left: var(--space-half); font-size: var(--text-sm); }
+/* The chapter playing, after the time, as YouTube shows it */
+.controls__chapter {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--screen-text-muted);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.controls__chapter::before { content: '·'; margin: 0 var(--space-1) 0 var(--space-half); }
 .controls__seek { position: relative; height: var(--space-2); cursor: pointer; touch-action: none; }
 .controls__seek::before, .controls__buffered, .controls__played {
   content: '';
@@ -510,6 +520,16 @@ body:has(.player:not([hidden]), .viewer:not([hidden])) .settings__panel { backgr
 .controls__seek::before { right: 0; background: var(--screen-track); }
 .controls__buffered { width: calc(var(--buffered, 0) * 100%); background: var(--screen-loaded); }
 .controls__played { width: calc(var(--played, 0) * 100%); background: var(--accent); }
+/* Chapters: the track broken where each begins, as YouTube draws it */
+.controls__chapters { position: absolute; inset: 0; pointer-events: none; }
+.controls__divider {
+  position: absolute;
+  top: 50%;
+  width: 3px;
+  height: 6px;
+  margin: -3px 0 0 -1.5px;
+  background: var(--screen-shade);
+}
 /* Highlights, marked on the track, over where it has played to */
 .controls__marks { position: absolute; inset: 0; pointer-events: none; }
 .controls__mark {
@@ -1037,7 +1057,7 @@ body.showing-downloads .found { display: none !important; }
 .highlight[aria-pressed="true"] { border-color: var(--accent-edge); background: var(--surface); box-shadow: var(--shadow); }
 
 /* The timeline, as an editor has it: dark under the picture in both themes, a ruler, then the tracks (picture, lines,
-   sound, clips) each named at the left, the clip chosen lit across them all between two handles, and the playhead */
+   sound, clips, and chapters when the site named any) each named at the left, the clip chosen lit across them all between two handles, and the playhead */
 .cut {
   --label: 4.75rem;
   --ruler: 22px;
@@ -1045,6 +1065,7 @@ body.showing-downloads .found { display: none !important; }
   --lines: 26px;
   --sound: 38px;
   --clips: 18px;
+  --chapters: 20px;
   display: grid;
   gap: var(--space-1);
   padding: var(--space-1) var(--space-1) var(--space-1) var(--space-2);
@@ -1093,18 +1114,23 @@ body.showing-downloads .found { display: none !important; }
   position: relative;
   display: grid;
   grid-template-columns: var(--label) minmax(0, 1fr);
-  grid-template-rows: var(--ruler) var(--picture) var(--lines) var(--sound) var(--clips);
+  /* Each lane its own height; a lane hidden (the picture for sound alone, chapters for a video without) takes no row */
+  grid-auto-rows: auto;
   row-gap: 3px;
   padding-right: var(--space-1);
   cursor: crosshair;
   touch-action: none;
   user-select: none;
 }
-.cut__editor:has([data-lane="picture"][hidden]) { grid-template-rows: var(--ruler) var(--lines) var(--sound) var(--clips); }
 [data-lane][hidden] { display: none; }
 .cut__label { align-self: center; overflow: hidden; color: var(--editor-muted); font-size: var(--text-sm); white-space: nowrap; text-overflow: ellipsis; }
 .cut__lane { position: relative; width: 100%; height: 100%; overflow: hidden; border-radius: var(--radius-sm); background: var(--editor-lane); }
-.cut__pictures { display: block; }
+.cut__ruler { height: var(--ruler); }
+.cut__chapters { height: var(--chapters); }
+.cut__pictures { display: block; height: var(--picture); }
+.cut__lines { height: var(--lines); }
+.cut__soundlane { height: var(--sound); }
+.cut__clips { height: var(--clips); }
 
 /* The ruler: its times, and five small ticks to a step drawn as a pattern under them */
 .cut__ruler {
@@ -1143,6 +1169,26 @@ body.showing-downloads .found { display: none !important; }
   text-overflow: ellipsis;
 }
 .cut__soundlane { display: block; }
+/* A chapter on its lane: its title, the one playing lit; a click plays from its start */
+.cut__chapter {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  overflow: hidden;
+  padding: 0 var(--space-half);
+  border: 0;
+  border-left: 2px solid var(--editor-muted);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--editor-block);
+  color: var(--editor-text);
+  font: 500 11px / 16px var(--font-ui);
+  text-align: left;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.cut__chapter:hover { background: var(--editor-block-hover); }
+.cut__chapter[aria-current="true"] { border-left-color: var(--accent); }
 .cut__sound { display: block; width: 100%; height: 100%; }
 .cut__note { position: absolute; inset: 0 auto 0 var(--space-1); display: flex; align-items: center; color: var(--editor-muted); font-size: 12px; }
 .cut__other {

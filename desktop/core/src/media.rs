@@ -8,6 +8,8 @@ use std::collections::BTreeMap;
 use serde::Serialize;
 use serde_json::{Map, Value};
 
+use crate::chapters::{self, Chapter};
+
 /// One file or stream yt-dlp found for a video: a quality, audio only, or a ready-made combination.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Format {
@@ -144,6 +146,8 @@ pub struct Media {
     /// The language spoken in the video, when the site says.
     pub language: Option<String>,
     pub subtitles: Vec<SubtitleTrack>,
+    /// Its chapters, as its maker named them (`chapters`).
+    pub chapters: Vec<Chapter>,
 }
 
 /// Why a link could not be turned into something to download.
@@ -244,6 +248,7 @@ pub fn parse(json: &str) -> Result<Media, Failure> {
         items: list("items").iter().filter_map(Value::as_object).filter_map(item).collect(),
         language: text(media, "language"),
         subtitles: list("subtitles").iter().filter_map(Value::as_object).filter_map(subtitle_track).collect(),
+        chapters: chapters::read(list("chapters"), number(media, "duration")),
     })
 }
 
@@ -416,6 +421,19 @@ mod tests {
         let languages: Vec<(&str, bool)> = media.subtitles.iter().map(|t| (t.language.as_str(), t.automatic)).collect();
         assert_eq!(languages, [("en", false), ("en-orig", true)], "only tracks with a language and a web address");
         assert!(parse(r#"{"media": {"title": "T"}}"#).unwrap().subtitles.is_empty());
+    }
+
+    #[test]
+    fn a_videos_chapters_are_read() {
+        let media = parse(
+            r#"{"media": {"title": "T", "duration": 90, "chapters": [
+            {"start": 0, "end": 30, "title": "Intro"}, {"start": 30, "end": 95, "title": "The rest"}
+        ]}}"#,
+        )
+        .unwrap();
+        let read: Vec<(u64, u64, &str)> = media.chapters.iter().map(|c| (c.start, c.end, c.title.as_str())).collect();
+        assert_eq!(read, [(0, 30_000, "Intro"), (30_000, 90_000, "The rest")]);
+        assert!(parse(r#"{"media": {"title": "T"}}"#).unwrap().chapters.is_empty());
     }
 
     #[test]

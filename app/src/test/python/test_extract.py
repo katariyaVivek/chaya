@@ -127,6 +127,28 @@ def test_subtitles_are_listed_only_when_asked_for_one_readable_address_a_languag
     json.dumps(shaped)
 
 
+def test_chapters_are_listed_with_the_subtitles_in_seconds_and_named():
+    info = {
+        'title': 'A long video',
+        'url': 'https://example.com/x.mp4',
+        'chapters': [
+            {'start_time': 0.0, 'end_time': 42.0, 'title': ' Intro '},
+            {'start_time': 42.0, 'end_time': 300.5, 'title': 'The walk'},
+            {'start_time': 300.5, 'end_time': 300.5, 'title': 'Nothing long'},
+            {'start_time': None, 'end_time': 400, 'title': 'No start'},
+            {'start_time': 300.5, 'end_time': 420, 'title': None},
+            'not a chapter',
+        ],
+    }
+    assert engine._shape(info, subtitles=True)['chapters'] == [
+        {'start': 0.0, 'end': 42.0, 'title': 'Intro'},
+        {'start': 42.0, 'end': 300.5, 'title': 'The walk'},
+        {'start': 300.5, 'end': 420.0, 'title': ''},
+    ]
+    assert 'chapters' not in engine._shape(info), 'the phone never asks'
+    assert engine._shape({'title': 't', 'url': 'https://example.com/x.mp4', 'chapters': None}, subtitles=True)['chapters'] == []
+
+
 def test_a_carousel_shows_its_first_item():
     carousel = {
         '_type': 'playlist',

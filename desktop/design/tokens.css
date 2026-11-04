@@ -55,6 +55,8 @@
   --screen-loaded: rgb(255 255 255 / 0.4);
   /* A highlight marked on the seek bar */
   --screen-highlight: rgb(255 228 92 / 0.85);
+  /* Words beside the time under the video, quieter than it: the chapter playing */
+  --screen-text-muted: rgb(255 255 255 / 0.75);
   /* The clip timeline under the player, dark in both themes as the screen above it is: its ground, a track's ground,
      a line or clip on a track, the ruler's ticks, its words, and the sound's bars */
   --editor: #151517;

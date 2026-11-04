@@ -2,6 +2,7 @@
 // settings.
 import { DownloadButton, setTheme, setMotion, stagger, leave } from './design/chaya-motion.js';
 import { selection, snap, moveEdge, stepEdge, rows, clipOf, nameFrom, view as clipView, exact } from './clips.js';
+import { chapterAt, stepChapter, snapEdges, dividers } from './chapters.js';
 import {
   LOOKS,
   LOOK_NAMES,
@@ -1156,7 +1157,7 @@ async function openPlayer(id, from = null) {
   const task = tasks.get(id);
   if (!task) return;
   if (!viewer.hidden) closeViewer();
-  playing = { id, tracks: [], shown: null, line: null, savedAt: 0, clips: [], anchor: null, pick: null, cut: null, until: null, view: null, peaks: null, synced: null };
+  playing = { id, tracks: [], shown: null, line: null, savedAt: 0, clips: [], anchor: null, pick: null, cut: null, until: null, view: null, peaks: null, synced: null, chapters: [] };
   document.getElementById('player-title').textContent = task.title || task.fileName;
   playerProblem.hidden = true;
   playerResumed.hidden = true;
@@ -1186,14 +1187,18 @@ async function openPlayer(id, from = null) {
   showPosition();
   playerVideo.focus();
 
-  const [tracks, start, made, highlights, clips] = await Promise.all([
+  markChapters();
+  const [tracks, start, made, highlights, clips, chapters] = await Promise.all([
     tauri.core.invoke('video_subtitles', { id }).catch(() => []),
     tauri.core.invoke('playback_start', { id }).catch(() => 0),
     tauri.core.invoke('made_subtitles', { id }).catch(() => null),
     tauri.core.invoke('video_highlights', { id }).catch(() => null),
     tauri.core.invoke('video_clips', { id }).catch(() => []),
+    tauri.core.invoke('video_chapters', { id }).catch(() => []),
   ]);
   if (playing?.id !== id) return;
+  playing.chapters = chapters;
+  markChapters();
   playing.tracks = tracks;
   playing.made = made;
   playing.highlights = highlights;
@@ -1311,12 +1316,103 @@ function showPosition() {
   playerSeek.setAttribute('aria-valuemax', String(Math.round(duration)));
   playerSeek.setAttribute('aria-valuenow', String(Math.round(at)));
   playerSeek.setAttribute('aria-valuetext', `${clock(at)} of ${clock(duration)}`);
+  showChapter(at * 1000);
   const { buffered } = playerVideo;
   let loaded = 0;
   for (let i = 0; i < buffered.length; i++) if (buffered.start(i) <= at + 0.5) loaded = buffered.end(i);
   playerSeek.style.setProperty('--buffered', String(duration ? Math.min(1, loaded / duration) : 0));
   followCut();
 }
+
+// ── Chapters ──
+//
+// A video's chapters, as its maker named them on the site (`chapters.js`): the seek bar broken where each begins, the
+// one playing named after the time and under the pointer on the seek bar, Ctrl+← and Ctrl+→ to go between them, and a
+// lane of them on the timeline, where a clip's edges snap to them.
+
+const playerChapter = document.getElementById('player-chapter');
+
+/** Where each chapter begins on the seek bar, and the one playing. */
+function markChapters() {
+  const chapters = playing?.chapters ?? [];
+  document.getElementById('player-chapters').replaceChildren(
+    ...dividers(chapters, lengthMs()).map((at) => {
+      const divider = span('controls__divider', '');
+      divider.style.left = `${at * 100}%`;
+      return divider;
+    }),
+  );
+  delete playerChapter.dataset.index;
+  showChapter((playerVideo.currentTime || 0) * 1000);
+}
+playerVideo.addEventListener('loadedmetadata', markChapters);
+
+/** The chapter playing at `ms`, named after the time; nothing for a video without chapters. */
+function showChapter(ms) {
+  const chapters = playing?.chapters ?? [];
+  const index = chapterAt(chapters, ms);
+  if (playerChapter.dataset.index === String(index)) return;
+  playerChapter.dataset.index = String(index);
+  playerChapter.hidden = index < 0;
+  playerChapter.textContent = index < 0 ? '' : chapters[index].title;
+  for (const el of document.querySelectorAll('#cut-chapters .cut__chapter')) {
+    el.setAttribute('aria-current', String(el.dataset.chapter === String(index)));
+  }
+}
+
+/** Ctrl+→ to the next chapter, Ctrl+← back to the start of this one or the one before. */
+function goChapter(by) {
+  const to = stepChapter(playing?.chapters ?? [], (playerVideo.currentTime || 0) * 1000, by);
+  if (to === null) return;
+  playing.until = null;
+  playerVideo.currentTime = to / 1000;
+  showPosition();
+}
+
+/** The chapters on their lane of the timeline, each a block with its title; a click plays from its start. */
+function drawChapters() {
+  const chapters = playing?.chapters ?? [];
+  for (const el of cut.querySelectorAll('[data-lane="chapters"]')) el.hidden = chapters.length === 0;
+  const lane = document.getElementById('cut-chapters');
+  if (!chapters.length) {
+    lane.replaceChildren();
+    return;
+  }
+  const { from, to, at } = scale();
+  const playingNow = chapterAt(chapters, (playerVideo.currentTime || 0) * 1000);
+  lane.replaceChildren(
+    ...chapters.flatMap((c, i) => {
+      if (c.end <= from || c.start >= to) return [];
+      const el = document.createElement('button');
+      el.type = 'button';
+      el.className = 'cut__chapter';
+      el.tabIndex = -1;
+      el.dataset.chapter = String(i);
+      el.textContent = c.title;
+      el.title = `${c.title} · ${clock(c.start / 1000)} – ${clock(c.end / 1000)}`;
+      el.setAttribute('aria-current', String(i === playingNow));
+      el.style.left = `${at(Math.max(c.start, from)) * 100}%`;
+      el.style.width = `${(at(Math.min(c.end, to)) - at(Math.max(c.start, from))) * 100}%`;
+      el.addEventListener('pointerdown', (e) => e.stopPropagation());
+      el.addEventListener('click', () => {
+        playing.until = null;
+        playerVideo.currentTime = c.start / 1000;
+      });
+      return [el];
+    }),
+  );
+}
+
+/** The Clips tab's Add chapters to clips, while some chapter is not a clip yet. */
+function showChapterClips() {
+  const chapters = playing?.chapters ?? [];
+  const button = document.getElementById('player-chapter-clips');
+  button.hidden = !chapters.length || chapters.every((c) => clipOf(playing.clips, c.start, c.end));
+}
+document.getElementById('player-chapter-clips').addEventListener('click', () => {
+  const wanted = (playing?.chapters ?? []).filter((c) => !clipOf(playing.clips, c.start, c.end));
+  addClips(wanted.map((c) => ({ name: c.title, start: c.start, end: c.end })));
+});
 
 function showPlaying() {
   const paused = playerVideo.paused;
@@ -1364,7 +1460,9 @@ playerSeek.addEventListener('pointermove', (e) => {
   playerHover.hidden = false;
   const at = fraction * playerVideo.duration;
   const highlight = playing?.highlights?.items.find((h) => h.start <= at * 1000 && at * 1000 < h.end);
-  playerHover.textContent = highlight ? `${clock(at)} · ${highlight.title}` : clock(at);
+  const chapter = playing?.chapters?.[chapterAt(playing.chapters, at * 1000)];
+  const named = highlight?.title ?? chapter?.title;
+  playerHover.textContent = named ? `${clock(at)} · ${named}` : clock(at);
   playerHover.style.left = `${fraction * 100}%`;
 });
 playerSeek.addEventListener('pointerleave', () => (playerHover.hidden = true));
@@ -1897,6 +1995,9 @@ document.addEventListener(
     } else if (edge && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
       e.preventDefault();
       nudgeEdge(edge === cutStart ? 'start' : 'end', e.key === 'ArrowRight' ? 1 : -1, e.altKey);
+    } else if (e.ctrlKey && !e.altKey && !e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && playing?.chapters.length) {
+      e.preventDefault();
+      goChapter(e.key === 'ArrowRight' ? 1 : -1);
     } else if (e.ctrlKey || e.altKey || e.metaKey) {
       // Not the player's.
     } else if (key === 'f') {
@@ -3229,8 +3330,10 @@ const playerClips = document.getElementById('player-clips');
 
 /** The video's length in milliseconds, or NaN before it is known. */
 const lengthMs = () => (Number.isFinite(playerVideo.duration) ? playerVideo.duration * 1000 : NaN);
-/** The lines edges snap to: those shown. */
+/** The lines shown. */
 const shownLines = () => playing?.shown?.lines ?? [];
+/** What a clip's edges snap to: the lines shown, and the chapters' edges. */
+const edges = () => snapEdges(shownLines(), playing?.chapters ?? []);
 
 /** Chooses lines `a` to `b` of those shown for a clip; `a` null chooses none. */
 function pickLines(a, b = a) {
@@ -3363,6 +3466,7 @@ function showClips() {
     }),
   );
   markHighlightClips();
+  showChapterClips();
   showCut();
 }
 
@@ -3502,6 +3606,7 @@ function timeAt(e) {
 function drawView() {
   if (!playing?.view || cut.hidden) return;
   drawRuler();
+  drawChapters();
   drawLines();
   drawClipsLane();
   drawPictures();
@@ -3821,7 +3926,7 @@ for (const [el, kind] of [[cutStart, 'start'], [cutEnd, 'end']]) {
   });
   el.addEventListener('pointermove', (e) => {
     if (dragging?.el !== el) return;
-    dragging.clip = moveEdge(dragging.clip, kind, timeAt(e), shownLines(), lengthMs(), e.altKey);
+    dragging.clip = moveEdge(dragging.clip, kind, timeAt(e), edges(), lengthMs(), e.altKey);
     playerVideo.currentTime = dragging.clip[kind] / 1000;
     drawRegion();
   });
@@ -3854,7 +3959,7 @@ cutEditor.addEventListener('pointermove', (e) => {
   if (Math.abs(e.clientX - sweeping.x) > 4) sweeping.moved = true;
   if (!sweeping.moved) return;
   const [a, b] = [Math.min(sweeping.at, at), Math.max(sweeping.at, at)];
-  const lines = shownLines();
+  const lines = edges();
   sweeping.range = { start: snap(lines, a, 'start', e.altKey), end: snap(lines, b, 'end', e.altKey) };
   const { from, to } = playing.view;
   cutSweep.hidden = false;
@@ -3917,7 +4022,7 @@ document.getElementById('cut-zoom-in').addEventListener('click', () => zoom(0.5)
 function nudgeEdge(kind, by, free) {
   const clip = cutClip();
   if (!clip) return;
-  const moved = stepEdge(clip, kind, by, shownLines(), lengthMs(), free);
+  const moved = stepEdge(clip, kind, by, edges(), lengthMs(), free);
   playerVideo.currentTime = moved[kind] / 1000;
   playing.clips = playing.clips.map((c) => (c.id === moved.id ? moved : c));
   showCut();
@@ -3934,7 +4039,7 @@ function edgeAtPlayhead(kind, free) {
   let from = clip;
   if (kind === 'start' && at >= clip.end) from = { ...clip, end: at + length };
   if (kind === 'end' && at <= clip.start) from = { ...clip, start: Math.max(0, at - length) };
-  saveClip(moveEdge(from, kind, at, shownLines(), lengthMs(), free));
+  saveClip(moveEdge(from, kind, at, edges(), lengthMs(), free));
 }
 
 cutName.addEventListener('change', () => {

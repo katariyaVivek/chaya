@@ -201,6 +201,16 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
   `videos/ID.json` (the right way round, at least half a second, inside the video, named, the same range kept
   once; overlapping clips are both kept), and writes that file under a lock, so a translation's batch and a clip
   changed at the same moment both stay.
+- **Chapters** (`core::chapters`, `app/ui/chapters.js`). A video's chapters as its maker named them on the site
+  (YouTube's, from the times in its description), which the engine lists with the video's subtitles, are kept with the
+  saved video (`videos/ID.json`) when a link's video is saved; the sound alone has none, and a video saved from a page,
+  one of the person's own, or one saved before this has none either. In the player the seek bar is broken where each
+  begins, the one playing is named after the time and under the pointer on the seek bar, and Ctrl+→ and Ctrl+← go to
+  the next chapter and back (to the start of the one playing, or the one before when that start was only just passed,
+  as YouTube does). The timeline has a Chapters lane above the picture, a click on one plays from its start, and a
+  clip's edges snap to a chapter's as to a line's. *Add chapters to clips* in the Clips tab makes a clip of each, named
+  for it. Chapters are put right as they are read: in order, none past the next one's start or the video's end, and
+  fewer than two is none.
 - **Export options** (`core::export::fit`, `srt_together`, the GIF path). *Fit in* 10, 25 or 50 MB makes a video fit:
   the bit rate from the clip's length (a twentieth kept for the file's own parts; 64, 96 or 128 kb/s of sound, less
   for a small file), the picture made smaller (1080, 720, 540, 480, 360, 240 on its narrow side) until each pixel has
