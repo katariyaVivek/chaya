@@ -262,8 +262,9 @@ finds "walk" in the clip's lines and opens it at 0:25.
 
 - **Subtitles put right** (from omniget's subtitle workshop, re-written): a line's words corrected in the transcript,
   timing shifted or stretched between two lines, with Undo. Done.
-- Next from the same list: export options (a size to fit, GIF, even loudness, a two-language subtitle file), YouTube
-  chapters on the seek bar and the timeline, and an opt-in hotkey that downloads the link just copied.
+- **Export options:** a size to fit (10, 25 or 50 MB), a GIF, even loudness, both languages in one subtitle file. Done.
+- Next from the same list: YouTube chapters on the seek bar and the timeline, and an opt-in hotkey that downloads the
+  link just copied.
 
 ## Later, perhaps
 

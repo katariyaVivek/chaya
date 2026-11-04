@@ -9,6 +9,10 @@ export const LOOKS = ['outline', 'boxed', 'large'];
 export const QUALITIES = ['p720', 'p1080', 'original'];
 export const LOOK_NAMES = { outline: 'Outline', boxed: 'Box', large: 'Large' };
 export const QUALITY_NAMES = { p720: '720p', p1080: '1080p', original: 'Original' };
+/** Sizes a video may be made to fit, in megabytes: Discord's 10, e-mail's 25, and 50. */
+export const FITS = [10, 25, 50];
+/** The longest clip made into a GIF, in milliseconds, as the app allows. */
+export const LONGEST_GIF = 60_000;
 
 const COLORS = ['white', 'yellow', 'cyan', 'green', 'pink'];
 const SIZES = ['S', 'M', 'L', 'XL'];
@@ -42,7 +46,7 @@ export function firstChoice({ clips = [], cut = null, tracks = [], shown = null,
   return fixed(
     {
       which: cut !== null && clips.some((c) => c.id === cut) ? 'chosen' : 'all',
-      saveAs: kept.saveAs === 'srt' && tracks.length ? 'srt' : 'video',
+      saveAs: kept.saveAs === 'srt' && tracks.length ? 'srt' : kept.saveAs === 'gif' ? 'gif' : 'video',
       subtitles,
       first,
       second: other,
@@ -50,6 +54,9 @@ export function firstChoice({ clips = [], cut = null, tracks = [], shown = null,
       look: LOOKS.includes(kept.look) ? kept.look : 'outline',
       quality: QUALITIES.includes(kept.quality) ? kept.quality : 'p1080',
       srt,
+      fit: FITS.includes(kept.fit) ? kept.fit : null,
+      even: kept.even === true,
+      together: kept.together === true,
     },
     tracks,
   );
@@ -70,7 +77,7 @@ function fixed(choice, tracks) {
   if (!tracks.includes(next.second) || next.second === next.first) next.second = tracks.find((key) => key !== next.first) ?? null;
   if (tracks.length === 0) {
     next.subtitles = 'none';
-    next.saveAs = 'video';
+    if (next.saveAs === 'srt') next.saveAs = 'video';
   } else if (next.subtitles === 'two' && next.second === null) {
     next.subtitles = 'one';
   }
@@ -92,28 +99,44 @@ export function clipIds(choice, clips, cut) {
   return clips.map((c) => c.id);
 }
 
+/** Whether subtitle files are one file holding both languages (two chosen, and "one file" asked). */
+const together = (choice) => choice.saveAs === 'srt' && choice.together && choice.srt.length === 2;
+
 /** The `options` the app's `export_clips` takes. */
 export function optionsOf(choice, styleOf) {
   const languages =
     choice.saveAs === 'srt'
       ? choice.srt
       : { none: [], one: [choice.first], two: [choice.first, choice.second] }[choice.subtitles] ?? [];
+  const video = choice.saveAs === 'video';
   return {
     saveAs: choice.saveAs,
     quality: choice.quality,
     look: choice.look,
     subtitles: languages.filter((key) => key !== null).map((language) => ({ language, style: contractStyle(styleOf(language)) })),
-    secondOnTop: choice.saveAs === 'video' && choice.subtitles === 'two' && choice.secondOnTop,
+    secondOnTop: choice.saveAs !== 'srt' && choice.subtitles === 'two' && choice.secondOnTop,
+    fit: video ? choice.fit : null,
+    evenLoudness: video && choice.even,
+    together: together(choice),
   };
 }
 
 /** What is remembered for next time. Languages are not: they follow what the player shows. */
 export function keptOf(choice) {
-  return { saveAs: choice.saveAs, subtitles: choice.subtitles === 'none' ? 'none' : 'some', look: choice.look, quality: choice.quality };
+  return {
+    saveAs: choice.saveAs,
+    subtitles: choice.subtitles === 'none' ? 'none' : 'some',
+    look: choice.look,
+    quality: choice.quality,
+    fit: choice.fit,
+    even: choice.even,
+    together: choice.together,
+  };
 }
 
 /** How many files an export makes: one a clip, or one a clip and language for SRT. */
 export function fileCount(choice, clips) {
+  if (together(choice)) return clips;
   return choice.saveAs === 'srt' ? clips * choice.srt.length : clips;
 }
 
@@ -123,12 +146,18 @@ export function exportLabel(choice, clips) {
     const files = fileCount(choice, clips);
     return `Export ${files} subtitle file${files === 1 ? '' : 's'}`;
   }
+  if (choice.saveAs === 'gif') return clips === 1 ? 'Export GIF' : `Export ${clips} GIFs`;
   return clips === 1 ? 'Export clip' : `Export ${clips} clips`;
 }
 
 /** Where the files go, with the first one's name as an example. */
 export function whereNote(choice, title, clipName) {
   const base = `${title} - ${clipName}`;
+  if (together(choice)) {
+    const [a, b] = choice.srt.map((key) => key || 'subtitles');
+    return `Saved next to the video as one file with both languages: “${base} (${a} + ${b}).srt”.`;
+  }
+  if (choice.saveAs === 'gif') return `Saved next to the video, without sound: “${base}.gif”.`;
   if (choice.saveAs === 'srt') {
     const language = choice.srt[0] ? `.${choice.srt[0]}` : '';
     return `Saved next to the video, named for the video, the clip and the language: “${base}${language}.srt”.`;
@@ -155,6 +184,7 @@ export function encoderWords(encoder) {
       graphicsCard: 'H.264 on the graphics card',
       windows: 'H.264 (Windows)',
       mpeg4: 'MPEG-4, as Windows has no H.264 encoder',
+      gif: 'GIF',
     }[encoder] ?? null
   );
 }
@@ -184,4 +214,10 @@ export function noticeOf(job) {
     return { text: `Couldn't export “${job.name}”: ${why}`, detail: '', action: 'Retry', failed: true };
   }
   return null;
+}
+
+/** Why a GIF can't be made of these clips (one is longer than a minute), or null. */
+export function gifTooLong(clips) {
+  const long = clips.find((c) => c.end - c.start > LONGEST_GIF);
+  return long ? `“${long.name}” is longer than a minute: a GIF is for a short clip.` : null;
 }

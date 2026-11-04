@@ -6,7 +6,8 @@
 #     into 8 kHz WAV for the clip timeline's sound track;
 #   - exporting clips (step 8): each cut exactly from a saved video, scaled, with its subtitles drawn on by libass,
 #     and encoded as H.264 by Windows' own encoder (Media Foundation, which uses the graphics card where it can), or
-#     as MPEG-4 where that is missing (and on Linux, for the tests), with AAC sound.
+#     as MPEG-4 where that is missing (and on Linux, for the tests), with AAC sound, its loudness evened when asked;
+#     or as a GIF.
 # It has no network. Its libraries, built here from their own pinned sources and linked in, are FreeType, FriBidi,
 # HarfBuzz and libass (FreeType License, LGPL 2.1, MIT, ISC); with them and without x264 the whole stays under the
 # LGPL. The app fetches streams itself; ffmpeg only reads the files it saved.
@@ -114,17 +115,19 @@ options=(
   # sound saved on its own as Ogg, FLAC or WAV. MP4 out, Matroska for what MP4 cannot hold, and WAV for whisper.cpp.
   # ASS in: the subtitles an exported clip is drawn with.
   --enable-demuxer=mov,matroska,mpegts,aac,mp3,ogg,flac,wav,ass
-  --enable-muxer=mp4,mov,ipod,matroska,webm,wav
+  --enable-muxer=mp4,mov,ipod,matroska,webm,wav,gif
   --enable-parser=h264,hevc,av1,vp9,aac,opus,mpegaudio,ac3
   --enable-bsf=aac_adtstoasc,h264_mp4toannexb,hevc_mp4toannexb,vp9_superframe
   # Sound of every kind Chaya saves (AAC, MP3, Opus, Vorbis, FLAC, PCM); pictures of every kind it saves (H.264,
   # HEVC, VP8, VP9), for export; and the ASS subtitles libass draws.
   --enable-decoder=aac,mp3float,mp3,opus,vorbis,flac,pcm_s16le,pcm_s24le,pcm_f32le
   --enable-decoder=h264,hevc,vp8,vp9,mpeg4,ass,ssa
-  # PCM for whisper.cpp and the timeline; AAC and MPEG-4 for export (H.264 on Windows, below).
-  --enable-encoder=pcm_s16le,aac,mpeg4
-  --enable-filter=aresample,aformat,anull,abuffer,abuffersink
-  --enable-filter=buffer,buffersink,null,format,scale,setsar,subtitles
+  # PCM for whisper.cpp and the timeline; AAC and MPEG-4 for export (H.264 on Windows, below); GIF for a clip as one.
+  --enable-encoder=pcm_s16le,aac,mpeg4,gif
+  # Even loudness for an exported clip's sound (loudnorm, EBU R128).
+  --enable-filter=aresample,aformat,anull,abuffer,abuffersink,loudnorm
+  # A GIF's frames at its own rate, and a palette made for the clip (split, palettegen, paletteuse).
+  --enable-filter=buffer,buffersink,null,format,scale,setsar,subtitles,fps,split,palettegen,paletteuse
   --enable-swresample --enable-swscale --enable-libass
   --pkg-config=pkg-config --pkg-config-flags=--static
   # HarfBuzz is C++.
