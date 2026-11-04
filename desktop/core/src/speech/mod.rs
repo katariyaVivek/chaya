@@ -7,6 +7,7 @@
 //! what whisper.cpp wrote, while it listens), and `settings.json` (the model picked, the language, and whether every
 //! download gets subtitles).
 
+pub mod card;
 pub mod lines;
 pub mod models;
 pub mod whisper;

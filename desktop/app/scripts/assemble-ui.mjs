@@ -12,7 +12,7 @@ rmSync(dist, { recursive: true, force: true });
 cpSync(join(app, 'ui'), dist, { recursive: true });
 
 mkdirSync(join(dist, 'design', 'fonts'), { recursive: true });
-for (const file of ['tokens.css', 'fonts.css', 'components.css', 'chaya-motion.js']) {
+for (const file of ['tokens.css', 'fonts.css', 'components.css', 'chaya-motion.js', 'chaya-picker.js']) {
   cpSync(join(design, file), join(dist, 'design', file));
 }
 const fonts = readdirSync(join(design, 'fonts')).filter((f) => /\.(woff2|ttf)$/.test(f));

@@ -23,6 +23,12 @@ import {
 } from './export.js';
 import { lineSearch } from './search.js';
 import { ownVideos } from './own.js';
+import { enhanceSelects } from './design/chaya-picker.js';
+import { secondsLeft, listeningWords } from './pace.js';
+
+// Every drop-down drawn as Chaya's own, not Windows' list (unreadable in Night, in Windows' font). The <select>s stay
+// underneath, so what follows reads and sets them as before.
+enhanceSelects();
 
 const tauri = window.__TAURI__;
 
@@ -2069,8 +2075,10 @@ function speechText(job) {
       return `Fetching the speech model · ${fileSize(job.done)} of ${fileSize(job.total)}`;
     case 'sound':
       return 'Making subtitles · Reading the sound';
-    case 'listening':
-      return `Making subtitles${LISTENING_ON[job.on] ?? ''} · ${job.percent}%`;
+    case 'listening': {
+      const left = secondsLeft(speechPace.get(job.id), Date.now(), job.percent);
+      return `Making subtitles${LISTENING_ON[job.on] ?? ''} · ${listeningWords(job.percent, left, timeLeft)}`;
+    }
     case 'done': {
       // Where it listened and how long it took, so the graphics card and the processor can be compared.
       const where = job.on === 'graphicsCard' ? 'on the graphics card' : 'on the processor';
@@ -2231,7 +2239,21 @@ speechCard.addEventListener('click', (e) => {
   if (card) saveSpeech({ graphicsCard: card === 'true' });
 });
 
+/** When each video's listening was first seen moving, and how far it was then: the pace its time left comes from.
+ * Begun again when it starts over (the processor after the graphics card). */
+const speechPace = new Map();
+function notePace(job) {
+  const pace = speechPace.get(job.id);
+  if (job.state !== 'listening' || job.percent <= 0 || (pace && (pace.on !== job.on || job.percent < pace.percent))) {
+    speechPace.delete(job.id);
+  }
+  if (job.state === 'listening' && job.percent > 0 && !speechPace.has(job.id)) {
+    speechPace.set(job.id, { at: Date.now(), percent: job.percent, on: job.on });
+  }
+}
+
 tauri?.event.listen('speech', ({ payload: job }) => {
+  notePace(job);
   if (job.state === 'stopped') speechJobs.delete(job.id);
   else speechJobs.set(job.id, job);
   if (tasks.has(job.id)) renderRow(job.id);

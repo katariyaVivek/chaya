@@ -352,6 +352,15 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
     player says where and how long it took ("Subtitles made on the graphics card in 1 min 12 s"), so the two can be
     compared by switching *Listen on* to *Processor*. CI runs the JFK sample through it on Lavapipe, Mesa's Vulkan
     driver for the processor.
+  - **Which card, and how fast** (`core::speech::card`): whisper.cpp's Vulkan build listens on the first GPU Vulkan
+    lists, and on a laptop with both that is often the processor's own graphics, not the card beside it. Chaya reads
+    Vulkan's list itself (Windows' `vulkan-1.dll`, through `ash`, once, when first needed), and on a PC with integrated
+    graphics and a card of its own hands whisper.cpp the card alone (`GGML_VK_VISIBLE_DEVICES`); a value the person
+    set is left as it is. It decodes greedily (`-bs 1`), not with a beam of five: on a two-minute test the words came
+    out the same but one, a third faster on the processor and more on a card, where decoding is most of the time.
+  - **How far it has got**: *Getting ready* while the model loads (on a card the first time also prepares it), then
+    the share of the sound heard, with about how long is left from the pace since it first moved, then *Finishing*
+    (`app/ui/pace.js`).
   - **Short lines** (`core::speech::lines`): what was said is cut where a sentence ends and at pauses of 0.7 s or
     more (1.4 s after "the" or "of"); a line still longer than 5 s or 44 characters is cut at its best gap,
     one scoring higher after a comma, at a longer pause, before "and", "but" or "because" and when it leaves the

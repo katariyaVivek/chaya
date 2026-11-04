@@ -15,6 +15,7 @@ folder) to see every token and component live, in both themes, with full or redu
 | `fonts.css`, `fonts/` | Geist and Geist Mono (bundled, OFL); Cabinet Grotesk, which each builder downloads from Fontshare (`fonts/README.md`) |
 | `components.css` | Base styles and the signature components, built only from tokens |
 | `chaya-motion.js` | The spring-to-CSS generator, the download button's state machine and controller, list and theme helpers. An ES module with no dependencies |
+| `chaya-picker.js` | The drop-down: a native `<select>` drawn as Chaya's own button and list. An ES module with no dependencies |
 | `showcase.html` | The living reference |
 | `test/` | `npm test`: the spring, both themes' contrast, reduced motion, the button's states |
 
@@ -48,6 +49,7 @@ attribute follows Windows (light or dark). `setTheme('day' | 'night' | 'system')
 | `--text` | `#1A1917` | `#F2F1EE` | Titles and body |
 | `--muted` | `#6B6862` | `#8A8883` | Secondary lines, placeholders, idle icons |
 | `--wash`, `--wash-strong` | ink 4%, 7% | white 5%, 9% | Hover; pressed, selected, tracks and empty thumbnails |
+| `--scroll-thumb`, `--scroll-thumb-hover` | ink 20%, 36% | white 18%, 32% | A scrollbar's thumb, and under the pointer |
 | `--shadow` | `0 1px 2px` 4% + `0 8px 24px` 6% | `0 8px 32px` 50% | Glass elevation |
 | `--focus` | `--text` | `--accent` | Focus rings and a focused field's edge |
 | `--accent` | `#FF9A3C` | `#FF9A3C` | Light: glow, edges, thin progress |
@@ -212,6 +214,32 @@ keyboard's home: Ctrl+L focuses it, paste a link, Enter starts the download.
 While downloading, a thin conic-gradient light circles the row's border once every 8 s. Paused, the
 light stays where it stopped at half strength. Waiting, finished and failed rows have only the
 hairline. Only downloading rows move, so the eye finds them.
+
+### e. Drop-down
+
+```html
+<label for="speech-language">Language spoken</label>
+<select class="select" id="speech-language">…</select>
+<script type="module">
+  import { enhanceSelects } from './chaya-picker.js';
+  enhanceSelects(); // every select.select, once
+</script>
+```
+
+Windows' own list for a `<select>` is drawn in Windows' font, with Windows' scrollbar, and in Night with light words
+on white. `enhanceSelects()` keeps each `select.select` (hidden, still the value, still firing `change`) and shows a
+`.picker`: a pill button with the choice and a chevron, and a list under it (above it when there is more room
+there). The list is a popover, so it sits over everything, a panel's edges included, and a click elsewhere closes it.
+It is solid (`--surface` over `--bg`): glass alone is unreadable over a page in Night. The choice made has a check;
+the one the keys are on is lit with `--wash-strong`; one that can't be chosen is muted and skipped. Focus stays on
+the button (`aria-activedescendant`): ↑ ↓ Home End move, Enter or Space chooses, Escape or Tab closes, and typing jumps
+to the choice that starts with what was typed, open or not. The app keeps setting `select.value`, `selectedIndex`,
+`disabled` and the options as before; the picker follows. Its label names (and focuses) the button.
+
+### Scrollbars
+
+Everything that scrolls has a 4 px rounded thumb in `--scroll-thumb` (`--scroll-thumb-hover` under the pointer),
+inside a 10 px gutter with no track and no arrows.
 
 ### Lists
 

@@ -7,6 +7,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { nextEnabled, edgeEnabled, typeAhead } from '../chaya-picker.js';
 import {
   springEasing,
   PRESS_SPRING,
@@ -304,4 +305,42 @@ test('a download cancelled while its button is hidden gets its whole pill back, 
   el.shown = true;
   button.send('start');
   assert.equal(el.style.width, '40px');
+});
+
+// ── The drop-down ───────────────────────────────────────────────────────────────────────────
+
+const choices = (...labels) => labels.map((l) => ({ label: l.replace(/^-/, ''), disabled: l.startsWith('-') }));
+
+test('the arrow keys skip what cannot be chosen and stop at the ends', () => {
+  const list = choices('None', '-OpenAI', 'Anthropic', '-Gemini');
+  assert.equal(nextEnabled(list, 0, 1), 2, 'over the one that cannot be chosen');
+  assert.equal(nextEnabled(list, 2, 1), 2, 'nothing below that can be: it stays');
+  assert.equal(nextEnabled(list, 2, -1), 0);
+  assert.equal(nextEnabled(list, -1, 1), 0, 'from nothing chosen, the first');
+  assert.equal(edgeEnabled(list), 0);
+  assert.equal(edgeEnabled(list, true), 2, 'End: the last that can be chosen');
+  assert.equal(edgeEnabled(choices('-a', '-b')), -1);
+});
+
+test('typing jumps to the choice that starts with it, a letter again to the next', () => {
+  const list = choices('None', 'OpenAI', 'OpenRouter', 'Ollama', '-Groq', 'Gemini', 'Écrire');
+  assert.equal(typeAhead(list, 'o', 0), 1);
+  assert.equal(typeAhead(list, 'o', 1), 2, 'the same letter again: the next with it');
+  assert.equal(typeAhead(list, 'oo', 1), 2, 'typed twice quickly: still the next');
+  assert.equal(typeAhead(list, 'oll', 0), 3, 'a word');
+  assert.equal(typeAhead(list, 'open', 2), 2, 'a word still matching the one on keeps it');
+  assert.equal(typeAhead(list, 'g', 0), 5, 'not one that cannot be chosen');
+  assert.equal(typeAhead(list, 'e', 0), 6, 'accents ignored');
+  assert.equal(typeAhead(list, 'o', 3), 1, 'round from the end');
+  assert.equal(typeAhead(list, 'z', 0), -1);
+});
+
+test('scrollbars and the drop-down are drawn from tokens in both themes', () => {
+  for (const theme of [day, nightSystem, nightPicked]) {
+    assert.ok(theme.get('--scroll-thumb') && theme.get('--scroll-thumb-hover'), 'a thumb in each theme');
+  }
+  assert.match(componentsCss, /::-webkit-scrollbar-thumb \{[^}]*var\(--scroll-thumb\)/);
+  assert.match(componentsCss, /::-webkit-scrollbar-button \{ display: none/);
+  assert.match(componentsCss, /\.picker__list \{[^}]*background: linear-gradient\(var\(--surface\), var\(--surface\)\), var\(--bg\)/,
+    'the list is solid: glass alone is unreadable over the page in Night');
 });

@@ -524,6 +524,17 @@ def ai_model(tour, clip):
     tour.shot('ai-model', note=note, models=listed, key_note=tour.js("return document.getElementById('ai-key-note').innerText"),
               key_sent=service.keys.count(f'Bearer {key}'), asked=len(service.keys),
               key_in_ai_json=key in in_file, ai_json=in_file.replace('\n', ' '))
+    # The service's drop-down is Chaya's own (chaya-picker.js): its button shows the choice, and its list opens over
+    # the panel, solid and in the theme's colours, the choice checked.
+    tour.click('#ai-service-picker')
+    time.sleep(0.5)
+    tour.shot('ai-service-list', button=tour.js("return document.getElementById('ai-service-picker')?.innerText ?? ''"),
+              open=tour.js("return document.getElementById('ai-service-list')?.matches(':popover-open') ?? false"),
+              choices=tour.js("return [...document.querySelectorAll('#ai-service-list .picker__option')].map(o => o.textContent)"),
+              checked=tour.js("return document.querySelector('#ai-service-list [aria-selected=\"true\"]')?.textContent ?? ''"),
+              colours=tour.js("const l = document.getElementById('ai-service-list'); const c = getComputedStyle(l);"
+                              " return c ? [c.backgroundColor, getComputedStyle(l.firstElementChild ?? l).color] : []"))
+    tour.js("document.getElementById('ai-service-list')?.hidePopover(); return 1")
     tour.click('#settings-button')
     time.sleep(0.5)
     try:
