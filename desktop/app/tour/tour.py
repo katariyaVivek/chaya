@@ -816,7 +816,7 @@ def export_options(tour, clip):
         f" await tauri.core.invoke('export_clips', {{ id: {clip}, clips: [one.id], options: {{ ...base, saveAs: 'gif' }} }});"
         f" await tauri.core.invoke('export_clips', {{ id: {clip}, clips: [one.id], options: {{ ...base, saveAs: 'video', fit: 10, evenLoudness: true }} }});"
         f" await tauri.core.invoke('export_clips', {{ id: {clip}, clips: [one.id], options: {{ ...base, saveAs: 'srt', together: true,"
-        " subtitles: [{ language: 'en', style }, { language: 'fr', style }] } }});"
+        " subtitles: [{ language: 'en', style }, { language: 'fr', style }] } });"
         " })().catch((e) => (window.__optionsError = String(e))); return 1"
     )
     ended = ("const last = new Map(); for (const v of window.__options) last.set(v.job, v);"
