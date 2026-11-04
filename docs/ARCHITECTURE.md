@@ -368,6 +368,9 @@ a built-in browser. [`../desktop/README.md`](../desktop/README.md) has the layou
   no duplicates). The window's live rules (lines chosen as a range, edges snapped to lines, overlapping clips on rows)
   are in `desktop/app/ui/clips.js`, tested with Node (`desktop/app/test`). `video::Videos` writes a video's file under
   a lock, so changes from two places at once all stay.
+- **Subtitles put right** (`chaya-core`'s `fix`, `desktop/app/src-tauri/src/fix.rs`): a line's words changed or the line
+  taken out, a track shifted or stretched between two lines (`fix::Retime`, `t × scale + offset`), written back to
+  the file next to the video in its own format; the app keeps each change's files for Undo.
 - **The timeline's sound** (`chaya-core`'s `sound`, `sound_peaks` in `desktop/app/src-tauri/src/clips.rs`): the
   engine's ffmpeg decodes a video's sound to WAV on a pipe, read as it comes into peaks (50 a second, a byte each),
   kept as `videos/ID.peaks`. The picture track's frames are taken in the window, by a second `<video>` that seeks.

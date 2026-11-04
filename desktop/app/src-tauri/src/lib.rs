@@ -6,6 +6,7 @@ mod ai;
 mod browser;
 mod clips;
 mod export;
+mod fix;
 mod highlights;
 mod own;
 mod search;
@@ -463,6 +464,7 @@ pub fn run() {
             tauri::async_runtime::spawn(translate::Translating::work(app.handle().clone()));
             app.manage(search::Searching::default());
             app.manage(export::Exporting::default());
+            app.manage(fix::Fixes::default());
             tauri::async_runtime::spawn(export::Exporting::work(app.handle().clone()));
             let handle = app.handle().clone();
             let manager = DownloadManager::open(
@@ -556,6 +558,10 @@ pub fn run() {
             export::retry_export,
             export::show_export,
             export::exports_status,
+            fix::edit_line,
+            fix::retime_subtitles,
+            fix::undo_subtitles,
+            fix::subtitle_undos,
             speech::set_speech,
             speech::delete_speech_model,
             speech::make_subtitles,

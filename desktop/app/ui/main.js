@@ -1155,7 +1155,7 @@ async function openPlayer(id, from = null) {
   const task = tasks.get(id);
   if (!task) return;
   if (!viewer.hidden) closeViewer();
-  playing = { id, tracks: [], shown: null, line: null, savedAt: 0, clips: [], anchor: null, pick: null, cut: null, until: null, view: null, peaks: null };
+  playing = { id, tracks: [], shown: null, line: null, savedAt: 0, clips: [], anchor: null, pick: null, cut: null, until: null, view: null, peaks: null, synced: null };
   document.getElementById('player-title').textContent = task.title || task.fileName;
   playerProblem.hidden = true;
   playerResumed.hidden = true;
@@ -1169,6 +1169,7 @@ async function openPlayer(id, from = null) {
   playerTranslating.hidden = true;
   document.getElementById('player-translate-box').hidden = true;
   document.getElementById('player-pick').hidden = true;
+  document.getElementById('player-fixed').hidden = true;
   cut.hidden = true;
   playerCc.hidden = true;
   player.hidden = false;
@@ -1500,10 +1501,11 @@ function showSubtitles(track) {
         playerVideo.currentTime = line.start / 1000;
         playerVideo.play().catch(() => {});
       });
-      li.append(button);
+      li.append(button, lineActions(i));
       return li;
     }),
   );
+  showTiming();
   showPick();
   showSecond();
   showMaking();
@@ -1870,7 +1872,8 @@ document.addEventListener(
     const edge = e.target instanceof Element && e.target.closest('.cut__edge');
     const key = e.key.toLowerCase();
     if (e.key === 'Escape') {
-      if (typing) e.target.blur();
+      if (typing && e.target.closest('.line__edit')) stopEditing(false);
+      else if (typing) e.target.blur();
       else if (!playerSpeedPanel.hidden) openSpeeds(false);
       else if (player.classList.contains('player--full')) fullWindow(false);
       else if (playing?.pick) pickLines(null);
@@ -1885,6 +1888,11 @@ document.addEventListener(
     } else if (typing) {
       // The field's own: a name typed, Enter to keep it.
       if (e.key === 'Enter' && e.target === cutName) cutName.blur();
+      // A line being corrected: Enter keeps it, Shift+Enter breaks it in two.
+      if (e.key === 'Enter' && !e.shiftKey && e.target.closest('.line__edit')) {
+        e.preventDefault();
+        stopEditing(true);
+      }
     } else if (edge && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
       e.preventDefault();
       nudgeEdge(edge === cutStart ? 'start' : 'end', e.key === 'ArrowRight' ? 1 : -1, e.altKey);
@@ -4430,3 +4438,175 @@ async function retryExport(job, toast) {
 new ResizeObserver(placePage).observe(toasts);
 tauri?.event.listen('export', ({ payload }) => exportChanged(payload));
 loadExports();
+
+// ── Subtitles put right ─────────────────────────────────────────────────────────────────────
+//
+// A line's words corrected in the transcript (its pencil, or a double-click), or taken out by leaving it empty; and the
+// timing moved, in one language or every one: "said now" on a line moves the lines so it starts at the playhead, and
+// on a second line further on stretches them between the two, for subtitles that drift; or a little at a time from
+// the Subtitles tab. The app writes the file next to the video and keeps what was there for Undo (`fix.rs`).
+
+const playerFixed = document.getElementById('player-fixed');
+
+/** A line's own buttons: correct it, and "said now". */
+function lineActions(index) {
+  const acts = span('line__acts', '');
+  const make = (icon, label, action) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'line__act';
+    button.setAttribute('aria-label', label);
+    button.title = label;
+    button.innerHTML = `<svg><use href="#${icon}"/></svg>`;
+    button.addEventListener('click', (e) => {
+      e.stopPropagation();
+      action();
+    });
+    return button;
+  };
+  acts.append(
+    make('i-pencil', 'Correct this line', () => startEditing(index)),
+    make('i-sync', 'This line is said now: move the lines to the playhead', () => sayNow(index)),
+  );
+  return acts;
+}
+
+playerLines.addEventListener('dblclick', (e) => {
+  const line = e.target.closest('.player__line');
+  if (line) startEditing(Number(line.dataset.line));
+});
+
+/** The line being corrected: its index and its field. */
+let editing = null;
+
+function startEditing(index) {
+  if (!playing?.shown) return;
+  if (editing) stopEditing(false);
+  const li = playerLines.querySelector(`[data-line="${index}"]`)?.closest('li');
+  if (!li) return;
+  playerVideo.pause();
+  const field = document.createElement('textarea');
+  field.className = 'field line__edit';
+  field.value = playing.shown.lines[index].text;
+  field.rows = Math.min(4, field.value.split('\n').length + 1);
+  field.setAttribute('aria-label', `Line at ${clock(playing.shown.lines[index].start / 1000)}`);
+  field.addEventListener('blur', () => editing?.field === field && stopEditing(true));
+  const hint = span('line__hint', 'Enter keeps it · Shift+Enter for a new line · Esc leaves it · empty takes it out');
+  li.classList.add('is-editing');
+  li.append(field, hint);
+  editing = { index, field, li };
+  field.focus();
+  field.setSelectionRange(field.value.length, field.value.length);
+}
+
+/** Ends correcting a line: kept (`keep`) when its words changed, or left as it was. */
+async function stopEditing(keep) {
+  if (!editing) return;
+  const { index, field, li } = editing;
+  editing = null;
+  const before = playing?.shown?.lines[index]?.text ?? '';
+  const text = field.value;
+  li.classList.remove('is-editing');
+  field.remove();
+  li.querySelector('.line__hint')?.remove();
+  if (!keep || !playing || text.trim() === before.trim()) return;
+  const taken = text.trim() === '';
+  await changeSubtitles('edit_line', { index, text }, taken ? 'Line taken out.' : 'Line corrected.');
+}
+
+/** "Said now": the line starts at the playhead; after another line was put right further away, the lines stretch. */
+function sayNow(index) {
+  const line = playing?.shown?.lines[index];
+  if (!line) return;
+  const at = Math.round(playerVideo.currentTime * 1000);
+  const fixed = playing.synced;
+  const ask = fixed != null && Math.abs(line.start - fixed) >= 5000
+    ? { kind: 'through', fixed, from: line.start, to: at }
+    : { kind: 'shift', by: at - line.start };
+  const said =
+    ask.kind === 'through'
+      ? `Lines stretched to fit between ${clock(fixed / 1000)} and ${clock(at / 1000)}.`
+      : moved(ask.by);
+  changeSubtitles('retime_subtitles', { ask, every: timingEvery() }, said).then((ok) => {
+    if (ok) playing.synced = at;
+  });
+}
+
+function moved(by) {
+  const seconds = (Math.abs(by) / 1000).toFixed(by % 1000 === 0 ? 0 : 1);
+  return by === 0 ? 'Lines left where they were.' : `Lines moved ${seconds} s ${by > 0 ? 'later' : 'earlier'}.`;
+}
+
+/** Whether timing moves every language next to the video, or only the one shown. */
+function timingEvery() {
+  return remembered('chaya.timing.every', 'yes') === 'yes';
+}
+
+/** The Subtitles tab's Timing, while subtitles are shown. */
+function showTiming() {
+  document.getElementById('player-timing').hidden = !playing?.shown;
+  const every = timingEvery();
+  // With one language there is nothing to choose.
+  document.getElementById('player-timing-which').hidden = (playing?.tracks.length ?? 0) < 2;
+  for (const button of document.querySelectorAll('#player-timing-which button')) {
+    button.setAttribute('aria-pressed', String((button.dataset.every === 'yes') === every));
+  }
+}
+for (const button of document.querySelectorAll('#player-timing-which button')) {
+  button.addEventListener('click', () => {
+    remember('chaya.timing.every', button.dataset.every);
+    showTiming();
+  });
+}
+for (const button of document.querySelectorAll('#player-timing-nudge button')) {
+  button.addEventListener('click', () => {
+    const by = Number(button.dataset.by);
+    changeSubtitles('retime_subtitles', { ask: { kind: 'shift', by }, every: timingEvery() }, moved(by));
+  });
+}
+
+/** Asks the app to change the subtitles shown with `command`; shows them as they are now, and what changed. */
+async function changeSubtitles(command, args, said) {
+  if (!playing?.shown) return false;
+  const id = playing.id;
+  const language = playing.shown.language ?? null;
+  try {
+    const tracks = await tauri.core.invoke(command, { id, language, ...args });
+    if (playing?.id !== id) return false;
+    showChangedTracks(tracks, language);
+    showFixed(said);
+    return true;
+  } catch (message) {
+    if (playing?.id === id) showFixed(String(message), false);
+    return false;
+  }
+}
+
+function showChangedTracks(tracks, language) {
+  playing.tracks = tracks;
+  playing.line = null;
+  showSubtitles(tracks.find((t) => (t.language ?? null) === language) ?? tracks[0] ?? null);
+}
+
+function showFixed(text, undo = true) {
+  playerFixed.hidden = false;
+  document.getElementById('player-fixed-text').textContent = text;
+  document.getElementById('player-fixed-undo').hidden = !undo;
+}
+
+document.getElementById('player-fixed-undo').addEventListener('click', async () => {
+  if (!playing) return;
+  const id = playing.id;
+  const language = playing.shown?.language ?? null;
+  try {
+    const tracks = await tauri.core.invoke('undo_subtitles', { id });
+    if (playing?.id !== id) return;
+    playing.synced = null;
+    showChangedTracks(tracks, language);
+    const left = await tauri.core.invoke('subtitle_undos', { id }).catch(() => 0);
+    showFixed('Put back as it was.', left > 0);
+  } catch (message) {
+    showFixed(String(message), false);
+  }
+});
+document.getElementById('player-fixed-close').addEventListener('click', () => (playerFixed.hidden = true));

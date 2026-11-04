@@ -242,6 +242,16 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
   WebView2, so the page neither opens the file nor learns its name; the app hands it to the window (`page-drop`).
   The list's site chips name them *This PC*, and their row says *On this PC* and the folder. *For every download*
   (making subtitles) leaves them be: their subtitles are made when the person asks.
+- **Putting subtitles right** (`core::fix`, `app/src-tauri/src/fix.rs`). In the transcript each line has a pencil
+  (or a double-click) to correct its words: Enter keeps them, Shift+Enter breaks the line, Esc leaves it as it was,
+  and an empty line is taken out. Its other button, *said now*, moves the lines so that one starts at the playhead;
+  used again on a line at least 5 s away, it stretches them between the two (each line where it is said), for
+  subtitles that drift (made for another cut, or another frame rate; at most 25% faster or slower, else it shifts).
+  The Subtitles tab's *Timing* moves them 0.1 or 0.5 s at a time, in the language shown or every language (the
+  default, so a translation keeps step with its original). Lines that would end before the video starts are left
+  out. Each change is written to the subtitle file next to the video, in its own format (SRT or WebVTT), so other
+  players see it too; the app keeps the files as they were before each of the last 20 changes of a video while it
+  runs, and *Undo* puts them back exactly.
 - **Finding what was said** (`core::search`, `app/src-tauri/src/search.rs`, `app/ui/search.js`). The Downloads list's
   find box (Ctrl+F) narrows the list by name, as before, and below the downloads it matches lists the lines of
   every saved video and sound (in every language next to it) that hold all its words, in any order: by video,

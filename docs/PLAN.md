@@ -258,6 +258,13 @@ with every word under the names it matches, and a line opens the player there (`
 The Windows tour drops a video from `~/Videos/Chaya tour/`, plays it and removes it (the file stays as it was), and
 finds "walk" in the clip's lines and opens it at 0:25.
 
+## After the plan
+
+- **Subtitles put right** (from omniget's subtitle workshop, re-written): a line's words corrected in the transcript,
+  timing shifted or stretched between two lines, with Undo. Done.
+- Next from the same list: export options (a size to fit, GIF, even loudness, a two-language subtitle file), YouTube
+  chapters on the seek bar and the timeline, and an opt-in hotkey that downloads the link just copied.
+
 ## Later, perhaps
 
 - **Who is speaking:** the MOSS model labels speakers; it runs on Windows through
