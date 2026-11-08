@@ -135,7 +135,7 @@ class BrowserViewModel @JvmOverloads constructor(
                 hiddenSegmentCount = 0,
                 showThoroughScan = false,
                 thoroughScanRequest = null,
-                sheet = null,
+                sheet = state.sheet.forNewDocument(),
             )
         }
     }
@@ -582,6 +582,32 @@ class BrowserViewModel @JvmOverloads constructor(
         _uiState.update { it.copy(sheet = it.sheet.without<BrowserSheet.Media>()) }
     }
 
+    fun openAdBlockSheet() {
+        _uiState.update { it.copy(sheet = BrowserSheet.AdBlock) }
+    }
+
+    fun dismissAdBlockSheet() {
+        _uiState.update { it.copy(sheet = it.sheet.without<BrowserSheet.AdBlock>()) }
+    }
+
+    /** Asks about notifications before [download] starts: a sentence first, then Android's own question. */
+    fun askAboutNotifications(download: AskedDownload) {
+        _uiState.update { it.copy(sheet = BrowserSheet.Notifications(download)) }
+    }
+
+    /**
+     * The person answered the notification sentence (either way): closes it and returns the download it was for, or
+     * null when it had already closed (a new page, another sheet), so an answer is acted on once.
+     */
+    fun answerNotifications(): AskedDownload? {
+        var asked: AskedDownload? = null
+        _uiState.update { state ->
+            asked = (state.sheet as? BrowserSheet.Notifications)?.download
+            state.copy(sheet = state.sheet.without<BrowserSheet.Notifications>())
+        }
+        return asked
+    }
+
     // ------------------------------------------------------------------ //
     // Links to a video on YouTube, Instagram, TikTok or X
     // ------------------------------------------------------------------ //
@@ -648,7 +674,12 @@ class BrowserViewModel @JvmOverloads constructor(
      * addresses may have expired is looked up again first, and the sheet stays open to show the new one.
      */
     fun downloadLink(choice: PlatformChoice, onStarted: (String) -> Unit = {}) {
-        val found = links.freshFound() ?: return
+        val found = links.freshFound() ?: run {
+            // Looked up again because the addresses may have expired: the sheet shows the new answer, even when the
+            // choice was made from the notification question, which had taken the sheet's place.
+            if (links.state.value !is LinkState.Idle) _uiState.update { it.copy(sheet = BrowserSheet.Link) }
+            return
+        }
         _uiState.update { it.copy(sheet = it.sheet.without<BrowserSheet.Link>()) }
         if (choice.file.isDirectFile) {
             downloadManager.startDownload(choice.toDownloadRequest(found.media, pageUrl = found.match.url))
@@ -733,7 +764,7 @@ internal fun BrowserUiState.startedPage(url: String, navigationGeneration: Long)
             hiddenSegmentCount = 0,
             showThoroughScan = false,
             thoroughScanRequest = null,
-            sheet = null,
+            sheet = sheet.forNewDocument(),
         )
     }
 

@@ -25,4 +25,12 @@ class BrowserSheetTest {
         assertEquals(picker, picker.without<BrowserSheet.Link>())
         assertNull(null.without<BrowserSheet.Link>())
     }
+
+    @Test
+    fun `only the ad blocker's sheet outlives a new document`() {
+        assertEquals(BrowserSheet.AdBlock, BrowserSheet.AdBlock.forNewDocument())
+        listOf(BrowserSheet.Media, BrowserSheet.Link, BrowserSheet.Profile, BrowserSheet.Quality(QualityPickerState.Loading))
+            .forEach { assertNull(it.toString(), it.forNewDocument()) }
+        assertNull(null.forNewDocument())
+    }
 }

@@ -215,15 +215,26 @@ fun BrowserScreen(
     // Back: exit fullscreen first, then WebView history, then default (exit app)
     BackHandler(enabled = customView != null) { exitFullscreen() }
 
-    // Pending download waiting for notification permission
-    var pendingMedia by remember { mutableStateOf<DetectedMedia?>(null) }
-    // One-line rationale before the system dialog (Phase 0.5): the download
-    // is not obviously notification-related, so explain first. "Not now"
-    // still downloads — matches the silent fallback below.
-    var rationaleMedia by remember { mutableStateOf<DetectedMedia?>(null) }
-    // The same two steps for a quality chosen in a link's sheet.
-    var pendingChoice by remember { mutableStateOf<PlatformChoice?>(null) }
-    var rationaleChoice by remember { mutableStateOf<PlatformChoice?>(null) }
+    // A download asked for before notifications were allowed takes two steps. First a one-line sentence
+    // (BrowserSheet.Notifications, Phase 0.5): the download is not obviously notification-related, so explain
+    // first, and "Not now" still downloads. Then, after Allow, Android's own question, which this waits for.
+    var awaitingPermission by remember { mutableStateOf<AskedDownload?>(null) }
+
+    /** Starts [asked] and says so; [notificationsOn] false says it runs without notifications. */
+    fun startAsked(asked: AskedDownload, notificationsOn: Boolean) {
+        fun say(message: String) {
+            scope.launch { snackbarHostState.showSnackbar(message = message, duration = SnackbarDuration.Short) }
+        }
+        when (asked) {
+            is AskedDownload.File -> {
+                viewModel.downloadMedia(asked.media)
+                say(if (notificationsOn) "Downloading ${downloadLabel(asked.media)}" else "Downloading (notifications off)")
+            }
+            is AskedDownload.LinkQuality -> viewModel.downloadLink(asked.choice) { label ->
+                say(if (notificationsOn) "Downloading $label" else "Downloading (notifications off)")
+            }
+        }
+    }
 
     // First-run hint (Phase 4.5): shown once, persisted in SharedPreferences.
     // Plain SharedPreferences — one boolean, no DataStore dependency warranted.
@@ -243,28 +254,9 @@ fun BrowserScreen(
     val notifPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
-        pendingMedia?.let { media ->
-            pendingMedia = null
-            viewModel.downloadMedia(media)
-            scope.launch {
-                val msg = if (granted) {
-                    "Downloading ${downloadLabel(media)}"
-                } else {
-                    "Downloading (notifications off)"
-                }
-                snackbarHostState.showSnackbar(message = msg, duration = SnackbarDuration.Short)
-            }
-        }
-        pendingChoice?.let { choice ->
-            pendingChoice = null
-            viewModel.downloadLink(choice) { label ->
-                scope.launch {
-                    snackbarHostState.showSnackbar(
-                        message = if (granted) "Downloading $label" else "Downloading (notifications off)",
-                        duration = SnackbarDuration.Short
-                    )
-                }
-            }
+        awaitingPermission?.let { asked ->
+            awaitingPermission = null
+            startAsked(asked, notificationsOn = granted)
         }
     }
 
@@ -535,8 +527,11 @@ fun BrowserScreen(
     val adBlockEnabled by adBlocker.settings.enabled.collectAsState()
     val adAllowedSites by adBlocker.settings.allowedSites.collectAsState()
     val adEngine by adBlocker.engine.collectAsState()
-    var showAdBlockSheet by remember { mutableStateOf(false) }
     var showTabGrid by remember { mutableStateOf(false) }
+    // A sheet opening (a link shared from another app, say) shows over the tab grid's place: what was just asked for.
+    LaunchedEffect(uiState.sheet) {
+        if (uiState.sheet != null) showTabGrid = false
+    }
 
     // Ranks and names the page's media; pure and cheap, so it recomputes only when its inputs change.
     val sheetModel = remember(
@@ -601,19 +596,12 @@ fun BrowserScreen(
                 context, Manifest.permission.POST_NOTIFICATIONS
             ) != PackageManager.PERMISSION_GRANTED
         ) {
-            rationaleMedia = media
+            viewModel.askAboutNotifications(AskedDownload.File(media))
         } else {
-            viewModel.downloadMedia(media)
-            scope.launch {
-                snackbarHostState.showSnackbar(
-                    message = "Downloading ${downloadLabel(media)}",
-                    duration = SnackbarDuration.Short
-                )
-            }
+            startAsked(AskedDownload.File(media), notificationsOn = true)
         }
     }
 
-    /** Fires after the rationale sheet: Allow shows the system dialog, Not now downloads silently. */
     /** Starts a quality chosen in a link's sheet, asking about notifications first as a detected file does. */
     fun requestPermissionAndDownloadLink(choice: PlatformChoice) {
         if (Build.VERSION.SDK_INT >= 33 &&
@@ -621,51 +609,20 @@ fun BrowserScreen(
                 context, Manifest.permission.POST_NOTIFICATIONS
             ) != PackageManager.PERMISSION_GRANTED
         ) {
-            rationaleChoice = choice
+            viewModel.askAboutNotifications(AskedDownload.LinkQuality(choice))
         } else {
-            viewModel.downloadLink(choice) { label ->
-                scope.launch {
-                    snackbarHostState.showSnackbar(
-                        message = "Downloading $label",
-                        duration = SnackbarDuration.Short
-                    )
-                }
-            }
+            startAsked(AskedDownload.LinkQuality(choice), notificationsOn = true)
         }
     }
 
+    /** After the notification sentence: Allow asks Android, Not now downloads without notifications. */
     fun proceedFromRationale(allow: Boolean) {
-        val choice = rationaleChoice
-        if (choice != null) {
-            rationaleChoice = null
-            if (allow) {
-                pendingChoice = choice
-                notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-            } else {
-                viewModel.downloadLink(choice) {
-                    scope.launch {
-                        snackbarHostState.showSnackbar(
-                            message = "Downloading (notifications off)",
-                            duration = SnackbarDuration.Short
-                        )
-                    }
-                }
-            }
-            return
-        }
-        val media = rationaleMedia ?: return
-        rationaleMedia = null
+        val asked = viewModel.answerNotifications() ?: return
         if (allow) {
-            pendingMedia = media
+            awaitingPermission = asked
             notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         } else {
-            viewModel.downloadMedia(media)
-            scope.launch {
-                snackbarHostState.showSnackbar(
-                    message = "Downloading (notifications off)",
-                    duration = SnackbarDuration.Short
-                )
-            }
+            startAsked(asked, notificationsOn = false)
         }
     }
 
@@ -842,7 +799,7 @@ fun BrowserScreen(
                                     active = adBlockEnabled && adSite !in adAllowedSites,
                                     blocked = adBlocked,
                                 ).takeIf { adSite.isNotEmpty() },
-                                onAdBlock = { showAdBlockSheet = true },
+                                onAdBlock = { viewModel.openAdBlockSheet() },
                                 bookmarked = pageBookmarked,
                                 // Only a web page can be starred; the start screen and other pages have no star.
                                 onToggleBookmark = if (BrowsingRecord.isWebPage(uiState.url)) {
@@ -1069,7 +1026,7 @@ fun BrowserScreen(
                     )
                 }
 
-                if (showAdBlockSheet) {
+                if (uiState.sheet == BrowserSheet.AdBlock) {
                     AdBlockSheet(
                         site = adSite,
                         blocked = adBlocked,
@@ -1087,7 +1044,7 @@ fun BrowserScreen(
                             invalidateDetectionSession()
                             reloadPage()
                         },
-                        onDismiss = { showAdBlockSheet = false },
+                        onDismiss = { viewModel.dismissAdBlockSheet() },
                     )
                 }
 
@@ -1132,17 +1089,14 @@ fun BrowserScreen(
 
                 // Notification rationale (Phase 0.5): one sentence before the
                 // system dialog; declining still starts the download.
-                rationaleMedia?.let { media ->
+                (uiState.sheet as? BrowserSheet.Notifications)?.let { sheet ->
                     NotificationRationaleSheet(
-                        fileName = downloadLabel(media),
-                        onAllow = { proceedFromRationale(true) },
-                        onNotNow = { proceedFromRationale(false) },
-                    )
-                }
-                rationaleChoice?.let { choice ->
-                    NotificationRationaleSheet(
-                        fileName = (linkState as? LinkState.Found)?.let { "${it.media.title} (${choice.label})" }
-                            ?: choice.label,
+                        fileName = when (val asked = sheet.download) {
+                            is AskedDownload.File -> downloadLabel(asked.media)
+                            is AskedDownload.LinkQuality ->
+                                (linkState as? LinkState.Found)?.let { "${it.media.title} (${asked.choice.label})" }
+                                    ?: asked.choice.label
+                        },
                         onAllow = { proceedFromRationale(true) },
                         onNotNow = { proceedFromRationale(false) },
                     )
