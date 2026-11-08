@@ -671,7 +671,7 @@ fun BrowserScreen(
 
     val downloads by viewModel.downloads.collectAsState()
     val activeDownloads = remember(downloads) {
-        downloads.count { it.state == DownloadState.DOWNLOADING || it.state == DownloadState.QUEUED }
+        downloads.count { it.state.isActive }
     }
     val recentDownloads = remember(downloads) {
         downloads.filter { it.state == DownloadState.COMPLETED }.sortedByDescending { it.updatedAt }.take(3)

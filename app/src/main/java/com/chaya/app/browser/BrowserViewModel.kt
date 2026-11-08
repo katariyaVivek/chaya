@@ -67,18 +67,20 @@ data class BrowserUiState(
     val pageMeta: PageMeta? = null,
     /** Stream pieces seen on this page; counted for the sheet footnote, never listed. */
     val hiddenSegmentCount: Int = 0,
-    val showMediaSheet: Boolean = false,
     /** Shows an explicit opt-in only when ordinary detection found no media. */
     val showThoroughScan: Boolean = false,
     /** Delivers a one-shot request for BrowserScreen to invoke the injected detector. */
     val thoroughScanRequest: ThoroughScanRequest? = null,
-    val qualityPickerState: QualityPickerState? = null,
-    /** Shows the sheet for the video behind a link on a supported site. */
-    val showLinkSheet: Boolean = false,
     /** The Instagram or X account the page or the pasted link is, whose posts can be saved as one ZIP. */
     val profile: ProfileMatch? = null,
-    val showProfileSheet: Boolean = false,
-)
+    /** The one sheet shown over the page, or null. Change it only through this; the flags below read it. */
+    val sheet: BrowserSheet? = null,
+) {
+    val showMediaSheet: Boolean get() = sheet == BrowserSheet.Media
+    val showLinkSheet: Boolean get() = sheet == BrowserSheet.Link
+    val showProfileSheet: Boolean get() = sheet == BrowserSheet.Profile
+    val qualityPickerState: QualityPickerState? get() = (sheet as? BrowserSheet.Quality)?.picker
+}
 
 class BrowserViewModel @JvmOverloads constructor(
     application: Application,
@@ -131,11 +133,9 @@ class BrowserViewModel @JvmOverloads constructor(
                 detectedMedia = emptyList(),
                 pageMeta = null,
                 hiddenSegmentCount = 0,
-                showMediaSheet = false,
                 showThoroughScan = false,
                 thoroughScanRequest = null,
-                qualityPickerState = null,
-                showLinkSheet = false,
+                sheet = null,
             )
         }
     }
@@ -180,7 +180,7 @@ class BrowserViewModel @JvmOverloads constructor(
         val profile = if (isVideo) null else ProfileMatcher.match(url)
         _uiState.update { state ->
             if (state.profile == profile) state
-            else state.copy(profile = profile, showProfileSheet = state.showProfileSheet && profile != null)
+            else state.copy(profile = profile, sheet = if (profile == null) state.sheet.without<BrowserSheet.Profile>() else state.sheet)
         }
     }
 
@@ -236,13 +236,10 @@ class BrowserViewModel @JvmOverloads constructor(
                 detectedMedia = emptyList(),
                 pageMeta = null,
                 hiddenSegmentCount = 0,
-                showMediaSheet = false,
                 showThoroughScan = false,
                 thoroughScanRequest = null,
-                qualityPickerState = null,
-                showLinkSheet = false,
                 profile = null,
-                showProfileSheet = false,
+                sheet = null,
             )
         }
     }
@@ -411,39 +408,45 @@ class BrowserViewModel @JvmOverloads constructor(
      * [durationSeconds], when the page's player knows it, lets the picker estimate sizes.
      */
     fun analyzeStream(media: DetectedMedia, durationSeconds: Double? = null) {
-        _uiState.value = _uiState.value.copy(
-            qualityPickerState = QualityPickerState.Loading
-        )
+        val ask = qualityAsk.incrementAndGet()
+        val loading = BrowserSheet.Quality(QualityPickerState.Loading)
+        _uiState.update { it.copy(sheet = loading) }
 
         viewModelScope.launch {
             val result = readQualities(media)
 
-            result.fold(
+            val picker: QualityPickerState = result.fold(
                 onSuccess = { tracks ->
                     if (tracks.isEmpty()) {
                         // Asking for the qualities never downloads by itself: each tap used to add another copy
                         // of a stream that had none to read. "Download anyway" stays the person's choice.
-                        showStreamError(media, IOException("No qualities could be read from this stream."))
+                        streamError(media, IOException("No qualities could be read from this stream."))
                     } else {
-                        _uiState.value = _uiState.value.copy(
-                            qualityPickerState = QualityPickerState.Ready(
-                                tracks = tracks,
-                                url = media.url,
-                                mimeType = media.mimeType,
-                                suggestedName = media.suggestedName,
-                                // The page's player knows the length; a player from another server does not,
-                                // and then the stream's own playlist does.
-                                durationSeconds = durationSeconds ?: tracks.firstNotNullOfOrNull { it.streamDurationSeconds },
-                                title = media.title,
-                                thumbnailUrl = media.thumbnailUrl,
-                            )
+                        QualityPickerState.Ready(
+                            tracks = tracks,
+                            url = media.url,
+                            mimeType = media.mimeType,
+                            suggestedName = media.suggestedName,
+                            // The page's player knows the length; a player from another server does not,
+                            // and then the stream's own playlist does.
+                            durationSeconds = durationSeconds ?: tracks.firstNotNullOfOrNull { it.streamDurationSeconds },
+                            title = media.title,
+                            thumbnailUrl = media.thumbnailUrl,
                         )
                     }
                 },
-                onFailure = { error -> showStreamError(media, error) }
+                onFailure = { error -> streamError(media, error) }
             )
+            // Only into the picker still waiting for this answer: one closed meanwhile (dismissed, another
+            // sheet opened, the page left) stays closed, and a newer question's picker keeps waiting for its own.
+            _uiState.update { state ->
+                if (ask == qualityAsk.get() && state.sheet == loading) state.copy(sheet = BrowserSheet.Quality(picker)) else state
+            }
         }
     }
+
+    /** Identifies the newest [analyzeStream], so an older answer cannot fill a newer picker. */
+    private val qualityAsk = AtomicLong(0L)
 
     /**
      * One tap: reads the stream's renditions and starts the best one with its audio, without the picker.
@@ -451,6 +454,7 @@ class BrowserViewModel @JvmOverloads constructor(
      * can't be read, the picker opens with its "Download anyway" fallback instead.
      */
     fun downloadStreamBest(media: DetectedMedia, onStarted: (String?) -> Unit = {}) {
+        val generation = _uiState.value.navigationGeneration
         viewModelScope.launch {
             val result = ManifestHelper.parse(
                 context = getApplication(),
@@ -469,7 +473,13 @@ class BrowserViewModel @JvmOverloads constructor(
                     startStreamDownload(media, chosen)
                     onStarted(chosen.maxOfOrNull { it.height }?.takeIf { it > 0 }?.let { "${it}p" })
                 },
-                onFailure = { error -> showStreamError(media, error) }
+                onFailure = { error ->
+                    // The picker's "Download anyway" opens on the page that asked, never on one opened since.
+                    val picker = BrowserSheet.Quality(streamError(media, error))
+                    _uiState.update { state ->
+                        if (state.navigationGeneration == generation) state.copy(sheet = picker) else state
+                    }
+                }
             )
         }
     }
@@ -487,25 +497,21 @@ class BrowserViewModel @JvmOverloads constructor(
     }
 
     /** Keeps the URL so the picker's "Download anyway" still works after a failed analysis. */
-    private fun showStreamError(media: DetectedMedia, error: Throwable) {
-        _uiState.value = _uiState.value.copy(
-            qualityPickerState = QualityPickerState.Error(
-                message = error.message ?: "Failed to analyze stream",
-                url = media.url,
-                mimeType = media.mimeType,
-                suggestedName = media.suggestedName,
-                title = media.title,
-                thumbnailUrl = media.thumbnailUrl,
-            )
-        )
-    }
+    private fun streamError(media: DetectedMedia, error: Throwable) = QualityPickerState.Error(
+        message = error.message ?: "Failed to analyze stream",
+        url = media.url,
+        mimeType = media.mimeType,
+        suggestedName = media.suggestedName,
+        title = media.title,
+        thumbnailUrl = media.thumbnailUrl,
+    )
 
     /** Download stream with user-selected tracks. */
     fun downloadStream(tracks: List<StreamTrack>) {
         val state = _uiState.value.qualityPickerState
         if (state !is QualityPickerState.Ready) return
 
-        _uiState.value = _uiState.value.copy(qualityPickerState = null)
+        dismissQualityPicker()
         startStreamDownload(
             base = DetectedMedia(
                 url = state.url,
@@ -543,7 +549,7 @@ class BrowserViewModel @JvmOverloads constructor(
         val state = _uiState.value.qualityPickerState
         if (state !is QualityPickerState.Error) return
 
-        _uiState.value = _uiState.value.copy(qualityPickerState = null)
+        dismissQualityPicker()
         val media = DetectedMedia(
             url = state.url,
             pageUrl = _uiState.value.url,
@@ -557,7 +563,7 @@ class BrowserViewModel @JvmOverloads constructor(
     }
 
     fun dismissQualityPicker() {
-        _uiState.value = _uiState.value.copy(qualityPickerState = null)
+        _uiState.update { it.copy(sheet = it.sheet.without<BrowserSheet.Quality>()) }
     }
 
     fun downloadMedia(media: DetectedMedia) {
@@ -569,13 +575,11 @@ class BrowserViewModel @JvmOverloads constructor(
     }
 
     fun toggleMediaSheet() {
-        _uiState.value = _uiState.value.copy(
-            showMediaSheet = !_uiState.value.showMediaSheet
-        )
+        _uiState.update { it.copy(sheet = it.sheet.toggled(BrowserSheet.Media)) }
     }
 
     fun dismissMediaSheet() {
-        _uiState.value = _uiState.value.copy(showMediaSheet = false)
+        _uiState.update { it.copy(sheet = it.sheet.without<BrowserSheet.Media>()) }
     }
 
     // ------------------------------------------------------------------ //
@@ -589,11 +593,11 @@ class BrowserViewModel @JvmOverloads constructor(
     fun openLink(text: String): Boolean {
         val url = LINK_IN_TEXT.find(text)?.value?.trimEnd('.', ',', ')', ']', '>', '"', '\'') ?: text.trim()
         if (links.look(url)) {
-            _uiState.update { it.copy(showLinkSheet = true) }
+            _uiState.update { it.copy(sheet = BrowserSheet.Link) }
             return true
         }
         val profile = ProfileMatcher.match(url) ?: return false
-        _uiState.update { it.copy(profile = profile, showProfileSheet = true) }
+        _uiState.update { it.copy(profile = profile, sheet = BrowserSheet.Profile) }
         return true
     }
 
@@ -602,11 +606,11 @@ class BrowserViewModel @JvmOverloads constructor(
     // ------------------------------------------------------------------ //
 
     fun toggleProfileSheet() {
-        _uiState.update { it.copy(showProfileSheet = it.profile != null && !it.showProfileSheet) }
+        _uiState.update { if (it.profile == null) it else it.copy(sheet = it.sheet.toggled(BrowserSheet.Profile)) }
     }
 
     fun dismissProfileSheet() {
-        _uiState.update { it.copy(showProfileSheet = false) }
+        _uiState.update { it.copy(sheet = it.sheet.without<BrowserSheet.Profile>()) }
     }
 
     /** Whether the browser here is signed in to [platform], so saving with that sign-in can be offered. */
@@ -620,16 +624,16 @@ class BrowserViewModel @JvmOverloads constructor(
         val profile = _uiState.value.profile ?: return
         val request = profile.archiveRequest(useSignIn)
         downloadManager.startArchive(request)
-        _uiState.update { it.copy(showProfileSheet = false) }
+        _uiState.update { it.copy(sheet = it.sheet.without<BrowserSheet.Profile>()) }
         onStarted(request.fileName)
     }
 
     fun toggleLinkSheet() {
-        _uiState.update { it.copy(showLinkSheet = !it.showLinkSheet) }
+        _uiState.update { it.copy(sheet = it.sheet.toggled(BrowserSheet.Link)) }
     }
 
     fun dismissLinkSheet() {
-        _uiState.update { it.copy(showLinkSheet = false) }
+        _uiState.update { it.copy(sheet = it.sheet.without<BrowserSheet.Link>()) }
     }
 
     /** Asks again about the current link; [useSignIn] retries with the account the browser is signed in to. */
@@ -645,7 +649,7 @@ class BrowserViewModel @JvmOverloads constructor(
      */
     fun downloadLink(choice: PlatformChoice, onStarted: (String) -> Unit = {}) {
         val found = links.freshFound() ?: return
-        _uiState.update { it.copy(showLinkSheet = false) }
+        _uiState.update { it.copy(sheet = it.sheet.without<BrowserSheet.Link>()) }
         if (choice.file.isDirectFile) {
             downloadManager.startDownload(choice.toDownloadRequest(found.media, pageUrl = found.match.url))
         } else {
@@ -663,7 +667,7 @@ class BrowserViewModel @JvmOverloads constructor(
         val post = links.freshAnswer() as? LinkState.FoundPost ?: return
         val chosen = indices.distinct().filter { it in post.items.indices }
         if (chosen.isEmpty()) return
-        _uiState.update { it.copy(showLinkSheet = false) }
+        _uiState.update { it.copy(sheet = it.sheet.without<BrowserSheet.Link>()) }
         chosen.forEach { index ->
             val request = post.items[index].toDownloadRequest(
                 post.media, number = index + 1, count = post.items.size, pageUrl = post.match.url,
@@ -713,11 +717,9 @@ internal fun BrowserUiState.startedPage(url: String, navigationGeneration: Long)
             detectedMedia = emptyList(),
             pageMeta = null,
             hiddenSegmentCount = 0,
-            showMediaSheet = false,
             showThoroughScan = false,
             thoroughScanRequest = null,
-            qualityPickerState = null,
-            showLinkSheet = false,
+            sheet = null,
         )
     } else {
         copy(
@@ -729,12 +731,9 @@ internal fun BrowserUiState.startedPage(url: String, navigationGeneration: Long)
             detectedMedia = emptyList(),
             pageMeta = null,
             hiddenSegmentCount = 0,
-            showMediaSheet = false,
             showThoroughScan = false,
             thoroughScanRequest = null,
-            qualityPickerState = null,
-            showLinkSheet = false,
-            showProfileSheet = false,
+            sheet = null,
         )
     }
 
@@ -749,9 +748,6 @@ internal fun BrowserUiState.withProgress(progress: Int, navigationGeneration: Lo
 
 /** The same page with every sheet and pending request closed, as a tab is when it is left. */
 internal fun BrowserUiState.withSheetsClosed(): BrowserUiState = copy(
-    showMediaSheet = false,
     thoroughScanRequest = null,
-    qualityPickerState = null,
-    showLinkSheet = false,
-    showProfileSheet = false,
+    sheet = null,
 )

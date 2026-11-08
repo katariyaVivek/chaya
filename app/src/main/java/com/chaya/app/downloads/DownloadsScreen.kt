@@ -635,7 +635,7 @@ private fun SwipeableDownloadCard(
     onShare: () -> Unit = {}
 ) {
     val currentDelete by rememberUpdatedState(onDelete)
-    val inFlight = task.state == DownloadState.DOWNLOADING || task.state == DownloadState.QUEUED
+    val inFlight = task.state.isActive
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { value ->
             if (value == SwipeToDismissBoxValue.EndToStart) {

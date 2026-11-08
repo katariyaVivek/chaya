@@ -23,7 +23,6 @@ enum class DownloadFilter(val label: String) {
 /** One titled run of downloads in the list. */
 data class DownloadSection(val title: String, val items: List<DownloadTask>)
 
-private val inProgressStates = setOf(DownloadState.QUEUED, DownloadState.DOWNLOADING, DownloadState.PAUSED)
 private val attentionStates = setOf(DownloadState.FAILED, DownloadState.CANCELLED)
 
 /**
@@ -41,7 +40,7 @@ fun groupDownloads(
     val sections = mutableListOf<DownloadSection>()
 
     if (filter != DownloadFilter.DONE) {
-        tasks.filter { it.state in inProgressStates }
+        tasks.filter { it.state.isUnfinished }
             .sortedByDescending { it.createdAt }
             .takeIf { it.isNotEmpty() }
             ?.let { sections += DownloadSection("In progress", it) }
