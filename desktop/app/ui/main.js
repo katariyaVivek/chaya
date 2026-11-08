@@ -25,6 +25,7 @@ import { lineSearch } from './search.js';
 import { ownVideos } from './own.js';
 import { enhanceSelects } from './design/chaya-picker.js';
 import { secondsLeft, listeningWords } from './pace.js';
+import { onePanel } from './panels.js';
 
 // Every drop-down drawn as Chaya's own, not Windows' list (unreadable in Night, in Windows' font). The <select>s stay
 // underneath, so what follows reads and sets them as before.
@@ -140,9 +141,20 @@ for (const [attr, key] of [['themeChoice', 'theme'], ['motionChoice', 'motion']]
   );
 }
 
+// Settings, the ad blocker's shield and what the page holds: one panel open at a time (panels.js). Each panel's
+// open function asks for it here; its draw function only draws it.
+const panels = onePanel((name, open) => {
+  if (name === 'settings') drawSettings(open);
+  else if (name === 'shield') drawShield(open);
+  else drawMedia(open);
+});
+
 const settingsButton = document.getElementById('settings-button');
 const settingsPanel = document.getElementById('settings-panel');
 function showSettings(open) {
+  panels.set('settings', open);
+}
+function drawSettings(open) {
   settingsPanel.hidden = !open;
   settingsButton.setAttribute('aria-expanded', String(open));
   fitSettings();
@@ -154,14 +166,14 @@ function showSettings(open) {
 /** The panel ends inside the window wherever its button is (lower while browsing, beside the address bar), and
  * scrolls the rest. */
 function fitSettings() {
-  if (settingsPanel.hidden) return;
+  if (panels.open !== 'settings') return;
   settingsPanel.style.maxHeight = `${Math.max(160, window.innerHeight - settingsPanel.getBoundingClientRect().top - 12)}px`;
 }
 window.addEventListener('resize', fitSettings);
-settingsButton.addEventListener('click', () => showSettings(settingsPanel.hidden));
+settingsButton.addEventListener('click', () => panels.toggle('settings'));
 document.addEventListener('click', (e) => {
   // A choice in the panel can draw the panel again, taking the button clicked out of the page: still inside.
-  if (!settingsPanel.hidden && e.target.isConnected && !e.target.closest('.settings')) showSettings(false);
+  if (panels.open === 'settings' && e.target.isConnected && !e.target.closest('.settings')) showSettings(false);
 });
 
 // ── The address bar ─────────────────────────────────────────────────────────────────────────
@@ -2519,7 +2531,7 @@ const NARROWEST_PAGE = 360;
 
 /** The panel open over the page, if one is. */
 function openPanel() {
-  return [settingsPanel, shieldPanel, mediaPanel].find((panel) => !panel.hidden) ?? null;
+  return { settings: settingsPanel, shield: shieldPanel, media: mediaPanel }[panels.open] ?? null;
 }
 
 /** Where the page goes: its place in the window, narrowed to what an open panel leaves beside it; null when that is
@@ -2789,7 +2801,9 @@ let mediaCount = 0;
 let resultNoun = '';
 
 function openMedia(open) {
-  if (open === !mediaPanel.hidden) return;
+  panels.set('media', open);
+}
+function drawMedia(open) {
   mediaPanel.hidden = !open;
   mediaButton.setAttribute('aria-expanded', String(open));
   if (open) mediaButton.classList.remove('page-media--new');
@@ -2811,7 +2825,7 @@ function showMediaButton() {
   mediaButton.querySelector('.page-media__label').textContent = label;
   mediaButton.setAttribute('aria-label', `On this page: ${label}`);
   mediaButton.hidden = count === 0;
-  if (count > mediaCount && mediaPanel.hidden) mediaButton.classList.add('page-media--new');
+  if (count > mediaCount && panels.open !== 'media') mediaButton.classList.add('page-media--new');
   if (count === 0) {
     mediaButton.classList.remove('page-media--new');
     openMedia(false);
@@ -2822,10 +2836,10 @@ function showMediaButton() {
 new MutationObserver(showMediaButton).observe(result, { childList: true });
 new MutationObserver(showMediaButton).observe(foundBox.querySelector('.found__list'), { childList: true });
 
-mediaButton.addEventListener('click', () => openMedia(mediaPanel.hidden));
+mediaButton.addEventListener('click', () => panels.toggle('media'));
 document.addEventListener('click', (e) => {
   // The path as the click found it: a card's button may have replaced the card by the time this runs.
-  if (!mediaPanel.hidden && !e.composedPath().includes(mediaWrap)) openMedia(false);
+  if (panels.open === 'media' && !e.composedPath().includes(mediaWrap)) openMedia(false);
 });
 
 // ── The ad blocker ──────────────────────────────────────────────────────────────────────────
@@ -2840,6 +2854,9 @@ const shieldSite = document.getElementById('shield-site');
 let ads = null;
 
 function openShield(open) {
+  panels.set('shield', open);
+}
+function drawShield(open) {
   shieldPanel.hidden = !open;
   shieldButton.setAttribute('aria-expanded', String(open));
   if (open) {
@@ -2883,7 +2900,7 @@ function showShield(shield) {
   const label = `Ad blocker: ${adStatus(shield)}`;
   shieldButton.setAttribute('aria-label', label);
   shieldButton.title = label;
-  if (!shieldPanel.hidden) showAds({ ...(ads ?? {}), shield });
+  if (panels.open === 'shield') showAds({ ...(ads ?? {}), shield });
 }
 
 function showAds(view) {
@@ -2915,7 +2932,7 @@ async function chooseAds(command, args) {
   }
 }
 
-shieldButton.addEventListener('click', () => openShield(shieldPanel.hidden));
+shieldButton.addEventListener('click', () => panels.toggle('shield'));
 shieldSite.querySelectorAll('[data-site-ads]').forEach((button) =>
   button.addEventListener('click', () => {
     if (ads?.shield.site) chooseAds('allow_ads_on', { site: ads.shield.site, allowed: button.dataset.siteAds === 'show' });
@@ -2925,7 +2942,7 @@ shieldPanel.querySelectorAll('[data-all-ads]').forEach((button) =>
   button.addEventListener('click', () => chooseAds('block_ads', { on: button.dataset.allAds === 'block' })),
 );
 document.addEventListener('click', (e) => {
-  if (!shieldPanel.hidden && !e.target.closest('.shield')) openShield(false);
+  if (panels.open === 'shield' && !e.target.closest('.shield')) openShield(false);
 });
 
 // ── Reading the address bar ─────────────────────────────────────────────────────────────────
@@ -2980,9 +2997,7 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     if (browsing) tauri.core.invoke('page_action', { action: 'reload' });
   } else if (e.key === 'Escape') {
-    if (!settingsPanel.hidden) showSettings(false);
-    else if (!shieldPanel.hidden) openShield(false);
-    else if (!mediaPanel.hidden) openMedia(false);
+    if (panels.open) panels.set(panels.open, false);
     else if (document.body.classList.contains('showing-downloads')) showDownloads(false);
     else if (document.activeElement === address && browsing) {
       // Back to the page's own address.

@@ -3,6 +3,7 @@ package com.chaya.app.downloads
 import com.chaya.app.detection.MediaUrlClassifier
 import com.chaya.app.download.DownloadNotification.formatFileSize
 import com.chaya.app.download.DownloadState
+import com.chaya.app.download.DownloadStep
 import com.chaya.app.download.DownloadTask
 import java.time.Instant
 import java.time.LocalDate
@@ -88,3 +89,35 @@ fun finishedDetails(task: DownloadTask): String {
     val quality = task.qualityHeight?.takeIf { it >= 144 }?.let { "${it}p" }
     return listOfNotNull(size, quality, sourceHost(task)).joinToString(" · ")
 }
+
+/**
+ * What a running download's card shows: how far it has got, or null when that can't be told (the bar then moves
+ * on its own), the label on the left and the detail on the right.
+ */
+internal data class CardProgress(val fraction: Float?, val label: String, val detail: String)
+
+/** The card's progress for [task], from what it is doing ([DownloadTask.step]) or, failing that, its bytes. */
+internal fun progressOf(task: DownloadTask): CardProgress {
+    val size = if (task.downloadedBytes > 0) formatFileSize(task.downloadedBytes) else ""
+    return when (val step = task.step) {
+        is DownloadStep.SavingAsMp4 -> CardProgress(step.fraction, "Saving as MP4 · ${percent(step.fraction)}", size)
+        // An archive counts files, not bytes: it cannot know its size until every file has arrived.
+        is DownloadStep.FindingPosts ->
+            CardProgress(null, "Finding posts", if (step.found > 0) "${step.found} so far" else "")
+        is DownloadStep.FetchingFiles ->
+            if (step.packing) CardProgress(null, "Making the ZIP", formatFileSize(task.downloadedBytes))
+            else CardProgress(step.saved.toFloat() / step.found, "${step.saved} of ${step.found} files", formatFileSize(task.downloadedBytes))
+        DownloadStep.Joining -> CardProgress(null, "Joining picture and sound", size)
+        null -> {
+            val total = task.totalBytes ?: 0L
+            if (total > 0L) {
+                CardProgress(task.progressFraction, percent(task.progressFraction),
+                    "${formatFileSize(task.downloadedBytes)} of ${formatFileSize(total)}")
+            } else {
+                CardProgress(null, "Downloading", size)
+            }
+        }
+    }
+}
+
+private fun percent(fraction: Float) = "${(fraction.coerceIn(0f, 1f) * 100).toInt()}%"

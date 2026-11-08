@@ -45,7 +45,7 @@ platform 36, Gradle 8.14.3 and Python 3.13 (Chaquopy). Versions are in `gradle/l
 - **A state is one value.** Something that is in one of several states gets an enum or sealed type, not
   another flag beside the others; ask its properties (`DownloadState.isActive`) instead of listing states
   again. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#state-machines) lists every state machine and the
-  ones still spread over flags.
+  layers kept apart on purpose.
 - **Room migrations are explicit.** Bump the version, add a `Migration` and a migration test; never
   destructive migration.
 - **Privacy boundaries are features.** Keep: the per-navigation bridge capability, redirect-free

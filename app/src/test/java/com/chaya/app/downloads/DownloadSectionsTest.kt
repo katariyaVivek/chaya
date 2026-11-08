@@ -1,8 +1,10 @@
 package com.chaya.app.downloads
 
 import com.chaya.app.download.DownloadState
+import com.chaya.app.download.DownloadStep
 import com.chaya.app.download.DownloadTask
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.Instant
@@ -122,5 +124,49 @@ class DownloadSectionsTest {
         val stream = task(1, DownloadState.COMPLETED).copy(totalBytes = null, downloadedBytes = 2_097_152L, pageUrl = null)
 
         assertEquals("2.0 MB · cdn.example.com", finishedDetails(stream))
+    }
+
+    // ---- what a running download's card says ---- //
+
+    private fun running(step: DownloadStep?, downloaded: Long = 512, total: Long? = null) =
+        task(1, DownloadState.DOWNLOADING).copy(step = step, downloadedBytes = downloaded, totalBytes = total)
+
+    @Test
+    fun `joining a picture and its sound says so, with a moving bar`() {
+        val card = progressOf(running(DownloadStep.Joining))
+
+        assertEquals("Joining picture and sound", card.label)
+        assertEquals("512 B", card.detail)
+        assertNull("how long a join takes can't be told", card.fraction)
+    }
+
+    @Test
+    fun `an account's ZIP finds posts, counts its files, then makes the ZIP`() {
+        val finding = progressOf(running(DownloadStep.FindingPosts(found = 0)))
+        assertEquals(CardProgress(null, "Finding posts", ""), finding)
+        assertEquals("30 so far", progressOf(running(DownloadStep.FindingPosts(found = 30))).detail)
+
+        val fetching = progressOf(running(DownloadStep.FetchingFiles(saved = 40, found = 120)))
+        assertEquals("40 of 120 files", fetching.label)
+        assertEquals(1f / 3, fetching.fraction!!, 0.0001f)
+
+        val packing = progressOf(running(DownloadStep.FetchingFiles(saved = 120, found = 120)))
+        assertEquals("Making the ZIP", packing.label)
+        assertNull(packing.fraction)
+    }
+
+    @Test
+    fun `saving a stream as an MP4 shows how far it has got`() {
+        assertEquals(
+            CardProgress(0.5f, "Saving as MP4 · 50%", "512 B"),
+            progressOf(running(DownloadStep.SavingAsMp4(0.5f))),
+        )
+    }
+
+    @Test
+    fun `a plain transfer shows its share of a known size, and a moving bar without one`() {
+        assertEquals(CardProgress(0.5f, "50%", "500 B of 1000 B"), progressOf(running(null, downloaded = 500, total = 1000)))
+        assertEquals(CardProgress(null, "Downloading", "512 B"), progressOf(running(null)))
+        assertEquals(CardProgress(null, "Downloading", ""), progressOf(running(null, downloaded = 0)))
     }
 }

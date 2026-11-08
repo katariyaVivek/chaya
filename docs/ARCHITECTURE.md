@@ -284,8 +284,10 @@ not another flag beside it.
 | What | States | Where | Kind |
 |---|---|---|---|
 | A download's life | `QUEUED → DOWNLOADING ⇄ PAUSED → COMPLETED \| FAILED \| CANCELLED` | `download/DownloadState` (its diagram and `isActive`, `isUnfinished`, `canResume`) | One enum, stored |
-| What a running download is doing | picture → sound → join; list → files → ZIP; Media3 pieces → *Saving as MP4* | `DownloadManager.runTracks`, `runArchive`, `startSavingAsFile`; on the card, `ProgressBlock` | Worked out from files on disk, so a killed app resumes; `archive` and `savingAsFile` are in memory only |
-| The sheet over the page | none, media, link, account, a stream's qualities | `browser/BrowserSheet`, `BrowserUiState.sheet` | One value: one sheet at a time, closed together on a new page, home or tab switch |
+| What a running download is doing | picture → sound → join; list → files → ZIP; Media3 pieces → *Saving as MP4* | `DownloadManager.runTracks`, `runArchive`, `startSavingAsFile` | Worked out from files on disk, so a killed app resumes |
+| What its card says it is doing | `FindingPosts`, `FetchingFiles` (then *Making the ZIP*), `Joining`, `SavingAsMp4` | `download/DownloadStep`, `DownloadTask.step`; the card's text from `progressOf` | Sealed type, in memory only; dropped whenever the task stops running |
+| The sheet over the page | none, media, link, account, a stream's qualities, the ad blocker, the notification question (with its `AskedDownload`) | `browser/BrowserSheet`, `BrowserUiState.sheet` | One value: one sheet at a time, closed together on home or a tab switch, and on a new page except the ad blocker's (`forNewDocument`) |
+| Android's notification question | asked (the sentence), then waiting for Android's answer | `BrowserSheet.Notifications`, then `BrowserScreen`'s `awaitingPermission` | One value at each step; the answer is taken once (`answerNotifications`) |
 | A page | start screen, loading, loaded | `BrowserUiState.startedPage` / `finishedPage`, keyed by `navigationGeneration` | Pure functions; a late callback from an older document changes nothing |
 | *Scan more thoroughly* | not offered → offered → asked (`ThoroughScanRequest`) → done | `BrowserViewModel.offerThoroughScanAfterDelay`, `requestThoroughScan`, `completeThoroughScanRequest` | Two fields, one at a time |
 | A link's lookup | `Idle`, `Looking`, `Found`, `FoundPost`, `Failed` | `platform/LinkState`, `PlatformLinks` (a ticket drops late answers) | Sealed type |
@@ -294,15 +296,15 @@ not another flag beside it.
 | An engine set | `NEW → TRUSTED \| BAD`, `checking` while its first start runs | `platform/EngineSets` (`state.json`) | Enum, stored; a check the app died during counts as failed |
 | An engine update check | `NOT_DUE`, `UP_TO_DATE`, `DOWNLOADED`, `REFUSED`, `FAILED` | `EngineUpdater.Outcome` | Enum |
 | Windows: a download | `Queued → Downloading ⇄ Paused → Completed \| Failed`, steps `Picture`, `Sound`, `Joining`, `Saving` | `desktop/core/src/download/manager.rs` | Rust enums, stored |
+| Windows: the panel open | none, Settings, the ad blocker's shield, what the page holds | `desktop/app/ui/panels.js` (`onePanel`), used by `main.js` | One value: opening a panel closes the one open; Escape closes it |
 
-Still spread over separate fields, so they can disagree. These are candidates for the same treatment:
+Kept apart on purpose, because they are layers rather than one state:
 
-- `BrowserScreen` keeps the ad-blocking sheet, the tab grid and the notification rationale in its own
-  `remember`ed flags, beside `BrowserUiState.sheet`, so one of them can still open over a page's sheet.
-- The phone's card shows no *Joining* step: while a picture and its sound are joined, the card stays at the
-  last byte count. Windows has the `Joining` step for this.
-- The Windows window (`desktop/app/ui/main.js`) keeps its modes in module-level variables (`browsing`,
-  `asking`, `playing`, `editing`, `exporting`, ...).
+- The phone's tab grid is `BrowserScreen`'s own flag. It is about the tabs, not the page, so it stays open
+  through the tab switches and new documents that close a sheet. It hides when a sheet opens.
+- On Windows, the Downloads list, the player and the viewer each cover the page's place and stack: the
+  player opens from the list and closes back to it. `showPageView` asks whether any of them is shown.
+  `browsing` is whether a page is open at all, and `playing` is the video in the player, not a mode.
 
 ## Tests
 

@@ -29,10 +29,8 @@ data class DownloadTask(
     val audioRequestHeaders: Map<String, String> = emptyMap(),
     /** Shared by the files saved from one post, so the library shows them as one tile; null otherwise. */
     val groupKey: String? = null,
-    /** For a ZIP archive of many files, how far it has got; not stored. */
-    val archive: ArchiveProgress? = null,
-    /** While a finished stream is being saved as an MP4 file, how far that has got (0 to 1); not stored. */
-    val savingAsFile: Float? = null,
+    /** What it is doing besides fetching a file (finding an account's posts, joining, saving as MP4); not stored. */
+    val step: DownloadStep? = null,
     /** What became of saving a stream as a file, when there is something to say (re-encoded, or why not); not stored. */
     val saveNote: String? = null,
 ) {
@@ -50,7 +48,7 @@ data class DownloadTask(
 
     /** A finished stream that still lives only in the cache: it plays in the app and can be saved as an MP4 file. */
     val canSaveAsFile: Boolean
-        get() = state == DownloadState.COMPLETED && isStream && filePath == null && exportedUri == null && savingAsFile == null
+        get() = state == DownloadState.COMPLETED && isStream && filePath == null && exportedUri == null
 
     /** Started from engine results, so it brings its own headers instead of this browser's session. */
     val hasOwnRequest: Boolean

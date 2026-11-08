@@ -541,7 +541,7 @@ cd desktop && cargo test --workspace     # chaya-core
 python -m pytest desktop/engine          # putting the engine together
 python -m pytest app/src/test/python     # chaya_engine, shared with the phone
 cd desktop/design && npm test            # the design system
-cd desktop/app && node --test test/*.test.mjs   # the window's rules (ui/clips.js, export.js, search.js, own.js)
+cd desktop/app && node --test test/*.test.mjs   # the window's rules (ui/clips.js, export.js, search.js, own.js, panels.js)
 ```
 
 `CHAYA_ENGINE_DIR=<an engine folder> cargo test` also runs the prepared engine for real

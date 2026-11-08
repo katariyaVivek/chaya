@@ -470,4 +470,60 @@ class BrowserViewModelLinksTest {
 
         assertNull(viewModel.uiState.value.sheet)
     }
+
+    // ---- the ad blocker's sheet and the notification question ---- //
+
+    @Test
+    fun `the ad blocker's sheet stays through the reload its switches cause, and closes on going home`() {
+        val page = "https://news.example/story"
+        viewModel.onPageStarted(page)
+        viewModel.openAdBlockSheet()
+
+        // Turning blocking off for the site reloads the page under the open sheet.
+        viewModel.onNavigationInvalidated()
+        viewModel.onPageStarted(page)
+        assertEquals(BrowserSheet.AdBlock, viewModel.uiState.value.sheet)
+
+        viewModel.goHome()
+        assertNull(viewModel.uiState.value.sheet)
+    }
+
+    @Test
+    fun `the notification question replaces the sheet it was asked from, and its answer is acted on once`() {
+        viewModel.openLink(video)
+        val found = viewModel.linkState.value as LinkState.Found
+        val asked = AskedDownload.LinkQuality(found.best)
+
+        viewModel.askAboutNotifications(asked)
+        assertEquals(BrowserSheet.Notifications(asked), viewModel.uiState.value.sheet)
+
+        assertEquals(asked, viewModel.answerNotifications())
+        assertNull(viewModel.uiState.value.sheet)
+        assertNull("a second tap finds nothing to start", viewModel.answerNotifications())
+    }
+
+    @Test
+    fun `a question left open on a page that has gone starts nothing`() {
+        viewModel.onPageStarted("https://news.example/story")
+        viewModel.askAboutNotifications(AskedDownload.File(file("https://cdn.example/clip.mp4")))
+
+        viewModel.onPageStarted("https://news.example/other")
+
+        assertNull(viewModel.answerNotifications())
+    }
+
+    @Test
+    fun `a quality chosen from the notification question on an expired answer brings the link's sheet back`() {
+        viewModel.openLink(video)
+        val found = viewModel.linkState.value as LinkState.Found
+        viewModel.askAboutNotifications(AskedDownload.LinkQuality(found.best))
+        now += 21 * 60 * 1000L
+        var reported: String? = null
+
+        viewModel.answerNotifications()
+        viewModel.downloadLink(found.best) { reported = it }
+
+        assertNull("nothing may start from stale addresses", reported)
+        assertEquals("the new answer is shown", BrowserSheet.Link, viewModel.uiState.value.sheet)
+    }
 }
