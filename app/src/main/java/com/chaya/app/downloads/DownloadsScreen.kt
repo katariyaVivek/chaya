@@ -782,21 +782,9 @@ private fun StateArea(task: DownloadTask) {
 
 @Composable
 private fun ProgressBlock(task: DownloadTask) {
-    // An archive counts files, not bytes: it cannot know its size until every file has arrived.
-    val archive = task.archive
-    val saving = task.savingAsFile
-    val totalKnown = when {
-        saving != null -> true
-        archive != null -> !archive.listing && archive.found > 0
-        else -> (task.totalBytes ?: 0L) > 0L
-    }
-    val target = when {
-        saving != null -> saving
-        archive != null && archive.found > 0 -> archive.saved.toFloat() / archive.found
-        else -> task.progressFraction
-    }
+    val progress = progressOf(task)
     val fraction by animateFloatAsState(
-        targetValue = target.coerceIn(0f, 1f),
+        targetValue = (progress.fraction ?: 0f).coerceIn(0f, 1f),
         animationSpec = ChayaMotion.tweenStandard(),
         label = "progressFraction"
     )
@@ -807,7 +795,7 @@ private fun ProgressBlock(task: DownloadTask) {
 
     Column {
         // Streams never report a total size, so they get a moving bar instead of a stuck 0%.
-        if (totalKnown) {
+        if (progress.fraction != null) {
             LinearProgressIndicator(
                 progress = { fraction },
                 modifier = barModifier,
@@ -829,25 +817,12 @@ private fun ProgressBlock(task: DownloadTask) {
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
-                text = when {
-                    saving != null -> "Saving as MP4 · ${(fraction * 100).toInt()}%"
-                    archive != null && archive.listing -> "Finding posts"
-                    archive != null -> "${archive.saved} of ${archive.found} files"
-                    totalKnown -> "${(fraction * 100).toInt()}%"
-                    else -> "Downloading"
-                },
+                text = progress.label,
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary
             )
             Text(
-                text = when {
-                    saving != null -> if (task.downloadedBytes > 0) formatFileSize(task.downloadedBytes) else ""
-                    archive != null && archive.listing -> if (archive.found > 0) "${archive.found} so far" else ""
-                    archive != null -> formatFileSize(task.downloadedBytes)
-                    totalKnown -> "${formatFileSize(task.downloadedBytes)} of ${formatFileSize(task.totalBytes ?: 0)}"
-                    task.downloadedBytes > 0 -> formatFileSize(task.downloadedBytes)
-                    else -> ""
-                },
+                text = progress.detail,
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

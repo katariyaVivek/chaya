@@ -32,15 +32,6 @@ data class ArchiveRequest(
     val thumbnailUrl: String? = null,
 )
 
-/** How far an archive has got. Kept in memory only, and worked out again from its files when it resumes. */
-data class ArchiveProgress(
-    /** Files found so far while listing, or in the finished list. */
-    val found: Int,
-    /** Files fetched (or found gone) so far. */
-    val saved: Int,
-    /** Still finding out what the archive holds. */
-    val listing: Boolean,
-)
 
 /** One file in an archive's list. [name] is its name inside the archive, the same however often it is listed. */
 internal data class ArchiveEntry(val name: String, val url: String, val headers: Map<String, String>) {

@@ -242,10 +242,10 @@ class DownloadManager(
                 state = DownloadState.DOWNLOADING,
                 title = request.title,
                 thumbnailUrl = request.thumbnailUrl,
-                archive = ArchiveProgress(found = 0, saved = 0, listing = true),
+                step = DownloadStep.FindingPosts(found = 0),
             )
             if (freeBytes(saveDir) < MIN_FREE_BYTES_TO_START) {
-                val failed = task.copy(state = DownloadState.FAILED, error = DownloadError.StorageFull, archive = null)
+                val failed = task.copy(state = DownloadState.FAILED, error = DownloadError.StorageFull)
                 append(failed)
                 dao.insert(DownloadEntity.fromTask(failed))
                 return@launch
@@ -593,6 +593,7 @@ class DownloadManager(
 
     /** Joins the two finished tracks into the saved file, tidies up, and completes the task. */
     private fun joinTracks(id: Long, picture: File, sound: File) {
+        setStep(id, DownloadStep.Joining)
         scope.launch {
             val t = find(id) ?: return@launch
             val output = File(t.filePath ?: return@launch)
@@ -662,7 +663,7 @@ class DownloadManager(
         }
         val done = entries.count { File(folder, it.name).exists() || File(folder, it.name + SKIPPED_SUFFIX).exists() }
         val next = entries.firstOrNull { !File(folder, it.name).exists() && !File(folder, it.name + SKIPPED_SUFFIX).exists() }
-        updateArchive(id, ArchiveProgress(found = entries.size, saved = done, listing = false))
+        setStep(id, DownloadStep.FetchingFiles(saved = done, found = entries.size))
         if (next == null) packArchive(id, folder, entries) else fetchArchiveEntry(t, folder, next)
     }
 
@@ -675,11 +676,11 @@ class DownloadManager(
         // Resumed while a listing it had asked to stop is still winding down: removing the stop file above lets
         // that listing carry on, rather than starting a second one beside it.
         if (!listing.add(t.id)) return
-        updateArchive(t.id, ArchiveProgress(found = 0, saved = 0, listing = true))
+        setStep(t.id, DownloadStep.FindingPosts(found = 0))
         scope.launch {
             try {
                 lister.list(t.url, list, stop) { found ->
-                    updateArchive(t.id, ArchiveProgress(found = found, saved = 0, listing = true))
+                    setStep(t.id, DownloadStep.FindingPosts(found))
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -811,7 +812,7 @@ class DownloadManager(
                 return@launch
             }
             val length = output.length()
-            apply(current.copy(downloadedBytes = length, totalBytes = length, archive = null))
+            apply(current.copy(downloadedBytes = length, totalBytes = length))
             completeTask(id)
         }
     }
@@ -839,9 +840,14 @@ class DownloadManager(
         folder.listFiles()?.filter { it.isFile && it.name != ARCHIVE_LIST && it.name != ARCHIVE_STOP }
             ?.sumOf { it.length() } ?: 0L
 
-    /** Atomic, so a progress report racing a pause cannot write the old state back. */
-    private fun updateArchive(id: Long, progress: ArchiveProgress) {
-        _downloads.update { tasks -> tasks.map { if (it.id == id) it.copy(archive = progress) else it } }
+    /**
+     * Shows [step] on a task that is still downloading. Atomic, so a report racing a pause cannot write a step back
+     * onto a task that has stopped.
+     */
+    private fun setStep(id: Long, step: DownloadStep) {
+        _downloads.update { tasks ->
+            tasks.map { if (it.id == id && it.state == DownloadState.DOWNLOADING) it.copy(step = step) else it }
+        }
     }
 
     /** The site answered that the file is not there (any more), rather than that something failed on the way. */
@@ -905,10 +911,12 @@ class DownloadManager(
         }
         val output = resolveFileName(saveDir, sanitize(t.fileName.substringBeforeLast('.').ifBlank { "video" }) + ".mp4")
         val partial = File("${output.path}$SAVING_SUFFIX")
-        apply(t.copy(state = DownloadState.DOWNLOADING, savingAsFile = 0f, saveNote = null, error = null))
+        apply(t.copy(state = DownloadState.DOWNLOADING, step = DownloadStep.SavingAsMp4(0f), saveNote = null, error = null))
         val result = try {
             exporter.export(id, partial) { fraction ->
-                _downloads.update { list -> list.map { if (it.id == id && it.savingAsFile != null) it.copy(savingAsFile = fraction) else it } }
+                _downloads.update { list ->
+                    list.map { if (it.id == id && it.step is DownloadStep.SavingAsMp4) it.copy(step = DownloadStep.SavingAsMp4(fraction)) else it }
+                }
             }
         } catch (e: CancellationException) {
             partial.delete()
@@ -948,7 +956,6 @@ class DownloadManager(
                 mimeType = if (result.hasVideo) "video/mp4" else "audio/mp4",
                 downloadedBytes = length,
                 totalBytes = length,
-                savingAsFile = null,
                 saveNote = if (result.reencoded) "re-encoded to fit MP4" else null,
             ),
         )
@@ -960,7 +967,6 @@ class DownloadManager(
         val t = find(id) ?: return
         val kept = t.copy(
             state = DownloadState.COMPLETED,
-            savingAsFile = null,
             saveNote = note,
             error = null,
             updatedAt = System.currentTimeMillis(),
@@ -1065,7 +1071,9 @@ class DownloadManager(
         }
     }
 
-    private fun apply(task: DownloadTask) {
+    private fun apply(changed: DownloadTask) {
+        // A step is what a running download is doing, so a download that is not running has none.
+        val task = if (changed.state == DownloadState.DOWNLOADING) changed else changed.copy(step = null)
         // Single choke point for terminal transitions: every state flip is
         // recorded here, not scattered across complete/fail/pause paths.
         val previous = find(task.id)?.state

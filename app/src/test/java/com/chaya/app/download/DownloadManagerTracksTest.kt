@@ -99,6 +99,22 @@ class DownloadManagerTracksTest {
     }
 
     @Test
+    fun `while the picture and the sound are joined, the task says so, and says nothing once saved`() = runBlocking {
+        downloader.autoComplete = { call -> if (call.url.endsWith("/video")) VIDEO else AUDIO }
+        val joining = java.util.concurrent.CountDownLatch(1)
+        merger.hold = joining
+        manager.restore()
+
+        manager.startDownload(request())
+        val during = awaitTask { it.step == DownloadStep.Joining }
+        assertEquals(DownloadState.DOWNLOADING, during.state)
+
+        joining.countDown()
+        val done = awaitTask { it.state == DownloadState.COMPLETED }
+        assertEquals(null, done.step)
+    }
+
+    @Test
     fun `progress adds the picture and the sound together against the expected total`() = runBlocking {
         manager.restore()
         manager.startDownload(request(expectedBytes = 600))
@@ -428,9 +444,12 @@ private class ScriptedMerger : MediaMerger {
 
     val calls = CopyOnWriteArrayList<Call>()
     var failWith: Exception? = null
+    /** When set, a join waits for it, so a test can look at the task while the join runs. */
+    var hold: java.util.concurrent.CountDownLatch? = null
 
     override fun merge(picture: File, sound: File, output: File) {
         calls += Call(picture, sound, output)
+        hold?.await(10, java.util.concurrent.TimeUnit.SECONDS)
         failWith?.let { throw it }
         output.writeText("joined ${picture.length()} + ${sound.length()}")
     }

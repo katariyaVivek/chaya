@@ -120,7 +120,7 @@ class DownloadManagerStreamSaveTest {
 
         manager.streamCompleted(1)
 
-        assertTrue("shows it is saving", awaitUntil { task().savingAsFile == 0.5f })
+        assertTrue("shows it is saving", awaitUntil { task().step == DownloadStep.SavingAsMp4(0.5f) })
         assertEquals(DownloadState.DOWNLOADING, task().state)
         exporter.gate!!.complete(Unit)
         assertTrue(awaitUntil { task().state == DownloadState.COMPLETED && task().filePath != null })
@@ -130,7 +130,7 @@ class DownloadManagerStreamSaveTest {
         assertTrue(File(saved.filePath!!).isFile)
         assertEquals("video/mp4", saved.mimeType)
         assertEquals(1234L, saved.downloadedBytes)
-        assertNull(saved.savingAsFile)
+        assertNull(saved.step)
         assertFalse(saved.canSaveAsFile)
         assertEquals(listOf(1L), exporter.removed.toList())
         assertTrue("written beside the file, then renamed", exporter.exports.single().name.endsWith(".mp4.saving"))
@@ -218,7 +218,7 @@ class DownloadManagerStreamSaveTest {
         stream()
         exporter.gate = CompletableDeferred()
         manager.streamCompleted(1)
-        assertTrue(awaitUntil { task().savingAsFile != null })
+        assertTrue(awaitUntil { task().step is DownloadStep.SavingAsMp4 })
 
         manager.pauseDownload(1)
 
@@ -234,7 +234,7 @@ class DownloadManagerStreamSaveTest {
         stream()
         exporter.gate = CompletableDeferred()
         manager.streamCompleted(1)
-        assertTrue(awaitUntil { task().savingAsFile != null })
+        assertTrue(awaitUntil { task().step is DownloadStep.SavingAsMp4 })
 
         manager.deleteTask(1)
 

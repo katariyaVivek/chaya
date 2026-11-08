@@ -85,7 +85,7 @@ class DownloadManagerArchiveTest {
         assertEquals("no browser cookies are sent with an archive's files", listOf(null, null), server.cookies)
         assertEquals("application/zip", done.mimeType)
         assertEquals("someone (Instagram).zip", done.fileName)
-        assertNull(done.archive)
+        assertNull(done.step)
         val zip = File(done.filePath!!)
         assertEquals(
             mapOf("2024-05-01 A 1.jpg" to "https://cdn/a1", "2024-05-01 A 2.mp4" to "https://cdn/a2"),
@@ -234,7 +234,7 @@ class DownloadManagerArchiveTest {
         manager.restore()
 
         manager.startArchive(request)
-        val listing = awaitTask { it.archive?.listing == true }
+        val listing = awaitTask { it.step is DownloadStep.FindingPosts }
         lister.awaitStarted()
         manager.pauseDownload(listing.id)
         awaitTask { it.state == DownloadState.PAUSED }
