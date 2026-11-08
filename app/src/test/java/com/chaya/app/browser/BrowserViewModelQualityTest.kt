@@ -6,7 +6,9 @@ import com.chaya.app.model.DetectedMedia
 import com.chaya.app.model.DetectionSource
 import com.chaya.app.streaming.StreamTrack
 import com.chaya.app.ui.components.QualityPickerState
+import kotlinx.coroutines.CompletableDeferred
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -55,4 +57,48 @@ class BrowserViewModelQualityTest {
         val state = viewModel.uiState.value.qualityPickerState
         assertEquals(2_700.0, (state as QualityPickerState.Ready).durationSeconds!!, 0.001)
     }
+
+    @Test
+    fun `a picker dismissed while it reads the qualities stays closed when they arrive`() {
+        val viewModel = BrowserViewModel(RuntimeEnvironment.getApplication())
+        val answer = CompletableDeferred<Result<List<StreamTrack>>>()
+        viewModel.readQualities = { answer.await() }
+
+        viewModel.analyzeStream(stream)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(QualityPickerState.Loading, viewModel.uiState.value.qualityPickerState)
+        viewModel.dismissQualityPicker()
+
+        answer.complete(Result.success(listOf(track(720))))
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertNull(viewModel.uiState.value.sheet)
+    }
+
+    @Test
+    fun `an older question's answer does not fill the picker of a newer one`() {
+        val viewModel = BrowserViewModel(RuntimeEnvironment.getApplication())
+        val first = CompletableDeferred<Result<List<StreamTrack>>>()
+        val second = CompletableDeferred<Result<List<StreamTrack>>>()
+        val answers = ArrayDeque(listOf(first, second))
+        viewModel.readQualities = { answers.removeFirst().await() }
+
+        viewModel.analyzeStream(stream)
+        shadowOf(Looper.getMainLooper()).idle()
+        viewModel.analyzeStream(stream.copy(url = "https://player.example/stream/other"))
+        shadowOf(Looper.getMainLooper()).idle()
+
+        first.complete(Result.success(listOf(track(360))))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(QualityPickerState.Loading, viewModel.uiState.value.qualityPickerState)
+
+        second.complete(Result.success(listOf(track(1080))))
+        shadowOf(Looper.getMainLooper()).idle()
+        val ready = viewModel.uiState.value.qualityPickerState as QualityPickerState.Ready
+        assertEquals("https://player.example/stream/other", ready.url)
+    }
+
+    private fun track(height: Int) = StreamTrack(
+        rendererType = C.TRACK_TYPE_VIDEO, label = "${height}p", streamKeys = emptyList(), height = height,
+    )
 }

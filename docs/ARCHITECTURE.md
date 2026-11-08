@@ -274,6 +274,36 @@ Share. Reached from the Downloads screen's menu.
   (`history/HistoryScreen`, `history/BookmarksScreen`), which the navigation host answers by going
   back to the browser.
 
+## State machines
+
+Much of the app is something that is in one of a few states and moves between them. Where those states are
+one value, impossible combinations cannot be written; where they are spread over flags and nullable fields,
+every change has to keep them consistent by hand. This is where each one lives. Add a state to the type,
+not another flag beside it.
+
+| What | States | Where | Kind |
+|---|---|---|---|
+| A download's life | `QUEUED → DOWNLOADING ⇄ PAUSED → COMPLETED \| FAILED \| CANCELLED` | `download/DownloadState` (its diagram and `isActive`, `isUnfinished`, `canResume`) | One enum, stored |
+| What a running download is doing | picture → sound → join; list → files → ZIP; Media3 pieces → *Saving as MP4* | `DownloadManager.runTracks`, `runArchive`, `startSavingAsFile`; on the card, `ProgressBlock` | Worked out from files on disk, so a killed app resumes; `archive` and `savingAsFile` are in memory only |
+| The sheet over the page | none, media, link, account, a stream's qualities | `browser/BrowserSheet`, `BrowserUiState.sheet` | One value: one sheet at a time, closed together on a new page, home or tab switch |
+| A page | start screen, loading, loaded | `BrowserUiState.startedPage` / `finishedPage`, keyed by `navigationGeneration` | Pure functions; a late callback from an older document changes nothing |
+| *Scan more thoroughly* | not offered → offered → asked (`ThoroughScanRequest`) → done | `BrowserViewModel.offerThoroughScanAfterDelay`, `requestThoroughScan`, `completeThoroughScanRequest` | Two fields, one at a time |
+| A link's lookup | `Idle`, `Looking`, `Found`, `FoundPost`, `Failed` | `platform/LinkState`, `PlatformLinks` (a ticket drops late answers) | Sealed type |
+| A stream's qualities | `Loading`, `Ready`, `Error` | `ui/components/QualityPickerState`, inside `BrowserSheet.Quality` | Sealed type; an answer fills only the picker still waiting for it |
+| A tab | shown, live in the background, discarded; renderer lost | `BrowserTab`: `saved == null` is shown, `webView == null` is discarded; `RendererLoss` | Nullable fields, used from the main thread only |
+| An engine set | `NEW → TRUSTED \| BAD`, `checking` while its first start runs | `platform/EngineSets` (`state.json`) | Enum, stored; a check the app died during counts as failed |
+| An engine update check | `NOT_DUE`, `UP_TO_DATE`, `DOWNLOADED`, `REFUSED`, `FAILED` | `EngineUpdater.Outcome` | Enum |
+| Windows: a download | `Queued → Downloading ⇄ Paused → Completed \| Failed`, steps `Picture`, `Sound`, `Joining`, `Saving` | `desktop/core/src/download/manager.rs` | Rust enums, stored |
+
+Still spread over separate fields, so they can disagree. These are candidates for the same treatment:
+
+- `BrowserScreen` keeps the ad-blocking sheet, the tab grid and the notification rationale in its own
+  `remember`ed flags, beside `BrowserUiState.sheet`, so one of them can still open over a page's sheet.
+- The phone's card shows no *Joining* step: while a picture and its sound are joined, the card stays at the
+  last byte count. Windows has the `Joining` step for this.
+- The Windows window (`desktop/app/ui/main.js`) keeps its modes in module-level variables (`browsing`,
+  `asking`, `playing`, `editing`, `exporting`, ...).
+
 ## Tests
 
 | Where | What | Runs |

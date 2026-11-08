@@ -138,4 +138,4 @@ fun libraryItems(tasks: List<DownloadTask>, filter: LibraryFilter = LibraryFilte
 
 /** How many downloads are still running, waiting or paused: the grid only shows what is done. */
 fun unfinishedCount(tasks: List<DownloadTask>): Int =
-    tasks.count { it.state == DownloadState.DOWNLOADING || it.state == DownloadState.QUEUED || it.state == DownloadState.PAUSED }
+    tasks.count { it.state.isUnfinished }

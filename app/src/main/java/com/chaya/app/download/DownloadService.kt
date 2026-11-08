@@ -105,7 +105,3 @@ class DownloadService : Service() {
         super.onDestroy()
     }
 }
-
-/** Active states worth keeping a foreground service around for. */
-private val DownloadState.isActive: Boolean
-    get() = this == DownloadState.DOWNLOADING || this == DownloadState.QUEUED

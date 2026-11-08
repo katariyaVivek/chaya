@@ -135,7 +135,7 @@ class DownloadManager(
         if (ready.isCompleted) return
         val entities = dao.getAllOnce()
         val tasks = entities.map { e ->
-            if (e.state == DownloadState.DOWNLOADING || e.state == DownloadState.QUEUED) {
+            if (e.state.isActive) {
                 dao.updateState(e.id, DownloadState.PAUSED)
                 e.copy(state = DownloadState.PAUSED).toTask()
             } else {
@@ -279,7 +279,7 @@ class DownloadManager(
     /** Resume a paused download, or retry a failed/cancelled one (keeps partial data). */
     fun resumeDownload(id: Long) {
         val t0 = find(id) ?: return
-        if (t0.state !in resumableStates) return
+        if (!t0.state.canResume) return
         ensureServiceRunning()
 
         scope.launch {
@@ -332,7 +332,7 @@ class DownloadManager(
 
     fun cancelDownload(id: Long) {
         val t = find(id) ?: return
-        if (t.state != DownloadState.DOWNLOADING && t.state != DownloadState.QUEUED) return
+        if (!t.state.isActive) return
         if (stopSavingAsFile(id)) return
         if (t.isArchive) {
             // As with a pause: the state first, so a listing that ends sees the cancel and does not restart.
@@ -350,7 +350,7 @@ class DownloadManager(
 
     fun cancelAll() {
         _downloads.value
-            .filter { it.state == DownloadState.DOWNLOADING || it.state == DownloadState.QUEUED }
+            .filter { it.state.isActive }
             .forEach { cancelDownload(it.id) }
     }
 
@@ -1253,9 +1253,6 @@ class DownloadManager(
         private val ARCHIVE_RETRY_DELAYS_MILLIS = listOf(3_000L, 15_000L, 60_000L)
 
         private val ILLEGAL_CHARS = Regex("[\\\\/:*?\"<>|]")
-        private val resumableStates = setOf(
-            DownloadState.PAUSED, DownloadState.FAILED, DownloadState.CANCELLED
-        )
 
         fun isStreamingUrl(url: String): Boolean = StreamDownloader.isStreamingUrl(url)
 

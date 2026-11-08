@@ -435,5 +435,39 @@ class BrowserViewModelLinksTest {
         // writing to the database, which every test's app shares, while the next test runs.
         waitForDownload { it.isArchive && it.state == DownloadState.FAILED }
     }
-}
 
+    // ---- one sheet at a time ---- //
+
+    @Test
+    fun `a link shared while the page's media sheet is open replaces it instead of stacking on it`() {
+        viewModel.onPageStarted("https://news.example/story")
+        viewModel.toggleMediaSheet()
+        assertTrue(viewModel.uiState.value.showMediaSheet)
+
+        viewModel.openLink(video)
+
+        assertEquals(BrowserSheet.Link, viewModel.uiState.value.sheet)
+        assertFalse("two sheets never show at once", viewModel.uiState.value.showMediaSheet)
+    }
+
+    @Test
+    fun `dismissing a sheet that is no longer shown leaves the one shown open`() {
+        viewModel.openLink(video)
+        viewModel.openLink("https://www.instagram.com/someone/")
+
+        viewModel.dismissLinkSheet()
+
+        assertEquals(BrowserSheet.Profile, viewModel.uiState.value.sheet)
+    }
+
+    @Test
+    fun `a reload or new address closes the account sheet as it does every other`() {
+        viewModel.onPageStarted("https://x.com/someone")
+        viewModel.toggleProfileSheet()
+        assertTrue(viewModel.uiState.value.showProfileSheet)
+
+        viewModel.onNavigationInvalidated()
+
+        assertNull(viewModel.uiState.value.sheet)
+    }
+}
