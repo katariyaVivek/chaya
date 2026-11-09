@@ -42,7 +42,7 @@ curl -o app/src/main/assets/adblock/easyprivacy.txt https://easylist.to/easylist
 
 | Workflow | When | What |
 |---|---|---|
-| `build.yml` | every PR and push to `main` | unit tests, then the debug APK. Test-only changes skip the APK; a PR that changes only `desktop/`, its workflows, `docs/` or the root's Markdown skips the job altogether (skipped, so it never holds up a merge). A failing test prints its message, and the reports are uploaded. |
+| `build.yml` | every PR and push to `main` | unit tests, then the debug APK and Android Lint (`lintDebug`). Kotlin warnings fail the build, and so does any Lint finding, warnings included, not listed in `app/lint-baseline.xml` (the report is uploaded as `lint-report`). Lint's checks for newer library and SDK versions are off: they would fail on the day of a release, not because of the change. Test-only changes skip the APK and Lint; a PR that changes only `desktop/`, its workflows, `docs/` or the root's Markdown skips the job altogether (skipped, so it never holds up a merge). A failing test prints its message, and the reports are uploaded. |
 | `build.yml` (manual) | *Run workflow* | also runs the instrumented tests on an emulator |
 | `build.yml` (tag `v*`) | pushing a version tag | tests, signed release APK, GitHub Release |
 | `engine.yml` | PRs touching the Python engine | pytest with the versions pinned in `app/build.gradle.kts` (`enginePackages`) |
