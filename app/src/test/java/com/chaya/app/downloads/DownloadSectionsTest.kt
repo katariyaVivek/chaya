@@ -169,4 +169,17 @@ class DownloadSectionsTest {
         assertEquals(CardProgress(null, "Downloading", "512 B"), progressOf(running(null)))
         assertEquals(CardProgress(null, "Downloading", ""), progressOf(running(null, downloaded = 0)))
     }
+
+    @Test
+    fun `a quality whose picture and sound come apart says which half is on its way`() {
+        assertEquals(
+            CardProgress(0.25f, "Picture · 25%", "250 B of 1000 B"),
+            progressOf(running(DownloadStep.FetchingPicture, downloaded = 250, total = 1000)),
+        )
+        assertEquals(
+            CardProgress(0.75f, "Sound · 75%", "750 B of 1000 B"),
+            progressOf(running(DownloadStep.FetchingSound, downloaded = 750, total = 1000)),
+        )
+        assertEquals(CardProgress(null, "Picture", "512 B"), progressOf(running(DownloadStep.FetchingPicture)))
+    }
 }

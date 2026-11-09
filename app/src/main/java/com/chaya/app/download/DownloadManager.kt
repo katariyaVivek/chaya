@@ -551,9 +551,13 @@ class DownloadManager(
         val picture = File("$path$PICTURE_SUFFIX")
         val sound = File("$path$SOUND_SUFFIX")
         when {
-            !picture.exists() -> fetchTrack(t, t.url, t.requestHeaders, picture, bytesBefore = 0L)
+            !picture.exists() -> {
+                setStep(id, DownloadStep.FetchingPicture)
+                fetchTrack(t, t.url, t.requestHeaders, picture, bytesBefore = 0L)
+            }
             !sound.exists() -> {
                 val soundUrl = t.audioUrl ?: return
+                setStep(id, DownloadStep.FetchingSound)
                 fetchTrack(t, soundUrl, t.audioRequestHeaders, sound, bytesBefore = picture.length())
             }
             else -> joinTracks(id, picture, sound)
@@ -591,36 +595,57 @@ class DownloadManager(
         )
     }
 
-    /** Joins the two finished tracks into the saved file, tidies up, and completes the task. */
+    /** Downloads whose picture and sound are being joined right now, so a resume does not start a second join. */
+    private val joining: MutableSet<Long> = ConcurrentHashMap.newKeySet()
+
+    /**
+     * Joins the two finished tracks into the saved file, tidies up, and completes the task. A join cannot be stopped
+     * halfway, so a pause or cancel during it takes effect when it ends: the joined file is thrown away and both
+     * tracks stay, so a resume repeats only the join. Resumed while the join still runs, that join carries on.
+     */
     private fun joinTracks(id: Long, picture: File, sound: File) {
         setStep(id, DownloadStep.Joining)
+        if (!joining.add(id)) return
         scope.launch {
-            val t = find(id) ?: return@launch
-            val output = File(t.filePath ?: return@launch)
-            val joining = File("${output.path}$JOINING_SUFFIX")
             try {
-                merger.merge(picture, sound, joining)
-                output.delete()
-                if (!joining.renameTo(output)) throw CombineException("Couldn't keep the combined file")
-            } catch (e: CancellationException) {
-                joining.delete()
-                throw e
-            } catch (e: Exception) {
-                // The two tracks stay on disk, so a retry only repeats the join.
-                joining.delete()
-                failTask(id, e)
-                return@launch
+                joinNow(id, picture, sound)
+            } finally {
+                joining.remove(id)
             }
-            picture.delete()
-            sound.delete()
-            val current = find(id) ?: run {
-                output.delete() // removed while it was being joined
-                return@launch
-            }
-            val length = output.length()
-            apply(current.copy(downloadedBytes = length, totalBytes = length))
-            completeTask(id)
         }
+    }
+
+    private fun joinNow(id: Long, picture: File, sound: File) {
+        val t = find(id) ?: return
+        val output = File(t.filePath ?: return)
+        val joined = File("${output.path}$JOINING_SUFFIX")
+        try {
+            merger.merge(picture, sound, joined)
+            // Paused, cancelled or removed while it was joined: the person's choice stands.
+            if (find(id)?.state != DownloadState.DOWNLOADING) {
+                joined.delete()
+                return
+            }
+            output.delete()
+            if (!joined.renameTo(output)) throw CombineException("Couldn't keep the combined file")
+        } catch (e: CancellationException) {
+            joined.delete()
+            throw e
+        } catch (e: Exception) {
+            // The two tracks stay on disk, so a retry only repeats the join.
+            joined.delete()
+            failTask(id, e)
+            return
+        }
+        picture.delete()
+        sound.delete()
+        val current = find(id) ?: run {
+            output.delete() // removed just as it was joined
+            return
+        }
+        val length = output.length()
+        apply(current.copy(downloadedBytes = length, totalBytes = length))
+        completeTask(id)
     }
 
     /** The engine's headers for [url] when it gave any; otherwise this browser's own session, as for any page download. */

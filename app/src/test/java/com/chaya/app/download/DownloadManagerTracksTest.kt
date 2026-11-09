@@ -115,6 +115,89 @@ class DownloadManagerTracksTest {
     }
 
     @Test
+    fun `the task says which half it is fetching, the picture and then the sound`() = runBlocking {
+        manager.restore()
+        manager.startDownload(request())
+        awaitCalls(1)
+        assertEquals(DownloadStep.FetchingPicture, manager.downloads.value.single().step)
+
+        downloader.finish(downloader.calls[0], VIDEO)
+        awaitCalls(2)
+
+        assertEquals(DownloadStep.FetchingSound, awaitTask { it.step == DownloadStep.FetchingSound }.step)
+    }
+
+    // ---- a pause or cancel while the picture and sound are joined ---- //
+
+    /** Starts a download whose join waits for the returned latch, and returns once the join has begun. */
+    private suspend fun startHeldJoin(): java.util.concurrent.CountDownLatch {
+        downloader.autoComplete = { call -> if (call.url.endsWith("/video")) VIDEO else AUDIO }
+        val hold = java.util.concurrent.CountDownLatch(1)
+        merger.hold = hold
+        manager.restore()
+        manager.startDownload(request())
+        awaitTask { it.step == DownloadStep.Joining }
+        return hold
+    }
+
+    /** Waits until [count] joins have ended and the manager has dealt with their result. */
+    private suspend fun awaitJoinsEnded(count: Int) {
+        val deadline = System.currentTimeMillis() + TIMEOUT_MS
+        while (merger.ended.get() < count && System.currentTimeMillis() < deadline) delay(20)
+        assertEquals(count, merger.ended.get())
+        delay(200)
+    }
+
+    @Test
+    fun `pausing while the picture and sound are joined stays paused, and a resume joins them again`() = runBlocking {
+        val hold = startHeldJoin()
+        val path = manager.downloads.value.single().filePath!!
+
+        manager.pauseDownload(1)
+        hold.countDown()
+        awaitJoinsEnded(1)
+
+        val paused = manager.downloads.value.single()
+        assertEquals(DownloadState.PAUSED, paused.state)
+        assertFalse("the joined file is not kept", File(path).exists())
+        assertFalse(File("$path.joining").exists())
+        assertTrue("both tracks stay", File("$path.video").exists() && File("$path.audio").exists())
+
+        manager.resumeDownload(1)
+        val done = awaitTask { it.state == DownloadState.COMPLETED }
+        assertEquals(2, merger.calls.size)
+        assertEquals("nothing is downloaded again", 2, downloader.calls.size)
+        assertEquals("joined ${VIDEO.size} + ${AUDIO.size}", File(done.filePath!!).readText())
+    }
+
+    @Test
+    fun `cancelling while the picture and sound are joined stays cancelled`() = runBlocking {
+        val hold = startHeldJoin()
+        val path = manager.downloads.value.single().filePath!!
+
+        manager.cancelDownload(1)
+        hold.countDown()
+        awaitJoinsEnded(1)
+
+        assertEquals(DownloadState.CANCELLED, manager.downloads.value.single().state)
+        assertFalse(File(path).exists())
+    }
+
+    @Test
+    fun `resumed while its join still runs, that join finishes the download and no second one starts`() = runBlocking {
+        val hold = startHeldJoin()
+
+        manager.pauseDownload(1)
+        manager.resumeDownload(1)
+        assertEquals(DownloadStep.Joining, awaitTask { it.state == DownloadState.DOWNLOADING && it.step == DownloadStep.Joining }.step)
+        hold.countDown()
+
+        val done = awaitTask { it.state == DownloadState.COMPLETED }
+        assertEquals(1, merger.calls.size)
+        assertEquals("joined ${VIDEO.size} + ${AUDIO.size}", File(done.filePath!!).readText())
+    }
+
+    @Test
     fun `progress adds the picture and the sound together against the expected total`() = runBlocking {
         manager.restore()
         manager.startDownload(request(expectedBytes = 600))
@@ -446,11 +529,17 @@ private class ScriptedMerger : MediaMerger {
     var failWith: Exception? = null
     /** When set, a join waits for it, so a test can look at the task while the join runs. */
     var hold: java.util.concurrent.CountDownLatch? = null
+    /** Joins that have ended, however they ended. */
+    val ended = java.util.concurrent.atomic.AtomicInteger()
 
     override fun merge(picture: File, sound: File, output: File) {
         calls += Call(picture, sound, output)
-        hold?.await(10, java.util.concurrent.TimeUnit.SECONDS)
-        failWith?.let { throw it }
-        output.writeText("joined ${picture.length()} + ${sound.length()}")
+        try {
+            hold?.await(10, java.util.concurrent.TimeUnit.SECONDS)
+            failWith?.let { throw it }
+            output.writeText("joined ${picture.length()} + ${sound.length()}")
+        } finally {
+            ended.incrementAndGet()
+        }
     }
 }
