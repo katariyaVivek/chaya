@@ -125,6 +125,9 @@ class StreamDownloader(
                             listener.onStreamProgress(it, download.bytesDownloaded, total)
                         }
                     }
+                    // Removal is asked for by Chaya (delete), which has already let the task go; a restart is
+                    // Media3's own, and the download reports again as it goes on.
+                    Download.STATE_REMOVING, Download.STATE_RESTARTING -> Unit
                 }
             }
         })

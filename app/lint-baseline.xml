@@ -1,0 +1,2361 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<issues format="6" by="lint 8.13.0" type="baseline" client="gradle" dependencies="false" name="AGP (8.13.0)" variant="all" version="8.13.0">
+
+    <issue
+        id="InlinedApi"
+        message="Field requires API level 33 (current min is 26): `android.Manifest.permission#POST_NOTIFICATIONS`"
+        errorLine1="            notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)"
+        errorLine2="                                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/browser/BrowserScreen.kt"
+            line="623"
+            column="44"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="    fun startDownload(media: DetectedMedia, streamKeys: List&lt;StreamKey>) {"
+        errorLine2="                                                             ~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/download/DownloadManager.kt"
+            line="169"
+            column="62"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        streamKeys: List&lt;StreamKey>?"
+        errorLine2="                         ~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/download/DownloadManager.kt"
+            line="475"
+            column="26"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                    .setAllowCrossProtocolRedirects(true)"
+        errorLine2="                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="40"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                    .setConnectTimeoutMs(15_000)"
+        errorLine2="                     ~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="41"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                    .setReadTimeoutMs(30_000)"
+        errorLine2="                     ~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="42"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                    dataSourceFactory.setUserAgent(userAgent)"
+        errorLine2="                                      ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="44"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                if (headers.isNotEmpty()) dataSourceFactory.setDefaultRequestProperties(headers)"
+        errorLine2="                                                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="48"
+            column="61"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                val helper = DownloadHelper.forMediaItem("
+        errorLine2="                    ~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="56"
+            column="21"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                val helper = DownloadHelper.forMediaItem("
+        errorLine2="                                            ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="56"
+            column="45"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                    DefaultRenderersFactory(context),"
+        errorLine2="                    ~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="59"
+            column="21"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                continuation.invokeOnCancellation { helper.release() }"
+        errorLine2="                                                           ~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="63"
+            column="60"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                helper.prepare(object : DownloadHelper.Callback {"
+        errorLine2="                       ~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="65"
+            column="24"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                    override fun onPrepared(helper: DownloadHelper) {"
+        errorLine2="                                 ~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="66"
+            column="34"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                    override fun onPrepared(helper: DownloadHelper) {"
+        errorLine2="                                                    ~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="66"
+            column="53"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                        val duration = durationSeconds(helper.manifest)"
+        errorLine2="                                                              ~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="67"
+            column="63"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                        val tracks = extractTracks(helper, DownloadHelper.getDefaultTrackSelectorParameters(context))"
+        errorLine2="                                                                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="68"
+            column="75"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                        helper.release()"
+        errorLine2="                               ~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="70"
+            column="32"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                    override fun onPrepareError(helper: DownloadHelper, e: IOException) {"
+        errorLine2="                                 ~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="76"
+            column="34"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                    override fun onPrepareError(helper: DownloadHelper, e: IOException) {"
+        errorLine2="                                                        ~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="76"
+            column="57"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                        helper.release()"
+        errorLine2="                               ~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="77"
+            column="32"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        is HlsManifest -> manifest.mediaPlaylist.takeIf { it.hasEndTag }?.let { secondsOf(it.durationUs) }"
+        errorLine2="           ~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="97"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        is HlsManifest -> manifest.mediaPlaylist.takeIf { it.hasEndTag }?.let { secondsOf(it.durationUs) }"
+        errorLine2="                                   ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="97"
+            column="36"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        is DashManifest -> manifest.durationMs.takeIf { it != C.TIME_UNSET &amp;&amp; it > 0 }?.let { it / 1000.0 }"
+        errorLine2="           ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="98"
+            column="12"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        is DashManifest -> manifest.durationMs.takeIf { it != C.TIME_UNSET &amp;&amp; it > 0 }?.let { it / 1000.0 }"
+        errorLine2="                                    ~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="98"
+            column="37"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        helper: DownloadHelper,"
+        errorLine2="                ~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="117"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        parameters: DefaultTrackSelector.Parameters,"
+        errorLine2="                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="118"
+            column="21"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        for (period in 0 until helper.periodCount) {"
+        errorLine2="                                      ~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="122"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="            val trackInfo = helper.getMappedTrackInfo(period)"
+        errorLine2="                ~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="123"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="            val trackInfo = helper.getMappedTrackInfo(period)"
+        errorLine2="                                   ~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="123"
+            column="36"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="            for (renderer in 0 until trackInfo.rendererCount) {"
+        errorLine2="                                               ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="124"
+            column="48"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                val rendererType = trackInfo.getRendererType(renderer)"
+        errorLine2="                                             ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="125"
+            column="46"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                val trackGroups = trackInfo.getTrackGroups(renderer)"
+        errorLine2="                    ~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="128"
+            column="21"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                val trackGroups = trackInfo.getTrackGroups(renderer)"
+        errorLine2="                                            ~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="128"
+            column="45"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                for (group in 0 until trackGroups.length) {"
+        errorLine2="                                                  ~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="129"
+            column="51"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                    val trackGroup = trackGroups.get(group)"
+        errorLine2="                                                 ~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="130"
+            column="50"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                    for (trackIndex in 0 until trackGroup.length) {"
+        errorLine2="                                                          ~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="131"
+            column="59"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                            format = trackGroup.getFormat(trackIndex),"
+        errorLine2="                                                ~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="133"
+            column="49"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        helper: DownloadHelper,"
+        errorLine2="                ~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="147"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        parameters: DefaultTrackSelector.Parameters,"
+        errorLine2="                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="148"
+            column="21"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="    ): List&lt;StreamKey> {"
+        errorLine2="            ~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="153"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        for (p in 0 until helper.periodCount) helper.clearTrackSelections(p)"
+        errorLine2="                                 ~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="154"
+            column="34"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        for (p in 0 until helper.periodCount) helper.clearTrackSelections(p)"
+        errorLine2="                                                     ~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="154"
+            column="54"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        helper.addTrackSelectionForSingleRenderer("
+        errorLine2="               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="155"
+            column="16"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="            listOf(DefaultTrackSelector.SelectionOverride(group, trackIndex)),"
+        errorLine2="                                        ~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="159"
+            column="41"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        return helper.getDownloadRequest(null).streamKeys"
+        errorLine2="                      ~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="161"
+            column="23"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        return helper.getDownloadRequest(null).streamKeys"
+        errorLine2="                                               ~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="161"
+            column="48"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="    fun streamKeysFor(chosen: List&lt;StreamTrack>): List&lt;StreamKey> {"
+        errorLine2="                                                       ~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="171"
+            column="56"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="    internal fun trackFor(format: Format, rendererType: Int, streamKeys: List&lt;StreamKey>): StreamTrack {"
+        errorLine2="                                                                              ~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="181"
+            column="79"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        val bitrate = maxOf(format.bitrate, format.peakBitrate, format.averageBitrate, 0)"
+        errorLine2="                                   ~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="182"
+            column="36"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        val bitrate = maxOf(format.bitrate, format.peakBitrate, format.averageBitrate, 0)"
+        errorLine2="                                                   ~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="182"
+            column="52"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        val bitrate = maxOf(format.bitrate, format.peakBitrate, format.averageBitrate, 0)"
+        errorLine2="                                                                       ~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ManifestHelper.kt"
+            line="182"
+            column="72"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        ExoPlayer.Builder(context, DefaultRenderersFactory(context))"
+        errorLine2="                  ~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/ui/player/PlayerScreen.kt"
+            line="57"
+            column="19"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        ExoPlayer.Builder(context, DefaultRenderersFactory(context))"
+        errorLine2="                                   ~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/ui/player/PlayerScreen.kt"
+            line="57"
+            column="36"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="            .setMediaSourceFactory(DefaultMediaSourceFactory(playback.factory))"
+        errorLine2="                                   ~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/ui/player/PlayerScreen.kt"
+            line="58"
+            column="36"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="    override fun addTransferListener(transferListener: TransferListener) = delegate.addTransferListener(transferListener)"
+        errorLine2="                 ~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ReportingDataSource.kt"
+            line="19"
+            column="18"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="    override fun addTransferListener(transferListener: TransferListener) = delegate.addTransferListener(transferListener)"
+        errorLine2="                                                       ~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ReportingDataSource.kt"
+            line="19"
+            column="56"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="    override fun addTransferListener(transferListener: TransferListener) = delegate.addTransferListener(transferListener)"
+        errorLine2="                                                                                    ~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ReportingDataSource.kt"
+            line="19"
+            column="85"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="    override fun open(dataSpec: DataSpec): Long {"
+        errorLine2="                 ~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ReportingDataSource.kt"
+            line="21"
+            column="18"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="    override fun open(dataSpec: DataSpec): Long {"
+        errorLine2="                                ~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ReportingDataSource.kt"
+            line="21"
+            column="33"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        val address = dataSpec.uri.toString()"
+        errorLine2="                               ~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ReportingDataSource.kt"
+            line="22"
+            column="32"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="            delegate.open(dataSpec)"
+        errorLine2="                     ~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ReportingDataSource.kt"
+            line="24"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        val type = delegate.responseHeaders.entries"
+        errorLine2="                            ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ReportingDataSource.kt"
+            line="32"
+            column="29"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="    override fun read(buffer: ByteArray, offset: Int, length: Int): Int = delegate.read(buffer, offset, length)"
+        errorLine2="                 ~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ReportingDataSource.kt"
+            line="38"
+            column="18"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="    override fun read(buffer: ByteArray, offset: Int, length: Int): Int = delegate.read(buffer, offset, length)"
+        errorLine2="                                                                                   ~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ReportingDataSource.kt"
+            line="38"
+            column="84"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="    override fun getUri(): Uri? = delegate.uri"
+        errorLine2="                 ~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ReportingDataSource.kt"
+            line="40"
+            column="18"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="    override fun getUri(): Uri? = delegate.uri"
+        errorLine2="                                           ~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ReportingDataSource.kt"
+            line="40"
+            column="44"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="    override fun getResponseHeaders(): Map&lt;String, List&lt;String>> = delegate.responseHeaders"
+        errorLine2="                 ~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ReportingDataSource.kt"
+            line="42"
+            column="18"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="    override fun getResponseHeaders(): Map&lt;String, List&lt;String>> = delegate.responseHeaders"
+        errorLine2="                                                                            ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ReportingDataSource.kt"
+            line="42"
+            column="77"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="    override fun close() = delegate.close()"
+        errorLine2="                 ~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ReportingDataSource.kt"
+            line="44"
+            column="18"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="    override fun close() = delegate.close()"
+        errorLine2="                                    ~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/ReportingDataSource.kt"
+            line="44"
+            column="37"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="    private val databaseProvider = StandaloneDatabaseProvider(context)"
+        errorLine2="                ~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="59"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="    private val databaseProvider = StandaloneDatabaseProvider(context)"
+        errorLine2="                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="59"
+            column="36"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="    private val cache = SimpleCache(cacheDir, NoOpCacheEvictor(), databaseProvider)"
+        errorLine2="                ~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="60"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="    private val cache = SimpleCache(cacheDir, NoOpCacheEvictor(), databaseProvider)"
+        errorLine2="                        ~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="60"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="    private val cache = SimpleCache(cacheDir, NoOpCacheEvictor(), databaseProvider)"
+        errorLine2="                                              ~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="60"
+            column="47"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        .setAllowCrossProtocolRedirects(true)"
+        errorLine2="         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="67"
+            column="10"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        .setConnectTimeoutMs(30_000)"
+        errorLine2="         ~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="68"
+            column="10"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        .setReadTimeoutMs(60_000)"
+        errorLine2="         ~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="69"
+            column="10"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="    private val upstreamFactory = DataSource.Factory {"
+        errorLine2="                                                     ^">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="75"
+            column="54"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="            httpFactory.setDefaultRequestProperties(headers)"
+        errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="77"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        val source = httpFactory.createDataSource()"
+        errorLine2="                                 ~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="79"
+            column="34"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="    private val cacheDataSourceFactory = CacheDataSource.Factory()"
+        errorLine2="                ~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="85"
+            column="17"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="    private val cacheDataSourceFactory = CacheDataSource.Factory()"
+        errorLine2="                                                         ~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="85"
+            column="58"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        .setCache(cache)"
+        errorLine2="         ~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="86"
+            column="10"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        .setUpstreamDataSourceFactory(upstreamFactory)"
+        errorLine2="         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="87"
+            column="10"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        .setCacheWriteDataSinkFactory(CacheDataSink.Factory().setCache(cache).setFragmentSize(2 * 1024 * 1024))"
+        errorLine2="         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="88"
+            column="10"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        .setCacheWriteDataSinkFactory(CacheDataSink.Factory().setCache(cache).setFragmentSize(2 * 1024 * 1024))"
+        errorLine2="                                                    ~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="88"
+            column="53"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        .setCacheWriteDataSinkFactory(CacheDataSink.Factory().setCache(cache).setFragmentSize(2 * 1024 * 1024))"
+        errorLine2="                                                              ~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="88"
+            column="63"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        .setCacheWriteDataSinkFactory(CacheDataSink.Factory().setCache(cache).setFragmentSize(2 * 1024 * 1024))"
+        errorLine2="                                                                              ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="88"
+            column="79"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="    val downloadManager: DownloadManager = DownloadManager("
+        errorLine2="                         ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="90"
+            column="26"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="    val downloadManager: DownloadManager = DownloadManager("
+        errorLine2="                                           ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="90"
+            column="44"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        requirements = Requirements(0)"
+        errorLine2="        ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="98"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        requirements = Requirements(0)"
+        errorLine2="                       ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="98"
+            column="24"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="            override fun onDownloadChanged("
+        errorLine2="                         ~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="105"
+            column="26"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                downloadManager: DownloadManager,"
+        errorLine2="                                 ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="106"
+            column="34"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                download: Download,"
+        errorLine2="                          ~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="107"
+            column="27"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                val taskId = taskIdFor(download.request.id)"
+        errorLine2="                                                ~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="110"
+            column="49"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                val taskId = taskIdFor(download.request.id)"
+        errorLine2="                                                        ~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="110"
+            column="57"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                when (download.state) {"
+        errorLine2="                               ~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="111"
+            column="32"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                    Download.STATE_COMPLETED -> {"
+        errorLine2="                             ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="112"
+            column="30"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                    Download.STATE_FAILED -> {"
+        errorLine2="                             ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="115"
+            column="30"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                        Log.w(TAG, &quot;Stream download failed (reason ${download.failureReason}): ${download.request.uri}&quot;, finalException)"
+        errorLine2="                                                                              ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="116"
+            column="79"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                        Log.w(TAG, &quot;Stream download failed (reason ${download.failureReason}): ${download.request.uri}&quot;, finalException)"
+        errorLine2="                                                                                                          ~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="116"
+            column="107"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                        Log.w(TAG, &quot;Stream download failed (reason ${download.failureReason}): ${download.request.uri}&quot;, finalException)"
+        errorLine2="                                                                                                                  ~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="116"
+            column="115"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                        taskId?.let { listener.onStreamFailed(it, download.failureReason, finalException) }"
+        errorLine2="                                                                           ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="117"
+            column="76"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                    Download.STATE_STOPPED -> {"
+        errorLine2="                             ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="119"
+            column="30"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                    Download.STATE_DOWNLOADING, Download.STATE_QUEUED -> {"
+        errorLine2="                             ~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="122"
+            column="30"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                    Download.STATE_DOWNLOADING, Download.STATE_QUEUED -> {"
+        errorLine2="                                                         ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="122"
+            column="58"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                            val total = download.contentLength.takeIf { len -> len > 0 }"
+        errorLine2="                                                 ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="124"
+            column="50"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                            listener.onStreamProgress(it, download.bytesDownloaded, total)"
+        errorLine2="                                                                   ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="125"
+            column="68"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        streamKeys: List&lt;StreamKey>? = null"
+        errorLine2="                         ~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="150"
+            column="26"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        if (downloadManager.currentDownloads.any { it.request.id == contentId }) {"
+        errorLine2="                            ~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="154"
+            column="29"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="            downloadManager.setStopReason(contentId, Download.STOP_REASON_NONE)"
+        errorLine2="                            ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="158"
+            column="29"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="            downloadManager.setStopReason(contentId, Download.STOP_REASON_NONE)"
+        errorLine2="                                                              ~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="158"
+            column="63"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        val builder = DownloadRequest.Builder(contentId, Uri.parse(url))"
+        errorLine2="            ~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="161"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        val builder = DownloadRequest.Builder(contentId, Uri.parse(url))"
+        errorLine2="                                      ~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="161"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        StreamMime.forMedia3(mimeType)?.let { builder.setMimeType(it) }"
+        errorLine2="                                                      ~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="162"
+            column="55"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        if (!streamKeys.isNullOrEmpty()) builder.setStreamKeys(streamKeys)"
+        errorLine2="                                                 ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="163"
+            column="50"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        downloadManager.addDownload(builder.build())"
+        errorLine2="                        ~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="164"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        downloadManager.addDownload(builder.build())"
+        errorLine2="                                            ~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="164"
+            column="45"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        if (downloadManager.currentDownloads.none { it.request.id == contentId }) return"
+        errorLine2="                            ~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="172"
+            column="29"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        downloadManager.setStopReason(contentId, STOP_REASON_PAUSED)"
+        errorLine2="                        ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="177"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        val stopped = downloadManager.currentDownloads.any {"
+        errorLine2="                                      ~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="190"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="            it.request.id == contentId &amp;&amp; it.state == Download.STATE_STOPPED"
+        errorLine2="                                                               ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="191"
+            column="64"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="            downloadManager.setStopReason(contentId, Download.STOP_REASON_NONE)"
+        errorLine2="                            ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="194"
+            column="29"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="            downloadManager.setStopReason(contentId, Download.STOP_REASON_NONE)"
+        errorLine2="                                                              ~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="194"
+            column="63"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="    fun completedDownload(taskId: Long): Download? ="
+        errorLine2="                                         ~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="220"
+            column="42"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        downloadManager.downloadIndex.getDownload(contentIdFor(taskId))?.takeIf { it.state == Download.STATE_COMPLETED }"
+        errorLine2="                        ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="221"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        downloadManager.downloadIndex.getDownload(contentIdFor(taskId))?.takeIf { it.state == Download.STATE_COMPLETED }"
+        errorLine2="                                      ~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="221"
+            column="39"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        downloadManager.downloadIndex.getDownload(contentIdFor(taskId))?.takeIf { it.state == Download.STATE_COMPLETED }"
+        errorLine2="                                                                                                       ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="221"
+            column="104"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        CacheDataSource.Factory()"
+        errorLine2="                        ~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="228"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="            .setCache(cache)"
+        errorLine2="             ~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="229"
+            column="14"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="            .setCacheWriteDataSinkFactory(null)"
+        errorLine2="             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="230"
+            column="14"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        downloadManager.removeDownload(contentIdFor(taskId))"
+        errorLine2="                        ~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="235"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        downloadManager.removeAllDownloads()"
+        errorLine2="                        ~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="239"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        downloadManager.release()"
+        errorLine2="                        ~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="243"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        cache.release()"
+        errorLine2="              ~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="244"
+            column="15"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        for (d in downloadManager.currentDownloads) {"
+        errorLine2="                                  ~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="265"
+            column="35"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="            if (d.state != Download.STATE_DOWNLOADING) continue"
+        errorLine2="                  ~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="266"
+            column="19"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="            if (d.state != Download.STATE_DOWNLOADING) continue"
+        errorLine2="                                    ~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="266"
+            column="37"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="            val taskId = taskIdFor(d.request.id) ?: continue"
+        errorLine2="                                     ~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="267"
+            column="38"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="            val taskId = taskIdFor(d.request.id) ?: continue"
+        errorLine2="                                             ~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="267"
+            column="46"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="            val total = StreamProgress.totalBytes(d.contentLength, d.bytesDownloaded, d.percentDownloaded)"
+        errorLine2="                                                    ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="269"
+            column="53"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="            val total = StreamProgress.totalBytes(d.contentLength, d.bytesDownloaded, d.percentDownloaded)"
+        errorLine2="                                                                     ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="269"
+            column="70"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="            val total = StreamProgress.totalBytes(d.contentLength, d.bytesDownloaded, d.percentDownloaded)"
+        errorLine2="                                                                                        ~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="269"
+            column="89"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="            listener.onStreamProgress(taskId, d.bytesDownloaded, total)"
+        errorLine2="                                                ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="270"
+            column="49"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="    override fun cachedBytes(taskId: Long): Long? = streams.completedDownload(taskId)?.bytesDownloaded"
+        errorLine2="                                                                                       ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="75"
+            column="88"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        val download = withContext(Dispatchers.IO) { streams.completedDownload(taskId) }"
+        errorLine2="            ~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="78"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        val result = withContext(Dispatchers.Main) {"
+        errorLine2="            ~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="81"
+            column="13"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                val transformer = Transformer.Builder(appContext)"
+        errorLine2="                    ~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="83"
+            column="21"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                val transformer = Transformer.Builder(appContext)"
+        errorLine2="                                              ~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="83"
+            column="47"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                    .setAssetLoaderFactory("
+        errorLine2="                     ~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="84"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                        DefaultAssetLoaderFactory("
+        errorLine2="                        ~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="85"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                            DefaultDecoderFactory.Builder(appContext).build(),"
+        errorLine2="                                                  ~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="87"
+            column="51"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                            DefaultDecoderFactory.Builder(appContext).build(),"
+        errorLine2="                                                                      ~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="87"
+            column="71"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                            Clock.DEFAULT,"
+        errorLine2="                                  ~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="88"
+            column="35"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                            DefaultMediaSourceFactory(streams.cacheOnlyDataSourceFactory()),"
+        errorLine2="                            ~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="89"
+            column="29"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                            DataSourceBitmapLoader(appContext),"
+        errorLine2="                            ~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="90"
+            column="29"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                    .setMuxerFactory(InAppMuxer.Factory.Builder().build())"
+        errorLine2="                     ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="96"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                    .setMuxerFactory(InAppMuxer.Factory.Builder().build())"
+        errorLine2="                                                        ~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="96"
+            column="57"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                    .setMuxerFactory(InAppMuxer.Factory.Builder().build())"
+        errorLine2="                                                                  ~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="96"
+            column="67"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                    .build()"
+        errorLine2="                     ~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="97"
+            column="22"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                    val holder = ProgressHolder()"
+        errorLine2="                        ~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="99"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                    val holder = ProgressHolder()"
+        errorLine2="                                 ~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="99"
+            column="34"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                        if (transformer.getProgress(holder) == Transformer.PROGRESS_STATE_AVAILABLE) {"
+        errorLine2="                                        ~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="102"
+            column="41"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                        if (transformer.getProgress(holder) == Transformer.PROGRESS_STATE_AVAILABLE) {"
+        errorLine2="                                                                           ~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="102"
+            column="76"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                            onProgress(holder.progress / 100f)"
+        errorLine2="                                              ~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="103"
+            column="47"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                    run(transformer, download.request.toMediaItem(), output)"
+        errorLine2="                                              ~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="108"
+            column="47"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                    run(transformer, download.request.toMediaItem(), output)"
+        errorLine2="                                                      ~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="108"
+            column="55"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="            hasVideo = result.videoMimeType != null,"
+        errorLine2="                              ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="117"
+            column="31"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="            reencoded = result.videoConversionProcess.isTranscoded() || result.audioConversionProcess.isTranscoded(),"
+        errorLine2="                               ~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="118"
+            column="32"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="            reencoded = result.videoConversionProcess.isTranscoded() || result.audioConversionProcess.isTranscoded(),"
+        errorLine2="                                                                               ~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="118"
+            column="80"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="    private suspend fun run(transformer: Transformer, item: androidx.media3.common.MediaItem, output: File): ExportResult ="
+        errorLine2="                                         ~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="125"
+            column="42"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="    private suspend fun run(transformer: Transformer, item: androidx.media3.common.MediaItem, output: File): ExportResult ="
+        errorLine2="                                                                                                             ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="125"
+            column="110"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="            transformer.addListener(object : Transformer.Listener {"
+        errorLine2="                        ~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="127"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                override fun onCompleted(composition: Composition, exportResult: ExportResult) {"
+        errorLine2="                             ~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="128"
+            column="30"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                override fun onCompleted(composition: Composition, exportResult: ExportResult) {"
+        errorLine2="                                                      ~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="128"
+            column="55"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                override fun onCompleted(composition: Composition, exportResult: ExportResult) {"
+        errorLine2="                                                                                 ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="128"
+            column="82"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                override fun onError(composition: Composition, exportResult: ExportResult, exportException: ExportException) {"
+        errorLine2="                             ~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="132"
+            column="30"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                override fun onError(composition: Composition, exportResult: ExportResult, exportException: ExportException) {"
+        errorLine2="                                                  ~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="132"
+            column="51"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                override fun onError(composition: Composition, exportResult: ExportResult, exportException: ExportException) {"
+        errorLine2="                                                                             ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="132"
+            column="78"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                override fun onError(composition: Composition, exportResult: ExportResult, exportException: ExportException) {"
+        errorLine2="                                                                                                            ~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="132"
+            column="109"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                        Log.w(TAG, &quot;Export failed (${exportException.errorCodeName}): $causes&quot;, exportException)"
+        errorLine2="                                                                     ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="137"
+            column="70"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                            StreamExportException(&quot;Couldn&apos;t save the stream as a file (${exportException.errorCodeName}; $causes)&quot;, exportException),"
+        errorLine2="                                                                                                         ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="139"
+            column="106"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="            continuation.invokeOnCancellation { Handler(Looper.getMainLooper()).post { transformer.cancel() } }"
+        errorLine2="                                                                                                   ~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="145"
+            column="100"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="            transformer.start(item, output.absolutePath)"
+        errorLine2="                        ~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="146"
+            column="25"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="    private fun verify(output: File, result: ExportResult) {"
+        errorLine2="                                             ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="150"
+            column="46"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        if (result.videoMimeType != null &amp;&amp; mimeTypes.none { it.startsWith(&quot;video/&quot;) }) {"
+        errorLine2="                   ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="162"
+            column="20"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        if (result.audioMimeType != null &amp;&amp; mimeTypes.none { it.startsWith(&quot;audio/&quot;) }) {"
+        errorLine2="                   ~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="165"
+            column="20"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        if (result.durationMs > 0) {"
+        errorLine2="                   ~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="180"
+            column="20"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="            val allowed = maxOf(DURATION_SLACK_MILLIS, result.durationMs / 20)"
+        errorLine2="                                                              ~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="181"
+            column="63"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="            if (abs(durationMs - result.durationMs) > allowed) {"
+        errorLine2="                                        ~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="182"
+            column="41"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="                throw StreamExportException(&quot;The saved file lasts ${durationMs} ms instead of ${result.durationMs} ms&quot;)"
+        errorLine2="                                                                                                       ~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="183"
+            column="104"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        this == ExportResult.CONVERSION_PROCESS_TRANSCODED || this == ExportResult.CONVERSION_PROCESS_TRANSMUXED_AND_TRANSCODED"
+        errorLine2="                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="189"
+            column="30"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="        this == ExportResult.CONVERSION_PROCESS_TRANSCODED || this == ExportResult.CONVERSION_PROCESS_TRANSMUXED_AND_TRANSCODED"
+        errorLine2="                                                                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"
+            line="189"
+            column="84"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`"
+        errorLine1="    val streamKeys: List&lt;StreamKey>,"
+        errorLine2="                         ~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamTrack.kt"
+            line="9"
+            column="26"/>
+    </issue>
+
+    <issue
+        id="ModifierParameter"
+        message="Modifier parameter should be the first optional parameter"
+        errorLine1="    modifier: Modifier = Modifier,"
+        errorLine2="    ~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/browser/BrowserChrome.kt"
+            line="325"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="InsecureBaseConfiguration"
+        message="Insecure Base Configuration"
+        errorLine1="    &lt;base-config cleartextTrafficPermitted=&quot;true&quot;>"
+        errorLine2="                                            ~~~~">
+        <location
+            file="src/main/res/xml/network_security_config.xml"
+            line="3"
+            column="45"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="This folder configuration (`v26`) is unnecessary; `minSdkVersion` is 26. Merge all the resources in this folder into `mipmap-anydpi`.">
+        <location
+            file="src/main/res/mipmap-anydpi-v26"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.bool.leak_canary_watcher_auto_install` appears to be unused"
+        errorLine1="    &lt;bool name=&quot;leak_canary_watcher_auto_install&quot;>false&lt;/bool>"
+        errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/debug/res/values/leakcanary.xml"
+            line="4"
+            column="11"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        prefs.edit().putBoolean(KEY_ENABLED, enabled).apply()"
+        errorLine2="        ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/adblock/AdBlockSettings.kt"
+            line="19"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        prefs.edit().putStringSet(KEY_ALLOWED, sites).apply()"
+        errorLine2="        ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/adblock/AdBlockSettings.kt"
+            line="26"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        context.getSharedPreferences(&quot;chaya_prefs&quot;, android.content.Context.MODE_PRIVATE)"
+        errorLine2="        ^">
+        <location
+            file="src/main/java/com/chaya/app/browser/BrowserScreen.kt"
+            line="250"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        prefs.edit().putBoolean(KEY_RECORDING, on).apply()"
+        errorLine2="        ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/history/BrowsingRecord.kt"
+            line="41"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="                val uri = Uri.parse(rawUrl)"
+        errorLine2="                          ~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/diagnostics/ChayaEvent.kt"
+            line="61"
+            column="27"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="                runCatching { context.contentResolver.delete(Uri.parse(u), null, null) }"
+        errorLine2="                                                             ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/download/DownloadManager.kt"
+            line="375"
+            column="62"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="            uri = Uri.parse(t.url),"
+        errorLine2="                  ~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/download/DownloadManager.kt"
+            line="416"
+            column="19"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        prefs.edit().putBoolean(KEY_GRID, on).apply()"
+        errorLine2="        ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/downloads/DownloadsViewModel.kt"
+            line="38"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        if (saved) prefs.edit().putLong(KEY_UPDATED, clock()).apply()"
+        errorLine2="                   ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/adblock/FilterLists.kt"
+            line="81"
+            column="20"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `Bitmap.scale` instead?"
+        errorLine1="            val scaled = Bitmap.createScaledBitmap(frame, FRAME_WIDTH, frame.height * FRAME_WIDTH / frame.width, true)"
+        errorLine2="                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/library/LibraryFiles.kt"
+            line="64"
+            column="26"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="        val builder = DownloadRequest.Builder(contentId, Uri.parse(url))"
+        errorLine2="                                                         ~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="161"
+            column="58"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        prefs.edit().putString(KEY, mode.name).apply()"
+        errorLine2="        ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/ui/theme/ThemeSettings.kt"
+            line="28"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX function `createBitmap` instead?"
+        errorLine1="            Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).also { bitmap ->"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/browser/WebViewStates.kt"
+            line="59"
+            column="13"/>
+    </issue>
+
+</issues>
