@@ -52,13 +52,14 @@ fun groupDownloads(
     }
 
     if (filter != DownloadFilter.ACTIVE) {
-        val today = LocalDate.ofInstant(now, zone)
+        // Not LocalDate.ofInstant: Android has it only from API 34, and the app runs from 26.
+        val today = now.atZone(zone).toLocalDate()
         val dayFormat = DateTimeFormatter.ofPattern("d MMM", locale)
         val byDay = linkedMapOf<LocalDate, MutableList<DownloadTask>>()
         tasks.filter { it.state == DownloadState.COMPLETED }
             .sortedByDescending { it.updatedAt }
             .forEach { task ->
-                byDay.getOrPut(LocalDate.ofInstant(Instant.ofEpochMilli(task.updatedAt), zone)) { mutableListOf() } += task
+                byDay.getOrPut(Instant.ofEpochMilli(task.updatedAt).atZone(zone).toLocalDate()) { mutableListOf() } += task
             }
         byDay.forEach { (day, items) ->
             val title = when (day) {
