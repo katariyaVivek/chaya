@@ -223,7 +223,7 @@ class DownloadManagerArchiveTest {
         assertFalse(failed.error!!.retryable)
         delay(200)
         val stored = DownloadEntity.fromTask(failed).toTask().error
-        assertEquals(failed.error?.userMessage, stored?.userMessage)
+        assertEquals(failed.error.userMessage, stored?.userMessage)
         assertEquals(false, stored?.retryable)
     }
 

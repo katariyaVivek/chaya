@@ -106,6 +106,9 @@ android {
 kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_17)
+        // A warning fails the build, the app's code and its tests alike, as clippy's -D warnings does for Chaya
+        // for Windows: a deprecation or a needless !! is fixed when it appears, not left to pile up.
+        allWarningsAsErrors.set(true)
     }
 }
 
@@ -116,6 +119,7 @@ dependencies {
     implementation(libs.androidx.webkit)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.activity.compose)
 
     // Compose

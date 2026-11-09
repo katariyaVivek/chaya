@@ -237,7 +237,7 @@ class DownloadManagerTest {
             assertEquals(7L, downloader.starts.last().fromBytes)
             assertEquals(
                 "resume must reuse the original partial file",
-                File(started.filePath!!),
+                File(started.filePath),
                 downloader.starts.last().saveFile
             )
             assertEquals(DownloadState.DOWNLOADING, awaitTaskState(1, DownloadState.DOWNLOADING).state)
