@@ -22,7 +22,8 @@ jobs:
   walkthrough:
     if: github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ui-check')
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # Room for a second walk on a fresh emulator, when the first one vanishes.
+    timeout-minutes: 55
     strategy:
       fail-fast: false
       matrix:
@@ -72,7 +73,12 @@ jobs:
           pkill -f KotlinCompileDaemon || true
           free -m
 
+      # The emulator has vanished mid-run more than once whatever its memory and graphics (see below), which says
+      # nothing about the app. The walkthrough tells that apart from the app dying: it leaves evidence/emulator-gone
+      # and the job walks through again, once, on a fresh emulator. Any other failure fails the job at once.
       - name: Walk through the app in an emulator
+        id: walk
+        continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
@@ -94,8 +100,36 @@ jobs:
           emulator-options: -no-window -gpu guest -no-snapshot -noaudio -no-boot-anim -feature -HardwareDecoder
           script: BUILD=${{ matrix.build }} python3 .github/scripts/walkthrough.py
 
+      - name: Keep the first walk's evidence
+        if: steps.walk.outcome == 'failure' && hashFiles('evidence/emulator-gone') != ''
+        run: |
+          cat evidence/emulator-gone
+          mv evidence evidence-first-walk
+
+      - name: Walk through again on a fresh emulator
+        id: walk-again
+        if: steps.walk.outcome == 'failure' && hashFiles('evidence-first-walk/emulator-gone') != ''
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: default
+          arch: x86_64
+          profile: pixel_6
+          ram-size: 6144M
+          cores: 3
+          disable-animations: true
+          emulator-options: -no-window -gpu guest -no-snapshot -noaudio -no-boot-anim -feature -HardwareDecoder
+          script: BUILD=${{ matrix.build }} python3 .github/scripts/walkthrough.py
+
+      # The job's verdict: the first walk passed, or its emulator vanished and the second walk passed.
+      - name: Walkthrough result
+        if: steps.walk.outcome == 'failure' && steps.walk-again.outcome != 'success'
+        run: |
+          echo "The walkthrough failed; its evidence is uploaded below."
+          exit 1
+
       - name: Look for the out-of-memory killer
-        if: failure()
+        if: failure() || steps.walk.outcome == 'failure'
         run: |
           free -m
           sudo dmesg | grep -iE 'out of memory|oom-kill|killed process' || echo "no out-of-memory kill recorded"
@@ -105,5 +139,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: emulator-evidence-${{ matrix.build }}
-          path: evidence/
+          path: |
+            evidence/
+            evidence-first-walk/
           if-no-files-found: warn

@@ -75,6 +75,14 @@ class AppDied(Exception):
     """The app's process disappeared mid-scenario (e.g. the emulator's system apps restarted)."""
 
 
+class EmulatorGone(Exception):
+    """The emulator itself stopped answering adb: nothing on it can be checked until a fresh one boots."""
+
+
+# Left in the evidence folder when the emulator vanished, so the workflow walks through again on a fresh one.
+EMULATOR_GONE = "emulator-gone"
+
+
 results = []  # (step, ok, detail)
 shot_count = 0
 screen_w, screen_h = 1080, 2400
@@ -103,11 +111,26 @@ def sh(command, timeout=120):
 
 
 def app_alive():
-    return bool(sh(f"pidof {PKG}").strip())
+    try:
+        return bool(sh(f"pidof {PKG}", timeout=30).strip())
+    except subprocess.TimeoutExpired:
+        return False
+
+
+def emulator_answers():
+    """Whether the emulator still runs commands. When it has vanished (adb's port refused), every adb call fails or
+    hangs, which would otherwise read as the app having died."""
+    try:
+        answer = run(["adb", "shell", "echo", "ok"], timeout=20)
+    except subprocess.TimeoutExpired:
+        return False
+    return answer.returncode == 0 and answer.stdout.strip() == "ok"
 
 
 def require_app():
     if not app_alive():
+        if not emulator_answers():
+            raise EmulatorGone("the emulator stopped answering")
         raise AppDied(f"{PKG} is not running")
 
 
@@ -323,7 +346,12 @@ def monitor_download(tag, seconds):
 
 
 def save_logcat(tag):
-    text = adb("logcat", "-d", "-v", "threadtime", timeout=180)
+    try:
+        text = adb("logcat", "-d", "-v", "threadtime", timeout=180)
+    except subprocess.TimeoutExpired:
+        # A vanished emulator never answers; the walkthrough goes on to say so instead of ending here.
+        log(f"logcat {tag}: not read, adb did not answer")
+        return
     (EVIDENCE / f"logcat-{tag}.txt").write_text(text, encoding="utf-8", errors="replace")
     keep = re.compile(r"chaya|DownloadManager|ExoPlayer|HlsMediaSource|HlsDownloader|StreamDownloader|"
                       r"StreamExporter|Transformer|AndroidRuntime|FATAL|StrictMode|media3", re.I)
@@ -566,12 +594,16 @@ def main():
         record("build the local test page", False, fixture_error)
 
     # The engine runs early: on the release build it is the check that matters most, and it needs no video page.
+    gone = None
     for name, scenario in (("hls", scenario_hls), ("engine", scenario_engine), ("local", scenario_local),
                            ("tabs", scenario_tabs), ("history", scenario_history)):
         for attempt in (1, 2):
             first_result = len(results)
             try:
                 scenario()
+                break
+            except EmulatorGone as vanished:
+                gone = (name, str(vanished))
                 break
             except AppDied as died:
                 save_logcat(f"{name}-attempt{attempt}")
@@ -581,9 +613,21 @@ def main():
                 else:
                     record(f"{name}: the app was killed again", False, str(died))
             except Exception:
+                # A step that timed out on adb may be the emulator gone, not the app or the step.
+                if not emulator_answers():
+                    gone = (name, "the emulator stopped answering")
+                    break
                 record(f"{name}: scenario raised", False, traceback.format_exc(limit=3).strip().splitlines()[-1])
                 break
+        if gone:
+            break
         save_logcat(name)
+
+    if gone:
+        # Not a verdict on the app: the workflow starts a fresh emulator and walks through again once.
+        name, why = gone
+        record(f"{name}: {why}", False, "the workflow walks through again on a fresh emulator")
+        (EVIDENCE / EMULATOR_GONE).write_text(f"{name}: {why}\n", encoding="utf-8")
 
     if server:
         server.terminate()
