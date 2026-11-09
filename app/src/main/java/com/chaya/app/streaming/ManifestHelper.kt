@@ -5,6 +5,7 @@ import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
 import androidx.media3.common.StreamKey
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.dash.manifest.DashManifest
@@ -18,6 +19,7 @@ import java.io.IOException
 import java.util.Locale
 import kotlin.coroutines.resume
 
+@androidx.annotation.OptIn(UnstableApi::class)
 object ManifestHelper {
 
     /**

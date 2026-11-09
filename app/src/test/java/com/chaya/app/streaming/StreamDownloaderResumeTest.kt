@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.exoplayer.offline.Download
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
@@ -37,6 +38,7 @@ import java.util.concurrent.CopyOnWriteArrayList
  * responds, so a download stays active deterministically instead of racing
  * to a failure state before it can be paused.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class StreamDownloaderResumeTest {

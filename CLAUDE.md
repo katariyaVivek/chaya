@@ -30,6 +30,7 @@ local checkout of Aloha Browser's source, used for that research; it is not in t
 ```sh
 gradle testDebugUnitTest      # all JVM/Robolectric tests; run before every push
 gradle assembleDebug
+gradle lintDebug              # Android Lint; a finding not in app/lint-baseline.xml fails
 python -m pytest app/src/test/python
 cd desktop && cargo test --workspace   # Chaya for Windows (desktop/README.md)
 ```
@@ -59,8 +60,11 @@ platform 36, Gradle 8.14.3 and Python 3.13 (Chaquopy). Versions are in `gradle/l
 - **One PR per piece of work**, merged once every check is green. Add the `ui-check` label to any PR
   that touches the browser, downloads or anything only a device can show: it runs the instrumented
   tests and the emulator walkthrough, which have caught real bugs (#28, #32).
+- **Warnings fail the build.** Kotlin warnings are errors (`allWarningsAsErrors`), and so is any Android Lint
+  finding not in `app/lint-baseline.xml`. Fix a warning rather than suppress it; fixing a baselined finding means
+  taking it out of the baseline too, so the list only shrinks.
 - **CI is the Android build.** In the cloud container the proxy blocks `dl.google.com`, so the
-  Android Gradle plugin cannot be fetched. Pure-Kotlin code can still be compiled and tested with a
+  Android Gradle plugin cannot be fetched, and Lint cannot run either. Pure-Kotlin code can still be compiled and tested with a
   scratch Kotlin/JVM Gradle project whose source set points at the repo's files; keep such code free
   of Android imports so this stays possible.
 - **Chaya for Windows** (`desktop/`) is Tauri 2. Code that does not need the window goes in
@@ -84,6 +88,9 @@ platform 36, Gradle 8.14.3 and Python 3.13 (Chaquopy). Versions are in `gradle/l
 - LeakCanary's root view watcher reads its own resources through every dialog, and WebView's dialogs (a
   `<select>` list, a date picker) carry WebView's resources, so debug builds closed on any drop-down. Debug
   builds install LeakCanary without it (`app/src/debug/.../LeakWatching.kt`).
+- `minSdk` is 26 and core library desugaring is off, so a newer `java.time` call (`LocalDate.ofInstant` is API 34)
+  crashes older phones while every test passes: Robolectric runs on the desktop JVM, the emulators on API 34.
+  Lint's `NewApi` check is what catches it.
 - Kotlin's inlined functions report line numbers beyond the end of the file in stack traces;
   find the real call site, not the reported line.
 - Gradle parallel project execution stays off (Chaquopy + KSP fail on a project lock).

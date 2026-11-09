@@ -1,6 +1,7 @@
 package com.chaya.app.streaming
 
 import android.net.Uri
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.HttpDataSource
@@ -11,6 +12,7 @@ import androidx.media3.datasource.TransferListener
  * and length, or the HTTP status that refused it. A stream that downloads "fine" yet will not play (a server
  * answering each piece with a small error page) shows up only this way.
  */
+@androidx.annotation.OptIn(UnstableApi::class)
 class ReportingDataSource(
     private val delegate: DataSource,
     private val report: (String) -> Unit,

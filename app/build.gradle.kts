@@ -100,12 +100,27 @@ android {
         // diagnostics gating (StrictMode) and crash-report app-version field.
         buildConfig = true
     }
+
+    // Android Lint (`gradle lintDebug`, run by CI): any finding fails it, warnings included, except those
+    // listed in lint-baseline.xml, which were there when Lint started running. Fixing one of those means
+    // taking it out of the baseline too, so the list only shrinks.
+    lint {
+        baseline = file("lint-baseline.xml")
+        warningsAsErrors = true
+        abortOnError = true
+        // Whether a newer library, plugin or SDK exists depends on the day, not on the code: these would fail
+        // every pull request the day something is released. Upgrading is its own deliberate change (CLAUDE.md).
+        disable += setOf("GradleDependency", "NewerVersionAvailable", "AndroidGradlePluginVersion", "OldTargetApi")
+    }
 }
 
 // Kotlin 2.2 and later reject the old android { kotlinOptions { } } block.
 kotlin {
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_17)
+        // A warning fails the build, the app's code and its tests alike, as clippy's -D warnings does for Chaya
+        // for Windows: a deprecation or a needless !! is fixed when it appears, not left to pile up.
+        allWarningsAsErrors.set(true)
     }
 }
 
@@ -116,6 +131,7 @@ dependencies {
     implementation(libs.androidx.webkit)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.activity.compose)
 
     // Compose

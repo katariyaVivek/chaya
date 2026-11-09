@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<issues format="6" by="lint 8.13.0" type="baseline" client="gradle" dependencies="false" name="AGP (8.13.0)" variant="all" version="8.13.0">
+
+    <issue
+        id="InlinedApi"
+        message="Field requires API level 33 (current min is 26): `android.Manifest.permission#POST_NOTIFICATIONS`"
+        errorLine1="            notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)"
+        errorLine2="                                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/browser/BrowserScreen.kt"
+            line="623"
+            column="44"/>
+    </issue>
+
+    <issue
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.media3.common.util.UnstableApi` or `@OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)`">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamExporter.kt"/>
+    </issue>
+
+    <issue
+        id="ModifierParameter"
+        message="Modifier parameter should be the first optional parameter"
+        errorLine1="    modifier: Modifier = Modifier,"
+        errorLine2="    ~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/browser/BrowserChrome.kt"
+            line="325"
+            column="5"/>
+    </issue>
+
+    <issue
+        id="InsecureBaseConfiguration"
+        message="Insecure Base Configuration"
+        errorLine1="    &lt;base-config cleartextTrafficPermitted=&quot;true&quot;>"
+        errorLine2="                                            ~~~~">
+        <location
+            file="src/main/res/xml/network_security_config.xml"
+            line="3"
+            column="45"/>
+    </issue>
+
+    <issue
+        id="ObsoleteSdkInt"
+        message="This folder configuration (`v26`) is unnecessary; `minSdkVersion` is 26. Merge all the resources in this folder into `mipmap-anydpi`.">
+        <location
+            file="src/main/res/mipmap-anydpi-v26"/>
+    </issue>
+
+    <issue
+        id="UnusedResources"
+        message="The resource `R.bool.leak_canary_watcher_auto_install` appears to be unused"
+        errorLine1="    &lt;bool name=&quot;leak_canary_watcher_auto_install&quot;>false&lt;/bool>"
+        errorLine2="          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/debug/res/values/leakcanary.xml"
+            line="4"
+            column="11"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        prefs.edit().putBoolean(KEY_ENABLED, enabled).apply()"
+        errorLine2="        ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/adblock/AdBlockSettings.kt"
+            line="19"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        prefs.edit().putStringSet(KEY_ALLOWED, sites).apply()"
+        errorLine2="        ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/adblock/AdBlockSettings.kt"
+            line="26"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        context.getSharedPreferences(&quot;chaya_prefs&quot;, android.content.Context.MODE_PRIVATE)"
+        errorLine2="        ^">
+        <location
+            file="src/main/java/com/chaya/app/browser/BrowserScreen.kt"
+            line="250"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        prefs.edit().putBoolean(KEY_RECORDING, on).apply()"
+        errorLine2="        ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/history/BrowsingRecord.kt"
+            line="41"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="                val uri = Uri.parse(rawUrl)"
+        errorLine2="                          ~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/diagnostics/ChayaEvent.kt"
+            line="61"
+            column="27"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="                runCatching { context.contentResolver.delete(Uri.parse(u), null, null) }"
+        errorLine2="                                                             ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/download/DownloadManager.kt"
+            line="375"
+            column="62"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="            uri = Uri.parse(t.url),"
+        errorLine2="                  ~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/download/DownloadManager.kt"
+            line="416"
+            column="19"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        prefs.edit().putBoolean(KEY_GRID, on).apply()"
+        errorLine2="        ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/downloads/DownloadsViewModel.kt"
+            line="38"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        if (saved) prefs.edit().putLong(KEY_UPDATED, clock()).apply()"
+        errorLine2="                   ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/adblock/FilterLists.kt"
+            line="81"
+            column="20"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `Bitmap.scale` instead?"
+        errorLine1="            val scaled = Bitmap.createScaledBitmap(frame, FRAME_WIDTH, frame.height * FRAME_WIDTH / frame.width, true)"
+        errorLine2="                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/library/LibraryFiles.kt"
+            line="64"
+            column="26"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `String.toUri` instead?"
+        errorLine1="        val builder = DownloadRequest.Builder(contentId, Uri.parse(url))"
+        errorLine2="                                                         ~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/streaming/StreamDownloader.kt"
+            line="161"
+            column="58"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX extension function `SharedPreferences.edit` instead?"
+        errorLine1="        prefs.edit().putString(KEY, mode.name).apply()"
+        errorLine2="        ~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/ui/theme/ThemeSettings.kt"
+            line="28"
+            column="9"/>
+    </issue>
+
+    <issue
+        id="UseKtx"
+        message="Use the KTX function `createBitmap` instead?"
+        errorLine1="            Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).also { bitmap ->"
+        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/chaya/app/browser/WebViewStates.kt"
+            line="59"
+            column="13"/>
+    </issue>
+
+</issues>

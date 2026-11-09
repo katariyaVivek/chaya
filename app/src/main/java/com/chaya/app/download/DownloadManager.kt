@@ -15,6 +15,7 @@ import androidx.annotation.VisibleForTesting
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.media3.common.StreamKey
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
 import com.chaya.app.database.DownloadDao
 import com.chaya.app.database.DownloadEntity
@@ -166,6 +167,7 @@ class DownloadManager(
         }
     }
 
+    @androidx.annotation.OptIn(UnstableApi::class)
     fun startDownload(media: DetectedMedia, streamKeys: List<StreamKey>) {
         ensureServiceRunning()
         scope.launch {
@@ -467,6 +469,7 @@ class DownloadManager(
         )
     }
 
+    @androidx.annotation.OptIn(UnstableApi::class)
     private suspend fun startStream(
         id: Long,
         media: DetectedMedia,

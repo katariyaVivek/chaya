@@ -1,7 +1,9 @@
 package com.chaya.app.streaming
 
 import androidx.media3.common.StreamKey
+import androidx.media3.common.util.UnstableApi
 
+@androidx.annotation.OptIn(UnstableApi::class)
 data class StreamTrack(
     val rendererType: Int,
     /** What a person picks by: "1080p" for video, a language or "Audio" for audio. */

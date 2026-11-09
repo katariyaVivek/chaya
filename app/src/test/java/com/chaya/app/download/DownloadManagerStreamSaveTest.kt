@@ -174,8 +174,8 @@ class DownloadManagerStreamSaveTest {
         // The log records in the background.
         assertTrue(awaitUntil { runBlocking { eventLog.snapshot() }.any { it is ChayaEvent.CaughtException } })
         val logged = eventLog.snapshot().filterIsInstance<ChayaEvent.CaughtException>().single { it.tag == "stream-save" }
-        assertTrue(logged.message!!, logged.message!!.contains("no video in https://cdn.example/s/seg.ts"))
-        assertFalse(logged.message!!, logged.message!!.contains("secret"))
+        assertTrue(logged.message!!, logged.message.contains("no video in https://cdn.example/s/seg.ts"))
+        assertFalse(logged.message, logged.message.contains("secret"))
     }
 
     @Test

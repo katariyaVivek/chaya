@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.exoplayer.offline.Download
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
@@ -32,6 +33,7 @@ import java.util.concurrent.CopyOnWriteArrayList
  * the cache. Two bugs once made every stream download fail or never begin, and no test noticed, because the
  * others only check that a download shows up in the list.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
 class StreamDownloaderDownloadTest {

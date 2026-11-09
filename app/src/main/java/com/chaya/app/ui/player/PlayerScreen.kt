@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -35,6 +36,7 @@ import com.chaya.app.ui.theme.LocalChayaColors
  * downloader used — already-downloaded segments play offline.
  */
 @OptIn(ExperimentalMaterial3Api::class)
+@androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 fun PlayerScreen(
     taskId: Long,

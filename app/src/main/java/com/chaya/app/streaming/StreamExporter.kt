@@ -8,6 +8,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import androidx.media3.common.util.Clock
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSourceBitmapLoader
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.transformer.Composition
@@ -66,6 +67,7 @@ interface StreamExporter {
  * they are when the MP4 container can take them (H.264 or HEVC with AAC, nearly every HLS stream), which takes
  * seconds and loses nothing; otherwise Transformer re-encodes them, and the result says so.
  */
+@androidx.annotation.OptIn(UnstableApi::class)
 class Media3StreamExporter(
     context: Context,
     private val streams: StreamDownloader,
