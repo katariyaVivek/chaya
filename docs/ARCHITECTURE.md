@@ -163,8 +163,11 @@ faster than APKs ship, so the app fetches newer releases itself.
 - A `DownloadRequest` from the engine carries its own headers and optionally a separate sound. Such
   a task fetches the picture, then the sound (each into `<name>.part`, renamed when whole), then
   `MediaMerger` (`Mp4Merger`, `MediaMuxer`) joins them losslessly. What is left to do is decided
-  from which files exist, so pause, resume, a killed app and a retried join all work. Only H.264
-  pictures are joined for now.
+  from which files exist, so pause, resume, a killed app and a retried join all work. A join cannot
+  be stopped halfway, so a pause or cancel during it takes effect when it ends: the joined file is
+  thrown away and both tracks kept, and a resume while it still runs lets it finish instead of
+  starting a second. The card says which half is on its way (*Picture*, *Sound*), then *Joining
+  picture and sound*. Only H.264 pictures are joined for now.
 - Failures are classified by `DownloadError` (network, HTTP status, storage full, unsupported,
   could not combine, …), which decides the message and whether *Retry* is offered. A 50 MB
   free-space check runs before starting.
@@ -285,7 +288,7 @@ not another flag beside it.
 |---|---|---|---|
 | A download's life | `QUEUED → DOWNLOADING ⇄ PAUSED → COMPLETED \| FAILED \| CANCELLED` | `download/DownloadState` (its diagram and `isActive`, `isUnfinished`, `canResume`) | One enum, stored |
 | What a running download is doing | picture → sound → join; list → files → ZIP; Media3 pieces → *Saving as MP4* | `DownloadManager.runTracks`, `runArchive`, `startSavingAsFile` | Worked out from files on disk, so a killed app resumes |
-| What its card says it is doing | `FindingPosts`, `FetchingFiles` (then *Making the ZIP*), `Joining`, `SavingAsMp4` | `download/DownloadStep`, `DownloadTask.step`; the card's text from `progressOf` | Sealed type, in memory only; dropped whenever the task stops running |
+| What its card says it is doing | `FetchingPicture`, `FetchingSound`, `Joining`; `FindingPosts`, `FetchingFiles` (then *Making the ZIP*); `SavingAsMp4` | `download/DownloadStep`, `DownloadTask.step`; the card's text from `progressOf` | Sealed type, in memory only; dropped whenever the task stops running |
 | The sheet over the page | none, media, link, account, a stream's qualities, the ad blocker, the notification question (with its `AskedDownload`) | `browser/BrowserSheet`, `BrowserUiState.sheet` | One value: one sheet at a time, closed together on home or a tab switch, and on a new page except the ad blocker's (`forNewDocument`) |
 | Android's notification question | asked (the sentence), then waiting for Android's answer | `BrowserSheet.Notifications`, then `BrowserScreen`'s `awaitingPermission` | One value at each step; the answer is taken once (`answerNotifications`) |
 | A page | start screen, loading, loaded | `BrowserUiState.startedPage` / `finishedPage`, keyed by `navigationGeneration` | Pure functions; a late callback from an older document changes nothing |
@@ -313,7 +316,7 @@ Kept apart on purpose, because they are layers rather than one state:
 | `app/src/test/java` | JVM and Robolectric tests: state machine, MockWebServer transfers, Room migrations, Media3 stream pipeline, Compose UI | every PR (`build.yml`) |
 | `app/src/test/python` | pytest for `chaya_engine`, against the pinned yt-dlp | PRs touching the engine (`engine.yml`) |
 | `app/src/androidTest` | On a device: Python/yt-dlp and QuickJS, an engine update compiled and imported (and a broken one falling back), the real `MediaMuxer` join, the whole two-file save, ad blocking in a real WebView | `ui-check` label or manual (`device-tests.yml`); also *Run workflow* on `build.yml` |
-| `.github/scripts/walkthrough.py` | Drives the debug app in an emulator and saves screenshots, screen text and logs | `ui-check` label or manual (`emulator-check.yml`) |
+| `.github/scripts/walkthrough.py` | Drives the debug and release apps in an emulator and saves screenshots, screen text and logs. An emulator that stops answering is told apart from the app dying, and gets one fresh emulator for a second walk | `ui-check` label or manual (`emulator-check.yml`) |
 
 ## Chaya for Windows (`desktop/`)
 
