@@ -11,6 +11,15 @@ package com.chaya.app.download
  * time, and the card asks one `when` what to say.
  */
 sealed interface DownloadStep {
+    /**
+     * A quality whose picture and sound come apart, fetching its picture. Its bytes and total count both files, the
+     * picture first, so the share runs on through [FetchingSound].
+     */
+    data object FetchingPicture : DownloadStep
+
+    /** The same, fetching its sound once the picture is whole. */
+    data object FetchingSound : DownloadStep
+
     /** An account's ZIP finding out what was posted: [found] files so far. */
     data class FindingPosts(val found: Int) : DownloadStep
 

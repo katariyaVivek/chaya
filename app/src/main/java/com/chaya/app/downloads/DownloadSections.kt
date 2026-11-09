@@ -108,15 +108,22 @@ internal fun progressOf(task: DownloadTask): CardProgress {
             if (step.packing) CardProgress(null, "Making the ZIP", formatFileSize(task.downloadedBytes))
             else CardProgress(step.saved.toFloat() / step.found, "${step.saved} of ${step.found} files", formatFileSize(task.downloadedBytes))
         DownloadStep.Joining -> CardProgress(null, "Joining picture and sound", size)
-        null -> {
-            val total = task.totalBytes ?: 0L
-            if (total > 0L) {
-                CardProgress(task.progressFraction, percent(task.progressFraction),
-                    "${formatFileSize(task.downloadedBytes)} of ${formatFileSize(total)}")
-            } else {
-                CardProgress(null, "Downloading", size)
-            }
-        }
+        // Which half of a quality whose picture and sound come apart is on its way, as Chaya for Windows says it.
+        DownloadStep.FetchingPicture -> transfer(task, "Picture")
+        DownloadStep.FetchingSound -> transfer(task, "Sound")
+        null -> transfer(task, null)
+    }
+}
+
+/** Bytes on their way: the share of a known size, or a moving bar without one; [part] names the half fetched. */
+private fun transfer(task: DownloadTask, part: String?): CardProgress {
+    val total = task.totalBytes ?: 0L
+    return if (total > 0L) {
+        val share = percent(task.progressFraction)
+        CardProgress(task.progressFraction, part?.let { "$it · $share" } ?: share,
+            "${formatFileSize(task.downloadedBytes)} of ${formatFileSize(total)}")
+    } else {
+        CardProgress(null, part ?: "Downloading", if (task.downloadedBytes > 0) formatFileSize(task.downloadedBytes) else "")
     }
 }
 
