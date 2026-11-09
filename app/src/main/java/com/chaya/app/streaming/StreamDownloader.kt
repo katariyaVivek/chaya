@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import androidx.media3.common.StreamKey
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.cache.CacheDataSink
@@ -40,6 +41,7 @@ import java.util.concurrent.atomic.AtomicReference
  * resume = setStopReason back to [Download.STOP_REASON_NONE], delete =
  * [DownloadManager.removeDownload].
  */
+@androidx.annotation.OptIn(UnstableApi::class)
 class StreamDownloader(
     context: Context,
     private val listener: Listener,
