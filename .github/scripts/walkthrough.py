@@ -111,20 +111,18 @@ def sh(command, timeout=120):
 
 
 def app_alive():
-    try:
-        return bool(sh(f"pidof {PKG}", timeout=30).strip())
-    except subprocess.TimeoutExpired:
-        return False
+    return bool(sh(f"pidof {PKG}").strip())
 
 
 def emulator_answers():
-    """Whether the emulator still runs commands. When it has vanished (adb's port refused), every adb call fails or
-    hangs, which would otherwise read as the app having died."""
+    """Whether the emulator is still there. Asked of adb's own server, which drops a vanished emulator at once
+    (its port refused) and still lists one that is only slow: a page playing three videos can keep the emulator's
+    shell busy for a minute, which is not the emulator gone. A timeout here proves nothing, so it counts as there."""
     try:
-        answer = run(["adb", "shell", "echo", "ok"], timeout=20)
+        state = run(["adb", "get-state"], timeout=30)
     except subprocess.TimeoutExpired:
-        return False
-    return answer.returncode == 0 and answer.stdout.strip() == "ok"
+        return True
+    return state.returncode == 0 and state.stdout.strip() == "device"
 
 
 def require_app():
