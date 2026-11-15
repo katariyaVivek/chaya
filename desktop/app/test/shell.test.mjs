@@ -63,3 +63,42 @@ test('Home lists what is under way: running, paused and failed, never what was s
   for (const state of ['queued', 'downloading', 'paused', 'failed']) assert.equal(underWay({ state }), true, state);
   assert.equal(underWay({ state: 'completed' }), false);
 });
+
+import { heroOf, clockOf } from '../ui/shell.js';
+
+test("Home's hero carries on with the video stopped last, else shows the newest saved video", () => {
+  const tasks = [
+    { id: 1, state: 'completed', kind: 'video', ended: 100 },
+    { id: 2, state: 'completed', kind: 'video', ended: 300 },
+    { id: 3, state: 'completed', kind: 'picture', ended: 900 },
+    { id: 4, state: 'downloading', kind: 'video', added: 950 },
+  ];
+  const watching = { id: 1, at: 252, duration: 760 };
+  assert.deepEqual(heroOf(tasks, watching), { id: 1, watching });
+  assert.deepEqual(heroOf(tasks, null), { id: 2, watching: null }, 'the newest saved video, not a picture or a running one');
+  assert.deepEqual(heroOf(tasks, { id: 9, at: 5 }), { id: 2, watching: null }, 'one no longer in the list is not offered');
+  assert.equal(heroOf([{ id: 3, state: 'completed', kind: 'picture' }], null), null);
+  assert.equal(heroOf([], null), null);
+});
+
+test('times read as a clock', () => {
+  assert.equal(clockOf(252), '4:12');
+  assert.equal(clockOf(5), '0:05');
+  assert.equal(clockOf(3725), '1:02:05');
+  assert.equal(clockOf(NaN), '0:00');
+  assert.equal(clockOf(-3), '0:00');
+});
+
+import { shelfColumns } from '../ui/shell.js';
+
+test("Home's shelf shows one row: as many 180 px cards as its width holds, as the grid would lay them out", () => {
+  // 1000 px with 12 px gaps holds five (5 × 180 + 4 × 12 = 948), not six (1128)
+  assert.equal(shelfColumns(1000, 180, 12, 5), 5);
+  assert.equal(shelfColumns(800, 180, 12, 5), 4); // 4 × 180 + 3 × 12 = 756
+  assert.equal(shelfColumns(756, 180, 12, 5), 4); // exactly four
+  assert.equal(shelfColumns(755, 180, 12, 5), 3);
+  assert.equal(shelfColumns(2000, 180, 12, 5), 5, 'never past the most it asks for');
+  assert.equal(shelfColumns(100, 180, 12, 5), 1, 'one card even when narrower than one');
+  assert.equal(shelfColumns(0, 180, 12, 5), 5, 'not laid out yet: the most, to be counted again once it is');
+  assert.equal(shelfColumns(NaN, 180, 12, 5), 5);
+});

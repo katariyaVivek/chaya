@@ -64,3 +64,36 @@ export function libraryTotals(tasks) {
   }
   return { saved, bytes };
 }
+
+/**
+ * The video Home's hero shows: the one to carry on with (`continue_watching`), while it is still a saved video in
+ * the list; else the newest saved video; else none.
+ * @param {Iterable<{id: number, state: string, kind: string, ended?: number | null, added?: number}>} tasks
+ * @param {{id: number, at: number, duration?: number | null} | null} watching
+ * @returns {{ id: number, watching: object | null } | null}
+ */
+export function heroOf(tasks, watching) {
+  const videos = [...tasks].filter((t) => t.state === 'completed' && t.kind === 'video');
+  if (watching && videos.some((t) => t.id === watching.id)) return { id: watching.id, watching };
+  const when = (t) => t.ended ?? t.added ?? 0;
+  const newest = videos.reduce((a, b) => (a === null || when(b) > when(a) || (when(b) === when(a) && b.id > a.id) ? b : a), null);
+  return newest ? { id: newest.id, watching: null } : null;
+}
+
+/** "4:12", or "1:02:05" past an hour. */
+export function clockOf(seconds) {
+  const s = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0;
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = String(s % 60).padStart(2, '0');
+  return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`;
+}
+
+/**
+ * How many cards Home's shelf has room for in one row, as `repeat(auto-fill, minmax(card, 1fr))` lays them out:
+ * at least one, and none past `most`. With no width yet (hidden, not laid out), `most`.
+ */
+export function shelfColumns(width, card, gap, most) {
+  if (!(width > 0) || !(card > 0)) return most;
+  return Math.max(1, Math.min(most, Math.floor((width + Math.max(0, gap)) / (card + Math.max(0, gap)))));
+}

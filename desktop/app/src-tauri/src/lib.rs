@@ -353,6 +353,23 @@ fn keep_poster(id: u64, jpeg: String, videos: State<'_, Videos>) -> Result<(), S
     videos.keep_poster(id, &bytes).map_err(|_| "The poster couldn't be kept.".to_string())
 }
 
+/// The saved video Home offers to carry on with: the one stopped part way most recently (`video::Videos`).
+#[tauri::command]
+fn continue_watching(
+    downloads: State<'_, Downloads>,
+    videos: State<'_, Videos>,
+) -> Option<chaya_core::video::Watching> {
+    let ids: Vec<u64> = downloads
+        .manager
+        .list()
+        .iter()
+        .map(TaskView::from)
+        .filter(|t| t.state == "completed" && t.kind == chaya_core::download::manager::Kind::Video)
+        .map(|t| t.id)
+        .collect();
+    videos.continue_watching(&ids)
+}
+
 /// Where playback of saved video `id` stopped, `at` seconds into its `duration`.
 #[tauri::command]
 fn playback_stopped(id: u64, at: f64, duration: Option<f64>, videos: State<'_, Videos>) {
@@ -554,6 +571,7 @@ pub fn run() {
             list_downloads,
             download_sections,
             library_tiles,
+            continue_watching,
             pause_download,
             resume_download,
             cancel_download,

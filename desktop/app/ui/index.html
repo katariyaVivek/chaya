@@ -213,6 +213,22 @@
     <button class="found__more" type="button" hidden></button>
   </section>
 
+  <!-- Home (Stage): the video to carry on with, or the newest saved, filling the top (main.js, showHome) -->
+  <section class="hero" id="home-hero" aria-labelledby="hero-title" hidden>
+    <div class="hero__picture" aria-hidden="true"></div>
+    <div class="hero__copy">
+      <p class="hero__eyebrow" id="hero-eyebrow"></p>
+      <h2 class="hero__title" id="hero-title"></h2>
+      <p class="hero__meta" id="hero-meta"></p>
+      <div class="hero__actions">
+        <button class="hero__btn hero__btn--play pressable" type="button" id="hero-play"><svg><use href="#i-play"/></svg><span>Play</span></button>
+        <button class="hero__btn pressable" type="button" id="hero-clip">Make a clip</button>
+        <button class="hero__btn pressable" type="button" id="hero-transcript">Transcript</button>
+      </div>
+    </div>
+    <div class="hero__watched" id="hero-watched" role="progressbar" aria-label="Watched" aria-valuemin="0" aria-valuemax="100" hidden><span></span></div>
+  </section>
+
   <div class="page-frame" data-browsing hidden>
     <span class="page-load" id="page-load" aria-hidden="true"></span>
     <div class="page" id="page"><img class="page__still" id="page-still" alt="" hidden></div>
@@ -256,6 +272,15 @@
       <span class="empty__icon"><svg><use href="#i-download"/></svg></span>
       <p>What you download appears here. Paste a link on Home to start, or drop a video from this PC to make subtitles for it, translate it or cut it.</p>
     </div>
+  </section>
+
+  <!-- Home: the newest saved, as the Library's cards; See all opens the Library -->
+  <section class="shelf" id="home-recent" aria-labelledby="recent-title" hidden>
+    <div class="shelf__head">
+      <h2 class="shelf__title" id="recent-title">Recently saved</h2>
+      <button class="shelf__all pressable" type="button" id="recent-all">See all</button>
+    </div>
+    <ul class="grid shelf__cards" id="recent-cards" aria-labelledby="recent-title"></ul>
   </section>
 </main>
 

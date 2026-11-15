@@ -28,7 +28,7 @@ import { secondsLeft, listeningWords } from './pace.js';
 import { onePanel } from './panels.js';
 import { markMarkup, mountMark } from './design/chaya-mark.js';
 import { markState, nextRun, shareOf } from './mark-state.js';
-import { placeOf, railed, tabToBrowse, libraryTotals, sourcesOf, underWay } from './shell.js';
+import { placeOf, railed, tabToBrowse, libraryTotals, sourcesOf, underWay, heroOf, clockOf, shelfColumns } from './shell.js';
 
 // Every drop-down drawn as Chaya's own, not Windows' list (unreadable in Night, in Windows' font). The <select>s stay
 // underneath, so what follows reads and sets them as before.
@@ -885,6 +885,7 @@ function arrange() {
     if (order.length !== now.length || order.some((node, i) => node !== now[i])) downloadList.replaceChildren(...order);
     hideEmptySections();
     renderGrid();
+    showHome();
   });
 }
 
@@ -1169,6 +1170,105 @@ viewSwitch.addEventListener('click', (e) => {
 });
 gridRunning.addEventListener('click', () => showView('list'));
 
+// ── Home (Stage) ────────────────────────────────────────────────────────────────────────────
+//
+// Under the address bar: the video to carry on with (`continue_watching`: the one stopped part way most recently), or,
+// with none, the newest saved video, filling the top; what is under way; then the newest saved, as the Library's
+// cards. Asked for again as the downloads change and as the player closes.
+
+const hero = document.getElementById('home-hero');
+const recent = document.getElementById('home-recent');
+const recentCards = document.getElementById('recent-cards');
+const RECENT_CARDS = 5;
+let heroId = null;
+let shelfFits = RECENT_CARDS;
+
+// The shelf is one row: as many cards as its width holds, counted again as the window is resized
+function fitsOnShelf() {
+  const style = getComputedStyle(recentCards);
+  return shelfColumns(
+    recentCards.clientWidth,
+    parseFloat(style.getPropertyValue('--shelf-card')),
+    parseFloat(style.columnGap) || 0,
+    RECENT_CARDS,
+  );
+}
+new ResizeObserver(() => {
+  const fits = fitsOnShelf();
+  if (fits !== shelfFits) showHome();
+}).observe(recent);
+let homing = 0;
+
+function showHome() {
+  cancelAnimationFrame(homing);
+  homing = requestAnimationFrame(async () => {
+    const saved = [...tasks.values()].filter((t) => t.state === 'completed');
+    const videos = saved.filter((t) => t.kind === 'video');
+    const watching = videos.length ? await tauri.core.invoke('continue_watching').catch(() => null) : null;
+    const days = saved.length
+      ? await tauri.core
+          .invoke('library_tiles', { kept: saved.map((t) => t.id), offset: -new Date().getTimezoneOffset() })
+          .catch(() => null)
+      : [];
+    const chosen = heroOf(tasks.values(), watching);
+    const task = chosen && tasks.get(chosen.id);
+    showHero(task, chosen?.watching ?? null);
+    // The shelf: the newest few, leaving out the one the hero shows
+    const tiles = (days ?? []).flatMap((d) => d.tiles).filter((t) => !(t.ids.length === 1 && t.ids[0] === task?.id));
+    const shown = new Map([...recentCards.children].map((li) => [li.dataset.key, li]));
+    recent.hidden = tiles.length === 0;
+    shelfFits = fitsOnShelf();
+    const next = tiles.slice(0, shelfFits).map((tile) => {
+      const old = shown.get(tile.key);
+      return old && old.dataset.ids === tile.ids.join(',') ? old : tileFor(tile);
+    });
+    const now = [...recentCards.children];
+    if (next.length !== now.length || next.some((li, i) => li !== now[i])) recentCards.replaceChildren(...next);
+    recent.hidden = next.length === 0;
+  });
+}
+
+function showHero(task, watching) {
+  hero.hidden = !task;
+  if (!task) return;
+  const site = SITES.find(([value]) => value === task.site)?.[1];
+  document.getElementById('hero-eyebrow').textContent = watching
+    ? `Continue watching · ${clockOf(watching.at)}${watching.duration ? ` of ${clockOf(watching.duration)}` : ''}`
+    : 'Newest in your Library';
+  document.getElementById('hero-title').textContent = task.title || task.fileName;
+  document.getElementById('hero-meta').textContent = [site, task.choice, task.total ? fileSize(task.total) : ''].filter(Boolean).join(' · ');
+  const bar = document.getElementById('hero-watched');
+  const share = watching?.duration ? Math.min(100, (100 * watching.at) / watching.duration) : null;
+  bar.hidden = share === null;
+  if (share !== null) {
+    bar.setAttribute('aria-valuenow', String(Math.round(share)));
+    bar.firstElementChild.style.width = `${share}%`;
+  }
+  if (heroId === task.id) return;
+  heroId = task.id;
+  const picture = hero.querySelector('.hero__picture');
+  picture.replaceChildren();
+  if (coversOf(task).length) {
+    const img = image(task, (missing) => missing.remove());
+    img.loading = 'eager';
+    img.addEventListener('load', () => glowFrom(img, task.id, hero));
+    picture.append(img);
+  }
+}
+
+document.getElementById('hero-play').addEventListener('click', () => heroId !== null && openPlayer(heroId));
+document.getElementById('hero-transcript').addEventListener('click', async () => {
+  if (heroId === null) return;
+  await openPlayer(heroId);
+  showTab('transcript', true);
+});
+document.getElementById('hero-clip').addEventListener('click', async () => {
+  if (heroId === null) return;
+  await openPlayer(heroId);
+  showTab('clips', true);
+});
+document.getElementById('recent-all').addEventListener('click', () => showDownloads(true));
+
 // ── The viewer ──────────────────────────────────────────────────────────────────────────────
 
 const viewer = document.getElementById('viewer');
@@ -1407,7 +1507,8 @@ function showResumed(at) {
 function closePlayer() {
   if (!playing) return;
   closeExport();
-  keepPosition(true);
+  // Home's hero follows: the video just closed is the one to carry on with now
+  keepPosition(true)?.then(showHome);
   playing = null;
   dragging = null;
   sweeping = null;
@@ -1430,7 +1531,7 @@ function keepPosition(now = false) {
   if (!now && moment - playing.savedAt < 5000) return;
   playing.savedAt = moment;
   const duration = Number.isFinite(playerVideo.duration) ? playerVideo.duration : null;
-  tauri.core.invoke('playback_stopped', { id: playing.id, at: playerVideo.currentTime, duration }).catch(() => {});
+  return tauri.core.invoke('playback_stopped', { id: playing.id, at: playerVideo.currentTime, duration }).catch(() => {});
 }
 
 // ── The player's tabs ──
