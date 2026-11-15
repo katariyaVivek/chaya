@@ -5,8 +5,10 @@ html, body { height: 100%; }
 [hidden] { display: none !important; }
 
 body {
-  display: flex;
-  flex-direction: column;
+  /* Stage: the sidebar down the left, the title bar and the window's places beside it */
+  display: grid;
+  grid-template-columns: var(--side-width) minmax(0, 1fr);
+  grid-template-rows: var(--titlebar-height) minmax(0, 1fr);
   overflow: hidden;
   /* Glass needs something to soften: two very faint warm lights behind everything */
   background:
@@ -26,7 +28,8 @@ body {
  */
 :root { --titlebar-height: var(--space-5); }
 .top {
-  flex: none;
+  grid-row: 1;
+  grid-column: 2;
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -40,10 +43,82 @@ body {
 /* Above the player and the viewer (50), so their tabs, Home and Settings stay at hand; below a full-window player (60) */
 .top { position: relative; z-index: 55; }
 .top .tabstrip { margin-right: auto; }
-/* Chaya's mark leads the title bar and shows how the downloads are going (design/chaya-mark.js). Part of the bar's
-   drag area, as a title is. With no tabs it pushes the settings to the right itself */
-.brand { display: flex; align-items: center; margin-right: auto; }
-.brand:has(+ .tabstrip:not([hidden])) { margin-right: 0; }
+
+/*
+ * The sidebar (Stage): Chaya's mark and name, the window's places, and what the library holds. It runs the window's
+ * full height beside the title bar and the places. While a page is open it narrows to a rail of icons, at once and
+ * not animated: the page is drawn over the window, and each step of a moving edge would place it again. It stays
+ * under the player, the viewer and the export (50 and up), which cover it as they cover the page.
+ */
+:root { --side-width: 232px; --side-rail: 64px; }
+body.browsing { --side-width: var(--side-rail); }
+.side {
+  grid-row: 1 / -1;
+  grid-column: 1;
+  position: relative;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-half);
+  min-height: 0;
+  margin: var(--space-1) 0 var(--space-1) var(--space-1);
+  padding: 0 var(--space-1) var(--space-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  backdrop-filter: blur(var(--surface-blur));
+  box-shadow: var(--shadow);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+.side__brand {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: calc(var(--titlebar-height) + var(--space-1));
+  padding: 0 var(--space-1);
+  app-region: drag;
+  -webkit-app-region: drag;
+}
+.side__places { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.side__place {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  width: 100%;
+  height: var(--control-height);
+  padding: 0 var(--space-1);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: 500 var(--text-md) / var(--leading-md) var(--font-ui);
+  text-align: left;
+  cursor: default;
+}
+.side__place svg { flex: none; width: 20px; height: 20px; }
+.side__place:hover { background: var(--wash); }
+.side__place[aria-current='page'] { background: var(--wash-strong); font-weight: 600; }
+.side__place:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.side__library {
+  margin: auto 0 0;
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-1);
+  border-radius: var(--radius-md);
+  background: var(--wash);
+  font: 500 var(--text-sm) / var(--leading-sm) var(--font-ui);
+}
+.side__bytes { color: var(--muted); }
+/* The rail: icons only, each still named by its tooltip and for a screen reader */
+body.browsing .side { padding-inline: var(--space-half); align-items: center; }
+body.browsing .side__brand { justify-content: center; padding: 0; }
+body.browsing .side__name,
+body.browsing .side__place span,
+body.browsing .side__library { display: none; }
+body.browsing .side__place { justify-content: center; width: var(--control-height); padding: 0; }
 
 .caption { display: flex; align-self: stretch; }
 .caption__btn {
@@ -182,7 +257,8 @@ body:has(.player:not([hidden]), .viewer:not([hidden])) .settings__panel { backgr
 .seg button[aria-pressed="true"] { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
 
 .main {
-  flex: 1;
+  grid-row: 2;
+  grid-column: 2;
   display: grid;
   align-content: start;
   gap: var(--space-3);

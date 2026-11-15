@@ -10,8 +10,8 @@ import { markState, nextRun, shareOf } from '../ui/mark-state.js';
 
 const html = readFileSync(fileURLToPath(new URL('../ui/index.html', import.meta.url)), 'utf8');
 
-test("the title bar's mark is the resting mark, as chaya-mark.js draws it", () => {
-  assert.ok(html.includes(markMarkup('top-mark', { size: 24 })), 'index.html no longer matches markMarkup("top-mark", { size: 24 })');
+test("the sidebar's mark is the resting mark, as chaya-mark.js draws it", () => {
+  assert.ok(html.includes(markMarkup('side-mark', { size: 26 })), 'index.html no longer matches markMarkup("side-mark", { size: 26 })');
 });
 
 let ids = 0;

@@ -23,11 +23,11 @@
   --scroll-thumb: rgb(26 25 23 / 0.2);
   --scroll-thumb-hover: rgb(26 25 23 / 0.36);
   --shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 8px 24px rgb(0 0 0 / 0.06);
-  --focus: var(--text); /* the accent is too pale on Day for a focus ring (1.9:1) */
+  --focus: var(--text); /* the accent is too pale on Day for a focus ring (1.7:1) */
 
   /* Accent, the same in both themes: light, never a fill */
-  --accent: #FF9A3C;
-  --accent-rgb: 255 154 60;
+  --accent: #F2B25A; /* Stage's amber, the mark's own light */
+  --accent-rgb: 242 178 90;
   --accent-glow: 0 0 24px rgb(var(--accent-rgb) / 0.35);
   --accent-edge: rgb(var(--accent-rgb) / 0.45); /* border of the one primary control */
 

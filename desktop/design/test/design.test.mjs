@@ -102,7 +102,7 @@ test('the brief\'s colors are what the tokens say', () => {
   assert.equal(nightPicked.get('--border'), 'rgb(255 255 255 / 0.08)');
   assert.equal(nightPicked.get('--text'), '#F2F1EE');
   assert.equal(nightPicked.get('--muted'), '#8A8883');
-  assert.equal(day.get('--accent'), '#FF9A3C');
+  assert.equal(day.get('--accent'), '#F2B25A');
   assert.ok(!nightPicked.has('--accent'), 'the accent is shared, not redefined for Night');
 });
 

@@ -28,6 +28,7 @@ import { secondsLeft, listeningWords } from './pace.js';
 import { onePanel } from './panels.js';
 import { markMarkup, mountMark } from './design/chaya-mark.js';
 import { markState, nextRun, shareOf } from './mark-state.js';
+import { placeOf, tabToBrowse, libraryTotals } from './shell.js';
 
 // Every drop-down drawn as Chaya's own, not Windows' list (unreadable in Night, in Windows' font). The <select>s stay
 // underneath, so what follows reads and sets them as before.
@@ -429,7 +430,7 @@ const downloadsEmpty = document.getElementById('downloads-empty');
 const tasks = new Map();
 
 // Chaya's mark in the title bar: the line draws as the downloads go, and the twin, the copy, comes out as they arrive
-const topMark = mountMark(document.querySelector('.brand .mark'));
+const topMark = mountMark(document.querySelector('.side__brand .mark'));
 /** The downloads in this run (mark-state.js): its progress counts the ones finished in it, so it never steps back */
 let markRun = new Set();
 function showMark() {
@@ -558,6 +559,16 @@ function countRunning() {
   badge.textContent = String(running);
   badge.hidden = running === 0;
   showMark();
+  showLibrary();
+}
+
+/** The sidebar's foot: how many downloads are saved, and the room they take. */
+function showLibrary() {
+  const { saved, bytes } = libraryTotals(tasks.values());
+  const foot = document.getElementById('side-library');
+  foot.hidden = saved === 0;
+  foot.querySelector('.side__saved').textContent = `${saved} saved`;
+  foot.querySelector('.side__bytes').textContent = bytes ? fileSize(bytes) : '';
 }
 
 const ROW_ICON = { video: 'i-video', audio: 'i-audio', picture: 'i-post', archive: 'i-zip' };
@@ -2370,6 +2381,7 @@ function boundsOf(el) {
 function setBrowsing(on) {
   browsing = on;
   document.body.classList.toggle('browsing', on);
+  showPlace();
   document.querySelectorAll('[data-browsing]').forEach((el) => (el.hidden = !on));
   // Over a page, what is looked up and what the page holds open from the bar, so the page never moves for them.
   if (on) {
@@ -2446,6 +2458,7 @@ function tabName(tab) {
 function showTabs(view) {
   tabsNow = view;
   tabstrip.hidden = view.tabs.length === 0;
+  placeBrowse.hidden = view.tabs.length === 0;
   tabList.replaceChildren(
     ...view.tabs.map((tab) => {
       const el = tabTemplate.content.firstElementChild.cloneNode(true);
@@ -2501,6 +2514,31 @@ async function switchTab(id) {
 function closeTab(id) {
   tauri.core.invoke('close_tab', { id });
 }
+
+// ── The sidebar (Stage) ─────────────────────────────────────────────────────────────────────
+//
+// Its places are the window's views: Home, and Browse while any tab is open. Which is shown follows from the views
+// themselves (shell.js); the sidebar only says so and goes there.
+
+const placeHome = document.getElementById('place-home');
+const placeBrowse = document.getElementById('place-browse');
+
+function showPlace() {
+  const place = placeOf({ browsing });
+  for (const el of document.querySelectorAll('.side__place')) {
+    if (el.dataset.place === place) el.setAttribute('aria-current', 'page');
+    else el.removeAttribute('aria-current');
+  }
+}
+
+placeHome.addEventListener('click', () => {
+  if (browsing || playing) goHome();
+});
+placeBrowse.addEventListener('click', () => {
+  const id = tabToBrowse(tabsNow, activeTab);
+  if (id !== null) switchTab(id);
+});
+showPlace();
 
 /** The tab `step` places along from the one shown (or the first or last from the home), as Ctrl+Tab goes. */
 function cycleTabs(step) {
