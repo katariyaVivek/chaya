@@ -1491,6 +1491,14 @@ async function openPlayer(id, from = null) {
   document.getElementById('player-translate-box').hidden = true;
   document.getElementById('player-pick').hidden = true;
   document.getElementById('player-fixed').hidden = true;
+  // Nor the video before's highlights; and Find is offered only once this one's subtitles are read (showSubtitles),
+  // since it finds them in the subtitles shown: pressed before, it would do nothing.
+  playerHighlights.replaceChildren();
+  document.getElementById('player-marks').replaceChildren();
+  document.getElementById('player-highlights-top').hidden = true;
+  document.getElementById('player-find-row').hidden = true;
+  document.getElementById('player-find-setup').hidden = true;
+  document.getElementById('player-find-note').textContent = '';
   cut.hidden = true;
   playerCc.hidden = true;
   player.hidden = false;
