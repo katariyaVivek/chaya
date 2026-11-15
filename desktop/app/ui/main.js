@@ -27,7 +27,7 @@ import { enhanceSelects } from './design/chaya-picker.js';
 import { secondsLeft, listeningWords } from './pace.js';
 import { onePanel } from './panels.js';
 import { markMarkup, mountMark } from './design/chaya-mark.js';
-import { markState, shareOf } from './mark-state.js';
+import { markState, nextRun, shareOf } from './mark-state.js';
 
 // Every drop-down drawn as Chaya's own, not Windows' list (unreadable in Night, in Windows' font). The <select>s stay
 // underneath, so what follows reads and sets them as before.
@@ -430,8 +430,11 @@ const tasks = new Map();
 
 // Chaya's mark in the title bar: the line draws as the downloads go, and the twin, the copy, comes out as they arrive
 const topMark = mountMark(document.querySelector('.brand .mark'));
+/** The downloads in this run (mark-state.js): its progress counts the ones finished in it, so it never steps back */
+let markRun = new Set();
 function showMark() {
-  topMark.set(markState(tasks.values(), navigator.onLine));
+  markRun = nextRun(markRun, tasks.values());
+  topMark.set(markState(tasks.values(), navigator.onLine, markRun));
 }
 addEventListener('online', showMark);
 addEventListener('offline', showMark);
