@@ -300,6 +300,7 @@ not another flag beside it.
 | An engine update check | `NOT_DUE`, `UP_TO_DATE`, `DOWNLOADED`, `REFUSED`, `FAILED` | `EngineUpdater.Outcome` | Enum |
 | Windows: a download | `Queued → Downloading ⇄ Paused → Completed \| Failed`, steps `Picture`, `Sound`, `Joining`, `Saving` | `desktop/core/src/download/manager.rs` | Rust enums, stored |
 | Windows: the panel open | none, Settings, the ad blocker's shield, what the page holds | `desktop/app/ui/panels.js` (`onePanel`), used by `main.js` | One value: opening a panel closes the one open; Escape closes it |
+| Windows: the sidebar's place | `home`, `browse` (offered while any tab is open) | `desktop/app/ui/shell.js` (`placeOf`, from `browsing`) | Worked out from the views, never stored; the Downloads list, player and viewer are layers over a place, not places |
 | Windows: Chaya's mark | `idle`, `saving` (with progress), `unknown` (a stream), `paused`, `offline`; a rise in `saved` settles it | `desktop/app/ui/mark-state.js` (`markState`, from all the downloads), drawn by `desktop/design/chaya-mark.js` | One value, worked out from the downloads each time they change; the drawing eases between states as a pure function of time |
 
 Kept apart on purpose, because they are layers rather than one state:

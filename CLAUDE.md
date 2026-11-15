@@ -80,7 +80,7 @@ The two suns: an amber sun, its shadow-twin, one line of light through both. Its
 [`desktop/design/README.md`](desktop/design/README.md) (Mark):
 
 - **One source.** Its geometry is the named constants in `desktop/design/chaya-mark.js`; no stored path strings.
-  The title bar's resting markup in `desktop/app/ui/index.html` is what `markMarkup()` writes (a test checks), and
+  The sidebar's resting markup in `desktop/app/ui/index.html` is what `markMarkup()` writes (a test checks), and
   the icon files come from `desktop/app/scripts/icons.mjs`. Change the constants, then regenerate both.
 - **The silhouette stays.** Every state shows two suns. A state may tuck the twin, draw or flatten the line, but
   never hides the twin, merges the two, or changes a sun's size.

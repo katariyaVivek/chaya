@@ -53,7 +53,7 @@ attribute follows Windows (light or dark). `setTheme('day' | 'night' | 'system')
 | `--scroll-thumb`, `--scroll-thumb-hover` | ink 20%, 36% | white 18%, 32% | A scrollbar's thumb, and under the pointer |
 | `--shadow` | `0 1px 2px` 4% + `0 8px 24px` 6% | `0 8px 32px` 50% | Glass elevation |
 | `--focus` | `--text` | `--accent` | Focus rings and a focused field's edge |
-| `--accent` | `#FF9A3C` | `#FF9A3C` | Light: glow, edges, thin progress |
+| `--accent` | `#F2B25A` | `#F2B25A` | Light: glow, edges, thin progress |
 | `--accent-glow` | `0 0 24px` accent 35% | same | The glow itself |
 | `--accent-edge` | accent 45% | same | Border of the one primary control, and of the ring |
 
@@ -61,7 +61,7 @@ Contrast, checked by the tests: text is 16:1 (Day) and 17:1 (Night). Muted is at
 both the ground and the glass in both themes.
 
 **The accent is light, never paint.** Use it as a glow, a 1px edge, a 2px progress line or a ring
-stroke. Never fill a button, a badge or a background with it. On Day it is only 1.9:1 against the
+stroke. Never fill a button, a badge or a background with it. On Day it is only 1.7:1 against the
 ground, so it is never text and never the only sign of focus there. Progress it draws is always
 also written as a number. The one exception is Chaya's mark (below): a logo, not a control, so its sun is filled,
 in its own amber (`--mark-light`), not the accent.
@@ -268,7 +268,8 @@ shadow, and in the story Chhaya was made from the sun-wife's shadow; a download 
 - **Motion:** eased out, never overshooting. Frames come from `frameAt()`, a pure function of time, and are drawn
   by setting attributes on the mark's elements. Nothing runs while it rests or the window is hidden; with reduced
   motion it shows each state still.
-- **Sizes:** 24 px in the title bar, 16 px in the Finding pill. The app icon (`desktop/app/scripts/icons.mjs`) puts
+- **Sizes:** 26 px at the top of the sidebar, beside the wordmark (alone on the rail while browsing), 16 px in the
+  Finding pill. The app icon (`desktop/app/scripts/icons.mjs`) puts
   it on a near-black plate, with a wider gap and hairline at 32 px and below.
 
 ## Decisions beyond the brief
@@ -276,7 +277,7 @@ shadow, and in the story Chhaya was made from the sun-wife's shadow; a download 
 - **Day has a border token** (ink at 6%). The brief gave Night a border and Day none; without it,
   white glass on the pale ground loses its edge.
 - **Wash tokens** for hover and pressed states, derived from the text color in each theme.
-- **Focus on Day uses the text color**, because the accent is 1.9:1 there.
+- **Focus on Day uses the text color**, because the accent is 1.7:1 there.
 - **The download button settles to *Saved*.** The brief says it settles back. Saying *Download*
   again would invite a second copy.
 - **"Static when idle"** is read as: a paused row's light stops where it is, and rows that are not
