@@ -102,3 +102,25 @@ test("Home's shelf shows one row: as many 180 px cards as its width holds, as th
   assert.equal(shelfColumns(0, 180, 12, 5), 5, 'not laid out yet: the most, to be counted again once it is');
   assert.equal(shelfColumns(NaN, 180, 12, 5), 5);
 });
+
+import { backLabel, playerFacts } from '../ui/shell.js';
+
+test("the player's back button names the place it closes back to", () => {
+  assert.equal(backLabel('home'), 'Home');
+  assert.equal(backLabel('library'), 'Library');
+  assert.equal(backLabel('browse'), 'Page');
+  assert.equal(backLabel(undefined), 'Home');
+});
+
+test('the line under the title says where the video came from, its quality, its subtitles and its chapter', () => {
+  const chapters = [{ title: 'Welcome' }, { title: 'Second song' }, { title: 'Encore' }];
+  assert.equal(
+    playerFacts({ site: 'YouTube', choice: '1080p', subtitles: 'English', chapter: 1, chapters }),
+    'YouTube · 1080p · English subtitles · Chapter 2 of 3, “Second song”',
+  );
+  // Each part only when known
+  assert.equal(playerFacts({ site: 'X', choice: null, subtitles: null }), 'X');
+  assert.equal(playerFacts({ site: null, chapter: 0, chapters: [{ title: '  ' }] }), 'Chapter 1 of 1');
+  assert.equal(playerFacts({ chapter: 5, chapters }), '', 'a chapter past the end names none');
+  assert.equal(playerFacts({}), '');
+});
