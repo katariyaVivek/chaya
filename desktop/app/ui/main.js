@@ -1262,7 +1262,8 @@ function showHero(task, watching) {
   const picture = hero.querySelector('.hero__picture');
   picture.replaceChildren();
   if (coversOf(task).length) {
-    const img = image(task, (missing) => missing.remove());
+    // Missing (a poster not made yet), kept hidden: it shows, with its glow, once the poster is made
+    const img = image(task, (missing) => (missing.hidden = true));
     img.loading = 'eager';
     img.addEventListener('load', () => glowFrom(img, task.id, hero));
     picture.append(img);
