@@ -387,11 +387,14 @@
      beside it, tabs: the transcript to read, jump through and choose lines from, highlights, clips, and the subtitles
      to choose or make. -->
 <div class="player" id="player" role="dialog" aria-modal="true" aria-label="Player" hidden>
+  <!-- Stage: back to the place it was opened from, then what is done with the video as a whole -->
   <div class="viewer__top player__top">
-    <p class="viewer__title" id="player-title"></p>
+    <button class="player__back pressable" type="button" id="player-close" aria-label="Back to Home (Esc)" title="Back (Esc)"><svg><use href="#i-back"/></svg><span id="player-back-label">Home</span></button>
+    <span class="player__gap"></span>
     <button class="icon-btn pressable player__wide" type="button" id="player-open" aria-label="Open in another app" title="Open in another app"><svg><use href="#i-open"/></svg></button>
     <button class="icon-btn pressable player__wide" type="button" id="player-folder" aria-label="Show in folder" title="Show in folder"><svg><use href="#i-folder"/></svg></button>
-    <button class="icon-btn pressable" type="button" id="player-close" aria-label="Close (Esc)" title="Close (Esc)"><svg><use href="#i-close"/></svg></button>
+    <button class="player__action pressable" type="button" id="player-translate-top">Translate</button>
+    <button class="player__action player__action--strong pressable" type="button" id="player-export-top" title="Export (Ctrl+E)" aria-haspopup="dialog" hidden>Export</button>
   </div>
   <div class="player__body">
     <div class="player__main">
@@ -406,33 +409,39 @@
         <p>Chaya can't play this file. Another app on this PC may.</p>
         <button class="pill pill--primary glass pressable" type="button" id="player-problem-open">Open in another app</button>
       </div>
-      <!-- The player's own controls: they fade while it plays, and come back when the pointer moves -->
-      <div class="controls" id="player-controls">
-        <div class="controls__seek" id="player-seek" role="slider" tabindex="0" aria-label="Position" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
-          <span class="controls__buffered" id="player-buffered"></span>
-          <span class="controls__played" id="player-played"></span>
-          <span class="controls__chapters" id="player-chapters" aria-hidden="true"></span>
-          <span class="controls__marks" id="player-marks" aria-hidden="true"></span>
-          <span class="controls__thumb" id="player-thumb"></span>
-          <span class="controls__hover num" id="player-hover" hidden></span>
-        </div>
-        <div class="controls__row">
-          <button class="controls__play" type="button" id="player-play" aria-label="Play (Space)" title="Play (Space)"><svg><use href="#i-play"/></svg></button>
-          <button class="controls__btn" type="button" id="player-mute" aria-label="Mute (M)" title="Mute (M)"><svg><use href="#i-sound"/></svg></button>
-          <span class="controls__time num" id="player-time">0:00 / 0:00</span>
-          <span class="controls__chapter" id="player-chapter" title="Ctrl+← and Ctrl+→ go between chapters" hidden></span>
-          <span class="controls__gap"></span>
-          <div class="player__speed">
-            <button class="controls__btn controls__speed num" type="button" id="player-speed-button" aria-expanded="false" aria-controls="player-speed-panel" title="Speed">1×</button>
-            <div class="settings__panel player__speed-panel" id="player-speed-panel" hidden>
-              <p class="settings__label">Speed</p>
-              <div class="seg" role="group" aria-label="Speed" id="player-speed"></div>
-            </div>
-          </div>
-          <button class="controls__btn" type="button" id="player-cc" aria-label="Subtitles (C)" title="Subtitles (C)" aria-pressed="true" hidden><svg><use href="#i-cc"/></svg></button>
-          <button class="controls__btn" type="button" id="player-full" aria-label="Full window (F)" title="Full window (F)"><svg><use href="#i-expand"/></svg></button>
-        </div>
+    </div>
+    <!-- The player's own controls (Stage): a bar under the picture; in full window, over it, fading while it plays and
+         back when the pointer moves -->
+    <div class="controls" id="player-controls">
+      <div class="controls__seek" id="player-seek" role="slider" tabindex="0" aria-label="Position" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0">
+        <span class="controls__buffered" id="player-buffered"></span>
+        <span class="controls__played" id="player-played"></span>
+        <span class="controls__chapters" id="player-chapters" aria-hidden="true"></span>
+        <span class="controls__marks" id="player-marks" aria-hidden="true"></span>
+        <span class="controls__thumb" id="player-thumb"></span>
+        <span class="controls__hover num" id="player-hover" hidden></span>
       </div>
+      <div class="controls__row">
+        <button class="controls__play" type="button" id="player-play" aria-label="Play (Space)" title="Play (Space)"><svg><use href="#i-play"/></svg></button>
+        <button class="controls__btn" type="button" id="player-mute" aria-label="Mute (M)" title="Mute (M)"><svg><use href="#i-sound"/></svg></button>
+        <span class="controls__time num" id="player-time">0:00 / 0:00</span>
+        <span class="controls__chapter" id="player-chapter" title="Ctrl+← and Ctrl+→ go between chapters" hidden></span>
+        <span class="controls__gap"></span>
+        <div class="player__speed">
+          <button class="controls__btn controls__speed num" type="button" id="player-speed-button" aria-expanded="false" aria-controls="player-speed-panel" title="Speed">1×</button>
+          <div class="settings__panel player__speed-panel" id="player-speed-panel" hidden>
+            <p class="settings__label">Speed</p>
+            <div class="seg" role="group" aria-label="Speed" id="player-speed"></div>
+          </div>
+        </div>
+        <button class="controls__btn controls__text" type="button" id="player-cc" title="Subtitles (C)" aria-pressed="true" hidden>Subtitles</button>
+        <button class="controls__btn controls__text" type="button" id="player-clip-button" title="Make a clip">Clip</button>
+        <button class="controls__btn" type="button" id="player-full" aria-label="Full window (F)" title="Full window (F)"><svg><use href="#i-expand"/></svg></button>
+      </div>
+    </div>
+    <div class="player__about">
+      <h1 class="player__heading" id="player-title"></h1>
+      <p class="player__facts" id="player-facts"></p>
     </div>
     <!-- The timeline, as an editor has it, while the Clips tab is open or a clip is chosen: a ruler, the chapters (when
          the site named any), the picture, the lines, the sound and the clips. A clip chosen is lit between two handles that snap to the lines; I and O set

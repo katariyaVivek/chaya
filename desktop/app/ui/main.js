@@ -28,7 +28,7 @@ import { secondsLeft, listeningWords } from './pace.js';
 import { onePanel } from './panels.js';
 import { markMarkup, mountMark } from './design/chaya-mark.js';
 import { markState, nextRun, shareOf } from './mark-state.js';
-import { placeOf, railed, tabToBrowse, libraryTotals, sourcesOf, underWay, heroOf, clockOf, shelfColumns } from './shell.js';
+import { placeOf, railed, tabToBrowse, libraryTotals, sourcesOf, underWay, heroOf, clockOf, shelfColumns, backLabel, playerFacts } from './shell.js';
 import { firstPick, offerFound } from './found.js';
 
 // Every drop-down drawn as Chaya's own, not Windows' list (unreadable in Night, in Windows' font). The <select>s stay
@@ -1486,6 +1486,12 @@ async function openPlayer(id, from = null) {
   if (!viewer.hidden) closeViewer();
   playing = { id, tracks: [], shown: null, line: null, savedAt: 0, clips: [], anchor: null, pick: null, cut: null, until: null, view: null, peaks: null, synced: null, chapters: [] };
   document.getElementById('player-title').textContent = task.title || task.fileName;
+  // Back to the place it was opened over (the player is a layer, not a place)
+  const back = backLabel(placeOf({ browsing, library: document.body.classList.contains('showing-downloads') }));
+  document.getElementById('player-back-label').textContent = back;
+  document.getElementById('player-close').setAttribute('aria-label', `Back to ${back} (Esc)`);
+  playerGlow(id);
+  showFacts();
   playerProblem.hidden = true;
   playerResumed.hidden = true;
   playerCaption.hidden = true;
@@ -1499,6 +1505,14 @@ async function openPlayer(id, from = null) {
   document.getElementById('player-translate-box').hidden = true;
   document.getElementById('player-pick').hidden = true;
   document.getElementById('player-fixed').hidden = true;
+  // Nor the video before's highlights; and Find is offered only once this one's subtitles are read (showSubtitles),
+  // since it finds them in the subtitles shown: pressed before, it would do nothing.
+  playerHighlights.replaceChildren();
+  document.getElementById('player-marks').replaceChildren();
+  document.getElementById('player-highlights-top').hidden = true;
+  document.getElementById('player-find-row').hidden = true;
+  document.getElementById('player-find-setup').hidden = true;
+  document.getElementById('player-find-note').textContent = '';
   cut.hidden = true;
   playerCc.hidden = true;
   player.hidden = false;
@@ -1554,6 +1568,28 @@ function showResumed(at) {
   playerResumed.hidden = false;
   clearTimeout(showResumed.timer);
   showResumed.timer = setTimeout(() => (playerResumed.hidden = true), 6000);
+}
+
+/** Stage: the picture's shadow in its own colour, from the poster Chaya keeps (as the Library's cards). */
+function playerGlow(id) {
+  player.style.removeProperty('--glow');
+  const img = new Image();
+  img.addEventListener('load', () => playing?.id === id && glowFrom(img, id, player), { once: true });
+  img.src = posterOf(id);
+}
+
+/** The line under the title: where it came from, its quality, the subtitles on the picture, the chapter playing. */
+function showFacts() {
+  if (!playing) return;
+  const task = tasks.get(playing.id);
+  const chapter = Number(playerChapter.dataset.index ?? -1);
+  document.getElementById('player-facts').textContent = playerFacts({
+    site: SITES.find(([value]) => value === task?.site)?.[1],
+    choice: task?.choice,
+    subtitles: captionsOn && playing.shown ? languageName(playing.shown.language) : null,
+    chapter,
+    chapters: playing.chapters,
+  });
 }
 
 function closePlayer() {
@@ -1683,6 +1719,7 @@ function showChapter(ms) {
   playerChapter.dataset.index = String(index);
   playerChapter.hidden = index < 0;
   playerChapter.textContent = index < 0 ? '' : chapters[index].title;
+  showFacts();
   for (const el of document.querySelectorAll('#cut-chapters .cut__chapter')) {
     el.setAttribute('aria-current', String(el.dataset.chapter === String(index)));
   }
@@ -1822,6 +1859,7 @@ function setCaptions(on) {
   playerCc.setAttribute('aria-pressed', String(on));
   if (playing) playing.line = null;
   followLine();
+  showFacts();
 }
 
 function showSpeeds() {
@@ -1880,6 +1918,7 @@ function showSubtitles(track) {
   playing.second = (wantedSecond && tracks.find((t) => t !== track && (t.language ?? '') === wantedSecond)) || null;
   playerCc.hidden = tracks.length === 0;
   playerCc.setAttribute('aria-pressed', String(captionsOn));
+  showFacts();
   refill(
     playerSubtitles,
     tracks.map((t) => {
@@ -3923,6 +3962,7 @@ function showClips() {
   delete head.dataset.kept;
   document.getElementById('player-clips-none').hidden = clips.length > 0;
   playerExport.hidden = clips.length === 0;
+  document.getElementById('player-export-top').hidden = clips.length === 0;
   if (exporting) {
     if (clips.length) showExport();
     else closeExport();
@@ -4847,6 +4887,14 @@ function exportKey(e) {
 }
 
 playerExport.addEventListener('click', openExport);
+// Stage's bar over the player: Export and Translate, for the video as a whole; Clip, under the picture
+document.getElementById('player-export-top').addEventListener('click', openExport);
+document.getElementById('player-translate-top').addEventListener('click', () => {
+  showTab('subtitles', true);
+  const box = document.getElementById('player-translate-box');
+  if (!box.hidden) box.scrollIntoView({ block: 'nearest' });
+});
+document.getElementById('player-clip-button').addEventListener('click', () => showTab('clips', true));
 exportGo.addEventListener('click', startExport);
 document.getElementById('export-close').addEventListener('click', closeExport);
 document.getElementById('export-cancel').addEventListener('click', closeExport);

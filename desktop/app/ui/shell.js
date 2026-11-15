@@ -97,3 +97,22 @@ export function shelfColumns(width, card, gap, most) {
   if (!(width > 0) || !(card > 0)) return most;
   return Math.max(1, Math.min(most, Math.floor((width + Math.max(0, gap)) / (card + Math.max(0, gap)))));
 }
+
+/** What the player's back button names: the place it closes back to (the player is a layer over a place). */
+export function backLabel(place) {
+  return { home: 'Home', library: 'Library', browse: 'Page' }[place] ?? 'Home';
+}
+
+/**
+ * The line under the player's title (Stage): where the video came from, the quality it was saved in, the subtitles
+ * shown, and the chapter playing, as `YouTube · 1080p · English subtitles · Chapter 2 of 3, “Second song”`.
+ * @param {{ site?: string | null, choice?: string | null, subtitles?: string | null, chapter?: number, chapters?: {title: string}[] }} now
+ */
+export function playerFacts({ site, choice, subtitles, chapter = -1, chapters = [] }) {
+  const parts = [site, choice, subtitles ? `${subtitles} subtitles` : null];
+  if (chapter >= 0 && chapter < chapters.length) {
+    const title = chapters[chapter].title?.trim();
+    parts.push(`Chapter ${chapter + 1} of ${chapters.length}${title ? `, “${title}”` : ''}`);
+  }
+  return parts.filter(Boolean).join(' · ');
+}
