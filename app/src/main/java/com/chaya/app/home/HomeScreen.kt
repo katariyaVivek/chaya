@@ -86,12 +86,6 @@ import com.chaya.app.ui.theme.LocalChayaColors
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
-/** Chaya's places (Stage): Home, Browse (a page in the browser) and the Library. */
-enum class Place(val label: String) {
-    HOME("Home"),
-    BROWSE("Browse"),
-    LIBRARY("Library"),
-}
 
 /**
  * Home (Stage): the newest saved video filling the top with Play and Share, the newest saved things in a row

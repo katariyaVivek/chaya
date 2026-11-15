@@ -24,6 +24,7 @@ import com.chaya.app.history.HistoryScreen
 import com.chaya.app.history.PagesToOpen
 import com.chaya.app.home.HomeScreen
 import com.chaya.app.home.Place
+import com.chaya.app.home.PlaceStep
 import com.chaya.app.ui.player.PlayerScreen
 import com.chaya.app.ui.theme.ChayaMotion
 
@@ -41,13 +42,15 @@ fun ChayaNavHost(navController: NavHostController) {
             Place.BROWSE -> Screen.Browser.route
             Place.LIBRARY -> Screen.Downloads.route
         }
-        if (place == Place.HOME) {
-            navController.popBackStack(Screen.Home.route, inclusive = false)
-            return
-        }
-        navController.navigate(route) {
-            popUpTo(Screen.Home.route)
-            launchSingleTop = true
+        val shown = navController.currentDestination?.route == route
+        val onStack = runCatching { navController.getBackStackEntry(route) }.isSuccess
+        when (PlaceStep.of(shown, onStack)) {
+            PlaceStep.STAY -> Unit
+            PlaceStep.GO_BACK -> navController.popBackStack(route, inclusive = false)
+            PlaceStep.OPEN -> navController.navigate(route) {
+                popUpTo(Screen.Home.route)
+                launchSingleTop = true
+            }
         }
     }
 
