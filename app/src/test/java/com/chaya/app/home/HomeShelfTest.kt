@@ -77,7 +77,7 @@ class HomeShelfTest {
     }
 
     @Test
-    fun `the row holds the newest few; the Library has the rest`() {
+    fun `the row holds the newest few, and the Library has the rest`() {
         val shelf = HomeShelf.of((1L..20L).map { task(it, "Picture $it", "Picture $it.jpg", "image/jpeg") })
 
         assertNull(shelf.hero)
