@@ -25,6 +25,7 @@
   <symbol id="i-retry" viewBox="0 0 24 24"><path d="M19 12a7 7 0 1 1-2.05-4.95M19 4.5V8h-3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-export" viewBox="0 0 24 24"><path d="M12 14.5V4m0 0L7.5 8.5M12 4l4.5 4.5M5 13v4.5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+  <symbol id="i-start" viewBox="0 0 24 24"><path d="M6.5 5.5h2.5v13H6.5zM19 5.5v13l-9-6.5z" fill="currentColor"/></symbol>
   <symbol id="i-close" viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
   <symbol id="i-zip" viewBox="0 0 24 24"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M13 9.5h2M13 12h2M13 14.5h2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
   <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5.5 12h13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
@@ -391,6 +392,8 @@
   <div class="viewer__top player__top">
     <button class="player__back pressable" type="button" id="player-close" aria-label="Back to Home (Esc)" title="Back (Esc)"><svg><use href="#i-back"/></svg><span id="player-back-label">Home</span></button>
     <span class="player__gap"></span>
+    <!-- Editing a clip (Stage): which clip, from which video -->
+    <p class="player__clip-title" id="player-clip-title" hidden><b id="player-clip-name"></b><span id="player-clip-from"></span></p>
     <button class="icon-btn pressable player__wide" type="button" id="player-open" aria-label="Open in another app" title="Open in another app"><svg><use href="#i-open"/></svg></button>
     <button class="icon-btn pressable player__wide" type="button" id="player-folder" aria-label="Show in folder" title="Show in folder"><svg><use href="#i-folder"/></svg></button>
     <button class="player__action pressable" type="button" id="player-translate-top">Translate</button>
@@ -438,6 +441,12 @@
         <button class="controls__btn controls__text" type="button" id="player-clip-button" title="Make a clip">Clip</button>
         <button class="controls__btn" type="button" id="player-full" aria-label="Full window (F)" title="Full window (F)"><svg><use href="#i-expand"/></svg></button>
       </div>
+    </div>
+    <!-- Editing a clip: its own controls in place of the player's -->
+    <div class="clip-transport" id="clip-transport" hidden>
+      <button class="clip-transport__btn pressable" type="button" id="clip-start" aria-label="Back to the clip's start" title="Back to the clip's start"><svg><use href="#i-start"/></svg></button>
+      <button class="clip-transport__play pressable" type="button" id="clip-play" aria-label="Play clip" title="Play clip"><svg><use href="#i-play"/></svg></button>
+      <p class="clip-transport__span"><b id="clip-length"></b><span id="clip-where"></span></p>
     </div>
     <div class="player__about">
       <h1 class="player__heading" id="player-title"></h1>
@@ -492,6 +501,14 @@
     </section>
     </div>
     <aside class="player__panel" id="player-panel" aria-label="Transcript, highlights, clips and subtitles">
+      <!-- Editing a clip (Stage): its name, and what is said in it, in place of the tabs -->
+      <section class="clip-card" id="clip-card" aria-label="Clip" hidden>
+        <p class="settings__label">Name</p>
+        <div class="clip-card__name" id="clip-card-name"></div>
+        <p class="settings__label" id="clip-card-said">Said in it</p>
+        <ol class="clip-card__lines" id="clip-card-lines" aria-labelledby="clip-card-said"></ol>
+        <p class="clip-card__note">Clips are kept with the video. Export this one now, or later from the Clips tab.</p>
+      </section>
       <div class="tabs" role="tablist" id="player-tabs">
         <span class="tabs__light" aria-hidden="true"></span>
         <button class="tabs__tab" type="button" role="tab" id="tab-transcript" aria-controls="panel-transcript" aria-selected="true">Transcript</button>

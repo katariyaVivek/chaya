@@ -124,3 +124,22 @@ test('the line under the title says where the video came from, its quality, its 
   assert.equal(playerFacts({ chapter: 5, chapters }), '', 'a chapter past the end names none');
   assert.equal(playerFacts({}), '');
 });
+
+import { linesIn, clipSpan } from '../ui/shell.js';
+
+test("a clip's lines are those said in it, any that overlap its edges included", () => {
+  const lines = [
+    { start: 0, end: 2800, text: 'a' },
+    { start: 3000, end: 5800, text: 'b' },
+    { start: 6000, end: 8800, text: 'c' },
+  ];
+  assert.deepEqual(linesIn(lines, { start: 3000, end: 6000 }).map((l) => l.text), ['b']);
+  assert.deepEqual(linesIn(lines, { start: 2000, end: 6500 }).map((l) => l.text), ['a', 'b', 'c']);
+  assert.deepEqual(linesIn(lines, { start: 2800, end: 3000 }), [], 'touching is not overlapping');
+  assert.deepEqual(linesIn(null, { start: 0, end: 1 }), []);
+});
+
+test("a clip's length and place read as Stage writes them", () => {
+  assert.equal(clipSpan({ start: 242_000, end: 280_000 }), '0:38 clip · 4:02 to 4:40');
+  assert.equal(clipSpan({ start: 3_599_400, end: 3_725_000 }), '2:06 clip · 59:59 to 1:02:05');
+});

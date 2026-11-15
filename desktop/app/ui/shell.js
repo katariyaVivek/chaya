@@ -116,3 +116,18 @@ export function playerFacts({ site, choice, subtitles, chapter = -1, chapters = 
   }
   return parts.filter(Boolean).join(' · ');
 }
+
+/**
+ * The lines said in a clip (Stage's clip editor): every line that overlaps it, in order. Times in milliseconds.
+ * @param {{start: number, end: number, text: string}[]} lines
+ * @param {{start: number, end: number}} clip
+ */
+export function linesIn(lines, clip) {
+  return (lines ?? []).filter((l) => l.end > clip.start && l.start < clip.end);
+}
+
+/** "0:38 clip · 4:02 to 4:40": a clip's length, then where it is in the video. Times in milliseconds. */
+export function clipSpan(clip) {
+  const s = (ms) => clockOf(Math.round(ms / 1000));
+  return `${s(clip.end - clip.start)} clip · ${s(clip.start)} to ${s(clip.end)}`;
+}
