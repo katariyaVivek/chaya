@@ -28,7 +28,7 @@ import { secondsLeft, listeningWords } from './pace.js';
 import { onePanel } from './panels.js';
 import { markMarkup, mountMark } from './design/chaya-mark.js';
 import { markState, nextRun, shareOf } from './mark-state.js';
-import { placeOf, railed, tabToBrowse, libraryTotals, sourcesOf, underWay, heroOf, clockOf, shelfColumns, backLabel, playerFacts } from './shell.js';
+import { placeOf, railed, tabToBrowse, libraryTotals, sourcesOf, underWay, heroOf, clockOf, shelfColumns, backLabel, playerFacts, linesIn, clipSpan } from './shell.js';
 import { firstPick, offerFound } from './found.js';
 
 // Every drop-down drawn as Chaya's own, not Windows' list (unreadable in Night, in Windows' font). The <select>s stay
@@ -1488,8 +1488,8 @@ async function openPlayer(id, from = null) {
   document.getElementById('player-title').textContent = task.title || task.fileName;
   // Back to the place it was opened over (the player is a layer, not a place)
   const back = backLabel(placeOf({ browsing, library: document.body.classList.contains('showing-downloads') }));
-  document.getElementById('player-back-label').textContent = back;
-  document.getElementById('player-close').setAttribute('aria-label', `Back to ${back} (Esc)`);
+  playing.back = back;
+  showBack();
   playerGlow(id);
   showFacts();
   playerProblem.hidden = true;
@@ -1568,6 +1568,13 @@ function showResumed(at) {
   playerResumed.hidden = false;
   clearTimeout(showResumed.timer);
   showResumed.timer = setTimeout(() => (playerResumed.hidden = true), 6000);
+}
+
+/** The back button: to the clip's video while a clip is edited, else to the place the player was opened over. */
+function showBack() {
+  const to = playing?.cut != null ? 'Player' : playing?.back ?? 'Home';
+  document.getElementById('player-back-label').textContent = to;
+  document.getElementById('player-close').setAttribute('aria-label', `Back to ${to} (Esc)`);
 }
 
 /** Stage: the picture's shadow in its own colour, from the poster Chaya keeps (as the Library's cards). */
@@ -2304,7 +2311,8 @@ function playerHeard(job) {
 
 // ── The player's keys ──
 
-document.getElementById('player-close').addEventListener('click', closePlayer);
+// Back: from a clip to its video, as Esc does; from the video to the place under it
+document.getElementById('player-close').addEventListener('click', () => (playing?.cut != null ? closeCut() : closePlayer()));
 document.getElementById('player-full').addEventListener('click', () => fullWindow());
 document.getElementById('player-restart').addEventListener('click', () => {
   playerVideo.currentTime = 0;
@@ -4042,6 +4050,9 @@ function showCutPlaying() {
   cutPlay.querySelector('use').setAttribute('href', on ? '#i-pause' : '#i-play');
   cutPlay.lastChild.textContent = on ? 'Pause' : 'Play clip';
   cutPlay.title = on ? 'Pause' : 'Play clip';
+  clipPlay.querySelector('use').setAttribute('href', on ? '#i-pause' : '#i-play');
+  clipPlay.setAttribute('aria-label', on ? 'Pause' : 'Play clip');
+  clipPlay.title = on ? 'Pause' : 'Play clip';
 }
 
 // ── The timeline ──
@@ -4091,7 +4102,54 @@ function viewFor(clip) {
   return { from: at - 10_000, to: at + 20_000 };
 }
 
+// ── Editing a clip (Stage) ──
+//
+// While a clip is chosen the player is its editor: the bar names the clip and goes back to the video, the clip's own
+// controls take the player's place under the picture, the timeline runs the window's width, and beside the picture
+// its name and what is said in it take the tabs' place. It is still the player: Esc, or back, leaves the clip.
+
+const cutBar = document.querySelector('.cut__bar');
+const cutClipEl = document.getElementById('cut-clip');
+const clipCardName = document.getElementById('clip-card-name');
+const clipPlay = document.getElementById('clip-play');
+
+function showEditing() {
+  const clip = playing ? dragging?.clip ?? cutClip() : null;
+  player.classList.toggle('player--editing', !!clip);
+  for (const id of ['clip-transport', 'clip-card', 'player-clip-title']) document.getElementById(id).hidden = !clip;
+  document.getElementById('player-export-top').textContent = clip ? 'Export clip' : 'Export';
+  showBack();
+  // The name field is the timeline's own, lent to the card while a clip is edited
+  if (!clip) {
+    if (cutClipEl.parentElement !== cutBar) cutBar.prepend(cutClipEl);
+    return;
+  }
+  if (cutClipEl.parentElement !== clipCardName) clipCardName.append(cutClipEl);
+  const task = tasks.get(playing.id);
+  document.getElementById('player-clip-name').textContent = clip.name;
+  document.getElementById('player-clip-from').textContent = ` · from ${task?.title || task?.fileName || 'this video'}`;
+  const span = clipSpan(clip);
+  const length = span.slice(0, span.indexOf(' '));
+  document.getElementById('clip-length').textContent = length;
+  document.getElementById('clip-where').textContent = span.slice(length.length);
+  const said = linesIn(playing.shown?.lines, clip);
+  const list = document.getElementById('clip-card-lines');
+  const key = said.map((l) => `${l.start}`).join(',') + (playing.shown?.language ?? '');
+  if (list.dataset.key !== key) {
+    list.dataset.key = key;
+    list.replaceChildren(...said.map((l) => Object.assign(document.createElement('li'), { textContent: l.text })));
+  }
+  document.getElementById('clip-card-said').hidden = said.length === 0;
+}
+
+document.getElementById('clip-start').addEventListener('click', () => {
+  const clip = cutClip();
+  if (clip) playerVideo.currentTime = clip.start / 1000;
+});
+clipPlay.addEventListener('click', () => cutPlay.click());
+
 function showCut() {
+  showEditing();
   const shown = cutWanted();
   cut.hidden = !shown;
   if (!shown) return;
@@ -4212,6 +4270,7 @@ function drawRegion() {
     region.style.width = `${(at(clip.end) - at(clip.start)) * 100}%`;
     document.getElementById('cut-times').textContent =
       `${exact(clip.start)} – ${exact(clip.end)} · ${exact(clip.end - clip.start)}`;
+    showEditing();
     for (const [el, ms] of [[cutStart, clip.start], [cutEnd, clip.end]]) {
       el.setAttribute('aria-valuemin', '0');
       el.setAttribute('aria-valuemax', String(Math.round(lengthMs() || clip.end)));
