@@ -7,8 +7,9 @@ play mark (the original) with its copy behind it, falling where a shadow would: 
 | File | What it is |
 |---|---|
 | [`chaya-icon.svg`](chaya-icon.svg) | Master artwork, for anything outside the app (README, store pages) |
-| [`chaya-icon-desktop.svg`](chaya-icon-desktop.svg) | Chaya for Windows' icon: the same mark in the desktop's amber |
-| [`generate_icon.py`](generate_icon.py) | Writes both SVGs and the launcher icon in `app/src/main/res/drawable/` from one set of measurements |
+| [`generate_icon.py`](generate_icon.py) | Writes that SVG and the launcher icon in `app/src/main/res/drawable/` from one set of measurements |
+
+This is the phone's icon. Chaya for Windows has moved to a new mark, below; the phone follows later.
 
 The launcher icon is an adaptive icon (`mipmap-anydpi-v26/ic_launcher.xml`):
 
@@ -22,18 +23,18 @@ The launcher icon is an adaptive icon (`mipmap-anydpi-v26/ic_launcher.xml`):
 To change the icon, edit the measurements or colours at the top of `generate_icon.py` and run
 `python docs/brand/generate_icon.py`. Do not edit the generated XML by hand.
 
-## Chaya for Windows
+## Chaya for Windows: the two suns
 
-The desktop app has its own look ([`../../desktop/design/`](../../desktop/design/README.md)): warm amber
-light on near-black instead of violet. Its icon is the same mark, drawn larger on a rounded-square
-plate (Windows applies no mask), with the accent used as light, as the desktop uses it everywhere:
-an amber glow behind the original and an amber rim on the copy. A faint light edge keeps the plate
-visible on a dark taskbar.
+Chaya for Windows has its own mark: an amber sun and its shadow-twin, one line of light through both. In the story
+Chhaya was made from the sun-wife's shadow, and a download is a copy of what was on the page. In the app it is
+alive: the line draws as a download goes and the twin, the copy, slides out from behind the sun as it arrives. Its
+rules are in [`../../desktop/design/README.md`](../../desktop/design/README.md) (Mark).
 
-The Windows icon files in `desktop/app/src-tauri/icons/` are made from `chaya-icon-desktop.svg`:
+Its geometry lives in one place, [`desktop/design/chaya-mark.js`](../../desktop/design/chaya-mark.js), as named
+constants. The icon files in `desktop/app/src-tauri/icons/` are made from it: in `desktop/app`, run
 
-1. Run `python docs/brand/generate_icon.py`.
-2. Render `chaya-icon-desktop.svg` to a 1024×1024 PNG with a transparent background (any SVG
-   renderer: `rsvg-convert -w 1024 -h 1024`, Inkscape, a browser).
-3. In `desktop/app`, run `npx tauri icon <that png> -o src-tauri/icons`, then delete what Windows does
-   not use: `android/`, `ios/`, `icon.icns`, `Square*.png` and `StoreLogo.png`.
+    node scripts/icons.mjs
+
+It writes `icon.svg` (48 px and up) and `icon-small.svg` (32 px and down, the mark larger and its gap and hairline
+wider so they survive at 16 px), renders each with Tauri's `tauri icon`, keeps the files Windows uses, and builds
+`icon.ico` from the small source's 16, 24 and 32 px pictures and the large one's 48, 64 and 256.
