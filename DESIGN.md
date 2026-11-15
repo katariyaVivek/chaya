@@ -3,49 +3,54 @@
 This is the Android app's system. The Windows app has its own, in
 [`desktop/design/`](desktop/design/README.md).
 
-Product register. Soft premium, fluid-assured-soft personality. Strategy: **Restrained** — warm tinted neutrals + one violet-indigo accent ≤10% of surface.
+Product register. **Stage**: saved media is the light. Warm neutrals and one strong control in ink (near-black by
+day, warm white by night), as Chaya for Windows has it ([`desktop/design/tokens.css`](desktop/design/tokens.css)) and
+the approved phone designs draw it. Stage's amber, the mark's own light, is a signal only.
 
 ## Color
 
-All colors computed from OKLCH; neutrals tinted warm (hue 80) in light, violet (hue 285) in dark. No pure black/white anywhere.
+No pure black or white in the interface (a video's frame is the one near-black, `PlayerBackdrop`).
 
 Light or dark follows the phone unless the person picks one under Downloads › ⋮ › **Appearance** (Same as phone, Light, Dark). The system bars follow the app's choice.
 
-### Light — "Porcelain"
+### Day
 
-| Role | OKLCH | Hex |
-|---|---|---|
-| background | 0.975 0.005 80 | #F8F6F3 |
-| surface | 0.992 0.004 80 | #FEFCF9 |
-| surfaceContainer | 0.950 0.006 80 | #F1EEEA |
-| surfaceContainerHigh | 0.934 0.007 80 | #ECE9E4 |
-| onSurface | 0.245 0.014 80 | #242019 |
-| onSurfaceVariant | 0.495 0.016 80 | #676158 |
-| outlineVariant | 0.878 0.010 80 | #DAD6D0 |
-| primary (accent) | 0.520 0.135 293 | #6D57AF |
-| primaryContainer | 0.900 0.055 293 | #DFD8FF |
-| onPrimaryContainer | 0.330 0.100 293 | #392863 |
-| error | 0.555 0.190 27 | #CA322E |
-| success (ext) | 0.580 0.125 152 | #338F54 |
+| Role | Hex |
+|---|---|
+| background (ground) | #F6F4F0 |
+| surface | #FCFBF8 |
+| surfaceContainer | #F0EEE9 |
+| surfaceContainerHigh | #EAE7E2 |
+| onSurface (ink) | #1A1917 |
+| onSurfaceVariant (muted) | #6B6862 |
+| outlineVariant | #DEDAD3 |
+| primary | ink, #1A1917, with onPrimary the ground |
+| primaryContainer | #E7E4DE |
+| tertiary (amber, deep enough for an icon) | #8F5B1E |
+| error | #CA322E |
+| success (ext) | #338F54 |
 
-### Dark — "Violet Charcoal"
+### Night
 
-| Role | OKLCH | Hex |
-|---|---|---|
-| background | 0.168 0.014 285 | #0E0E15 |
-| surface | 0.188 0.013 285 | #131319 |
-| surfaceContainer | 0.225 0.012 285 | #1B1B21 |
-| surfaceContainerHigh | 0.250 0.011 285 | #212127 |
-| onSurface | 0.915 0.010 285 | #E2E2E9 |
-| onSurfaceVariant | 0.720 0.014 285 | #A3A4AD |
-| outlineVariant | 0.330 0.012 285 | #34353B |
-| primary (accent) | 0.790 0.105 293 | #BDAEF8 |
-| primaryContainer | 0.400 0.115 293 | #4B387F |
-| onPrimaryContainer | 0.905 0.045 293 | #E0DBFC |
-| error | 0.780 0.130 25 | #FF958D |
-| success (ext) | 0.780 0.115 152 | #7CCD93 |
+| Role | Hex |
+|---|---|
+| background (ground) | #0F0E11 |
+| surface | #141316 |
+| surfaceContainer | #1E1D21 |
+| surfaceContainerHigh | #262529 |
+| onSurface (ink) | #F5F3F0 |
+| onSurfaceVariant (muted) | #B5B3B2 |
+| outlineVariant | #343337 |
+| primary | ink, #F5F3F0, with onPrimary the ground |
+| primaryContainer | #2C2B2F |
+| tertiary (amber) | #F2B25A |
+| error | #FF958D |
+| success (ext) | #7CCD93 |
 
-Accent usage: primary actions, active states, progress, selection only. Success green reserved for COMPLETED state dots. Never decorative.
+**Ink** is the one strong control: Save, Play, the chosen item. **Stage's amber** (`StageAmber`, #F2B25A, the same in
+both themes, `LocalChayaColors.signal`) is a signal only: a download's progress, a page loading, the mark. It is never
+text: on Day's ground it is 1.7:1. Success green is reserved for COMPLETED state dots. `StagePaletteTest` holds every
+text colour to 4.5:1 on the grounds it is set on (7:1 for ink).
 
 ## Typography
 
@@ -88,7 +93,7 @@ Patterns: nav = fade-through (fade + slight rise/scale) · lists = staggered fad
 
 ## App icon
 
-An original and its shadow-copy: a lit media tile with a play mark, its copy falling behind it like a shadow (Chaya means shadow; a download is a copy). Violet field, same in light and dark. Master artwork, meaning and the generator are in [`docs/brand/`](docs/brand/README.md); the launcher XML is generated, never edited by hand.
+The two suns, as on Windows: an amber sun and its shadow-twin, one line of light through both (Chaya means shadow; a download is a copy). On Stage's night ground, same in light and dark. Master artwork, meaning and the generator are in [`docs/brand/`](docs/brand/README.md); the launcher XML is generated, never edited by hand.
 
 ## Components vocabulary
 

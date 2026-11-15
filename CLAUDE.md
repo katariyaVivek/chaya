@@ -74,7 +74,7 @@ platform 36, Gradle 8.14.3 and Python 3.13 (Chaquopy). Versions are in `gradle/l
 - **pytest rewrites tracked `.pyc` files** under `__pycache__/`; run
   `git checkout -- '*__pycache__*'` before committing.
 
-## Chaya's mark (Windows)
+## Chaya's mark
 
 The two suns: an amber sun, its shadow-twin, one line of light through both. Its rules, in full in
 [`desktop/design/README.md`](desktop/design/README.md) (Mark):
@@ -91,7 +91,7 @@ The two suns: an amber sun, its shadow-twin, one line of light through both. Its
 - **Its colours are its own** (`--mark-light`, `--mark-shadow`, the same in both themes), the twin always the
   darker, as a shadow is. It is the one filled amber shape; the interface's accent stays light, never paint.
 - **Not Claude's mark.** A single disc with a line through its middle reads as Claude's; keep the twin in view.
-- The phone still has the older icon (`docs/brand/`) until it moves to this mark.
+- The phone's launcher icon is this mark too, written from the same constants by `docs/brand/android-icon.mjs`.
 
 ## Things that have bitten us
 

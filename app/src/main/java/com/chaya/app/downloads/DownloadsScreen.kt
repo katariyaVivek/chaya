@@ -799,14 +799,14 @@ private fun ProgressBlock(task: DownloadTask) {
             LinearProgressIndicator(
                 progress = { fraction },
                 modifier = barModifier,
-                color = MaterialTheme.colorScheme.primary,
+                color = LocalChayaColors.current.signal,
                 trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                 strokeCap = StrokeCap.Round
             )
         } else {
             LinearProgressIndicator(
                 modifier = barModifier,
-                color = MaterialTheme.colorScheme.primary,
+                color = LocalChayaColors.current.signal,
                 trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                 strokeCap = StrokeCap.Round
             )
