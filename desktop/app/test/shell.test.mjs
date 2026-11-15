@@ -31,3 +31,35 @@ test('the library counts saved downloads and the bytes they take, ignoring the r
     { saved: 3, bytes: 140 },
   );
 });
+
+import { railed, sourcesOf, underWay } from '../ui/shell.js';
+
+test('the Library is its own place, over Home or over a page, and only a page makes the sidebar a rail', () => {
+  assert.equal(placeOf({ browsing: false, library: true }), 'library');
+  assert.equal(placeOf({ browsing: true, library: true }), 'library');
+  assert.equal(placeOf({ browsing: true, library: false }), 'browse');
+  assert.equal(placeOf({ browsing: false, library: false }), 'home');
+  assert.equal(railed({ browsing: true, library: false }), true);
+  assert.equal(railed({ browsing: true, library: true }), false);
+  assert.equal(railed({ browsing: false, library: true }), false);
+  assert.equal(railed({ browsing: false, library: false }), false);
+});
+
+test('the sources are the sites the downloads come from, in order, counted, plus the one chosen', () => {
+  const order = [['youtube', 'YouTube'], ['instagram', 'Instagram'], ['x', 'X'], ['pc', 'This PC']];
+  const tasks = [{ site: 'x' }, { site: 'youtube' }, { site: 'youtube' }, { site: 'pc' }];
+  assert.deepEqual(sourcesOf(tasks, order, null), [
+    { site: 'youtube', name: 'YouTube', count: 2, chosen: false },
+    { site: 'x', name: 'X', count: 1, chosen: false },
+    { site: 'pc', name: 'This PC', count: 1, chosen: false },
+  ]);
+  assert.deepEqual(sourcesOf([{ site: 'x' }], order, 'instagram').map((s) => [s.site, s.count, s.chosen]), [
+    ['instagram', 0, true],
+    ['x', 1, false],
+  ]);
+});
+
+test('Home lists what is under way: running, paused and failed, never what was saved', () => {
+  for (const state of ['queued', 'downloading', 'paused', 'failed']) assert.equal(underWay({ state }), true, state);
+  assert.equal(underWay({ state: 'completed' }), false);
+});

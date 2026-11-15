@@ -30,6 +30,9 @@
   --accent-rgb: 242 178 90;
   --accent-glow: 0 0 24px rgb(var(--accent-rgb) / 0.35);
   --accent-edge: rgb(var(--accent-rgb) / 0.45); /* border of the one primary control */
+  /* A card's shadow, cast in its own picture's colour (--glow, set per card) or this plain one; stronger at night */
+  --glow-plain: 26 25 23;
+  --glow-strength: 0.32;
 
   /* Chaya's mark (chaya-mark.js), the same in both themes: the sun, and its shadow-twin. The one place amber fills a
      shape, because the mark is the brand, not a control; "light, never paint" is for the interface around it */
@@ -143,6 +146,8 @@
     --scroll-thumb: rgb(255 255 255 / 0.18);
     --scroll-thumb-hover: rgb(255 255 255 / 0.32);
     --shadow: 0 8px 32px rgb(0 0 0 / 0.5);
+    --glow-plain: 0 0 0;
+    --glow-strength: 0.7;
     --focus: var(--accent);
   }
 }
@@ -161,6 +166,8 @@
   --scroll-thumb: rgb(255 255 255 / 0.18);
   --scroll-thumb-hover: rgb(255 255 255 / 0.32);
   --shadow: 0 8px 32px rgb(0 0 0 / 0.5);
+  --glow-plain: 0 0 0;
+  --glow-strength: 0.7;
   --focus: var(--accent);
 }
 
