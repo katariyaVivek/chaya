@@ -1001,6 +1001,14 @@ function image(task, onNone) {
   if (coversOf(task)[0]?.includes('chaya-file')) img.crossOrigin = 'anonymous';
   img.loading = 'lazy';
   img.decoding = 'async';
+  // A picture missing now may come later (a video's poster, made once it is first asked for, after which every
+  // picture of it is shown again): so the picture is kept, hidden, where it goes, and shows when it loads, in place of
+  // whatever stood in for it.
+  img.addEventListener('load', () => {
+    img.hidden = false;
+    const standIn = img.nextElementSibling;
+    if (standIn?.dataset.standsIn === String(task.id)) standIn.remove();
+  });
   showCover(img, task, () => onNone(img));
   return img;
 }
@@ -1129,7 +1137,12 @@ function tileFor({ key, ids }) {
   tile.title = name;
   tile.setAttribute('aria-label', ids.length > 1 ? `${name}, ${ids.length} files` : name);
   if (coversOf(cover).length) {
-    const img = image(cover, (missing) => missing.replaceWith(named(cover)));
+    const img = image(cover, (missing) => {
+      missing.hidden = true;
+      const standIn = named(cover);
+      standIn.dataset.standsIn = String(cover.id);
+      missing.after(standIn);
+    });
     img.addEventListener('load', () => glowFrom(img, cover.id, li));
     tile.append(img);
   } else tile.append(named(cover));
@@ -1287,7 +1300,8 @@ function showHero(task, watching) {
   const picture = hero.querySelector('.hero__picture');
   picture.replaceChildren();
   if (coversOf(task).length) {
-    const img = image(task, (missing) => missing.remove());
+    // Missing (a poster not made yet), kept hidden: it shows, with its glow, once the poster is made
+    const img = image(task, (missing) => (missing.hidden = true));
     img.loading = 'eager';
     img.addEventListener('load', () => glowFrom(img, task.id, hero));
     picture.append(img);
