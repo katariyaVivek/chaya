@@ -233,34 +233,26 @@ body {
 /* Saved: back to a quiet pill */
 .dl[data-state="saved"] { border-color: var(--border); color: var(--muted); }
 
-/* ── b. "Finding media…": a warm light sweeping across the words ──────────────────────── */
+/* ── b. "Finding media…": the mark's stream light crossing its sun, beside the words ───── */
 
 .finding {
-  --shimmer-hi: color-mix(in oklab, var(--text) 70%, var(--accent));
   display: inline-flex;
   align-items: center;
+  gap: var(--space-1);
   box-sizing: border-box;
   height: var(--space-4);
-  padding: 0 var(--space-2);
+  padding: 0 var(--space-2) 0 var(--space-1);
   border-radius: var(--radius-pill);
   font: 500 var(--text-sm) / 1 var(--font-ui);
 }
 
-.finding__text {
-  background: linear-gradient(
-      100deg,
-      var(--muted) 0%,
-      var(--muted) 40%,
-      var(--shimmer-hi) 50%,
-      var(--muted) 60%,
-      var(--muted) 100%
-    )
-    0 0 / 300% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: var(--anim-shimmer) var(--shimmer-period) linear infinite;
-}
+.finding__text { color: var(--muted); }
+
+/* ── Chaya's mark (chaya-mark.js): the sun and its shadow-twin ────────────────────────── */
+
+.mark { display: block; flex: none; }
+.mark__sun { fill: var(--mark-light); }
+.mark__twin { fill: var(--mark-shadow); }
 
 /* ── c. Address and search bar: light under glass when focused ────────────────────────── */
 

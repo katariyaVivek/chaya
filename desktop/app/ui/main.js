@@ -26,6 +26,8 @@ import { ownVideos } from './own.js';
 import { enhanceSelects } from './design/chaya-picker.js';
 import { secondsLeft, listeningWords } from './pace.js';
 import { onePanel } from './panels.js';
+import { markMarkup, mountMark } from './design/chaya-mark.js';
+import { markState, nextRun, shareOf } from './mark-state.js';
 
 // Every drop-down drawn as Chaya's own, not Windows' list (unreadable in Night, in Windows' font). The <select>s stay
 // underneath, so what follows reads and sets them as before.
@@ -383,10 +385,18 @@ function pill(text, onClick, primary = false) {
   return button;
 }
 
+let findings = 0;
+
+/** "Finding…": the mark, its stream light crossing the sun, beside the words. It stops itself once removed. */
 function finding(text) {
   const pill = span('finding glass', '');
   pill.setAttribute('role', 'status');
+  pill.insertAdjacentHTML('beforeend', markMarkup(`finding-${++findings}`, { size: 16, label: '' }));
   pill.append(span('finding__text', text));
+  // Started once the pill is on the page, which its caller does next; not at all if it has gone again by then
+  requestAnimationFrame(() => {
+    if (pill.isConnected) mountMark(pill.querySelector('.mark'), { blink: false }).set({ mode: 'unknown', p: 0 });
+  });
   return pill;
 }
 
@@ -417,6 +427,19 @@ const downloadsEmpty = document.getElementById('downloads-empty');
 
 /** Every download the window knows, by id, as the app last described it. */
 const tasks = new Map();
+
+// Chaya's mark in the title bar: the line draws as the downloads go, and the twin, the copy, comes out as they arrive
+const topMark = mountMark(document.querySelector('.brand .mark'));
+/** The downloads in this run (mark-state.js): its progress counts the ones finished in it, so it never steps back */
+let markRun = new Set();
+function showMark() {
+  markRun = nextRun(markRun, tasks.values());
+  topMark.set(markState(tasks.values(), navigator.onLine, markRun));
+}
+addEventListener('online', showMark);
+addEventListener('offline', showMark);
+showMark();
+
 /** How making each video's subtitles is getting on (`speech.rs`'s JobView), by download. */
 const speechJobs = new Map();
 /** The Download buttons on show, each with the downloads it started (a post's "Save all" starts several). */
@@ -503,6 +526,7 @@ function taskProgress({ id, done, total, bytesPerSecond }) {
   if (!task) return;
   Object.assign(task, { done, total, speed: bytesPerSecond });
   renderRow(id);
+  showMark();
   for (const entry of buttons) if (entry.ids.includes(id)) follow(entry);
 }
 
@@ -533,6 +557,7 @@ function countRunning() {
   const badge = document.querySelector('.page-downloads .page-count');
   badge.textContent = String(running);
   badge.hidden = running === 0;
+  showMark();
 }
 
 const ROW_ICON = { video: 'i-video', audio: 'i-audio', picture: 'i-post', archive: 'i-zip' };
@@ -567,7 +592,7 @@ function renderRow(id) {
   row.dataset.state = task.state;
   row.querySelector('.row__title').textContent = task.fileName;
   row.querySelector('.row__meta').textContent = metaOf(task);
-  const share = task.archive ? (task.archive.found ? task.archive.saved / task.archive.found : null) : task.total ? task.done / task.total : null;
+  const share = shareOf(task);
   const percent = share === null ? null : Math.min(99, Math.floor(share * 100));
   row.querySelector('.row__pct').textContent =
     (task.state === 'downloading' || task.state === 'paused') && percent !== null ? `${percent}%` : '';

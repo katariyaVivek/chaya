@@ -353,8 +353,15 @@
 <script type="module">
 import { DownloadButton, springEasing, PRESS_SPRING, replayEntrance, setTheme, setMotion } from './chaya-motion.js';
 import { enhanceSelects } from './chaya-picker.js';
+import { markMarkup, mountMark } from './chaya-mark.js';
 
 enhanceSelects();
+
+// Each "Finding media…" pill leads with the mark, its stream light crossing the sun
+document.querySelectorAll('.finding').forEach((pill, i) => {
+  pill.insertAdjacentHTML('afterbegin', markMarkup(`show-finding-${i}`, { size: 16, label: '' }));
+  mountMark(pill.querySelector('.mark'), { blink: false }).set({ mode: 'unknown', p: 0 });
+});
 
 // Theme and motion switches
 const pressGroup = (attr, value) =>

@@ -16,8 +16,9 @@ folder) to see every token and component live, in both themes, with full or redu
 | `components.css` | Base styles and the signature components, built only from tokens |
 | `chaya-motion.js` | The spring-to-CSS generator, the download button's state machine and controller, list and theme helpers. An ES module with no dependencies |
 | `chaya-picker.js` | The drop-down: a native `<select>` drawn as Chaya's own button and list. An ES module with no dependencies |
+| `chaya-mark.js` | Chaya's mark: its geometry, its resting markup, and the motion that follows the downloads. An ES module with no dependencies |
 | `showcase.html` | The living reference |
-| `test/` | `npm test`: the spring, both themes' contrast, reduced motion, the button's states |
+| `test/` | `npm test`: the spring, both themes' contrast, reduced motion, the button's states, the mark's ranges |
 
 Load the CSS in this order: `tokens.css`, `fonts.css`, `components.css`.
 
@@ -62,7 +63,8 @@ both the ground and the glass in both themes.
 **The accent is light, never paint.** Use it as a glow, a 1px edge, a 2px progress line or a ring
 stroke. Never fill a button, a badge or a background with it. On Day it is only 1.9:1 against the
 ground, so it is never text and never the only sign of focus there. Progress it draws is always
-also written as a number.
+also written as a number. The one exception is Chaya's mark (below): a logo, not a control, so its sun is filled,
+in its own amber (`--mark-light`), not the accent.
 
 **Glass needs something behind it.** A blur over a flat color looks like a flat color. The app
 window's background carries one or two very soft accent lights (see `showcase.html`'s `body`), so
@@ -172,12 +174,12 @@ button.send('complete');    // or 'fail', or 'cancel'
 ### b. *Finding media…*
 
 ```html
-<span class="finding glass" role="status"><span class="finding__text">Finding media…</span></span>
+<span class="finding glass" role="status">(the mark, 16 px)<span class="finding__text">Finding media…</span></span>
 ```
 
-A warm light (text mixed with the accent) sweeps across the words every 1.6 s while a page or a
-link is looked up. With reduced motion the words fade gently instead. Use it only while something
-is really being looked up, and only this once per screen.
+The mark's stream light crosses its sun beside the words while a page or a link is looked up (`finding()` in the
+app adds the mark and starts it). With reduced motion it stands still. Use it only while something is really
+being looked up, and only this once per screen.
 
 ### c. Address and search bar
 
@@ -246,6 +248,28 @@ inside a 10 px gutter with no track and no arrows.
 Add `.stagger` to a list: children fade in and rise 6px, 30 ms apart (the first 12 by CSS; call
 `stagger(list)` for longer ones, `replayEntrance(list)` when new content arrives). `leave(el)` plays
 the 160 ms exit and then removes the element.
+
+### Mark
+
+Chaya's mark (`chaya-mark.js`): an amber sun and its shadow-twin, one line of light through both. Chaya means
+shadow, and in the story Chhaya was made from the sun-wife's shadow; a download is a copy of what was on the page.
+
+- **At rest it is complete:** the line all the way across, the twin all the way out. That is its static form, in
+  markup (`markMarkup()`), right with no script.
+- **It follows the downloads.** While something saves, the line draws across the sun and the twin, waiting tucked
+  behind the sun, slides out as the copy arrives; the last quarter of the line crosses the twin as it arrives. A
+  download with no known size (a stream) sends a short light across the sun instead. Paused holds still; offline
+  is a calm pose, the twin tucked and the line flat. A finished download settles it with a short snap; a cancelled
+  or failed one returns it to rest. While idle, the twin blinks once every 12 s.
+- **Its silhouette never changes:** two suns, always. A state may tuck the twin, draw the line or flatten it, but
+  never hides the twin or changes a sun's size.
+- **Colours:** `--mark-light` (#F2B25A) and `--mark-shadow` (#B9792F), the same in both themes; the twin is always
+  darker than the sun, as a shadow is. Not the accent.
+- **Motion:** eased out, never overshooting. Frames come from `frameAt()`, a pure function of time, and are drawn
+  by setting attributes on the mark's elements. Nothing runs while it rests or the window is hidden; with reduced
+  motion it shows each state still.
+- **Sizes:** 24 px in the title bar, 16 px in the Finding pill. The app icon (`desktop/app/scripts/icons.mjs`) puts
+  it on a near-black plate, with a wider gap and hairline at 32 px and below.
 
 ## Decisions beyond the brief
 

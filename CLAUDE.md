@@ -74,6 +74,25 @@ platform 36, Gradle 8.14.3 and Python 3.13 (Chaquopy). Versions are in `gradle/l
 - **pytest rewrites tracked `.pyc` files** under `__pycache__/`; run
   `git checkout -- '*__pycache__*'` before committing.
 
+## Chaya's mark (Windows)
+
+The two suns: an amber sun, its shadow-twin, one line of light through both. Its rules, in full in
+[`desktop/design/README.md`](desktop/design/README.md) (Mark):
+
+- **One source.** Its geometry is the named constants in `desktop/design/chaya-mark.js`; no stored path strings.
+  The title bar's resting markup in `desktop/app/ui/index.html` is what `markMarkup()` writes (a test checks), and
+  the icon files come from `desktop/app/scripts/icons.mjs`. Change the constants, then regenerate both.
+- **The silhouette stays.** Every state shows two suns. A state may tuck the twin, draw or flatten the line, but
+  never hides the twin, merges the two, or changes a sun's size.
+- **At rest it is complete**, with no script: the line across, the twin out. Motion is eased out with no overshoot,
+  a pure function of time, drawn by setting attributes, not rebuilding markup; none at all with reduced motion.
+- **Its motion means something:** progress draws the line and brings the twin out; a stream is a light crossing
+  the sun; paused holds; offline is calm; finishing settles it. Its state comes from `ui/mark-state.js`, one value.
+- **Its colours are its own** (`--mark-light`, `--mark-shadow`, the same in both themes), the twin always the
+  darker, as a shadow is. It is the one filled amber shape; the interface's accent stays light, never paint.
+- **Not Claude's mark.** A single disc with a line through its middle reads as Claude's; keep the twin in view.
+- The phone still has the older icon (`docs/brand/`) until it moves to this mark.
+
 ## Things that have bitten us
 
 - Media3's `DownloadManager.currentDownloads` leaves out completed and failed downloads; look those
