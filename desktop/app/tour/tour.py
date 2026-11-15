@@ -1061,11 +1061,13 @@ def run(tour, sites, seeded=None):
     except Exception as e:
         tour.failed('link-looked-up', e)
 
-    # Download its smallest choice, then cancel it from the list: the card's button goes back to its pill.
+    # Pick its smallest choice and Save it, then cancel it from the list: the card's button goes back to its pill.
+    save = '#result .card__save .dl:not([hidden])'
     try:
-        choices = tour.js("return document.querySelectorAll('#result .choice .dl').length")
+        choices = tour.js("return document.querySelectorAll('#result .choice').length")
         if choices:
-            tour.click('#result .choice .dl', choices - 1)
+            tour.click('#result .choice', choices - 1)
+            tour.click(save)
             tour.wait(lambda: tour.js("return document.querySelectorAll('#download-list .row').length"), 20)
             time.sleep(3)
             tour.shot('downloading', row=tour.js("return document.querySelector('#download-list .row')?.innerText ?? ''"))
@@ -1073,7 +1075,7 @@ def run(tour, sites, seeded=None):
             if state not in ('completed', None):
                 tour.click('#download-list .row .row__close')
                 time.sleep(1.5)
-                button = tour.js(f"return document.querySelectorAll('#result .choice .dl')[{choices - 1}]?.dataset.state ?? null")
+                button = tour.js(f"return document.querySelector('{save}')?.dataset.state ?? null")
                 tour.shot('cancelled', button=button)
     except Exception as e:
         tour.failed('download', e)
@@ -1106,13 +1108,17 @@ def run(tour, sites, seeded=None):
             address = tour.js("return document.getElementById('address').value")
             page_top = tour.js("return Math.round(document.getElementById('page').getBoundingClientRect().top)")
             pill = tour.js("const b = document.getElementById('page-media'); return b.hidden ? '' : b.textContent")
-            tour.shot(name, address=address, found=found, shield=shield, page_top=page_top, pill=pill)
-            # What the page holds, in its panel from the bar's pill, over a picture of the page.
+            panel_open = "return !document.getElementById('media-panel').hidden"
+            tour.shot(name, address=address, found=found, shield=shield, page_top=page_top, pill=pill, panel=tour.js(panel_open))
+            # What the page holds, in "Found on this page" beside it: opened by itself when there was room, else by
+            # the bar's pill; then closed.
             if pill:
-                tour.click('#page-media')
+                if not tour.js(panel_open):
+                    tour.click('#page-media')
                 time.sleep(1)
-                tour.shot(f'{name}-found', panel=tour.js("return document.getElementById('media-panel').innerText"))
-                tour.click('#page-media')
+                panel_left = tour.js("return Math.round(document.getElementById('media-panel').getBoundingClientRect().left)")
+                tour.shot(f'{name}-found', panel=tour.js("return document.getElementById('media-panel').innerText"), panel_left=panel_left)
+                tour.click('#found-panel-close')
         except Exception as e:
             tour.failed(name, e)
 

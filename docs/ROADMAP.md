@@ -85,7 +85,7 @@ Also in that time: [#80](https://github.com/katariyaVivek/chaya/pull/80) the pla
 **Stage, the new look (Windows first, then the phone).** Approved designs: a dark-and-light "Stage" where saved media is
 the light, the two-suns mark, and Stage's amber as the one signal colour. Built as a stack of PRs, each on the one
 before: the mark (#114); the shell (#115: the sidebar, its places, Stage's amber); the Library (#116); Home with *Continue
-watching* and *Recently saved*; then the browser with its *Found on this page* panel, the player, and the clip editor. Each new place joins the
+watching* and *Recently saved* (#117); the browser with its *Found on this page* panel beside the page; then the player, and the clip editor. Each new place joins the
 sidebar in its own PR. The phone follows in its own stack.
 
 The six-part plan after v0.4.0 has shipped (#34 to #39); it is in
