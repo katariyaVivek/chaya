@@ -51,7 +51,7 @@ body {
  * under the player, the viewer and the export (50 and up), which cover it as they cover the page.
  */
 :root { --side-width: 232px; --side-rail: 64px; }
-body.browsing { --side-width: var(--side-rail); }
+body.railed { --side-width: var(--side-rail); }
 .side {
   grid-row: 1 / -1;
   grid-column: 1;
@@ -112,13 +112,33 @@ body.browsing { --side-width: var(--side-rail); }
   font: 500 var(--text-sm) / var(--leading-sm) var(--font-ui);
 }
 .side__bytes { color: var(--muted); }
-/* The rail: icons only, each still named by its tooltip and for a screen reader */
-body.browsing .side { padding-inline: var(--space-half); align-items: center; }
-body.browsing .side__brand { justify-content: center; padding: 0; }
-body.browsing .side__name,
-body.browsing .side__place span,
-body.browsing .side__library { display: none; }
-body.browsing .side__place { justify-content: center; width: var(--control-height); padding: 0; }
+/* The Library's sources: where its downloads came from, a count beside each; one pressed narrows the Library to it */
+.side__sources { display: flex; flex-direction: column; gap: 2px; margin-top: var(--space-2); }
+.side__group { margin: 0; padding: 0 var(--space-1) var(--space-half); color: var(--muted); font: 600 var(--text-sm) / var(--leading-sm) var(--font-ui); }
+.side__source { justify-content: space-between; height: var(--space-4); }
+.side__source[aria-pressed='true'] { background: var(--wash-strong); font-weight: 600; }
+.side__count { color: var(--muted); font-size: var(--text-sm); }
+/* The rail, over a page only: icons only, each still named by its tooltip and for a screen reader */
+body.railed .side { padding-inline: var(--space-half); align-items: center; }
+body.railed .side__brand { justify-content: center; padding: 0; }
+body.railed .side__name,
+body.railed .side__place span,
+body.railed .side__sources,
+body.railed .side__library { display: none; }
+body.railed .side__place { justify-content: center; width: var(--control-height); padding: 0; }
+
+/*
+ * Home and the Library share the downloads' section. On Home it lists only what is under way (running, paused,
+ * failed) as rows, under "Under way", and is gone when nothing is; the Library holds everything, with its find box,
+ * kinds, list or grid. Over Home the Library takes the whole place, the address bar included.
+ */
+.downloads.downloads--quiet { display: none; }
+body:not(.showing-downloads) :is(#downloads-view, #downloads-find-field, #downloads-narrow, #downloads-add, #downloads-lines, #downloads-empty, #grid-running, .list__head[data-saved]) { display: none; }
+body.showing-downloads:not(.browsing) :is(.urlbar, .result, .notice, .found) { display: none; }
+body.showing-downloads:not(.browsing) .main { max-width: 1200px; padding-top: var(--space-4); }
+.downloads__titles { display: grid; gap: var(--space-half); margin-right: auto; }
+.downloads__sub { margin: 0; color: var(--muted); font: var(--text-md) / var(--leading-md) var(--font-ui); }
+body.showing-downloads .downloads__titles .title { font-size: calc(var(--title-size) * 1.5); line-height: 1.1; letter-spacing: -0.03em; }
 
 .caption { display: flex; align-self: stretch; }
 .caption__btn {
@@ -398,24 +418,32 @@ body:has(.player:not([hidden]), .viewer:not([hidden])) .settings__panel { backgr
 .grid__running { justify-self: start; }
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
-  gap: var(--space-1);
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--space-3) var(--space-2);
   margin: 0;
   padding: 0;
   list-style: none;
 }
+/* A day's heading in the grid, across the whole row, as the list has them */
+.grid__day { grid-column: 1 / -1; margin-top: var(--space-1); font: 700 var(--text-lg) / var(--leading-lg) var(--font-ui); letter-spacing: -0.01em; }
+.grid__day:first-child { margin-top: 0; }
+/* Stage's card: the picture at 16:10, its shadow cast in its own colour (--glow, from the picture), then its name */
+.grid__card { display: grid; gap: var(--space-1); align-content: start; min-width: 0; }
+.card__caption { display: grid; gap: 2px; margin: 0; padding: 0 2px; min-width: 0; }
+.card__name { font: 600 var(--text-md) / var(--leading-md) var(--font-ui); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card__meta { color: var(--muted); font: var(--text-sm) / var(--leading-sm) var(--font-ui); }
 .tile {
   position: relative;
   display: grid;
   place-items: center;
   width: 100%;
-  aspect-ratio: 1;
+  aspect-ratio: 16 / 10;
   padding: 0;
   overflow: hidden;
   border: 0;
   border-radius: var(--radius-md);
   background: var(--surface);
-  box-shadow: var(--shadow);
+  box-shadow: 0 18px 34px -14px rgb(var(--glow, var(--glow-plain)) / var(--glow-strength));
   color: var(--text);
   cursor: pointer;
 }

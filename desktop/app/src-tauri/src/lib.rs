@@ -258,9 +258,9 @@ fn list_downloads(downloads: State<'_, Downloads>) -> Vec<TaskView> {
 }
 
 /// The grid's tiles, as the phone's library: the saved downloads among `kept` (what the window's narrowing keeps),
-/// newest first, a post's files on one tile.
+/// newest first, a post's files on one tile, by the day they were saved on for a person `offset` minutes east of UTC.
 #[tauri::command]
-fn library_tiles(kept: Vec<u64>, downloads: State<'_, Downloads>) -> Vec<library::Tile> {
+fn library_tiles(kept: Vec<u64>, offset: i32, downloads: State<'_, Downloads>) -> Vec<library::TileDay> {
     let dated: Vec<library::Dated> = downloads
         .manager
         .list()
@@ -268,7 +268,8 @@ fn library_tiles(kept: Vec<u64>, downloads: State<'_, Downloads>) -> Vec<library
         .filter(|task| kept.contains(&task.id))
         .map(|task| library::Dated::from(&TaskView::from(task)))
         .collect();
-    library::tiles(&dated)
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+    library::tile_days(&dated, now, offset)
 }
 
 /// `chaya-file://localhost/ID`: the saved picture, video or sound of download ID, for the grid, the viewer and the
@@ -284,9 +285,11 @@ fn saved_file(app: &AppHandle, from: &str, request: &tauri::http::Request<Vec<u8
     // A saved video's poster, which the window made from it ("poster-12": convertFileSrc would encode a slash).
     if let Some(id) = path.strip_prefix("poster-").and_then(|id| id.parse().ok()) {
         return match std::fs::read(app.state::<Videos>().poster(id)) {
+            // Readable by the window's canvas, which takes the Library card's glow from it (only the window is answered)
             Ok(bytes) => tauri::http::Response::builder()
                 .header("Content-Type", "image/jpeg")
                 .header("Cache-Control", "no-cache")
+                .header("Access-Control-Allow-Origin", "*")
                 .body(bytes)
                 .unwrap_or_default(),
             Err(_) => status(404),
@@ -305,6 +308,7 @@ fn saved_file(app: &AppHandle, from: &str, request: &tauri::http::Request<Vec<u8
             Ok(bytes) => tauri::http::Response::builder()
                 .header("Content-Type", kind)
                 .header("Cache-Control", "max-age=3600")
+                .header("Access-Control-Allow-Origin", "*")
                 .body(bytes)
                 .unwrap_or_default(),
             Err(_) => status(404),

@@ -905,7 +905,7 @@ def copied_links(tour, sites):
 
 
 def search_lines(tour, clip):
-    """Ctrl+F in the Downloads list, then "walk": the tour clip's lines that say it, marked, below the titles; the
+    """Ctrl+F (which opens the Library), then "walk": the tour clip's lines that say it, marked, below the titles; the
     last ("The end of the walk.", at 25 s) clicked opens the clip in the player there."""
     tour.js("if (document.body.classList.contains('browsing')) document.getElementById('page-home').click();"
             " document.getElementById('address').blur(); return 1")
@@ -1224,8 +1224,15 @@ def run(tour, sites, seeded=None):
     except Exception as e:
         tour.failed('closed', e)
 
-    # The Downloads list narrowed, as the phone's library is: by a chip, then by words in the name.
+    # The Library (Stage): everything saved, its sources in the sidebar; Home lists only what is under way. Then
+    # narrowed, as the phone's library is: by a kind chip, then by words in the name.
     try:
+        home_rows = tour.js("return [...document.querySelectorAll('#download-list .row')].filter(r => !r.hidden).length")
+        tour.click('#place-library')
+        time.sleep(1)
+        tour.shot('library', home_rows=home_rows,
+                  title=tour.js("return document.getElementById('downloads-title').textContent"),
+                  sources=tour.js("return [...document.querySelectorAll('#side-sources .side__source')].map(b => b.innerText.replace(/\\n/g, ' '))"))
         shown = "return [...document.querySelectorAll('#download-list .row')].filter(r => !r.hidden).length"
         chips = tour.js("return [...document.querySelectorAll('#downloads-narrow .chip')].map(c => c.textContent)")
         everything = tour.js(shown)

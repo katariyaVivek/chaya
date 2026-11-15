@@ -85,6 +85,11 @@ pub struct Tile {
 /// one tile in the order they were saved. A post with one file among `tasks` (the rest narrowed away) is an
 /// ordinary tile.
 pub fn tiles(tasks: &[Dated]) -> Vec<Tile> {
+    dated_tiles(tasks).into_iter().map(|(_, tile)| tile).collect()
+}
+
+/// The grid's tiles with when each was last saved to (seconds since 1970), newest first.
+fn dated_tiles(tasks: &[Dated]) -> Vec<(u64, Tile)> {
     let saved: Vec<&Dated> = tasks.iter().filter(|t| t.state == "completed").collect();
     let mut tiles: Vec<(u64, Tile)> = Vec::new();
     let mut posts: Vec<(&str, usize)> = Vec::new();
@@ -111,7 +116,46 @@ pub fn tiles(tasks: &[Dated]) -> Vec<Tile> {
     }
     // Newest first; among equals, the later download first, as the list has them.
     tiles.sort_by(|(a, x), (b, y)| b.cmp(a).then(y.ids[0].cmp(&x.ids[0])));
-    tiles.into_iter().map(|(_, tile)| tile).collect()
+    tiles
+}
+
+/// One day of the grid: its title, as the list's sections title days, and its tiles, newest first.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct TileDay {
+    pub title: String,
+    pub tiles: Vec<Tile>,
+}
+
+/// The grid's tiles by the day they were saved on, at `now` for a person `offset` minutes east of UTC: "Today",
+/// "Yesterday", then "3 Oct", newest first. A post's tile is on the day its newest file was saved.
+pub fn tile_days(tasks: &[Dated], now: u64, offset: i32) -> Vec<TileDay> {
+    let today = day_of(now, offset);
+    let mut out: Vec<(i64, TileDay)> = Vec::new();
+    for (at, tile) in dated_tiles(tasks) {
+        let d = day_of(at, offset);
+        match out.last_mut() {
+            Some((last, day)) if *last == d => day.tiles.push(tile),
+            _ => out.push((d, TileDay { title: day_title(d, today), tiles: vec![tile] })),
+        }
+    }
+    out.into_iter().map(|(_, day)| day).collect()
+}
+
+/// The day `secs` (seconds since 1970) falls on for a person `offset` minutes east of UTC, in days since 1970.
+fn day_of(secs: u64, offset: i32) -> i64 {
+    (secs as i64 + i64::from(offset) * 60).div_euclid(86_400)
+}
+
+/// A day's title seen from `today`: "Today", "Yesterday", or "3 Oct".
+fn day_title(d: i64, today: i64) -> String {
+    match today - d {
+        0 => "Today".to_string(),
+        1 => "Yesterday".to_string(),
+        _ => {
+            let (_, month, date) = civil(d);
+            format!("{date} {}", MONTHS[month as usize - 1])
+        }
+    }
 }
 
 const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -135,7 +179,7 @@ pub fn sections(tasks: &[Dated], now: u64, offset: i32) -> Vec<Section> {
 
     // Saved downloads by the day they were saved on, in the person's time zone; downloads kept before the time they
     // were saved was, by the day they were added.
-    let day = |secs: u64| (secs as i64 + i64::from(offset) * 60).div_euclid(86_400);
+    let day = |secs: u64| day_of(secs, offset);
     let today = day(now);
     let mut saved = of(&["completed"]);
     saved.sort_by(|a, b| ended(b).cmp(&ended(a)).then(b.id.cmp(&a.id)));
@@ -148,15 +192,7 @@ pub fn sections(tasks: &[Dated], now: u64, offset: i32) -> Vec<Section> {
         }
     }
     for (d, items) in days {
-        let title = match today - d {
-            0 => "Today".to_string(),
-            1 => "Yesterday".to_string(),
-            _ => {
-                let (_, month, date) = civil(d);
-                format!("{date} {}", MONTHS[month as usize - 1])
-            }
-        };
-        push(title, items, ended);
+        push(day_title(d, today), items, ended);
     }
     out
 }
@@ -224,6 +260,36 @@ mod tests {
         assert_eq!(sections[2].ids, [7, 4]);
         assert_eq!(sections[3].ids, [5]);
         assert_eq!(sections[4].ids, [6]);
+    }
+
+    #[test]
+    fn the_grid_is_in_days_as_the_list_is_with_a_post_on_its_newest_files_day() {
+        let mut post_old = task(10, "completed", 1, 1);
+        post_old.group = Some("p".into());
+        let mut post_new = task(11, "completed", 0, 1);
+        post_new.group = Some("p".into());
+        let tasks = [
+            task(1, "downloading", 0, 0),
+            task(2, "failed", 0, 0),
+            task(4, "completed", 0, 0),
+            task(5, "completed", 1, 1),
+            task(6, "completed", 5, 5),
+            post_old,
+            post_new,
+        ];
+        let days = tile_days(&tasks, NOW, 0);
+        let titles: Vec<&str> = days.iter().map(|d| d.title.as_str()).collect();
+        // Only what was saved: nothing running or failed, as the grid has it
+        assert_eq!(titles, ["Today", "Yesterday", "3 Oct"]);
+        let keys = |d: &TileDay| d.tiles.iter().map(|t| t.key.clone()).collect::<Vec<_>>();
+        assert_eq!(keys(&days[0]), ["post:p", "task:4"]);
+        assert_eq!(days[0].tiles[0].ids, [10, 11]);
+        assert_eq!(keys(&days[1]), ["task:5"]);
+        assert_eq!(keys(&days[2]), ["task:6"]);
+        // The same tiles as the flat grid, in the same order
+        let flat: Vec<Tile> = days.into_iter().flat_map(|d| d.tiles).collect();
+        assert_eq!(flat, tiles(&tasks));
+        assert!(tile_days(&[task(1, "downloading", 0, 0)], NOW, 0).is_empty());
     }
 
     #[test]

@@ -41,6 +41,7 @@
   <symbol id="i-trash" viewBox="0 0 24 24"><path d="M5 7h14M10 4.5h4M7 7l.8 11a2 2 0 0 0 2 1.8h4.4a2 2 0 0 0 2-1.8L17 7M10.5 10.5v6M13.5 10.5v6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M5 19l1-4L15.5 5.5a2.1 2.1 0 0 1 3 3L9 18zM13.5 7.5l3 3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-sync" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 3.5v4M12 16.5v4M3.5 12h4M16.5 12h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/></symbol>
+  <symbol id="i-library" viewBox="0 0 24 24"><path d="M5 5h3.5v14H5zM10.5 5H14v14h-3.5zM16.5 6.2l3.3.9-3 12.2-3.3-.9z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
   <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="16" cy="7" r="2" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="8" cy="17" r="2" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
 </svg>
 
@@ -53,7 +54,13 @@
   <ul class="side__places">
     <li><button class="side__place pressable" type="button" id="place-home" data-place="home" title="Home"><svg><use href="#i-home"/></svg><span>Home</span></button></li>
     <li><button class="side__place pressable" type="button" id="place-browse" data-place="browse" title="Browse: the pages you have open" hidden><svg><use href="#i-page"/></svg><span>Browse</span></button></li>
+    <li><button class="side__place pressable" type="button" id="place-library" data-place="library" title="Library: everything you have saved"><svg><use href="#i-library"/></svg><span>Library</span></button></li>
   </ul>
+  <!-- In the Library: where its downloads came from, each one choosing only those (the Library's one site filter) -->
+  <div class="side__sources" id="side-sources" hidden>
+    <p class="side__group" id="side-sources-head">Sources</p>
+    <ul class="side__places" aria-labelledby="side-sources-head"></ul>
+  </div>
   <p class="side__library" id="side-library" hidden><span class="side__saved"></span><span class="side__bytes num"></span></p>
 </nav>
 
@@ -213,7 +220,11 @@
 
   <section class="downloads" aria-labelledby="downloads-title">
     <div class="downloads__head">
-      <h1 class="title" id="downloads-title">Downloads</h1>
+      <div class="downloads__titles">
+        <!-- "Library" in the Library; on Home, where only what is under way is listed, "Under way" -->
+        <h1 class="title" id="downloads-title">Library</h1>
+        <p class="downloads__sub" id="downloads-sub"></p>
+      </div>
       <div class="seg downloads__view" role="group" aria-label="Show downloads as" id="downloads-view" hidden>
         <button type="button" data-view="list" aria-pressed="true">List</button>
         <button type="button" data-view="grid" aria-pressed="false">Grid</button>
@@ -228,8 +239,6 @@
     <p class="own-note" id="own-note" role="status" hidden><span></span><button class="downloads__all" type="button">OK</button></p>
     <div class="narrow" id="downloads-narrow" role="group" aria-label="Show only" hidden>
       <div class="narrow__group" id="narrow-kind"></div>
-      <span class="narrow__rule" aria-hidden="true"></span>
-      <div class="narrow__group" id="narrow-site"></div>
     </div>
     <ul class="list" id="download-list" aria-labelledby="downloads-title"></ul>
     <!-- The grid, as the phone's library: what was saved, pictures showing themselves, a post's files on one tile -->
@@ -245,7 +254,7 @@
     <p class="downloads__none" id="downloads-none" hidden>Nothing here matches. <button class="downloads__all" type="button" id="narrow-clear">Show everything</button></p>
     <div class="empty" id="downloads-empty">
       <span class="empty__icon"><svg><use href="#i-download"/></svg></span>
-      <p>What you download appears here. Paste a link above to start, or drop a video from this PC to make subtitles for it, translate it or cut it.</p>
+      <p>What you download appears here. Paste a link on Home to start, or drop a video from this PC to make subtitles for it, translate it or cut it.</p>
     </div>
   </section>
 </main>

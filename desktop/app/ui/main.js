@@ -28,7 +28,7 @@ import { secondsLeft, listeningWords } from './pace.js';
 import { onePanel } from './panels.js';
 import { markMarkup, mountMark } from './design/chaya-mark.js';
 import { markState, nextRun, shareOf } from './mark-state.js';
-import { placeOf, tabToBrowse, libraryTotals } from './shell.js';
+import { placeOf, railed, tabToBrowse, libraryTotals, sourcesOf, underWay } from './shell.js';
 
 // Every drop-down drawn as Chaya's own, not Windows' list (unreadable in Night, in Windows' font). The <select>s stay
 // underneath, so what follows reads and sets them as before.
@@ -425,6 +425,7 @@ const dlTemplate = document.getElementById('dl-template');
 const rowTemplate = document.getElementById('row-template');
 const downloadList = document.getElementById('download-list');
 const downloadsEmpty = document.getElementById('downloads-empty');
+const downloadsSection = document.querySelector('.downloads');
 
 /** Every download the window knows, by id, as the app last described it. */
 const tasks = new Map();
@@ -562,6 +563,42 @@ function countRunning() {
   showLibrary();
 }
 
+/** The section's title: "Library" in the Library, with what it holds; on Home, "Under way", and nothing at all when
+ * nothing is. */
+function showTitles() {
+  const library = inLibrary();
+  const { saved, bytes } = libraryTotals(tasks.values());
+  document.getElementById('downloads-title').textContent = library ? 'Library' : 'Under way';
+  const sub = document.getElementById('downloads-sub');
+  sub.textContent = library && saved ? `${count(saved, 'download')} saved${bytes ? ` · ${fileSize(bytes)}` : ''} · everything stays on this PC` : '';
+  sub.hidden = !sub.textContent;
+  downloadsSection.classList.toggle('downloads--quiet', !library && ![...tasks.values()].some(underWay));
+}
+
+/** The Library's sources in the sidebar: where its downloads came from; one chosen narrows it to those. */
+function showSources() {
+  const box = document.getElementById('side-sources');
+  const list = sourcesOf(tasks.values(), SITES, narrowing.site);
+  box.hidden = !inLibrary() || list.length < 2;
+  const key = list.map((s) => `${s.site}:${s.count}${s.chosen ? '*' : ''}`).join(' ');
+  if (box.dataset.key === key) return;
+  box.dataset.key = key;
+  box.querySelector('ul').replaceChildren(
+    ...list.map(({ site, name, count: n, chosen }) => {
+      const li = document.createElement('li');
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'side__place side__source pressable';
+      button.setAttribute('aria-pressed', String(chosen));
+      button.append(span('', name), span('side__count num', String(n)));
+      // Pressed again, it lets go
+      button.addEventListener('click', () => narrow({ site: chosen ? null : site }));
+      li.append(button);
+      return li;
+    }),
+  );
+}
+
 /** The sidebar's foot: how many downloads are saved, and the room they take. */
 function showLibrary() {
   const { saved, bytes } = libraryTotals(tasks.values());
@@ -569,6 +606,7 @@ function showLibrary() {
   foot.hidden = saved === 0;
   foot.querySelector('.side__saved').textContent = `${saved} saved`;
   foot.querySelector('.side__bytes').textContent = bytes ? fileSize(bytes) : '';
+  showTitles();
 }
 
 const ROW_ICON = { video: 'i-video', audio: 'i-audio', picture: 'i-post', archive: 'i-zip' };
@@ -748,10 +786,17 @@ ownVideos({
   note: document.getElementById('own-note'),
   added: (list) => list.filter((t) => !tasks.has(t.id)).forEach(taskChanged),
   open: (id) => openSaved(id),
-  shown: () => browsing && showDownloads(true),
+  // What was just added is in the Library, from Home or from a page
+  shown: () => showDownloads(true),
 });
 
+/** Whether the Library is shown (over Home or over a page): its narrowing applies there only. */
+function inLibrary() {
+  return document.body.classList.contains('showing-downloads');
+}
+
 function keeps(task) {
+  if (!inLibrary()) return underWay(task);
   if (narrowing.kind && task.kind !== narrowing.kind) return false;
   if (narrowing.site && task.site !== narrowing.site) return false;
   const words = narrowing.words.trim().toLowerCase();
@@ -782,16 +827,15 @@ function chips(group, field, options) {
 
 function showNarrowing() {
   const kinds = document.getElementById('narrow-kind');
-  const sites = document.getElementById('narrow-site');
   chips(kinds, 'kind', KINDS);
-  chips(sites, 'site', SITES);
-  narrowEl.querySelector('.narrow__rule').hidden = kinds.hidden || sites.hidden;
-  narrowEl.hidden = kinds.hidden && sites.hidden;
+  narrowEl.hidden = kinds.hidden;
+  showSources();
+  showTitles();
   // With one saved video, the box still finds what is said in it.
   const saidIn = [...tasks.values()].some((t) => t.state === 'completed' && (t.kind === 'video' || t.kind === 'audio'));
   findField.hidden = tasks.size < 2 && !narrowing.words && !saidIn;
   const kept = [...tasks.values()].filter(keeps).length;
-  downloadsNone.hidden = tasks.size === 0 || kept > 0 || said.shown > 0;
+  downloadsNone.hidden = !inLibrary() || tasks.size === 0 || kept > 0 || said.shown > 0;
   // The grid holds what was saved: offered once something has been.
   viewSwitch.hidden = ![...tasks.values()].some((t) => t.state === 'completed');
   showView(viewSwitch.hidden ? 'list' : view, false);
@@ -832,6 +876,8 @@ function arrange() {
         head.className = 'list__head';
         head.textContent = section.title;
       }
+      // A day of saved downloads, which Home leaves to the Library
+      head.toggleAttribute('data-saved', section.ids.every((id) => tasks.get(id)?.state === 'completed'));
       order.push(head, ...section.ids.map((id) => downloadList.querySelector(`.row[data-id="${id}"]`)).filter(Boolean));
     }
     // Moved only when the order changed, so a row being pointed at stays where it is.
@@ -911,6 +957,9 @@ function showCover(img, task, onNone) {
 
 function image(task, onNone) {
   const img = new Image();
+  // Chaya's own pictures are served readable to this window (for the card's glow); a site's thumbnail is not asked
+  // to be, as it would not load at all from a site that does not allow it
+  if (coversOf(task)[0]?.includes('chaya-file')) img.crossOrigin = 'anonymous';
   img.loading = 'lazy';
   img.decoding = 'async';
   showCover(img, task, () => onNone(img));
@@ -975,8 +1024,62 @@ async function takePoster(id) {
   }
 }
 
+/** A day's heading in the Library's grid, across the whole row. */
+function dayHead(key, title) {
+  const li = document.createElement('li');
+  li.className = 'grid__day';
+  li.dataset.key = key;
+  li.setAttribute('role', 'heading');
+  li.setAttribute('aria-level', '2');
+  li.textContent = title;
+  return li;
+}
+
+/** What a card says under its picture: the site, then how many files a post has, or the size. */
+function cardMeta(task, files) {
+  const site = SITES.find(([value]) => value === task.site)?.[1];
+  const what = files > 1 ? count(files, task.kind === 'picture' ? 'picture' : 'file') : task.total ? fileSize(task.total) : '';
+  return [site, what].filter(Boolean).join(' · ');
+}
+
+// ── The glow under a card ──
+//
+// Stage casts each card's shadow in its own picture's colour. Read from the pictures Chaya serves itself (a saved
+// picture, a video's poster), which the window may read; a site's thumbnail can't be read, so its card keeps the
+// plain shadow. One colour a download, kept for the run.
+
+const glows = new Map();
+
+function glowFrom(img, id, card) {
+  if (glows.has(id)) return card.style.setProperty('--glow', glows.get(id));
+  if (!img.src.includes('chaya-file')) return;
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = 8;
+    canvas.height = 8;
+    const g = canvas.getContext('2d', { willReadFrequently: true });
+    g.drawImage(img, 0, 0, 8, 8);
+    const px = g.getImageData(0, 0, 8, 8).data;
+    let r = 0;
+    let gr = 0;
+    let b = 0;
+    for (let i = 0; i < px.length; i += 4) {
+      r += px[i];
+      gr += px[i + 1];
+      b += px[i + 2];
+    }
+    const n = px.length / 4;
+    const rgb = `${Math.round(r / n)} ${Math.round(gr / n)} ${Math.round(b / n)}`;
+    glows.set(id, rgb);
+    card.style.setProperty('--glow', rgb);
+  } catch {
+    // Unreadable after all: the plain shadow stays.
+  }
+}
+
 function tileFor({ key, ids }) {
   const li = document.createElement('li');
+  li.className = 'grid__card';
   li.dataset.key = key;
   li.dataset.ids = ids.join(',');
   const cover = tasks.get(ids[0]);
@@ -986,7 +1089,11 @@ function tileFor({ key, ids }) {
   tile.className = 'tile pressable';
   tile.title = name;
   tile.setAttribute('aria-label', ids.length > 1 ? `${name}, ${ids.length} files` : name);
-  tile.append(coversOf(cover).length ? image(cover, (img) => img.replaceWith(named(cover))) : named(cover));
+  if (coversOf(cover).length) {
+    const img = image(cover, (missing) => missing.replaceWith(named(cover)));
+    img.addEventListener('load', () => glowFrom(img, cover.id, li));
+    tile.append(img);
+  } else tile.append(named(cover));
   if (cover.kind === 'video') {
     const play = span('tile__badge tile__badge--play', '');
     play.append(icon('i-play'));
@@ -1002,7 +1109,10 @@ function tileFor({ key, ids }) {
     if (ids.length === 1 && only?.kind !== 'picture') openSaved(ids[0]);
     else openViewer(ids);
   });
-  li.append(tile);
+  const caption = document.createElement('p');
+  caption.className = 'card__caption';
+  caption.append(span('card__name', name), span('card__meta', cardMeta(cover, ids.length)));
+  li.append(tile, caption);
   return li;
 }
 
@@ -1012,13 +1122,22 @@ function renderGrid() {
   cancelAnimationFrame(gridding);
   gridding = requestAnimationFrame(async () => {
     const kept = [...tasks.values()].filter(keeps).map((t) => t.id);
-    const tiles = await tauri.core.invoke('library_tiles', { kept }).catch(() => null);
-    if (!tiles) return;
-    // A tile that holds the same files stays as it is, so its picture is not loaded again.
+    const days = await tauri.core
+      .invoke('library_tiles', { kept, offset: -new Date().getTimezoneOffset() })
+      .catch(() => null);
+    if (!days) return;
+    // A tile that holds the same files stays as it is, so its picture is not loaded again; so does a day's heading.
     const shown = new Map([...grid.children].map((li) => [li.dataset.key, li]));
-    const next = tiles.map((tile) => {
-      const old = shown.get(tile.key);
-      return old && old.dataset.ids === tile.ids.join(',') ? old : tileFor(tile);
+    const next = days.flatMap((day) => {
+      const key = `day:${day.title}`;
+      const head = shown.get(key) ?? dayHead(key, day.title);
+      return [
+        head,
+        ...day.tiles.map((tile) => {
+          const old = shown.get(tile.key);
+          return old && old.dataset.ids === tile.ids.join(',') ? old : tileFor(tile);
+        }),
+      ];
     });
     const now = [...grid.children];
     if (next.length !== now.length || next.some((li, i) => li !== now[i])) grid.replaceChildren(...next);
@@ -1037,9 +1156,11 @@ function showView(next, remember = true) {
     } catch {}
   }
   for (const b of viewSwitch.querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.view === next));
-  downloadList.hidden = next === 'grid';
-  gridWrap.hidden = next !== 'grid';
-  if (next === 'grid') renderGrid();
+  // Home lists what is under way, as rows; the grid is the Library's
+  const shown = inLibrary() ? next : 'list';
+  downloadList.hidden = shown === 'grid';
+  gridWrap.hidden = shown !== 'grid';
+  if (shown === 'grid') renderGrid();
 }
 
 viewSwitch.addEventListener('click', (e) => {
@@ -2352,6 +2473,8 @@ tauri?.event.listen('download', ({ payload }) => {
 
 tauri?.core.invoke('list_downloads').then((list) => {
   list.forEach(taskChanged);
+  // With nothing saved yet, nothing above ran: Home's section and the Library's titles still need saying
+  showNarrowing();
   arrange();
   stagger(downloadList);
   downloadList.classList.add('stagger');
@@ -2524,7 +2647,9 @@ const placeHome = document.getElementById('place-home');
 const placeBrowse = document.getElementById('place-browse');
 
 function showPlace() {
-  const place = placeOf({ browsing });
+  const views = { browsing, library: document.body.classList.contains('showing-downloads') };
+  document.body.classList.toggle('railed', railed(views));
+  const place = placeOf(views);
   for (const el of document.querySelectorAll('.side__place')) {
     if (el.dataset.place === place) el.setAttribute('aria-current', 'page');
     else el.removeAttribute('aria-current');
@@ -2532,7 +2657,13 @@ function showPlace() {
 }
 
 placeHome.addEventListener('click', () => {
-  if (browsing || playing) goHome();
+  if (playing) closePlayer();
+  if (browsing) goHome();
+  else showDownloads(false);
+});
+document.getElementById('place-library').addEventListener('click', () => {
+  if (playing) closePlayer();
+  showDownloads(true);
 });
 placeBrowse.addEventListener('click', () => {
   const id = tabToBrowse(tabsNow, activeTab);
@@ -2648,10 +2779,13 @@ function hidePageStill() {
   pageStill.removeAttribute('src');
 }
 
+/** The Library, over Home or over a page. Its narrowing applies only while it is shown, so rows are narrowed again. */
 function showDownloads(on) {
   if (on) openMedia(false);
   document.body.classList.toggle('showing-downloads', on);
   pageDownloads.setAttribute('aria-pressed', String(on));
+  showPlace();
+  narrow({});
   showPageView();
 }
 
@@ -3041,9 +3175,10 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     address.focus();
     address.select();
-  } else if (e.ctrlKey && !e.altKey && e.key.toLowerCase() === 'f' && !findField.hidden && viewer.hidden &&
-    (!browsing || document.body.classList.contains('showing-downloads'))) {
-    // The Downloads list's find box, which also finds what is said in the videos.
+  } else if (e.ctrlKey && !e.altKey && e.key.toLowerCase() === 'f' && viewer.hidden && (!browsing || inLibrary())) {
+    // The Library's find box, which also finds what is said in the videos: Ctrl+F goes to the Library for it.
+    if (!inLibrary()) showDownloads(true);
+    if (findField.hidden) return;
     e.preventDefault();
     findInput.focus();
     findInput.select();
