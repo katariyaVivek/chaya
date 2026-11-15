@@ -309,8 +309,9 @@ Kept apart on purpose, because they are layers rather than one state:
   through the tab switches and new documents that close a sheet. It hides when a sheet opens.
 - On Windows, the Library (`showing-downloads`, the sidebar's Library place), the player and the viewer each
   cover the page's place and stack: the player opens from the Library and closes back to it. `showPageView` asks
-  whether any of them is shown. Without a page, the Library takes Home's place; Home then lists only what is
-  under way.
+  whether any of them is shown. Without a page, the Library takes Home's place. Home shows the video to carry on
+  with (`continue_watching` in `desktop/core/src/video.rs`: the one stopped part way most recently, else the newest
+  saved video, as `heroOf` picks), what is under way, and one row of the newest saved (`shelfColumns`).
   `browsing` is whether a page is open at all, and `playing` is the video in the player, not a mode.
 
 ## Tests

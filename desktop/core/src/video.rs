@@ -36,6 +36,9 @@ pub struct VideoData {
     pub stopped_at: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub duration: Option<f64>,
+    /// When it stopped there (seconds since 1970), so Home can offer the one watched last. None in files from before.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stopped_when: Option<u64>,
     /// What whisper.cpp heard, the last time Chaya made subtitles for it, with which model, and where.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub transcript: Option<Transcript>,
@@ -60,6 +63,14 @@ pub struct VideoData {
     pub written: Vec<String>,
     #[serde(flatten)]
     pub other: Map<String, Value>,
+}
+
+/// A video to carry on with: which, where it starts again (seconds), and its length when known.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct Watching {
+    pub id: u64,
+    pub at: f64,
+    pub duration: Option<f64>,
 }
 
 /// A translation of a video's subtitles: from which language's subtitles (`None` for a file that names none), into
@@ -140,10 +151,27 @@ impl Videos {
 
     /// Where playback of download `id` stopped, in a video `duration` seconds long.
     pub fn stopped(&self, id: u64, at: f64, duration: Option<f64>) -> std::io::Result<()> {
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+        self.stopped_on(id, at, duration, now)
+    }
+
+    /// As `stopped`, at `when` (seconds since 1970).
+    pub fn stopped_on(&self, id: u64, at: f64, duration: Option<f64>, when: u64) -> std::io::Result<()> {
         self.change(id, |data| {
             data.stopped_at = Some(at).filter(|at| at.is_finite() && *at >= 0.0);
             data.duration = duration.filter(|d| d.is_finite() && *d > 0.0).or(data.duration);
+            data.stopped_when = Some(when);
         })
+    }
+
+    /// Of the saved videos `ids`, the one to carry on with: of those stopped part way, the one stopped last (one kept
+    /// before Chaya noted when counts as earliest; on a tie, the newer download). None when none was left part way.
+    pub fn continue_watching(&self, ids: &[u64]) -> Option<Watching> {
+        ids.iter()
+            .map(|&id| (id, self.load(id)))
+            .filter(|(_, data)| data.resume_at() > 0.0)
+            .max_by_key(|(id, data)| (data.stopped_when.unwrap_or(0), *id))
+            .map(|(id, data)| Watching { id, at: data.resume_at(), duration: data.duration })
     }
 
     /// Keeps the chapters of download `id`, as the site listed them when it was saved; a video without any keeps no file
@@ -319,6 +347,32 @@ mod tests {
     }
 
     #[test]
+    fn home_carries_on_with_the_video_stopped_last_part_way() {
+        let dir = tempfile::tempdir().unwrap();
+        let videos = Videos::in_folder(dir.path().join("videos"));
+        assert_eq!(videos.continue_watching(&[1, 2, 3]), None, "nothing watched yet");
+        videos.stopped_on(1, 300.0, Some(900.0), 1_000).unwrap();
+        videos.stopped_on(2, 60.0, Some(600.0), 2_000).unwrap();
+        // Watched to the end: nothing to carry on with
+        videos.stopped_on(3, 598.0, Some(600.0), 3_000).unwrap();
+        assert_eq!(videos.continue_watching(&[1, 2, 3]), Some(Watching { id: 2, at: 60.0, duration: Some(600.0) }));
+        // Only among the ids asked about (the saved videos still listed)
+        assert_eq!(videos.continue_watching(&[1, 3]).map(|w| w.id), Some(1));
+        // A stop kept before Chaya noted when is the earliest
+        videos
+            .change(4, |d| {
+                d.stopped_at = Some(30.0);
+                d.duration = Some(90.0);
+            })
+            .unwrap();
+        assert_eq!(videos.continue_watching(&[4, 1]).map(|w| w.id), Some(1));
+        assert_eq!(videos.continue_watching(&[4]).map(|w| w.id), Some(4));
+        // Stopping again makes it the latest
+        videos.stopped_on(1, 310.0, None, 5_000).unwrap();
+        assert_eq!(videos.continue_watching(&[1, 2]), Some(Watching { id: 1, at: 310.0, duration: Some(900.0) }));
+    }
+
+    #[test]
     fn where_playback_stopped_is_kept_per_download_and_forgotten_with_it() {
         let dir = tempfile::tempdir().unwrap();
         let videos = Videos::in_folder(dir.path().join("videos"));
@@ -327,8 +381,8 @@ mod tests {
         videos.stopped(4, 10.0, None).unwrap();
         assert_eq!(videos.load(3).resume_at(), 61.0);
         // The length, once known, stays when a later stop does not know it.
-        videos.stopped(3, 120.0, None).unwrap();
-        assert_eq!(videos.load(3), stopped(120.0, Some(300.0)));
+        videos.stopped_on(3, 120.0, None, 7).unwrap();
+        assert_eq!(videos.load(3), VideoData { stopped_when: Some(7), ..stopped(120.0, Some(300.0)) });
         assert!(dir.path().join("videos").join("3.json").exists());
         assert!(!dir.path().join("videos").join("3.json.part").exists());
         videos.forget(3);
