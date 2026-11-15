@@ -275,7 +275,13 @@ def launch_fresh():
     sh(f"pm grant {PKG} android.permission.POST_NOTIFICATIONS")
     adb("logcat", "-c")
     adb("shell", "am", "start", "-W", "-n", f"{PKG}/.MainActivity", timeout=180)
-    _, field = wait_for("home screen shows the address field", 90, cls="android.widget.EditText")
+    # Chaya opens on Home (Stage); the browser is Browse, from the places bar at its foot
+    _, browse = wait_for("Home shows its places", 90, text="Browse")
+    if browse is None:
+        return False
+    snapshot("home")
+    tap_node(browse)
+    _, field = wait_for("Browse shows the address field", 60, cls="android.widget.EditText")
     return field is not None
 
 
@@ -503,6 +509,13 @@ def scenario_local():
         time.sleep(3)
         snapshot("downloads-grid")
         tap_when("local: back to the list", 20, desc_contains="Show as list")
+    # Home, opened again: the video just saved across the top with Play and Share (Stage)
+    sh(f"am force-stop {PKG}")
+    adb("shell", "am", "start", "-W", "-n", f"{PKG}/.MainActivity", timeout=180)
+    _, play = wait_for("local: Home leads with the video just saved", 60, text="Play")
+    if play is not None:
+        time.sleep(2)
+        snapshot("home-saved")
 
 
 def scenario_tabs():
@@ -528,6 +541,8 @@ def scenario_tabs():
     sh(f"am force-stop {PKG}")
     time.sleep(2)
     adb("shell", "am", "start", "-W", "-n", f"{PKG}/.MainActivity", timeout=180)
+    # Chaya opens on Home again; the tabs are in Browse
+    tap_when("tabs: back to Browse", 60, text="Browse")
     wait_for("tabs: both tabs came back", 60, desc_contains="Tabs (2)")
     tap_when("tabs: open the tab grid again", 20, desc_contains="Tabs (2)")
     wait_for("tabs: the first tab's card", 20, text_contains="Launch Event")
