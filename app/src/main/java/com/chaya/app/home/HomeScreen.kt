@@ -196,8 +196,11 @@ private fun Hero(
             Modifier.fillMaxSize().background(
                 Brush.verticalGradient(
                     0f to ground.copy(alpha = 0.55f),
-                    0.26f to ground.copy(alpha = 0f),
-                    0.52f to ground.copy(alpha = 0.2f),
+                    0.24f to ground.copy(alpha = 0f),
+                    0.48f to ground.copy(alpha = 0.25f),
+                    0.78f to ground.copy(alpha = 0.92f),
+                    // The page's own ground well before the foot, so the picture has no edge where it ends
+                    0.8f to ground,
                     1f to ground,
                 ),
             ),
