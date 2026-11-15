@@ -29,6 +29,7 @@ import { onePanel } from './panels.js';
 import { markMarkup, mountMark } from './design/chaya-mark.js';
 import { markState, nextRun, shareOf } from './mark-state.js';
 import { placeOf, railed, tabToBrowse, libraryTotals, sourcesOf, underWay, heroOf, clockOf, shelfColumns } from './shell.js';
+import { firstPick, offerFound } from './found.js';
 
 // Every drop-down drawn as Chaya's own, not Windows' list (unreadable in Night, in Windows' font). The <select>s stay
 // underneath, so what follows reads and sets them as before.
@@ -199,7 +200,7 @@ function show(link, text) {
   if (link.kind === 'media' || link.kind === 'account') {
     if (link.kind === 'media') lookUp(link);
     else showAccount(link);
-    // While a page is open the card is in the bar's panel, opened since the person asked for it.
+    // While a page is open the card is in the panel beside it, opened since the person asked for it.
     if (browsing) openMedia(true);
   } else openPage(text);
 }
@@ -314,7 +315,10 @@ async function showLookup(lookup) {
 
 function showFound(card, lookup, found) {
   card.querySelector('.card__title').textContent = found.title;
-  card.querySelector('.card__meta').textContent = [found.author, found.duration].filter(Boolean).join(' · ');
+  card.querySelector('.card__meta').textContent = found.author ?? '';
+  const length = card.querySelector('.poster__length');
+  length.textContent = found.duration ?? '';
+  length.hidden = !found.duration;
   const poster = card.querySelector('.poster img');
   if (found.thumbnail?.startsWith('https://')) {
     poster.addEventListener('error', () => poster.removeAttribute('src'), { once: true });
@@ -332,21 +336,55 @@ function showFound(card, lookup, found) {
     row.append(downloadButton(() => lookup.save('post'), 'Save all', state));
     parts.push(row);
   } else {
-    const list = document.createElement('ul');
-    list.className = 'choices stagger';
-    for (const choice of found.choices) {
-      const row = document.createElement('li');
-      row.className = 'choice';
-      row.append(span('choice__label', choice.label), span('choice__detail num', choice.detail));
-      row.append(downloadButton(() => lookup.save(choice.label), 'Download', state));
-      list.append(row);
-    }
-    parts.push(list);
+    parts.push(...qualityPicker(found.choices, (choice) => lookup.save(choice.label), state));
     if (found.moreLater) {
       parts.push(paragraph("Some of this video's qualities come in a form Chaya for Windows can't save yet.", 'card__note'));
     }
   }
   state.replaceChildren(...parts);
+}
+
+/**
+ * The qualities as one choice, then one Save for the one picked (Stage). Each quality keeps its own Save, so one
+ * already saving or saved shows that again when it is picked again; only the picked one's is shown.
+ */
+function qualityPicker(choices, save, state) {
+  const list = document.createElement('div');
+  list.className = 'choices stagger';
+  list.setAttribute('role', 'radiogroup');
+  list.setAttribute('aria-label', 'Quality');
+  const saves = document.createElement('div');
+  saves.className = 'card__save';
+  const radios = choices.map((choice, i) => {
+    const radio = document.createElement('button');
+    radio.type = 'button';
+    radio.className = 'choice pressable';
+    radio.setAttribute('role', 'radio');
+    radio.append(span('choice__ring', ''), span('choice__label', choice.label), span('choice__detail num', choice.detail));
+    radio.addEventListener('click', () => pick(i));
+    list.append(radio);
+    const button = downloadButton(() => save(choice), `Save ${choice.label}`, state);
+    saves.append(button);
+    return { radio, button };
+  });
+  function pick(at, focus = false) {
+    radios.forEach(({ radio, button }, i) => {
+      radio.setAttribute('aria-checked', String(i === at));
+      radio.tabIndex = i === at ? 0 : -1;
+      button.hidden = i !== at;
+    });
+    if (focus) radios[at].radio.focus();
+  }
+  // A radio group's keys: the arrows move the choice, as Windows' own do
+  list.addEventListener('keydown', (e) => {
+    const step = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[e.key];
+    if (!step) return;
+    e.preventDefault();
+    const at = radios.findIndex(({ radio }) => radio.getAttribute('aria-checked') === 'true');
+    pick((at + step + radios.length) % radios.length, true);
+  });
+  pick(Math.max(0, firstPick(choices)));
+  return [list, saves];
 }
 
 function showFailed(card, lookup, failed) {
@@ -2621,9 +2659,9 @@ function setBrowsing(on) {
   document.body.classList.toggle('browsing', on);
   showPlace();
   document.querySelectorAll('[data-browsing]').forEach((el) => (el.hidden = !on));
-  // Over a page, what is looked up and what the page holds open from the bar, so the page never moves for them.
+  // Over a page, what is looked up and what the page holds are in the panel beside it, which the page steps aside for.
   if (on) {
-    mediaPanel.append(result, foundBox);
+    mediaBody.append(result, foundBox);
     foundBox.classList.add('found--open');
   } else {
     openMedia(false);
@@ -2637,6 +2675,7 @@ function setBrowsing(on) {
     hideNotice();
     forgetFound();
     pageLookedAt = '';
+    foundOfferedFor = '';
     setLoading(false);
     pageUrl = '';
     hidePageStill();
@@ -2837,6 +2876,8 @@ let pageViews = 0;
 
 /** The narrowest a page is made to stand beside an open panel; narrower, a still picture of it stands in. */
 const NARROWEST_PAGE = 360;
+/** The room between the page and a panel beside it. */
+const PANEL_GAP = 8;
 
 /** The panel open over the page, if one is. */
 function openPanel() {
@@ -2849,7 +2890,7 @@ function pageBounds() {
   const bounds = aboveToasts(boundsOf(pageEl));
   const panel = openPanel();
   if (!panel) return bounds;
-  const width = Math.min(bounds.width, panel.getBoundingClientRect().left - 8 - bounds.x);
+  const width = Math.min(bounds.width, panel.getBoundingClientRect().left - PANEL_GAP - bounds.x);
   return width >= NARROWEST_PAGE ? { ...bounds, width } : null;
 }
 
@@ -3041,6 +3082,8 @@ async function askPage() {
     followPage(page.url);
     showPageMedia(page.items);
     showShield(page.ads);
+    // The address may have changed with nothing new found: what is there is offered again at the new one.
+    offerMedia();
   } catch {
     // No page, or it did not answer this time.
   } finally {
@@ -3101,12 +3144,15 @@ setInterval(askPage, 1500);
 // ── What the page holds, from the bar ───────────────────────────────────────────────────────
 //
 // A pill in the bar names what was found on the page (or the video the page is, on YouTube and the other sites);
-// its panel lists each with its Download, over a picture of the page.
+// it opens Stage's "Found on this page" beside the page, which also opens itself once for each address that has
+// something to save (found.js, offerFound).
 
 const addressForm = document.getElementById('address-form');
-const mediaWrap = document.querySelector('.media');
 const mediaButton = document.getElementById('page-media');
 const mediaPanel = document.getElementById('media-panel');
+const mediaBody = document.getElementById('found-panel-body');
+/** The address the panel last opened itself for, or was kept closed at: its only memory (found.js). */
+let foundOfferedFor = '';
 /** What the pill counted last, so it lights up only when something new is found. */
 let mediaCount = 0;
 /** What the card on show is a lookup of ("video", "post"), for the pill to name it. */
@@ -3143,16 +3189,31 @@ function showMediaButton() {
     openMedia(false);
   }
   mediaCount = count;
+  offerMedia();
+}
+
+/** Opens the panel by itself, once for each address, when the page has a video or something to save on it. */
+function offerMedia() {
+  if (!browsing) return;
+  const something = !!result.querySelector('.card:not(.card--failed)') || !!foundBox.querySelector('.found__item--main');
+  const offer = offerFound({ address: pageLookedAt, offeredFor: foundOfferedFor, something, open: panels.open, fits: roomForPanel() });
+  foundOfferedFor = offer.offeredFor;
+  if (offer.open) openMedia(true);
+}
+
+/** Whether the page keeps NARROWEST_PAGE beside the panel, as pageBounds would place it. */
+function roomForPanel() {
+  const page = boundsOf(pageEl);
+  const width = parseFloat(getComputedStyle(mediaPanel).getPropertyValue('--found-width')) || 360;
+  return page.width - width - 2 * PANEL_GAP >= NARROWEST_PAGE;
 }
 
 new MutationObserver(showMediaButton).observe(result, { childList: true });
 new MutationObserver(showMediaButton).observe(foundBox.querySelector('.found__list'), { childList: true });
 
 mediaButton.addEventListener('click', () => panels.toggle('media'));
-document.addEventListener('click', (e) => {
-  // The path as the click found it: a card's button may have replaced the card by the time this runs.
-  if (panels.open === 'media' && !e.composedPath().includes(mediaWrap)) openMedia(false);
-});
+// Beside the page it covers nothing, so it stays open until closed: here, by its pill, or by Esc.
+document.getElementById('found-panel-close').addEventListener('click', () => openMedia(false));
 
 // ── The ad blocker ──────────────────────────────────────────────────────────────────────────
 //

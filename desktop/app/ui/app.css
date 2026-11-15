@@ -400,23 +400,63 @@ body:has(.player:not([hidden]), .viewer:not([hidden])) .settings__panel { backgr
 }
 .poster img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .poster img:not([src]) { visibility: hidden; }
+.poster { position: relative; }
+/* The video's length, on its picture, as a player shows it */
+.poster__length {
+  position: absolute;
+  right: var(--space-1);
+  bottom: var(--space-1);
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--scrim);
+  color: var(--scrim-text);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+}
 .card__meta { margin: 0; color: var(--muted); font-size: var(--text-sm); line-height: var(--leading-sm); }
 .card__meta:empty { display: none; }
 .card__state { display: grid; gap: var(--space-1); justify-items: start; margin-top: var(--space-1); }
 .card__actions { display: flex; flex-wrap: wrap; gap: var(--space-1); }
 
 .choices { display: grid; gap: var(--space-half); width: 100%; margin: 0; padding: 0; list-style: none; }
+/* The qualities as one choice (Stage): a ring beside each, the one picked filled, then one Save for it */
 .choice {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-2);
+  gap: var(--space-1);
+  width: 100%;
+  min-height: 40px;
+  padding: 0 var(--space-1);
+  border: 0;
   border-radius: var(--radius-sm);
-  background: var(--wash);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--dur-hover) var(--ease-out);
 }
+.choice:hover { background: var(--wash); }
+.choice[aria-checked="true"] { background: var(--wash-strong); }
+.choice:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.choice__ring {
+  display: grid;
+  flex: none;
+  place-items: center;
+  box-sizing: border-box;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--muted);
+  border-radius: 50%;
+}
+.choice__ring::after { content: ""; width: 8px; height: 8px; border-radius: 50%; background: transparent; }
+.choice[aria-checked="true"] .choice__ring { border-color: var(--text); }
+.choice[aria-checked="true"] .choice__ring::after { background: var(--text); }
 .choice__label { font-weight: 600; }
 .choice__detail { margin-left: auto; color: var(--muted); font-size: var(--text-sm); }
-.choice .dl { flex: none; }
+.card__save { display: grid; justify-items: start; }
 .card__error { margin: 0; color: var(--text); font-size: var(--text-sm); }
 
 @media (max-width: 640px) {
@@ -984,6 +1024,7 @@ body.browsing .urlbar__icon { display: none; }
  * window's own corners (Windows rounds them) below.
  */
 .page-frame {
+  position: relative;
   display: flex;
   flex: 1 !important;
   flex-direction: column;
@@ -1045,17 +1086,60 @@ body.browsing .urlbar__icon { display: none; }
 /* Something new on the page that the person hasn't opened yet: the accent edge, as on the one primary control */
 .page-media--new { border-color: var(--accent-edge); animation: var(--anim-enter) var(--dur-enter) var(--ease-out) both; }
 .page-media[aria-expanded="true"] { background-image: linear-gradient(var(--wash-strong), var(--wash-strong)); }
-.media__panel {
-  width: min(480px, calc(100vw - var(--space-3) * 2));
-  max-height: 70vh;
+/*
+ * Stage's "Found on this page": a sheet beside the page, which steps aside for it (main.js, pageBounds, with the
+ * same 8 px between). Where the window is too narrow for both, it lies over a still picture of the page, so it is
+ * solid: the ground under its glass.
+ */
+.found-panel {
+  --found-width: 340px;
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  box-sizing: border-box;
+  width: min(var(--found-width), calc(100% - 16px));
+  max-height: calc(100% - 16px);
+  padding: var(--space-1) var(--space-2) var(--space-2);
   overflow-y: auto;
-  gap: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(var(--surface), var(--surface)), var(--bg);
+  box-shadow: var(--shadow);
+  animation: var(--anim-enter) var(--dur-enter) var(--ease-out) both;
 }
-/* Inside the panel a card is its content, not another sheet of glass on the panel's */
-.media__panel .card { padding: 0; border: 0; background: none; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
-.media__panel .found__list { max-height: none; }
-.media__panel .found__item--main { background: var(--wash); box-shadow: none; }
-.media__panel .found__more { display: none !important; }
+.found-panel[hidden] { display: none; }
+.found-panel__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-1); margin-right: calc(var(--space-1) * -1); }
+.found-panel__title {
+  margin: 0;
+  color: var(--muted);
+  font: 600 12px / 16px var(--font-ui);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.found-panel__body { display: grid; gap: var(--space-2); }
+/* Inside the panel a card is its content: the picture across the top, then its name, its qualities and Save */
+.found-panel .card { grid-template-columns: minmax(0, 1fr); padding: 0; border: 0; background: none; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+.found-panel .poster { border-radius: var(--radius-md); }
+.found-panel .card__title { font: 700 22px / 1.15 var(--font-display); letter-spacing: -0.01em; }
+.found-panel .card__state, .found-panel .card__save { justify-items: stretch; }
+/* Save fills the sheet's width at rest; as it saves it narrows to its ring, as everywhere */
+/* Save fills the sheet's width at rest, solid ink, the one strong control (Stage); as it saves it narrows to its
+   ring, as everywhere */
+.found-panel .card__save .dl:not(:is([data-state="progress"], [data-state="paused"], [data-state="done"], [data-state="saved"])) {
+  width: 100% !important;
+  justify-content: center;
+  border-color: transparent;
+  background: var(--text);
+  color: var(--bg);
+  font-weight: 600;
+}
+.found-panel .found__list { max-height: none; }
+.found-panel .found__item--main { background: var(--wash); box-shadow: none; }
+.found-panel .found__more { display: none !important; }
 
 /* What the page holds: the main video on a line of its own, the rest under it when asked for */
 .found { display: grid; gap: var(--space-half); }

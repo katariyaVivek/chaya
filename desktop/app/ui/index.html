@@ -181,7 +181,6 @@
     <div class="page-nav" data-browsing hidden>
       <div class="media">
         <button class="pill glass pressable page-media" type="button" id="page-media" aria-expanded="false" aria-controls="media-panel" hidden><svg><use href="#i-video"/></svg><span class="page-media__label"></span></button>
-        <div class="settings__panel media__panel glass" id="media-panel" aria-label="On this page" hidden></div>
       </div>
       <div class="shield">
         <button class="icon-btn pressable page-shield" type="button" id="page-shield" aria-label="Ad blocker" title="Ad blocker" aria-expanded="false" aria-controls="shield-panel"><svg><use href="#i-shield"/></svg><span class="page-count num" hidden></span></button>
@@ -232,6 +231,15 @@
   <div class="page-frame" data-browsing hidden>
     <span class="page-load" id="page-load" aria-hidden="true"></span>
     <div class="page" id="page"><img class="page__still" id="page-still" alt="" hidden></div>
+    <!-- Stage's "Found on this page": beside the page, which steps aside for it (main.js, pageBounds). It holds the
+         page's own video, looked up, and what its players load (main.js, setBrowsing). -->
+    <aside class="found-panel" id="media-panel" aria-labelledby="found-panel-title" hidden>
+      <div class="found-panel__head">
+        <h2 class="found-panel__title" id="found-panel-title">Found on this page</h2>
+        <button class="icon-btn pressable" type="button" id="found-panel-close" aria-label="Close" title="Close (Esc)"><svg><use href="#i-close"/></svg></button>
+      </div>
+      <div class="found-panel__body" id="found-panel-body"></div>
+    </aside>
   </div>
 
   <section class="downloads" aria-labelledby="downloads-title">
@@ -297,7 +305,7 @@
 
 <template id="lookup-template">
   <article class="card card--media glass">
-    <div class="poster" aria-hidden="true"><img alt="" referrerpolicy="no-referrer"></div>
+    <div class="poster" aria-hidden="true"><img alt="" referrerpolicy="no-referrer"><span class="poster__length" hidden></span></div>
     <div class="card__body">
       <h2 class="card__title"></h2>
       <p class="card__meta"></p>
