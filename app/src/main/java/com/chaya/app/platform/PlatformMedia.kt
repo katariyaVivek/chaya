@@ -1,5 +1,6 @@
 package com.chaya.app.platform
 
+import com.chaya.app.subtitles.SubtitleTrack
 import org.json.JSONException
 import org.json.JSONObject
 import java.util.Locale
@@ -107,6 +108,10 @@ data class PlatformMedia(
     val isLive: Boolean,
     val formats: List<PlatformFormat>,
     val items: List<PostItem> = emptyList(),
+    /** The language spoken, when the site says ("en"). */
+    val language: String? = null,
+    /** The subtitles the site has for the video, in kinds Chaya reads (`chaya_engine.extract._subtitle_tracks`). */
+    val subtitles: List<SubtitleTrack> = emptyList(),
 ) {
     companion object {
         /**
@@ -147,8 +152,18 @@ data class PlatformMedia(
                 items = media.optJSONArray("items")?.let { array ->
                     (0 until array.length()).mapNotNull { index -> array.optJSONObject(index)?.let { parseItem(it) } }
                 }.orEmpty(),
+                language = media.str("language"),
+                subtitles = media.optJSONArray("subtitles")?.let { array ->
+                    (0 until array.length()).mapNotNull { index -> array.optJSONObject(index)?.let { parseTrack(it) } }
+                }.orEmpty(),
             )
         }
+
+        private fun parseTrack(track: JSONObject): SubtitleTrack? = SubtitleTrack(
+            language = track.str("language") ?: return null,
+            url = track.str("url") ?: return null,
+            automatic = track.optBoolean("automatic", false),
+        )
 
         private fun parseItem(item: JSONObject): PostItem? {
             val url = item.str("url") ?: return null

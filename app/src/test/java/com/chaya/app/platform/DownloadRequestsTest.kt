@@ -1,5 +1,7 @@
 package com.chaya.app.platform
 
+import com.chaya.app.subtitles.SubtitleSource
+import com.chaya.app.subtitles.SubtitleTrack
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
@@ -133,6 +135,28 @@ class DownloadRequestsTest {
         assertThrows(IllegalArgumentException::class.java) {
             choice("720p", 720, manifest).toDownloadRequest(media(title = "T"))
         }
+    }
+
+    @Test
+    fun `a video keeps the site's subtitles in the language spoken, with its headers but no cookie for another host`() {
+        val talk = media(title = "Talk").copy(
+            language = "en",
+            subtitles = listOf(
+                SubtitleTrack("de", "https://subs.example/de.vtt", automatic = true),
+                SubtitleTrack("en-orig", "https://subs.example/en.vtt", automatic = true),
+            ),
+        )
+
+        val request = choice("240p", quality = 240, file = video, sound = sound).toDownloadRequest(talk)
+
+        assertEquals(
+            SubtitleSource("en", "https://subs.example/en.vtt", mapOf("User-Agent" to "UA/video")),
+            request.subtitles,
+        )
+        // Sound alone has no picture to show them on; a video whose site has none gets none
+        val audio = PlatformChoice("Audio", "", null, sound, null, isAudioOnly = true).toDownloadRequest(talk)
+        assertNull(audio.subtitles)
+        assertNull(choice("240p", quality = 240, file = video).toDownloadRequest(media(title = "Clip")).subtitles)
     }
 
     private fun choice(label: String, quality: Int?, file: PlatformFormat, sound: PlatformFormat? = null) =

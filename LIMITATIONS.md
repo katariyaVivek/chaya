@@ -56,6 +56,10 @@ These are deliberate scope decisions, not open bugs.
   yt-dlp-ejs and gallery-dl are fetched. Python itself, the libraries bundled beside them
   (`requests`, `urllib3` and the rest) and Chaya's own code change only with a new APK, so a release
   that needs a newer library than the APK carries, or another Python, is skipped until then.
+- **Subtitles for every video (the phone).** A video saved from a link keeps the site's own subtitles in the language
+  spoken, when the site has them; the machine's translations into other languages are left behind. Videos found on a
+  page, saved before this, or from a site without subtitles have none, and the phone does not make, translate or edit
+  subtitles as Chaya for Windows does.
 - **Joining HEVC or AV1 pictures.** Only H.264 is joined for now, so those qualities are not offered.
 - **More than 50 tabs, or more than four in memory.** Up to 50 tabs can be open. Only the four shown
   most recently keep their page in memory; the others keep their address and history and load

@@ -21,6 +21,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ClosedCaption
+import androidx.compose.material.icons.filled.ClosedCaptionDisabled
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -38,6 +40,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -73,13 +78,16 @@ import com.chaya.app.downloads.displayTitle
 import com.chaya.app.library.SourceSite
 import com.chaya.app.library.siteOf
 import com.chaya.app.streaming.StreamMime
+import com.chaya.app.subtitles.SavedSubtitles
 import com.chaya.app.ui.theme.NightContainer
 import com.chaya.app.ui.theme.NightGround
 import com.chaya.app.ui.theme.NightInk
 import com.chaya.app.ui.theme.NightMuted
 import com.chaya.app.ui.theme.NightOutlineVariant
 import com.chaya.app.ui.theme.PlayerBackdrop
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import java.io.File
 
 /** How far −10 and +10 move. */
@@ -119,6 +127,12 @@ fun PlayerScreen(
     var atMs by remember { mutableLongStateOf(0L) }
     var lengthMs by remember { mutableLongStateOf(0L) }
     var seeking by remember { mutableStateOf<Float?>(null) }
+    // The site's subtitles kept with the video, read from their file off the main thread; null without any
+    val subtitles by produceState<SavedSubtitles?>(null, taskId) {
+        value = withContext(Dispatchers.IO) { app.subtitles.load(taskId) }
+    }
+    var showSubtitles by rememberSaveable { mutableStateOf(true) }
+    val hasSubtitles by rememberUpdatedState(subtitles != null)
 
     fun keepWhere() {
         // A file that would not play keeps where it was left before
@@ -163,7 +177,7 @@ fun PlayerScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    // The bar follows the video: read four times a second
+    // The bar follows the video: read four times a second, ten while subtitles show, so a line comes on time
     LaunchedEffect(player) {
         while (true) {
             atMs = player.currentPosition
@@ -172,9 +186,10 @@ fun PlayerScreen(
                 val going = player.isPlaying || (player.playWhenReady && player.playbackState == Player.STATE_BUFFERING)
                 status = if (going) PlayerStatus.PLAYING else PlayerStatus.PAUSED
             }
-            delay(250)
+            delay(if (hasSubtitles) 100 else 250)
         }
     }
+    val currentLine = subtitles?.lineAt(atMs)
 
     Box(modifier = Modifier.fillMaxSize().background(NightGround)) {
         Column(
@@ -189,9 +204,24 @@ fun PlayerScreen(
                 RoundButton(onClick = onNavigateBack, label = "Close player") {
                     Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, tint = NightInk)
                 }
-                if (task.filePath != null || task.exportedUri != null) {
-                    RoundButton(onClick = { share(app, task) }, label = "Share") {
-                        Icon(Icons.Default.Share, contentDescription = null, tint = NightInk, modifier = Modifier.size(20.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (subtitles != null) {
+                        RoundButton(
+                            onClick = { showSubtitles = !showSubtitles },
+                            label = if (showSubtitles) "Hide subtitles" else "Show subtitles",
+                        ) {
+                            Icon(
+                                if (showSubtitles) Icons.Default.ClosedCaption else Icons.Default.ClosedCaptionDisabled,
+                                contentDescription = null,
+                                tint = NightInk,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                    }
+                    if (task.filePath != null || task.exportedUri != null) {
+                        RoundButton(onClick = { share(app, task) }, label = "Share") {
+                            Icon(Icons.Default.Share, contentDescription = null, tint = NightInk, modifier = Modifier.size(20.dp))
+                        }
                     }
                 }
             }
@@ -215,6 +245,10 @@ fun PlayerScreen(
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
+                val saying = currentLine?.let { subtitles?.lines?.getOrNull(it)?.text }
+                if (showSubtitles && saying != null && status != PlayerStatus.FAILED) {
+                    SubtitleOverlay(saying, modifier = Modifier.align(Alignment.BottomCenter))
+                }
                 if (status == PlayerStatus.FAILED) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(16.dp)) {
                         Text("Chaya can't play this file.", color = NightInk, style = TextStyle(fontSize = 15.sp))
@@ -242,7 +276,20 @@ fun PlayerScreen(
                     modifier = Modifier.padding(top = 2.dp),
                 )
             }
-            Spacer(Modifier.weight(1f))
+            val said = subtitles
+            if (said != null) {
+                Transcript(
+                    lines = said.lines,
+                    language = said.language,
+                    current = currentLine,
+                    onSeek = { player.seekTo(it) },
+                    // Clear of the controls floating at the foot
+                    bottomPadding = 170.dp,
+                    modifier = Modifier.weight(1f),
+                )
+            } else {
+                Spacer(Modifier.weight(1f))
+            }
         }
 
         Controls(

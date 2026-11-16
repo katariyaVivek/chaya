@@ -11,8 +11,10 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.chaya.app.ui.navigation.ChayaNavHost
+import com.chaya.app.ui.navigation.Screen
 import com.chaya.app.ui.theme.ChayaTheme
 
 class MainActivity : ComponentActivity() {
@@ -25,16 +27,19 @@ class MainActivity : ComponentActivity() {
         setContent {
             val mode by (application as ChayaApplication).themeSettings.mode.collectAsState()
             val dark = mode.isDark(isSystemInDarkTheme())
+            val navController = rememberNavController()
+            // The player is dark in either theme: its picture is the light
+            val playing = navController.currentBackStackEntryAsState().value?.destination?.route == Screen.Player.route
+            val darkBars = dark || playing
             // The bars' icons follow the app's choice, not the phone's, or they vanish on a light screen.
-            DisposableEffect(dark) {
+            DisposableEffect(darkBars) {
                 enableEdgeToEdge(
-                    statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { dark },
-                    navigationBarStyle = SystemBarStyle.auto(LIGHT_SCRIM, DARK_SCRIM) { dark },
+                    statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT) { darkBars },
+                    navigationBarStyle = SystemBarStyle.auto(LIGHT_SCRIM, DARK_SCRIM) { darkBars },
                 )
                 onDispose {}
             }
             ChayaTheme(darkTheme = dark) {
-                val navController = rememberNavController()
                 ChayaNavHost(navController = navController)
             }
         }

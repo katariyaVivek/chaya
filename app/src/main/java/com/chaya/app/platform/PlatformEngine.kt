@@ -1,6 +1,7 @@
 package com.chaya.app.platform
 
 import android.content.Context
+import com.chaquo.python.Kwarg
 import com.chaquo.python.PyException
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
@@ -68,7 +69,8 @@ class PlatformEngine(context: Context, private val sets: EngineSets? = null) : L
         val cacheDir = cacheDir()
         return try {
             python().getModule("chaya_engine.extract")
-                .callAttr("extract", url, cacheDir.absolutePath, cookieFile?.absolutePath)
+                // The site's subtitles too, saved with the video; and its chapters, which the phone does not use yet
+                .callAttr("extract", url, cacheDir.absolutePath, cookieFile?.absolutePath, Kwarg("subtitles", true))
                 .toString()
                 .also { sets?.runFinished(engineFailed = false) }
         } catch (e: PyException) {

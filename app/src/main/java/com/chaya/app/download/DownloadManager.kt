@@ -25,6 +25,8 @@ import com.chaya.app.model.DetectedMedia
 import com.chaya.app.streaming.Media3StreamExporter
 import com.chaya.app.streaming.StreamDownloader
 import com.chaya.app.streaming.StreamExporter
+import com.chaya.app.subtitles.SubtitleSource
+import com.chaya.app.subtitles.SubtitleStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -84,6 +86,8 @@ class DownloadManager(
     private val archiveRetryDelaysMillis: List<Long> = ARCHIVE_RETRY_DELAYS_MILLIS,
     /** Saves finished streams as MP4 files; null builds the Media3 one when first needed. Replaced in tests. */
     private val streamExporter: StreamExporter? = null,
+    /** Where a site's subtitles are kept with its videos; null in tests that have none to keep. */
+    private val subtitles: SubtitleStore? = null,
 ) {
     /** Parent of all fire-and-forget persistence and transfer work; [drainBackgroundWork] joins it. */
     private val backgroundJob = SupervisorJob()
@@ -167,6 +171,27 @@ class DownloadManager(
         }
     }
 
+    /** A stream the engine found for a link, with the site's [subtitles] for it, kept as the stream saves. */
+    fun startDownload(media: DetectedMedia, subtitles: SubtitleSource?) {
+        ensureServiceRunning()
+        scope.launch {
+            val id = nextId()
+            keepSubtitles(id, subtitles)
+            val (ua, ck) = sessionHeaders(media.url)
+            startStream(id, media, ua, ck, null)
+        }
+    }
+
+    /**
+     * Fetches a site's [source] subtitles for download [id], beside the download and never in its way: they are
+     * fetched now, as their addresses expire, and a failure leaves the video without them.
+     */
+    private fun keepSubtitles(id: Long, source: SubtitleSource?) {
+        val store = subtitles ?: return
+        source ?: return
+        scope.launch { store.save(id, source) }
+    }
+
     @androidx.annotation.OptIn(UnstableApi::class)
     fun startDownload(media: DetectedMedia, streamKeys: List<StreamKey>) {
         ensureServiceRunning()
@@ -220,6 +245,7 @@ class DownloadManager(
 
             append(task)
             dao.insert(DownloadEntity.fromTask(task))
+            keepSubtitles(id, request.subtitles)
             transfer(task)
         }
     }
@@ -359,6 +385,7 @@ class DownloadManager(
     /** Remove a task and delete its files (private copy + public MediaStore copy). */
     fun deleteTask(id: Long) {
         val t = find(id)
+        subtitles?.forget(id)
         savingAsFile.remove(id)?.cancel()
         downloader.cancel(id)
         streamDownloader?.deleteStream(id)

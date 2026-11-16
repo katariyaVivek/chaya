@@ -247,4 +247,27 @@ class PlatformMediaParseTest {
     fun `a video has no items`() {
         assertTrue(PlatformMedia.parse(FULL).items.isEmpty())
     }
+
+    @Test
+    fun `the video's language and the site's subtitles are read`() {
+        val media = PlatformMedia.parse(
+            """{"media": {"title": "Talk", "formats": [], "language": "en", "subtitles": [
+              {"language": "en", "url": "https://www.youtube.com/api/timedtext?lang=en&fmt=vtt", "automatic": false},
+              {"language": "en-orig", "url": "https://www.youtube.com/api/timedtext?lang=en&kind=asr", "automatic": true},
+              {"language": "de"},
+              {"url": "https://subs.example/x.vtt"}
+            ]}}"""
+        )
+
+        assertEquals("en", media.language)
+        assertEquals(listOf("en" to false, "en-orig" to true), media.subtitles.map { it.language to it.automatic })
+        assertEquals("https://www.youtube.com/api/timedtext?lang=en&fmt=vtt", media.subtitles[0].url)
+    }
+
+    @Test
+    fun `a video whose site lists no subtitles has none`() {
+        val media = PlatformMedia.parse(FULL)
+        assertNull(media.language)
+        assertTrue(media.subtitles.isEmpty())
+    }
 }

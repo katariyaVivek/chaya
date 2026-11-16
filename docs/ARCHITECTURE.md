@@ -214,6 +214,12 @@ faster than APKs ship, so the app fetches newer releases itself.
   playback stopped is kept per download (`PlaybackPositions`, `Watched`): the player starts there unless it
   was in the first 5 seconds or the last 10, Home leads with the video left part-way (*Continue · 4:12 of
   12:40*), and deleting a download forgets it.
+- **Subtitles and the transcript** (`subtitles/`, a port of `chaya-core`'s `subtitles` with its tests): the engine
+  lists a link's subtitles (`subtitles=True`), `Subtitles.pick` takes the language spoken as Windows does, and
+  `DownloadManager` fetches them as the download starts, beside it and never in its way (`SubtitleStore`, by
+  download id, as SRT in app-private files; a cookie goes only to the video's own site). The player reads them off
+  the main thread and draws them itself (`SubtitleOverlay`), and lists them as the transcript (`Transcript`), the
+  line being said in ink and kept in view; a line tapped plays from it. Deleting the download deletes them.
 
 ## Storage (`database/`)
 
@@ -442,7 +448,7 @@ a built-in browser. [`../desktop/README.md`](../desktop/README.md) has the layou
   units. Tested in the core (folding, words, marks, order, the cap, the refresh) and with Node (marks into pieces,
   grouping, the heading).
 - **Chapters** (`chaya-core`'s `chapters`, `desktop/app/ui/chapters.js`): the engine lists a video's chapters with its
-  subtitles (`--subtitles`, so the phone never gets them); `chapters::read` puts them in order and inside the video,
+  subtitles (`--subtitles`; the phone asks for the subtitles but does not use the chapters yet); `chapters::read` puts them in order and inside the video,
   `Videos::keep_chapters` keeps them in `videos/ID.json` when a link's video is saved, and the window draws them on the
   seek bar and the timeline, where clip edges snap to them (`snapEdges`). Tested in the core, the engine and with Node.
 - **Copied links** (`chaya-core`'s `copied`, `desktop/app/src-tauri/src/copied.rs`): an opt-in Ctrl+Alt+D, Windows'
