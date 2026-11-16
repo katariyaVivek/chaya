@@ -3,79 +3,66 @@ package com.chaya.app.ui.theme
 import androidx.compose.ui.graphics.Color
 
 // ---------------------------------------------------------------------------
-// Chaya palette — computed from OKLCH (see DESIGN.md).
-// Light "Porcelain": warm-tinted neutrals (hue 80) + violet-indigo accent.
-// Dark "Violet Charcoal": violet-tinted neutrals (hue 285), lifted accent.
-// No pure black/white anywhere.
+// Stage, as Chaya for Windows has it (desktop/design/tokens.css) and the approved phone designs draw it.
+// Saved media is the light; the interface is warm neutrals, and its one strong control is ink (near-black by day,
+// warm white by night), never a colour. Stage's amber, the mark's own light, is a signal only: progress, a page
+// loading, the mark. It is never text on a light ground (1.7:1 there). See DESIGN.md.
 // ---------------------------------------------------------------------------
 
-// Light scheme
-val PorcelainBackground = Color(0xFFF8F6F3)
-val PorcelainSurface = Color(0xFFFEFCF9)
-val PorcelainContainerLowest = Color(0xFFFBF9F7)
-val PorcelainContainerLow = Color(0xFFF5F3F0)
-val PorcelainContainer = Color(0xFFF1EEEA)
-val PorcelainContainerHigh = Color(0xffece9e4)
-val PorcelainContainerHighest = Color(0xFFE7E3DE)
-val PorcelainOnSurface = Color(0xFF242019)
-val PorcelainOnSurfaceVariant = Color(0xFF676158)
-val PorcelainOutline = Color(0xFF857F77)
-val PorcelainOutlineVariant = Color(0xFFDAD6D0)
-val VioletPrimaryLight = Color(0xFF6D57AF)
-val OnVioletPrimaryLight = Color(0xFFFAF9FD)
-val VioletContainerLight = Color(0xFFDFD8FF)
-val OnVioletContainerLight = Color(0xFF392863)
-val SlateSecondaryLight = Color(0xFF6B6E8A)
-val OnSlateSecondaryLight = Color(0xFFF9FAFD)
-val SlateContainerLight = Color(0xFFDADAED)
-val OnSlateContainerLight = Color(0xFF353451)
-val BronzeTertiaryLight = Color(0xFFB6753B)
-val OnBronzeTertiaryLight = Color(0xFFFDF9F7)
-val BronzeContainerLight = Color(0xFFF8DAB9)
-val OnBronzeContainerLight = Color(0xFF5E2F00)
+// Day
+val DayGround = Color(0xFFF6F4F0)
+val DaySurface = Color(0xFFFCFBF8)
+val DayContainerLowest = Color(0xFFFEFDFB)
+val DayContainerLow = Color(0xFFF9F7F4)
+val DayContainer = Color(0xFFF0EEE9)
+val DayContainerHigh = Color(0xFFEAE7E2)
+val DayContainerHighest = Color(0xFFE3E0DA)
+val DayInk = Color(0xFF1A1917)
+val DayMuted = Color(0xFF6B6862)
+val DayOutline = Color(0xFF8C8983)
+val DayOutlineVariant = Color(0xFFDEDAD3)
+val DayInkContainer = Color(0xFFE7E4DE)
+val DayAmberDeep = Color(0xFF8F5B1E)
+val OnDayAmberDeep = Color(0xFFFFF9F0)
+val DayAmberContainer = Color(0xFFF6E3C4)
+val OnDayAmberContainer = Color(0xFF4A2E08)
 val ErrorLight = Color(0xFFCA322E)
 val OnErrorLight = Color(0xFFFFF8F7)
 val ErrorContainerLight = Color(0xFFFFD1CA)
 val OnErrorContainerLight = Color(0xFF720309)
-val InverseSurfaceLight = Color(0xFF37322B)
-val InverseOnSurfaceLight = Color(0xFFF4F1ED)
-val SurfaceDimLight = Color(0xFFE2DFDA)
-val SurfaceBrightLight = Color(0xFFFBFAF7)
-val ScrimLight = Color(0xFF050509)
+val DayInverseSurface = Color(0xFF2A2926)
+val DayInverseOnSurface = Color(0xFFF2F0EC)
+val DaySurfaceDim = Color(0xFFE2DFD9)
+val DayScrim = Color(0xFF08080A)
 
-// Dark scheme
-val CharcoalBackground = Color(0xFF0E0E15)
-val CharcoalSurface = Color(0xFF131319)
-val CharcoalContainerLowest = Color(0xFF09090F)
-val CharcoalContainerLow = Color(0xFF16161D)
-val CharcoalContainer = Color(0xFF1B1B21)
-val CharcoalContainerHigh = Color(0xFF212127)
-val CharcoalContainerHighest = Color(0xFF28282E)
-val CharcoalOnSurface = Color(0xFFE2E2E9)
-val CharcoalOnSurfaceVariant = Color(0xFFA3A4AD)
-val CharcoalOutline = Color(0xFF797983)
-val CharcoalOutlineVariant = Color(0xFF34353B)
-val VioletPrimaryDark = Color(0xFFBDAEF8)
-val OnVioletPrimaryDark = Color(0xFF291A4D)
-val VioletContainerDark = Color(0xFF4B387F)
-val OnVioletContainerDark = Color(0xFFE0DBFC)
-val SlateSecondaryDark = Color(0xFFB3B6CB)
-val OnSlateSecondaryDark = Color(0xFF28293D)
-val SlateContainerDark = Color(0xFF3B3B4D)
-val OnSlateContainerDark = Color(0xFFDCDDEA)
-val GoldTertiaryDark = Color(0xFFE5B379)
-val OnGoldTertiaryDark = Color(0xFF412400)
-val GoldContainerDark = Color(0xFF6F4606)
-val OnGoldContainerDark = Color(0xFFF9E0C5)
+// Night
+val NightGround = Color(0xFF0F0E11)
+val NightSurface = Color(0xFF141316)
+val NightContainerLowest = Color(0xFF0A090C)
+val NightContainerLow = Color(0xFF17161A)
+val NightContainer = Color(0xFF1E1D21)
+val NightContainerHigh = Color(0xFF262529)
+val NightContainerHighest = Color(0xFF2E2D31)
+val NightInk = Color(0xFFF5F3F0)
+val NightMuted = Color(0xFFB5B3B2)
+val NightOutline = Color(0xFF7E7C80)
+val NightOutlineVariant = Color(0xFF343337)
+val NightInkContainer = Color(0xFF2C2B2F)
+val NightAmberContainer = Color(0xFF4A3416)
+val OnNightAmber = Color(0xFF2A1A05)
+val OnNightAmberContainer = Color(0xFFF9E3C2)
 val ErrorDark = Color(0xFFFF958D)
 val OnErrorDark = Color(0xFF590007)
 val ErrorContainerDark = Color(0xFF8D1A1E)
 val OnErrorContainerDark = Color(0xFFFFD8D4)
-val InverseSurfaceDark = Color(0xFFE2E2E9)
-val InverseOnSurfaceDark = Color(0xFF1E1F25)
-val SurfaceDimDark = Color(0xFF0A0A10)
-val SurfaceBrightDark = Color(0xFF1E1F25)
-val ScrimDark = Color(0xFF020203)
+val NightSurfaceBright = Color(0xFF2A292D)
+val NightScrim = Color(0xFF020203)
+
+/** Stage's amber, the mark's light (`--mark-light` on Windows): the same in both themes, a signal only. */
+val StageAmber = Color(0xFFF2B25A)
+
+/** The mark's shadow-twin (`--mark-shadow`), always the darker of the two suns. */
+val StageAmberShadow = Color(0xFFB9792F)
 
 // Extended semantic colors (outside Material 3 scheme)
 val SuccessLight = Color(0xFF338F54)
@@ -85,13 +72,5 @@ val SuccessDark = Color(0xFF7CCD93)
 val SuccessContainerDark = Color(0xFF1A4E2C)
 val OnSuccessContainerDark = Color(0xFFC9E7D0)
 
-/** Player screen is always near-black regardless of theme. */
-val PlayerBackdrop = Color(0xFF08080F)
-
-// Legacy aliases kept for existing references
-val Blue80 = VioletPrimaryDark
-val Blue40 = VioletPrimaryLight
-val BlueGrey80 = SlateSecondaryDark
-val BlueGrey40 = SlateSecondaryLight
-val Teal80 = GoldTertiaryDark
-val Teal40 = BronzeTertiaryLight
+/** Behind a playing video, whichever theme: the picture's own frame. */
+val PlayerBackdrop = Color(0xFF050506)

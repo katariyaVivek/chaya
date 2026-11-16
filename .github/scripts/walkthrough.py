@@ -20,6 +20,7 @@ state is printed to the job log, so results can be read without screenshots.
 """
 import os
 import re
+import signal
 import shlex
 import subprocess
 import sys
@@ -447,9 +448,8 @@ def make_fixture():
         subprocess.run(cmd, check=True, timeout=300)
 
     video(media / "launch-event.mp4", "testsrc", 90, "640x360")
-    # The ad and the looping background play by themselves, in every tab that shows the page, and the
-    # emulator decodes them on the host: kept tiny so they cannot starve it (it died mid-run on #37, #39 and
-    # #40). The main video waits for a tap for the same reason; its size and length come from its metadata.
+    # The ad and the looping background play by themselves, as on a real page; kept tiny, as the emulator decodes
+    # in software. The main video waits for a tap; its size and length come from its metadata.
     video(media / "vast" / "preroll-15s.mp4", "testsrc2", 15, "160x90", rate=2)
     video(media / "hero-loop.mp4", "smptebars", 8, "160x90", audio=False, rate=2)
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=size=640x360:rate=1",
@@ -457,13 +457,34 @@ def make_fixture():
     (FIXTURE / "index.html").write_text(PAGE.replace("{BASE}", HOST_URL), encoding="utf-8")
 
 
+def stop_fixture_server(proc):
+    """Stops the server and what it started: npx runs http-server as a child, which outlives npx alone and keeps the
+    port, so a second walk-through (after the emulator went away) found it taken and its own server could not start."""
+    try:
+        os.killpg(proc.pid, signal.SIGTERM)
+    except (ProcessLookupError, PermissionError):
+        pass
+    try:
+        proc.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            pass
+
+
 def start_fixture_server():
+    # Anything still on the port (a server from an earlier walk-through on this runner) would answer from a folder
+    # since rebuilt; it goes first.
+    run(["fuser", "-k", f"{PORT}/tcp"])
+    time.sleep(1)
     servers = (
         ["npx", "--yes", "http-server", str(FIXTURE), "-p", str(PORT), "-c-1", "--silent"],  # supports Range
         [sys.executable, "-m", "http.server", str(PORT), "--directory", str(FIXTURE)],
     )
     for cmd in servers:
-        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        # Its own process group, so stopping it stops what it started too
+        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
         for _ in range(40):
             time.sleep(1)
             if proc.poll() is not None:
@@ -471,7 +492,7 @@ def start_fixture_server():
             if run(["curl", "-sfI", f"http://127.0.0.1:{PORT}/index.html"]).returncode == 0:
                 log(f"fixture server up ({cmd[0]} {cmd[1]})")
                 return proc
-        proc.terminate()
+        stop_fixture_server(proc)
     raise RuntimeError("could not start the fixture server")
 
 
@@ -628,7 +649,7 @@ def main():
         (EVIDENCE / EMULATOR_GONE).write_text(f"{name}: {why}\n", encoding="utf-8")
 
     if server:
-        server.terminate()
+        stop_fixture_server(server)
 
     lines = ["# Emulator walkthrough", "", "| Step | Result | Detail |", "|---|---|---|"]
     for step, ok, detail in results:

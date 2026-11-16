@@ -115,6 +115,7 @@ import com.chaya.app.ui.components.PlatformSheet
 import com.chaya.app.ui.components.ProfileSheet
 import com.chaya.app.ui.components.QualitySelectorSheet
 import com.chaya.app.ui.components.TabGrid
+import com.chaya.app.ui.theme.LocalChayaColors
 import com.chaya.app.ui.theme.ChayaMotion
 import com.chaya.app.ui.theme.pressScale
 import java.net.URLEncoder
@@ -826,7 +827,7 @@ fun BrowserScreen(
                             LinearProgressIndicator(
                                 progress = { uiState.progress / 100f },
                                 modifier = Modifier.fillMaxWidth().height(2.dp),
-                                color = MaterialTheme.colorScheme.primary,
+                                color = LocalChayaColors.current.signal,
                                 trackColor = Color.Transparent
                             )
                         }
