@@ -192,12 +192,12 @@ class DownloadsLibraryTest {
     }
 
     @Test
-    fun `a video opens in another app as before`() {
+    fun `a video plays in Chaya's player`() {
         show()
 
         composeRule.onNodeWithContentDescription("Me at the zoo").performClick()
 
-        assertEquals(listOf("open 1"), events)
+        assertEquals(listOf("play 1"), events)
     }
 
     @Test

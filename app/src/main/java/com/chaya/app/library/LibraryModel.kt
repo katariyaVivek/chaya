@@ -51,6 +51,13 @@ fun kindOf(task: DownloadTask): FileKind? = when {
     else -> kindOf(task.mimeType, task.fileName)
 }
 
+/**
+ * Whether a saved thing plays in Chaya's own player: a video, file or stream, and anything only Media3's cache holds
+ * (no other app can read that). Pictures, sound files and ZIPs open as before.
+ */
+fun playsInChaya(task: DownloadTask): Boolean =
+    kindOf(task) == FileKind.VIDEO || (task.filePath == null && task.exportedUri == null)
+
 /** pinterest.com and its country sites: pinterest.co.uk, de.pinterest.com... */
 private val PINTEREST_HOST = Regex("""(?:[a-z0-9-]+\.)*pinterest\.(?:com|[a-z]{2}|co\.[a-z]{2}|com\.[a-z]{2})""")
 

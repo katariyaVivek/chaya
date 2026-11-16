@@ -68,6 +68,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
+import com.chaya.app.ChayaApplication
 import com.chaya.app.SharedLinks
 import com.chaya.app.download.DownloadTask
 import com.chaya.app.downloads.DownloadsViewModel
@@ -79,9 +80,12 @@ import com.chaya.app.library.LibraryItem
 import com.chaya.app.library.NamedIcon
 import com.chaya.app.library.iconFor
 import com.chaya.app.library.kindOf
+import com.chaya.app.library.playsInChaya
 import com.chaya.app.library.rememberCover
 import com.chaya.app.library.tileLabel
 import com.chaya.app.library.tintFor
+import com.chaya.app.ui.player.Watched
+import com.chaya.app.ui.player.clockOf
 import com.chaya.app.ui.theme.LocalChayaColors
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -95,11 +99,13 @@ import kotlin.math.roundToInt
 @Composable
 fun HomeScreen(
     onPlace: (Place) -> Unit,
-    onPlayStream: (Long) -> Unit,
+    onPlay: (Long) -> Unit,
     viewModel: DownloadsViewModel = viewModel(),
 ) {
     val tasks by viewModel.downloads.collectAsState()
-    val shelf = remember(tasks) { HomeShelf.of(tasks) }
+    val app = LocalContext.current.applicationContext as ChayaApplication
+    val watched by app.playbackPositions.watched.collectAsState()
+    val shelf = remember(tasks, watched) { HomeShelf.of(tasks, watched = watched) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var typing by remember { mutableStateOf(false) }
@@ -108,9 +114,9 @@ fun HomeScreen(
         scope.launch { snackbarHostState.showSnackbar(text) }
     }
 
-    /** As the Library opens a saved thing: a file in the app that plays it, a stream in Chaya's player. */
+    /** As the Library opens a saved thing: a video in Chaya's player, anything else in the app that opens it. */
     fun open(task: DownloadTask) {
-        if (task.filePath != null || task.exportedUri != null) viewModel.open(task) { message(it) } else onPlayStream(task.id)
+        if (playsInChaya(task)) onPlay(task.id) else viewModel.open(task) { message(it) }
     }
 
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
@@ -119,6 +125,7 @@ fun HomeScreen(
             if (hero != null) {
                 Hero(
                     task = hero,
+                    watched = shelf.heroWatched,
                     files = viewModel.files,
                     progress = shelf.progress,
                     onProgress = { onPlace(Place.LIBRARY) },
@@ -164,10 +171,11 @@ fun HomeScreen(
     }
 }
 
-/** The newest saved video: its picture across the top, fading into the page, its name, Play and Share. */
+/** The video left part-way, else the newest saved one: its picture across the top, fading into the page, its name, Play and Share. */
 @Composable
 private fun Hero(
     task: DownloadTask,
+    watched: Watched?,
     files: LibraryFiles,
     progress: HomeShelf.Progress?,
     onProgress: () -> Unit,
@@ -207,7 +215,10 @@ private fun Hero(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text(
-                text = "NEWEST IN YOUR LIBRARY",
+                text = watched?.let { w ->
+                    "CONTINUE · ${clockOf(w.resumeAtMs)}" + if (w.lengthMs > 0) " OF ${clockOf(w.lengthMs)}" else ""
+                }
+                    ?: "NEWEST IN YOUR LIBRARY",
                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 0.8.sp),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

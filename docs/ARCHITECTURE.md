@@ -208,6 +208,12 @@ faster than APKs ship, so the app fetches newer releases itself.
   reason on its card and *Save as MP4* in its menu; streams downloaded before this have the same.
   The saving phase is kept in memory, like an archive's counts: an app killed mid-export brings the
   task back paused, and resuming finds every piece cached and saves it again.
+- **Saved videos play in Chaya** (`ui/player/PlayerScreen.kt`, Stage's phone player): a file from the
+  file (read for what it is, since a stream saved as MP4 keeps the stream's type), a stream still only in
+  the cache through the cache, as above. Pictures, sound and ZIPs open as before (`playsInChaya`). Where
+  playback stopped is kept per download (`PlaybackPositions`, `Watched`): the player starts there unless it
+  was in the first 5 seconds or the last 10, Home leads with the video left part-way (*Continue · 4:12 of
+  12:40*), and deleting a download forgets it.
 
 ## Storage (`database/`)
 

@@ -46,6 +46,9 @@ Store account, no third-party SDKs.
   *Save history* switch on the History screen stops pages being kept at all. × beside a bookmark,
   or the star beside the address, removes it.
 - Ad blocker settings (whether it is on, and the sites you let show ads): **on your phone only**.
+- Where you stopped each saved video in Chaya's player (the time, the video's length and when you stopped), so
+  it starts there again and Home offers *Continue*: **on your phone only**, in the app's preferences. It is
+  deleted with its download.
 - Open tabs (their addresses, titles, back and forward history, a small picture of each page and
   the site's icon), so they come back after Android closes the app: **on your phone only**, in
   app-private files. Closing a tab deletes its files; *Close all tabs* in the tab grid's ⋮ menu

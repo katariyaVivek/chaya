@@ -539,9 +539,20 @@ def scenario_local():
     sh(f"am force-stop {PKG}")
     adb("shell", "am", "start", "-W", "-n", f"{PKG}/.MainActivity", timeout=180)
     _, play = wait_for("local: Home leads with the video just saved", 60, text="Play")
-    if play is not None:
-        time.sleep(2)
-        snapshot("home-saved")
+    if play is None:
+        return
+    time.sleep(2)
+    snapshot("home-saved")
+    # Play plays it in Chaya's player; left part-way, Home offers to continue it
+    tap_node(play)
+    if wait_for("local: the video plays in Chaya's player", 30, desc_contains="Close player")[1] is None:
+        return
+    wait_for("local: the player is playing", 30, desc_contains="Pause")
+    time.sleep(8)
+    snapshot("player")
+    tap_when("local: close the player", 20, desc_contains="Close player")
+    wait_for("local: Home offers to continue the video", 30, text_contains="CONTINUE")
+    snapshot("home-continue")
 
 
 def scenario_tabs():

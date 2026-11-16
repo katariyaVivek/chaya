@@ -62,6 +62,9 @@ class ChayaApplication : Application() {
     /** Light, dark, or the same as the phone. */
     val themeSettings: ThemeSettings by lazy { ThemeSettings.from(this) }
 
+    /** Where each saved video was left, for the player to resume and Home to carry on with. */
+    val playbackPositions: com.chaya.app.ui.player.PlaybackPositions by lazy { com.chaya.app.ui.player.PlaybackPositions.from(this) }
+
     /** Which finished downloads still need their "complete" notification; one for the whole process. */
     val completionNotices = CompletionNotices(appStartedAt = System.currentTimeMillis())
 

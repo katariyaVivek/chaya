@@ -81,7 +81,7 @@ fun ChayaNavHost(navController: NavHostController) {
         composable(Screen.Home.route) {
             HomeScreen(
                 onPlace = ::go,
-                onPlayStream = { taskId -> navController.navigate(Screen.playerRoute(taskId)) },
+                onPlay = { taskId -> navController.navigate(Screen.playerRoute(taskId)) },
             )
         }
         composable(Screen.Browser.route) {
@@ -97,7 +97,7 @@ fun ChayaNavHost(navController: NavHostController) {
             val themeMode by themeSettings.mode.collectAsState()
             DownloadsScreen(
                 onNavigateBack = { navController.popBackStack() },
-                onPlayStream = { taskId ->
+                onPlay = { taskId ->
                     navController.navigate(Screen.playerRoute(taskId))
                 },
                 onNavigateToDiagnostics = {
