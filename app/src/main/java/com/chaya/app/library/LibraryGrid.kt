@@ -47,6 +47,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -161,7 +162,8 @@ private fun Card(item: LibraryItem, selected: Boolean, files: LibraryFiles?, mod
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Picture(item, selected, files)
-        Column(modifier = Modifier.padding(horizontal = 2.dp)) {
+        // What the caption says is the card's name, already its description: read once, not again as text
+        Column(modifier = Modifier.padding(horizontal = 2.dp).clearAndSetSemantics {}) {
             Text(
                 text = item.title,
                 style = MaterialTheme.typography.titleSmall,
