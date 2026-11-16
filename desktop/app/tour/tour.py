@@ -1154,9 +1154,9 @@ def run(tour, sites, seeded=None):
         except Exception as e:
             tour.failed('page-fullscreen', e)
 
-    # The Downloads list in the page's place, and Back from it to the page.
+    # The Library in the page's place, in a tab of its own, and Back from it to the page.
     try:
-        tour.click('#page-downloads')
+        tour.click('#place-library')
         time.sleep(1)
         tour.shot('downloads-over-page')
         tour.click('#page-back')

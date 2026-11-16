@@ -19,6 +19,7 @@ pub mod lookup;
 pub mod media;
 pub mod own;
 pub mod placement;
+pub mod program;
 pub mod search;
 pub mod serve;
 pub mod session;

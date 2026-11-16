@@ -131,3 +131,33 @@ export function clipSpan(clip) {
   const s = (ms) => clockOf(Math.round(ms / 1000));
   return `${s(clip.end - clip.start)} clip · ${s(clip.start)} to ${s(clip.end)}`;
 }
+
+/**
+ * Where a page gliding from `from` to `to` stands `k` of the way there (0 to 1, already eased), in whole pixels. The
+ * page is drawn over the window, so it can't be animated as the window's own content is: it is placed again at each
+ * step, and steps aside for a panel or follows the sidebar's edge as they move, instead of jumping to its new place.
+ */
+export function glideAt(from, to, k) {
+  const at = Math.min(1, Math.max(0, k));
+  const step = (a, b) => Math.round(a + (b - a) * at);
+  return { x: step(from.x, to.x), y: step(from.y, to.y), width: step(from.width, to.width), height: step(from.height, to.height) };
+}
+
+/** Whether two places for the page are the same, to the pixel. */
+export function samePlace(a, b) {
+  return !!a && !!b && ['x', 'y', 'width', 'height'].every((k) => Math.round(a[k]) === Math.round(b[k]));
+}
+
+/**
+ * The Library's tab in the title bar, as a browser's downloads page is a tab of its own: `closed`; `open`, in the
+ * strip while a page or Home is shown; or `shown`. `show` opens it or comes back to it; `leave` goes to another place
+ * and leaves it in the strip; `close` closes it.
+ * @param {'closed' | 'open' | 'shown'} now
+ * @param {'show' | 'leave' | 'close'} event
+ */
+export function libraryTabAfter(now, event) {
+  if (event === 'show') return 'shown';
+  if (event === 'close') return 'closed';
+  if (event === 'leave') return now === 'shown' ? 'open' : now;
+  return now;
+}

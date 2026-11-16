@@ -6,11 +6,11 @@
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
-use tokio::process::Command;
 use tokio::sync::watch;
 
 use super::error::DownloadError;
 use super::http::Outcome;
+use crate::program::program;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Joiner {
@@ -63,7 +63,7 @@ impl Joiner {
         stop: &watch::Receiver<bool>,
         failed: DownloadError,
     ) -> Result<Outcome, DownloadError> {
-        let mut command = Command::new(&self.ffmpeg);
+        let mut command = program(&self.ffmpeg);
         command.args(["-hide_banner", "-loglevel", "error", "-nostdin", "-y"]);
         for input in inputs {
             command.arg("-i").arg(input);
@@ -84,8 +84,6 @@ impl Joiner {
             .stdout(Stdio::null())
             .stderr(Stdio::piped())
             .kill_on_drop(true);
-        #[cfg(windows)]
-        command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
 
         let child = command.spawn().map_err(|_| failed)?;
         let mut stop = stop.clone();
@@ -130,7 +128,8 @@ mod tests {
     /// tests say they were skipped.
     fn joiner() -> Option<Joiner> {
         let ffmpeg = std::env::var_os("CHAYA_FFMPEG").map(PathBuf::from).unwrap_or_else(|| "ffmpeg".into());
-        let works = std::process::Command::new(&ffmpeg).arg("-version").output().is_ok_and(|o| o.status.success());
+        let works =
+            crate::program::program_blocking(&ffmpeg).arg("-version").output().is_ok_and(|o| o.status.success());
         if !works {
             eprintln!("No ffmpeg here; skipping the joining test.");
         }
