@@ -1,6 +1,22 @@
 package com.chaya.app.ui.player
 
 import android.net.Uri
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import android.content.pm.ActivityInfo
+import android.content.res.Configuration
+import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.FullscreenExit
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import android.view.LayoutInflater
 import android.widget.FrameLayout
 import androidx.compose.foundation.background
@@ -190,171 +206,302 @@ fun PlayerScreen(
         }
     }
     val currentLine = subtitles?.lineAt(atMs)
+    val saying = currentLine?.let { subtitles?.lines?.getOrNull(it)?.text }?.takeIf { showSubtitles && status != PlayerStatus.FAILED }
 
-    Box(modifier = Modifier.fillMaxSize().background(NightGround)) {
-        Column(
-            modifier = Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                RoundButton(onClick = onNavigateBack, label = "Close player") {
-                    Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, tint = NightInk)
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (subtitles != null) {
-                        RoundButton(
-                            onClick = { showSubtitles = !showSubtitles },
-                            label = if (showSubtitles) "Hide subtitles" else "Show subtitles",
-                        ) {
-                            Icon(
-                                if (showSubtitles) Icons.Default.ClosedCaption else Icons.Default.ClosedCaptionDisabled,
-                                contentDescription = null,
-                                tint = NightInk,
-                                modifier = Modifier.size(20.dp),
-                            )
-                        }
-                    }
-                    if (task.filePath != null || task.exportedUri != null) {
-                        RoundButton(onClick = { share(app, task) }, label = "Share") {
-                            Icon(Icons.Default.Share, contentDescription = null, tint = NightInk, modifier = Modifier.size(20.dp))
-                        }
-                    }
-                }
-            }
+    // Upright or across, from the screen's shape; the full-screen button turns the phone, and leaving the player lets
+    // it turn as it likes again
+    val layout = PlayerLayout.of(LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE)
+    val activity = remember(context) { context.findActivity() }
+    DisposableEffect(activity) {
+        onDispose { activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED }
+    }
+    // Across, the picture has the whole screen: the status and navigation bars come back with a swipe
+    DisposableEffect(activity, layout) {
+        val window = activity?.window
+        val bars = window?.let { WindowInsetsControllerCompat(it, it.decorView) }
+        if (layout == PlayerLayout.ACROSS) {
+            bars?.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            bars?.hide(WindowInsetsCompat.Type.systemBars())
+        }
+        onDispose { bars?.show(WindowInsetsCompat.Type.systemBars()) }
+    }
 
-            // The picture, the light of the screen
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(16f / 9f)
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(PlayerBackdrop),
-                contentAlignment = Alignment.Center,
-            ) {
-                AndroidView(
-                    // A TextureView inside (the layout says so), so the picture keeps the frame's rounded corners
-                    // and fades with the screen, which a SurfaceView does not
-                    factory = { ctx ->
-                        (LayoutInflater.from(ctx).inflate(R.layout.stage_player_view, FrameLayout(ctx), false) as PlayerView).apply {
-                            this.player = player
-                        }
-                    },
-                    modifier = Modifier.fillMaxSize(),
-                )
-                val saying = currentLine?.let { subtitles?.lines?.getOrNull(it)?.text }
-                if (showSubtitles && saying != null && status != PlayerStatus.FAILED) {
-                    SubtitleOverlay(saying, modifier = Modifier.align(Alignment.BottomCenter))
-                }
-                if (status == PlayerStatus.FAILED) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(16.dp)) {
-                        Text("Chaya can't play this file.", color = NightInk, style = TextStyle(fontSize = 15.sp))
-                        TextButton(onClick = { openElsewhere(app, task) }) {
-                            Text("Open in another app", color = NightInk, style = TextStyle(fontWeight = FontWeight.SemiBold))
-                        }
-                    }
-                }
-            }
+    // Across, the controls step aside while the video plays untouched, and a tap on the picture brings them back
+    var controlsShown by remember { mutableStateOf(true) }
+    var touched by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(layout, controlsShown, status, touched) {
+        if (layout.controlsStepAside && controlsShown && status == PlayerStatus.PLAYING) {
+            delay(PlayerLayout.CONTROLS_STAY_MS)
+            controlsShown = false
+        }
+    }
+    LaunchedEffect(layout) { controlsShown = true }
 
-            Column(modifier = Modifier.padding(horizontal = 4.dp)) {
-                Text(
-                    text = displayTitle(task),
-                    color = NightInk,
-                    style = TextStyle(fontSize = 22.sp, lineHeight = 26.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.5).sp),
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = factsOf(task),
-                    color = NightMuted,
-                    style = TextStyle(fontSize = 14.sp),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 2.dp),
-                )
-            }
-            val said = subtitles
-            if (said != null) {
-                Transcript(
-                    lines = said.lines,
-                    language = said.language,
-                    current = currentLine,
-                    onSeek = { player.seekTo(it) },
-                    // Clear of the controls floating at the foot
-                    bottomPadding = 170.dp,
-                    modifier = Modifier.weight(1f),
-                )
+    val toggleSubtitles: () -> Unit = {
+        if (subtitles != null) {
+            showSubtitles = !showSubtitles
+        } else {
+            Toast.makeText(context, "No subtitles were saved with this video", Toast.LENGTH_SHORT).show()
+        }
+    }
+    val turn: () -> Unit = { activity?.requestedOrientation = layout.turnTo }
+    val controls = ControlActions(
+        onSeeking = { seeking = it; touched = System.currentTimeMillis() },
+        onSeekDone = {
+            seeking?.let { player.seekTo((it * lengthMs).toLong()) }
+            seeking = null
+        },
+        onBack = {
+            player.seekTo((player.currentPosition - SKIP_MS).coerceAtLeast(0))
+            touched = System.currentTimeMillis()
+        },
+        onForward = {
+            player.seekTo((player.currentPosition + SKIP_MS).coerceAtMost(lengthMs.takeIf { it > 0 } ?: Long.MAX_VALUE))
+            touched = System.currentTimeMillis()
+        },
+        onPlayPause = {
+            if (player.isPlaying) {
+                player.pause()
+                keepWhere()
             } else {
-                Spacer(Modifier.weight(1f))
+                if (player.playbackState == Player.STATE_ENDED) player.seekTo(0)
+                player.play()
+            }
+            touched = System.currentTimeMillis()
+        },
+        onSubtitles = toggleSubtitles,
+        onTurn = turn,
+    )
+    val shownAt = seeking?.let { (it * lengthMs).toLong() } ?: atMs
+    val playing = status == PlayerStatus.PLAYING
+
+    @Composable
+    fun Picture(modifier: Modifier, subtitlesLift: androidx.compose.ui.unit.Dp) {
+        Box(modifier = modifier.background(PlayerBackdrop), contentAlignment = Alignment.Center) {
+            AndroidView(
+                // A TextureView inside (the layout says so), so the picture keeps the frame's rounded corners
+                // and fades with the screen, which a SurfaceView does not
+                factory = { ctx ->
+                    (LayoutInflater.from(ctx).inflate(R.layout.stage_player_view, FrameLayout(ctx), false) as PlayerView).apply {
+                        this.player = player
+                    }
+                },
+                // Turned, the picture is drawn by a new view: the old one lets the player go
+                onRelease = { view -> view.player = null },
+                modifier = Modifier.fillMaxSize(),
+            )
+            if (saying != null) {
+                SubtitleOverlay(saying, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = subtitlesLift))
+            }
+            if (status == PlayerStatus.FAILED) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(16.dp)) {
+                    Text("Chaya can't play this file.", color = NightInk, style = TextStyle(fontSize = 15.sp))
+                    TextButton(onClick = { openElsewhere(app, task) }) {
+                        Text("Open in another app", color = NightInk, style = TextStyle(fontWeight = FontWeight.SemiBold))
+                    }
+                }
+            }
+        }
+    }
+
+    when (layout) {
+        PlayerLayout.ACROSS -> Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+            Picture(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clickable(interactionSource = null, indication = null) {
+                        controlsShown = !controlsShown
+                        touched = System.currentTimeMillis()
+                    },
+                // Above the slim bar while it shows
+                subtitlesLift = if (controlsShown) 72.dp else 8.dp,
+            )
+            AnimatedVisibility(
+                visible = controlsShown,
+                enter = fadeIn(),
+                exit = fadeOut(),
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.6f), Color.Transparent)))
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RoundButton(onClick = onNavigateBack, label = "Close player") {
+                            Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, tint = NightInk)
+                        }
+                        Text(
+                            text = displayTitle(task),
+                            color = NightInk,
+                            style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (task.filePath != null || task.exportedUri != null) {
+                            RoundButton(onClick = { share(app, task) }, label = "Share") {
+                                Icon(Icons.Default.Share, contentDescription = null, tint = NightInk, modifier = Modifier.size(20.dp))
+                            }
+                        }
+                    }
+                    SlimControls(
+                        atMs = shownAt,
+                        lengthMs = lengthMs,
+                        playing = playing,
+                        subtitles = if (subtitles == null) null else showSubtitles,
+                        actions = controls,
+                        modifier = Modifier.align(Alignment.BottomCenter),
+                    )
+                }
             }
         }
 
-        Controls(
-            atMs = seeking?.let { (it * lengthMs).toLong() } ?: atMs,
-            lengthMs = lengthMs,
-            playing = status == PlayerStatus.PLAYING,
-            onSeeking = { seeking = it },
-            onSeekDone = {
-                seeking?.let { player.seekTo((it * lengthMs).toLong()) }
-                seeking = null
-            },
-            onBack = { player.seekTo((player.currentPosition - SKIP_MS).coerceAtLeast(0)) },
-            onForward = { player.seekTo((player.currentPosition + SKIP_MS).coerceAtMost(lengthMs.takeIf { it > 0 } ?: Long.MAX_VALUE)) },
-            onPlayPause = {
-                if (player.isPlaying) {
-                    player.pause()
-                    keepWhere()
-                } else {
-                    if (player.playbackState == Player.STATE_ENDED) player.seekTo(0)
-                    player.play()
+        PlayerLayout.UPRIGHT -> Box(modifier = Modifier.fillMaxSize().background(NightGround)) {
+            Column(
+                modifier = Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    RoundButton(onClick = onNavigateBack, label = "Close player") {
+                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, tint = NightInk)
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SubtitlesButton(subtitles = if (subtitles == null) null else showSubtitles, onClick = toggleSubtitles)
+                        if (task.filePath != null || task.exportedUri != null) {
+                            RoundButton(onClick = { share(app, task) }, label = "Share") {
+                                Icon(Icons.Default.Share, contentDescription = null, tint = NightInk, modifier = Modifier.size(20.dp))
+                            }
+                        }
+                        RoundButton(onClick = turn, label = "Full screen") {
+                            Icon(Icons.Default.Fullscreen, contentDescription = null, tint = NightInk, modifier = Modifier.size(22.dp))
+                        }
+                    }
                 }
-            },
-            modifier = Modifier.align(Alignment.BottomCenter),
-        )
+
+                // The picture, the light of the screen
+                Picture(
+                    modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(18.dp)),
+                    subtitlesLift = 0.dp,
+                )
+
+                Column(modifier = Modifier.padding(horizontal = 4.dp)) {
+                    Text(
+                        text = displayTitle(task),
+                        color = NightInk,
+                        style = TextStyle(fontSize = 22.sp, lineHeight = 26.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.5).sp),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = factsOf(task),
+                        color = NightMuted,
+                        style = TextStyle(fontSize = 14.sp),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+                val said = subtitles
+                if (said != null) {
+                    Transcript(
+                        lines = said.lines,
+                        language = said.language,
+                        current = currentLine,
+                        onSeek = { player.seekTo(it) },
+                        // Clear of the controls floating at the foot
+                        bottomPadding = 150.dp,
+                        modifier = Modifier.weight(1f),
+                    )
+                } else {
+                    Spacer(Modifier.weight(1f))
+                }
+            }
+
+            Controls(
+                atMs = shownAt,
+                lengthMs = lengthMs,
+                playing = playing,
+                actions = controls,
+                modifier = Modifier.align(Alignment.BottomCenter),
+            )
+        }
     }
 }
 
 /** What the player is doing: one value, so it cannot be playing and failed at once. */
 private enum class PlayerStatus { PLAYING, PAUSED, FAILED }
 
-/** The bar at the foot: the seek bar, then the time, −10, play in ink, +10 and the length. */
+/** What the controls do, the same in either layout. */
+private class ControlActions(
+    val onSeeking: (Float) -> Unit,
+    val onSeekDone: () -> Unit,
+    val onBack: () -> Unit,
+    val onForward: () -> Unit,
+    val onPlayPause: () -> Unit,
+    val onSubtitles: () -> Unit,
+    val onTurn: () -> Unit,
+)
+
 @Composable
-private fun Controls(
-    atMs: Long,
-    lengthMs: Long,
-    playing: Boolean,
-    onSeeking: (Float) -> Unit,
-    onSeekDone: () -> Unit,
-    onBack: () -> Unit,
-    onForward: () -> Unit,
-    onPlayPause: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
+private fun SeekBar(atMs: Long, lengthMs: Long, actions: ControlActions, modifier: Modifier = Modifier) {
+    Slider(
+        value = if (lengthMs > 0) (atMs.toFloat() / lengthMs).coerceIn(0f, 1f) else 0f,
+        onValueChange = actions.onSeeking,
+        onValueChangeFinished = actions.onSeekDone,
+        enabled = lengthMs > 0,
+        colors = SliderDefaults.colors(
+            thumbColor = NightInk,
+            activeTrackColor = NightInk,
+            inactiveTrackColor = Color.White.copy(alpha = 0.22f),
+            disabledThumbColor = NightMuted,
+            disabledInactiveTrackColor = Color.White.copy(alpha = 0.12f),
+        ),
+        modifier = modifier.height(28.dp).semantics { contentDescription = "Seek" },
+    )
+}
+
+@Composable
+private fun PlayButton(playing: Boolean, size: androidx.compose.ui.unit.Dp, onClick: () -> Unit) {
     Surface(
-        shape = RoundedCornerShape(30.dp),
+        onClick = onClick,
+        shape = CircleShape,
+        color = NightInk,
+        contentColor = NightGround,
+        modifier = Modifier.size(size).semantics { contentDescription = if (playing) "Pause" else "Play" },
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = null)
+        }
+    }
+}
+
+@Composable
+private fun SkipButton(text: String, label: String, onClick: () -> Unit) {
+    TextButton(onClick = onClick, modifier = Modifier.semantics { contentDescription = label }) {
+        Text(text, color = NightInk, style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold))
+    }
+}
+
+/** The bar at the foot, upright: the seek bar, then the time, −10, play in ink, +10 and the length. */
+@Composable
+private fun Controls(atMs: Long, lengthMs: Long, playing: Boolean, actions: ControlActions, modifier: Modifier = Modifier) {
+    Surface(
+        shape = RoundedCornerShape(26.dp),
         color = NightContainer,
         border = androidx.compose.foundation.BorderStroke(1.dp, NightOutlineVariant),
         shadowElevation = 12.dp,
-        modifier = modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 16.dp),
+        modifier = modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
-        Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 12.dp)) {
-            Slider(
-                value = if (lengthMs > 0) (atMs.toFloat() / lengthMs).coerceIn(0f, 1f) else 0f,
-                onValueChange = onSeeking,
-                onValueChangeFinished = onSeekDone,
-                enabled = lengthMs > 0,
-                colors = SliderDefaults.colors(
-                    thumbColor = NightInk,
-                    activeTrackColor = NightInk,
-                    inactiveTrackColor = Color.White.copy(alpha = 0.22f),
-                    disabledThumbColor = NightMuted,
-                    disabledInactiveTrackColor = Color.White.copy(alpha = 0.12f),
-                ),
-                modifier = Modifier.fillMaxWidth().height(28.dp).semantics { contentDescription = "Seek" },
-            )
+        Column(modifier = Modifier.padding(start = 14.dp, end = 14.dp, top = 4.dp, bottom = 8.dp)) {
+            SeekBar(atMs, lengthMs, actions, Modifier.fillMaxWidth())
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -366,23 +513,9 @@ private fun Controls(
                     style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold),
                     modifier = Modifier.width(56.dp),
                 )
-                TextButton(onClick = onBack, modifier = Modifier.semantics { contentDescription = "Back 10 seconds" }) {
-                    Text("−10", color = NightInk, style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold))
-                }
-                Surface(
-                    onClick = onPlayPause,
-                    shape = CircleShape,
-                    color = NightInk,
-                    contentColor = NightGround,
-                    modifier = Modifier.size(56.dp).semantics { contentDescription = if (playing) "Pause" else "Play" },
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = null)
-                    }
-                }
-                TextButton(onClick = onForward, modifier = Modifier.semantics { contentDescription = "Forward 10 seconds" }) {
-                    Text("+10", color = NightInk, style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold))
-                }
+                SkipButton("−10", "Back 10 seconds", actions.onBack)
+                PlayButton(playing, 48.dp, actions.onPlayPause)
+                SkipButton("+10", "Forward 10 seconds", actions.onForward)
                 Text(
                     if (lengthMs > 0) clockOf(lengthMs) else "",
                     color = NightMuted,
@@ -392,6 +525,62 @@ private fun Controls(
                 )
             }
         }
+    }
+}
+
+/**
+ * The bar across the foot of a full-screen picture: one row, so it covers a strip of the picture rather than half of
+ * it. Play, −10, +10, the time, the seek bar, the length, subtitles and back to upright.
+ */
+@Composable
+private fun SlimControls(
+    atMs: Long,
+    lengthMs: Long,
+    playing: Boolean,
+    /** Whether subtitles show; null when the video has none. */
+    subtitles: Boolean?,
+    actions: ControlActions,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.65f))))
+            .navigationBarsPadding()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        PlayButton(playing, 40.dp, actions.onPlayPause)
+        SkipButton("−10", "Back 10 seconds", actions.onBack)
+        SkipButton("+10", "Forward 10 seconds", actions.onForward)
+        Text(clockOf(atMs), color = NightInk, style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold))
+        SeekBar(atMs, lengthMs, actions, Modifier.weight(1f).padding(horizontal = 8.dp))
+        Text(if (lengthMs > 0) clockOf(lengthMs) else "", color = NightMuted, style = TextStyle(fontSize = 13.sp))
+        SubtitlesButton(subtitles = subtitles, onClick = actions.onSubtitles)
+        RoundButton(onClick = actions.onTurn, label = "Exit full screen") {
+            Icon(Icons.Default.FullscreenExit, contentDescription = null, tint = NightInk, modifier = Modifier.size(22.dp))
+        }
+    }
+}
+
+/** Subtitles on or off; dimmed, and saying so when tapped, for a video saved without any. */
+@Composable
+private fun SubtitlesButton(subtitles: Boolean?, onClick: () -> Unit) {
+    RoundButton(
+        onClick = onClick,
+        label = when (subtitles) {
+            true -> "Hide subtitles"
+            false -> "Show subtitles"
+            null -> "No subtitles"
+        },
+    ) {
+        Icon(
+            if (subtitles == true) Icons.Default.ClosedCaption else Icons.Default.ClosedCaptionDisabled,
+            contentDescription = null,
+            tint = if (subtitles == null) NightMuted else NightInk,
+            modifier = Modifier.size(20.dp),
+        )
     }
 }
 
@@ -438,4 +627,11 @@ private fun share(app: ChayaApplication, task: DownloadTask) {
         listOf(com.chaya.app.library.LibraryIntents.mimeOf(task.fileName, task.mimeType)),
     ) ?: return
     runCatching { app.startActivity(intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
+}
+
+/** The activity a composable's context belongs to, through any wrappers. */
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }
