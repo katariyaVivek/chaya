@@ -12,7 +12,7 @@ class SubtitlesTest {
 
     @Test
     fun `an SRT is read with its times and lines`() {
-        val srt = "﻿1\r\n00:00:01,000 --> 00:00:02,500\r\nHello there.\r\n\r\n2\r\n00:01:02,050 --> 01:00:04,000\r\n" +
+        val srt = "\uFEFF1\r\n00:00:01,000 --> 00:00:02,500\r\nHello there.\r\n\r\n2\r\n00:01:02,050 --> 01:00:04,000\r\n" +
             "Two lines,\r\nof one subtitle.\r\n\r\n"
         assertEquals(
             listOf(

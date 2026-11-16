@@ -28,7 +28,7 @@ object Subtitles {
      * out, as are lines with no text once their styling is taken off.
      */
     fun parse(input: String): List<SubtitleLine> {
-        val text = input.removePrefix("﻿")
+        val text = input.removePrefix("\uFEFF")
         // YouTube's machine captions roll: each line comes again at the top of the next, with each word's time inside it.
         val rolling = "><c>" in text || hasInlineTimes(text)
         val lines = mutableListOf<SubtitleLine>()
