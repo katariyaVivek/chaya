@@ -65,6 +65,9 @@ jobs:
           ram-size: 4096M
           cores: 3
           disable-animations: true
+          # Not the action's default -gpu swiftshader_indirect: its SwiftShader GL translator segfaults while Android
+          # draws video (see emulator-check.yml).
+          emulator-options: -no-window -gpu lavapipe -no-snapshot -noaudio -no-boot-anim
           # Each line runs on its own. A failed test run is recorded rather than stopping here, so the numbers
           # are still collected; the last line then fails the step.
           script: |
