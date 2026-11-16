@@ -46,11 +46,15 @@ body {
 
 /*
  * The sidebar (Stage): Chaya's mark and name, the window's places, and what the library holds. It runs the window's
- * full height beside the title bar and the places. While a page is open it narrows to a rail of icons, at once and
- * not animated: the page is drawn over the window, and each step of a moving edge would place it again. It stays
- * under the player, the viewer and the export (50 and up), which cover it as they cover the page.
+ * full height beside the title bar and the places. While a page is open it narrows to a rail of icons, sliding
+ * (`--dur-morph`, at once under reduced motion); the page follows its edge (main.js places it again as .page moves).
+ * The rail is the sidebar itself, clipped: what is in it keeps its full width, so the icons stay where they are and
+ * the names fade. It stays under the player, the viewer and the export (50 and up), which cover it as they cover the
+ * page.
  */
-:root { --side-width: 232px; --side-rail: 64px; }
+@property --side-width { syntax: '<length>'; inherits: true; initial-value: 232px; }
+:root { --side-full: 232px; --side-width: var(--side-full); --side-rail: 64px; }
+body { transition: --side-width var(--dur-morph) var(--ease-out); }
 body.railed { --side-width: var(--side-rail); }
 .side {
   grid-row: 1 / -1;
@@ -77,18 +81,23 @@ body.railed { --side-width: var(--side-rail); }
   align-items: center;
   gap: var(--space-1);
   height: calc(var(--titlebar-height) + var(--space-1));
-  padding: 0 var(--space-1);
+  padding: 0 var(--space-1) 0 7px;
   app-region: drag;
   -webkit-app-region: drag;
 }
+/* Full width (the sidebar's, less its margin, border and padding) even in the rail, which clips them */
+.side > * { flex-shrink: 0; box-sizing: border-box; min-width: calc(var(--side-full) - 3 * var(--space-1) - 2px); }
 .side__places { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .side__place {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--space-1);
   width: 100%;
   height: var(--control-height);
-  padding: 0 var(--space-1);
+  /* 10 px: the icon centred in a button as wide as it is high, which is what the rail shows */
+  padding: 0 var(--space-1) 0 10px;
+  white-space: nowrap;
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
@@ -118,14 +127,33 @@ body.railed { --side-width: var(--side-rail); }
 .side__source { justify-content: space-between; height: var(--space-4); }
 .side__source[aria-pressed='true'] { background: var(--wash-strong); font-weight: 600; }
 .side__count { color: var(--muted); font-size: var(--text-sm); }
-/* The rail, over a page only: icons only, each still named by its tooltip and for a screen reader */
-body.railed .side { padding-inline: var(--space-half); align-items: center; }
-body.railed .side__brand { justify-content: center; padding: 0; }
+/* How many downloads are under way, on the Library: at the end of its row, or on the icon's corner in the rail */
+.side__badge {
+  margin-left: auto;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border: 1px solid var(--accent-edge);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+}
+body.railed .side__badge { position: absolute; top: 1px; right: 0; padding: 0 4px; min-width: 16px; height: 16px; line-height: 14px; }
+/* The rail, over a page only: icons only, each still named by its tooltip and for a screen reader. The names fade as
+ * it narrows, and come back as it widens. */
+.side__name,
+.side__place > span:not(.side__badge),
+.side__sources,
+.side__library { transition: opacity var(--dur-morph) var(--ease-out), visibility 0s; }
 body.railed .side__name,
-body.railed .side__place span,
+body.railed .side__place > span:not(.side__badge),
 body.railed .side__sources,
-body.railed .side__library { display: none; }
-body.railed .side__place { justify-content: center; width: var(--control-height); padding: 0; }
+body.railed .side__library { opacity: 0; visibility: hidden; transition: opacity var(--dur-morph) var(--ease-out), visibility 0s var(--dur-morph); }
+body.railed .side__place { width: var(--control-height); }
 
 /*
  * Home and the Library share the downloads' section. On Home it lists only what is under way (running, paused,
@@ -1106,8 +1134,8 @@ body.browsing .urlbar__field { flex: 1; min-width: 0; }
 body.browsing .urlbar__icon { display: none; }
 .page-nav { display: flex; gap: var(--space-half); }
 
-.page-downloads, .page-shield { position: relative; }
-.page-downloads[aria-pressed="true"], .page-shield[aria-expanded="true"] { background: var(--wash-strong); color: var(--text); }
+.page-shield { position: relative; }
+.page-shield[aria-expanded="true"] { background: var(--wash-strong); color: var(--text); }
 /* Ads shown here: the shield stays, quieter, so the person can find the switch again. */
 .page-shield--off svg { opacity: 0.45; }
 .page-count {
@@ -1333,6 +1361,8 @@ body.showing-downloads .found { display: none !important; }
   cursor: pointer;
 }
 .tab__close:hover { background: var(--wash-strong); }
+/* The Library's tab carries its mark, as the sidebar's Library does */
+.tab__icon { width: 14px; height: 14px; margin-right: 6px; vertical-align: -2px; }
 .tab__close svg { width: 14px; height: 14px; }
 .tabstrip__new { width: 32px; height: 32px; }
 .tabstrip__new svg { width: 18px; height: 18px; }

@@ -30,7 +30,7 @@ use chaya_core::links::{self, Platform};
 use chaya_core::session::{self, CookieFile, SessionCookie};
 use serde::{Deserialize, Serialize};
 use tauri::webview::{DownloadEvent, NewWindowResponse, PageLoadEvent, WebviewBuilder};
-use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Url, Webview, WebviewUrl};
+use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Rect, Url, Webview, WebviewUrl};
 
 use chaya_core::download::plan::plan;
 use chaya_core::lookup::Lookup;
@@ -407,8 +407,7 @@ fn show_tab(app: &AppHandle, id: u64) -> Result<(), String> {
     if opened {
         if let Some(page) = app.get_webview(&label(id)) {
             if let Some(bounds) = bounds {
-                let _ = page.set_position(position(bounds));
-                let _ = page.set_size(size(bounds));
+                place(&page, bounds);
             }
             let _ = page.show();
         }
@@ -667,8 +666,7 @@ pub fn place_page(bounds: Bounds, app: AppHandle) {
     for id in open {
         if let Some(page) = app.get_webview(&label(id)) {
             let bounds = page_bounds(id, fullscreen, bounds, window);
-            let _ = page.set_position(position(bounds));
-            let _ = page.set_size(size(bounds));
+            place(&page, bounds);
         }
     }
 }
@@ -706,8 +704,7 @@ fn page_fullscreen(app: &AppHandle, tab: u64, on: bool) {
     tabs(app).fullscreen.get_or_insert(Fullscreen { tab, window_was });
     let _ = window.set_fullscreen(true);
     if let (Some(page), Some(bounds)) = (app.get_webview(&label(tab)), window_bounds(app)) {
-        let _ = page.set_position(position(bounds));
-        let _ = page.set_size(size(bounds));
+        place(&page, bounds);
     }
 }
 
@@ -727,8 +724,7 @@ fn leave_fullscreen(app: &AppHandle) {
     if let Some(page) = app.get_webview(&label(left.tab)) {
         let _ = page.eval("document.fullscreenElement && document.exitFullscreen()");
         if let Some(bounds) = bounds {
-            let _ = page.set_position(position(bounds));
-            let _ = page.set_size(size(bounds));
+            place(&page, bounds);
         }
     }
 }
@@ -1083,6 +1079,12 @@ pub fn save_found(url: String, app: AppHandle) -> Result<Vec<crate::TaskView>, S
     let new = browse::found_download(&item, &page_url, &downloads.folder, downloads.joins)
         .ok_or("Chaya can't save this yet.")?;
     Ok(vec![crate::TaskView::from(&downloads.manager.add(new))])
+}
+
+/// Puts `page` at `bounds` in one step: its place and size set apart, the page stood for a moment at its new place
+/// with its old size, which showed while it followed a moving edge (a panel opening, the sidebar narrowing).
+fn place(page: &Webview, bounds: Bounds) {
+    let _ = page.set_bounds(Rect { position: position(bounds).into(), size: size(bounds).into() });
 }
 
 fn position(bounds: Bounds) -> LogicalPosition<f64> {
