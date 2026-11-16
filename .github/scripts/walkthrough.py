@@ -68,11 +68,6 @@ PAGE = """<!doctype html>
 </div>
 <video src="/media/launch-event.mp4" poster="/media/poster.jpg" controls playsinline preload="auto"></video>
 <video src="/media/hero-loop.mp4" muted autoplay loop playsinline style="height:80px;object-fit:cover"></video>
-<script>
-// The ad and the loop keep their autoplay attribute, which is what Chaya reads to tell them apart, but nothing
-// plays: pause() before playback begins cancels autoplay. The emulator's renderer died as they started playing.
-for (const v of document.querySelectorAll('video[autoplay]')) v.pause();
-</script>
 <p>Test page for the Chaya media sheet.</p>
 </body></html>
 """
@@ -458,9 +453,8 @@ def make_fixture():
         subprocess.run(cmd, check=True, timeout=300)
 
     video(media / "launch-event.mp4", "testsrc", 90, "640x360")
-    # The ad and the looping background are autoplay videos, but the page pauses them before they play (see PAGE):
-    # the emulator vanished as they started, with its renderer's "invalid color buffer" (#37 to #41, #79, #121 to
-    # #124). Kept tiny all the same. The main video waits for a tap; its size and length come from its metadata.
+    # The ad and the looping background play by themselves, as on a real page; kept tiny, as the emulator decodes
+    # in software. The main video waits for a tap; its size and length come from its metadata.
     video(media / "vast" / "preroll-15s.mp4", "testsrc2", 15, "160x90", rate=2)
     video(media / "hero-loop.mp4", "smptebars", 8, "160x90", audio=False, rate=2)
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=size=640x360:rate=1",
