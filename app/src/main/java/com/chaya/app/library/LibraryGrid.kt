@@ -41,6 +41,9 @@ import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.runtime.remember
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -52,6 +55,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.chaya.app.download.DownloadTask
+import com.chaya.app.downloads.libraryDays
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -74,28 +78,40 @@ fun LibraryGrid(
     modifier: Modifier = Modifier,
 ) {
     val choosing = selected.isNotEmpty()
+    val days = remember(items) { libraryDays(items) }
+    // Stage's cards, two or more to a row, under the day each was saved; room at the foot for the places bar
     LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = 112.dp),
+        columns = GridCells.Adaptive(minSize = 150.dp),
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 24.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 120.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         if (unfinished > 0) {
             item(key = "unfinished", span = { GridItemSpan(maxLineSpan) }) {
                 UnfinishedPill(unfinished, onShowList)
             }
         }
-        items(items, key = { it.key }) { item ->
-            Tile(
-                item = item,
-                selected = item.key in selected,
-                files = files,
-                modifier = Modifier.combinedClickable(
-                    onClick = { if (choosing) onToggle(item) else onOpen(item) },
-                    onLongClick = { onToggle(item) },
-                ),
-            )
+        days.forEach { day ->
+            item(key = "day:${day.title}", span = { GridItemSpan(maxLineSpan) }) {
+                Text(
+                    text = day.title,
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onBackground,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+            }
+            items(day.items, key = { it.key }) { item ->
+                Card(
+                    item = item,
+                    selected = item.key in selected,
+                    files = files,
+                    modifier = Modifier.combinedClickable(
+                        onClick = { if (choosing) onToggle(item) else onOpen(item) },
+                        onLongClick = { onToggle(item) },
+                    ),
+                )
+            }
         }
     }
 }
@@ -133,24 +149,54 @@ internal fun tileLabel(item: LibraryItem): String = when (item) {
 }
 
 @Composable
-private fun Tile(item: LibraryItem, selected: Boolean, files: LibraryFiles?, modifier: Modifier) {
-    val cover = item.cover
-    val kind = kindOf(cover)
-    val picture = rememberCover(cover, files)
-    Box(
+private fun Card(item: LibraryItem, selected: Boolean, files: LibraryFiles?, modifier: Modifier) {
+    Column(
         modifier = Modifier
-            .aspectRatio(1f)
-            .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .then(
-                if (selected) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(16.dp))
-                else Modifier
-            )
+            .clip(RoundedCornerShape(14.dp))
             .then(modifier)
             .semantics(mergeDescendants = true) {
                 contentDescription = tileLabel(item)
                 this.selected = selected
             },
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Picture(item, selected, files)
+        Column(modifier = Modifier.padding(horizontal = 2.dp)) {
+            Text(
+                text = item.title,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onBackground,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = cardDetails(item),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+/** A card's picture at 16:10, Stage's frame: the picture itself, a frame of a video, or its kind and name. */
+@Composable
+private fun Picture(item: LibraryItem, selected: Boolean, files: LibraryFiles?) {
+    val cover = item.cover
+    val kind = kindOf(cover)
+    val picture = rememberCover(cover, files)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(16f / 10f)
+            .shadow(8.dp, RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .then(
+                if (selected) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(14.dp))
+                else Modifier
+            ),
     ) {
         if (picture != null) {
             AsyncImage(

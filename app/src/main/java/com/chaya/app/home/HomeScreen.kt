@@ -158,11 +158,7 @@ fun HomeScreen(
             onDismiss = { typing = false },
             onGo = { typed ->
                 typing = false
-                when (typed) {
-                    is Typed.LookUp -> SharedLinks.offer(typed.text)
-                    is Typed.Open -> PagesToOpen.open(typed.text)
-                }
-                onPlace(Place.BROWSE)
+                goTyped(typed, onPlace)
             },
         )
     }
@@ -481,10 +477,19 @@ fun PlacesBar(current: Place, onPlace: (Place) -> Unit, onType: () -> Unit, modi
     }
 }
 
+/** Hands what "+" was given to the browser, as [Typed] says, and brings Browse forward. */
+internal fun goTyped(typed: Typed, onPlace: (Place) -> Unit) {
+    when (typed) {
+        is Typed.LookUp -> SharedLinks.offer(typed.text)
+        is Typed.Open -> PagesToOpen.open(typed.text)
+    }
+    onPlace(Place.BROWSE)
+}
+
 /** "+": a link to save, an address, or words to search for; pasted with one tap. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TypeSheet(onDismiss: () -> Unit, onGo: (Typed) -> Unit) {
+internal fun TypeSheet(onDismiss: () -> Unit, onGo: (Typed) -> Unit) {
     val context = LocalContext.current
     var input by remember { mutableStateOf("") }
     fun paste() {

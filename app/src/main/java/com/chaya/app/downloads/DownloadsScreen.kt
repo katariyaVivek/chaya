@@ -85,6 +85,11 @@ import coil3.compose.AsyncImage
 import com.chaya.app.download.DownloadNotification.formatFileSize
 import com.chaya.app.download.DownloadState
 import com.chaya.app.download.DownloadTask
+import androidx.compose.ui.text.font.FontWeight
+import com.chaya.app.home.goTyped
+import com.chaya.app.home.TypeSheet
+import com.chaya.app.home.PlacesBar
+import com.chaya.app.home.Place
 import com.chaya.app.ui.theme.ChayaMotion
 import com.chaya.app.ui.theme.LocalChayaColors
 import com.chaya.app.ui.components.AppearanceDialog
@@ -127,6 +132,8 @@ fun DownloadsScreen(
     onNavigateToBookmarks: () -> Unit = {},
     themeMode: ThemeMode = ThemeMode.SYSTEM,
     onThemeModeChange: (ThemeMode) -> Unit = {},
+    /** Chaya's places, at the Library's foot (Stage); none where the Library is shown on its own (tests). */
+    onPlace: ((Place) -> Unit)? = null,
     viewModel: DownloadsViewModel = viewModel()
 ) {
     val tasks by viewModel.downloads.collectAsState()
@@ -168,6 +175,7 @@ fun DownloadsScreen(
     }
 
     DownloadsContent(
+        onPlace = onPlace,
         tasks = shown,
         grid = grid,
         onGridChange = viewModel::setGrid,
@@ -236,6 +244,7 @@ private class Viewing(val pages: List<ViewerPage>, val start: Int, val tasks: Li
 @Composable
 internal fun DownloadsContent(
     tasks: List<DownloadTask>,
+    onPlace: ((Place) -> Unit)? = null,
     grid: Boolean,
     onGridChange: (Boolean) -> Unit,
     files: LibraryFiles?,
@@ -254,6 +263,7 @@ internal fun DownloadsContent(
     var viewing by remember { mutableStateOf<Viewing?>(null) }
     var zipTaskId by rememberSaveable { mutableStateOf<Long?>(null) }
     var zipViewing by remember { mutableStateOf<Viewing?>(null) }
+    var typing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     val narrowed = LibraryFilter(kind, site, query)
@@ -326,7 +336,22 @@ internal fun DownloadsContent(
                     )
                 } else {
                     TopAppBar(
-                        title = { Text("Downloads", style = MaterialTheme.typography.titleLarge) },
+                        // Stage: the Library, and what it holds
+                        title = {
+                            Column {
+                                Text(
+                                    "Library",
+                                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                                )
+                                Text(
+                                    "${librarySummary(tasks)} · everything stays on this phone",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        },
                         navigationIcon = {
                             IconButton(onClick = menu.onNavigateBack) {
                                 Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -411,7 +436,8 @@ internal fun DownloadsContent(
                     )
                     else -> LazyColumn(
                         modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(top = 4.dp, bottom = 24.dp)
+                        // Room at the foot for the places bar, when it is there
+                        contentPadding = PaddingValues(top = 4.dp, bottom = if (onPlace != null) 120.dp else 24.dp)
                     ) {
                         sections.forEach { section ->
                             item(key = "section:${section.title}") { SectionLabel(section.title) }
@@ -485,6 +511,24 @@ internal fun DownloadsContent(
                     },
                 )
             }
+        }
+
+        if (onPlace != null && !choosing) {
+            PlacesBar(
+                current = Place.LIBRARY,
+                onPlace = onPlace,
+                onType = { typing = true },
+                modifier = Modifier.align(Alignment.BottomCenter),
+            )
+        }
+        if (typing && onPlace != null) {
+            TypeSheet(
+                onDismiss = { typing = false },
+                onGo = { typed ->
+                    typing = false
+                    goTyped(typed, onPlace)
+                },
+            )
         }
 
         viewing?.let { shown ->

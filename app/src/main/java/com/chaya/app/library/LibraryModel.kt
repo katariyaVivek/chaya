@@ -1,6 +1,7 @@
 package com.chaya.app.library
 
 import com.chaya.app.download.DownloadState
+import com.chaya.app.download.DownloadNotification.formatFileSize
 import com.chaya.app.download.DownloadTask
 import com.chaya.app.downloads.displayTitle
 import com.chaya.app.downloads.sourceHost
@@ -139,3 +140,15 @@ fun libraryItems(tasks: List<DownloadTask>, filter: LibraryFilter = LibraryFilte
 /** How many downloads are still running, waiting or paused: the grid only shows what is done. */
 fun unfinishedCount(tasks: List<DownloadTask>): Int =
     tasks.count { it.state.isUnfinished }
+
+/** The line under a Library card (Stage): where it came from, then its size, or for a post how many files it holds. */
+fun cardDetails(item: LibraryItem): String {
+    val site = siteOf(item.cover).label
+    val rest = when (item) {
+        is LibraryItem.Post -> "${item.tasks.size} files"
+        is LibraryItem.Single -> (item.task.totalBytes?.takeIf { it > 0 } ?: item.task.downloadedBytes)
+            .takeIf { it > 0 }
+            ?.let(::formatFileSize)
+    }
+    return listOfNotNull(site, rest).joinToString(" · ")
+}

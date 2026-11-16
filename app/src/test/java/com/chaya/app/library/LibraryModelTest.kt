@@ -98,4 +98,14 @@ class LibraryModelTest {
         assertEquals("Me at the zoo", postTitle(tasks[0]))
         assertEquals(1, unfinishedCount(tasks))
     }
+
+    @Test
+    fun `a card says where it came from, then its size, or for a post how many files it holds`() {
+        val items = libraryItems(tasks).associateBy { it.key }
+
+        assertEquals("Instagram · 3 files", cardDetails(items.getValue("post:$post")))
+        assertEquals("YouTube · 48.0 MB", cardDetails(LibraryItem.Single(task(1, "Me at the zoo").copy(totalBytes = 50_331_648L))))
+        // Nothing known of its size: where it came from alone
+        assertEquals("X", cardDetails(items.getValue("task:8")))
+    }
 }
