@@ -4,6 +4,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Public
@@ -14,6 +15,7 @@ sealed class Screen(
     val label: String,
     val icon: ImageVector
 ) {
+    data object Home : Screen("home", "Home", Icons.Default.Home)
     data object Browser : Screen("browser", "Browser", Icons.Default.Public)
     data object Downloads : Screen("downloads", "Downloads", Icons.Default.CloudDownload)
     data object Player : Screen("player/{taskId}", "Player", Icons.Default.PlayArrow)
