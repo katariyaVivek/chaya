@@ -1,6 +1,8 @@
 package com.chaya.app.ui.player
 
 import android.net.Uri
+import android.view.LayoutInflater
+import android.widget.FrameLayout
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -63,6 +65,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
 import com.chaya.app.ChayaApplication
+import com.chaya.app.R
 import com.chaya.app.download.DownloadManager
 import com.chaya.app.download.DownloadTask
 import com.chaya.app.downloads.displayTitle
@@ -111,15 +114,14 @@ fun PlayerScreen(
             .apply { source.cached?.let { setMediaSourceFactory(DefaultMediaSourceFactory(it.factory)) } }
             .build()
     }
-    var playing by remember { mutableStateOf(true) }
+    var status by remember { mutableStateOf(PlayerStatus.PLAYING) }
     var atMs by remember { mutableLongStateOf(0L) }
     var lengthMs by remember { mutableLongStateOf(0L) }
     var seeking by remember { mutableStateOf<Float?>(null) }
-    var failed by remember { mutableStateOf(false) }
 
     fun keepWhere() {
         // A file that would not play keeps where it was left before
-        if (failed) return
+        if (status == PlayerStatus.FAILED) return
         val length = player.duration.takeIf { it > 0 } ?: lengthMs
         positions.put(taskId, Watched(player.currentPosition, length, System.currentTimeMillis()))
     }
@@ -133,7 +135,7 @@ fun PlayerScreen(
         )
         val listener = object : Player.Listener {
             override fun onPlayerError(error: PlaybackException) {
-                failed = true
+                status = PlayerStatus.FAILED
             }
         }
         player.addListener(listener)
@@ -165,7 +167,10 @@ fun PlayerScreen(
         while (true) {
             atMs = player.currentPosition
             lengthMs = player.duration.takeIf { it > 0 } ?: lengthMs
-            playing = player.isPlaying || (player.playWhenReady && player.playbackState == Player.STATE_BUFFERING)
+            if (status != PlayerStatus.FAILED) {
+                val going = player.isPlaying || (player.playWhenReady && player.playbackState == Player.STATE_BUFFERING)
+                status = if (going) PlayerStatus.PLAYING else PlayerStatus.PAUSED
+            }
             delay(250)
         }
     }
@@ -200,15 +205,16 @@ fun PlayerScreen(
                 contentAlignment = Alignment.Center,
             ) {
                 AndroidView(
+                    // A TextureView inside (the layout says so), so the picture keeps the frame's rounded corners
+                    // and fades with the screen, which a SurfaceView does not
                     factory = { ctx ->
-                        PlayerView(ctx).apply {
+                        (LayoutInflater.from(ctx).inflate(R.layout.stage_player_view, FrameLayout(ctx), false) as PlayerView).apply {
                             this.player = player
-                            useController = false
                         }
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
-                if (failed) {
+                if (status == PlayerStatus.FAILED) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(16.dp)) {
                         Text("Chaya can't play this file.", color = NightInk, style = TextStyle(fontSize = 15.sp))
                         TextButton(onClick = { openElsewhere(app, task) }) {
@@ -241,7 +247,7 @@ fun PlayerScreen(
         Controls(
             atMs = seeking?.let { (it * lengthMs).toLong() } ?: atMs,
             lengthMs = lengthMs,
-            playing = playing,
+            playing = status == PlayerStatus.PLAYING,
             onSeeking = { seeking = it },
             onSeekDone = {
                 seeking?.let { player.seekTo((it * lengthMs).toLong()) }
@@ -262,6 +268,9 @@ fun PlayerScreen(
         )
     }
 }
+
+/** What the player is doing: one value, so it cannot be playing and failed at once. */
+private enum class PlayerStatus { PLAYING, PAUSED, FAILED }
 
 /** The bar at the foot: the seek bar, then the time, −10, play in ink, +10 and the length. */
 @Composable

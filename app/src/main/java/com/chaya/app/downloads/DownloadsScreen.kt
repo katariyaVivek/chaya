@@ -735,8 +735,8 @@ private fun DownloadCard(
     onSaveAsFile: () -> Unit,
     onShare: () -> Unit
 ) {
-    // Streams live in Media3's cache (no single file), so they play in-app instead of opening.
-    val openAction = if (task.filePath != null || task.exportedUri != null) onOpen else onPlay
+    // Videos, and streams that live only in Media3's cache, play in Chaya; anything else opens in another app.
+    val openAction = if (playsInChaya(task)) onPlay else onOpen
 
     Surface(
         shape = RoundedCornerShape(16.dp),
@@ -959,10 +959,10 @@ internal fun ActionsRow(
                 }
             }
             DownloadState.COMPLETED -> {
-                if (task.filePath != null || task.exportedUri != null) {
-                    PrimaryAction(Icons.AutoMirrored.Filled.OpenInNew, "Open", onOpen, highlighted = true)
-                } else {
+                if (playsInChaya(task)) {
                     PrimaryAction(Icons.Default.PlayArrow, "Play", onPlay, highlighted = true)
+                } else {
+                    PrimaryAction(Icons.AutoMirrored.Filled.OpenInNew, "Open", onOpen, highlighted = true)
                 }
             }
         }

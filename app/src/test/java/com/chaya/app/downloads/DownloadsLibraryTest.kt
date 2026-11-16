@@ -201,6 +201,16 @@ class DownloadsLibraryTest {
     }
 
     @Test
+    fun `in the list too, a saved video plays in Chaya's player and a picture opens in another app`() {
+        show(startInGrid = false, tasks = listOf(zoo, cat))
+
+        composeRule.onNodeWithText("Me at the zoo").performClick()
+        composeRule.onNodeWithText("Cat").performClick()
+
+        assertEquals(listOf("play 1", "open 5"), events)
+    }
+
+    @Test
     fun `a long press chooses, taps add more, and the chosen are shared or deleted together`() {
         show()
 

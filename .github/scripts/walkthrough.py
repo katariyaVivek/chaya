@@ -547,8 +547,9 @@ def scenario_local():
     tap_node(play)
     if wait_for("local: the video plays in Chaya's player", 30, desc_contains="Close player")[1] is None:
         return
-    wait_for("local: the player is playing", 30, desc_contains="Pause")
-    time.sleep(8)
+    # The clock past ten seconds: the video really plays, and far enough in for Home to offer to continue it
+    # (the length reads 1:30, so it cannot match)
+    wait_for("local: the player is playing", 60, text_prefix="0:1")
     snapshot("player")
     tap_when("local: close the player", 20, desc_contains="Close player")
     wait_for("local: Home offers to continue the video", 30, text_contains="CONTINUE")
