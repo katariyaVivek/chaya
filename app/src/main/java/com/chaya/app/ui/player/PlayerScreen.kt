@@ -53,6 +53,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -369,8 +370,8 @@ private data class Source(
 
 private fun sourceOf(app: ChayaApplication, task: DownloadTask): Source? {
     // A file is read for what it is: a stream saved as one MP4 still carries the stream's type
-    task.filePath?.let(::File)?.takeIf { it.isFile }?.let { return Source(Uri.fromFile(it), null) }
-    task.exportedUri?.let { return Source(Uri.parse(it), null) }
+    task.filePath?.let(::File)?.takeIf { it.isFile }?.let { return Source(it.toUri(), null) }
+    task.exportedUri?.let { return Source(it.toUri(), null) }
     return app.downloadManager.streamPlaybackFor(task.id)?.let { Source(it.uri, it.mimeType, it) }
 }
 

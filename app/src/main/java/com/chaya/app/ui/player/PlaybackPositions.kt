@@ -2,6 +2,7 @@ package com.chaya.app.ui.player
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.core.content.edit
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -16,13 +17,13 @@ class PlaybackPositions(private val prefs: SharedPreferences) {
     val watched: StateFlow<Map<Long, Watched>> = _watched.asStateFlow()
 
     fun put(id: Long, watched: Watched) {
-        prefs.edit().putString(id.toString(), "${watched.atMs},${watched.lengthMs},${watched.stoppedAt}").apply()
+        prefs.edit { putString(id.toString(), "${watched.atMs},${watched.lengthMs},${watched.stoppedAt}") }
         _watched.update { it + (id to watched) }
     }
 
     /** A download deleted: where it was left goes with it. */
     fun forget(id: Long) {
-        prefs.edit().remove(id.toString()).apply()
+        prefs.edit { remove(id.toString()) }
         _watched.update { it - id }
     }
 
