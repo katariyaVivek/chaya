@@ -384,7 +384,7 @@ def scenario_hls():
     time.sleep(20)  # let the stream play so the page reports its player and the stream pieces
     snapshot("hls-page")
     tap_when("hls: open the media sheet", 20, FALLBACK["fab"], desc_contains="Detected media")
-    wait_for("hls: media sheet shows", 30, text="On this page")
+    wait_for("hls: media sheet shows", 30, text="Found on this page")
     snapshot("hls-sheet")
     # Download on a stream starts the best quality straight away; Quality opens the picker.
     if not tap_when("hls: tap Quality", 20, text="Quality"):
@@ -422,14 +422,13 @@ def scenario_engine():
         "-t", "text/plain", "--es", "android.intent.extra.TEXT", PIN, timeout=60)
     time.sleep(3)
     snapshot("engine-finding")
-    # The found sheet's button reads "Download 720p", "Download audio" or "Download"; the bottom bar's "Downloads"
-    # must not count.
     deadline = time.time() + 150
     while True:
         require_app()
         nodes, _ = ui_dump()
         dismiss_not_responding(nodes)
-        button = find(nodes, text="Download") or find(nodes, text_prefix="Download ")
+        # Stage's sheet: the qualities as tiles and one "Save 1080p" (or "Save audio", or "Save") for the one picked
+        button = find(nodes, text="Save") or find(nodes, text_prefix="Save ")
         if button or time.time() > deadline:
             break
         time.sleep(2)
@@ -513,12 +512,12 @@ def scenario_local():
     time.sleep(15)
     snapshot("local-page")
     tap_when("local: open the media sheet", 20, FALLBACK["fab"], desc_contains="Detected media")
-    wait_for("local: media sheet shows", 30, text="On this page")
+    wait_for("local: media sheet shows", 30, text="Found on this page")
     snapshot("local-sheet")
     if tap_when("local: show likely ads", 10, desc_contains="likely ads"):
         time.sleep(1)
         snapshot("local-sheet-ads")
-    if not tap_when("local: tap Download", 20, text="Download"):
+    if not tap_when("local: tap Save", 20, text="Save"):
         return
     time.sleep(5)
     tap_when("local: open Downloads", 20, FALLBACK["downloads_button"], desc_contains="Downloads")
