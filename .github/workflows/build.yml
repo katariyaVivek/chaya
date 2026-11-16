@@ -251,4 +251,7 @@ jobs:
           api-level: 34
           target: google_apis
           arch: x86_64
+          # Not the action's default -gpu swiftshader_indirect: its SwiftShader GL translator segfaults while Android
+          # draws video (see emulator-check.yml).
+          emulator-options: -no-window -gpu lavapipe -no-snapshot -noaudio -no-boot-anim
           script: gradle connectedDebugAndroidTest --stacktrace

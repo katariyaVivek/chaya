@@ -112,6 +112,10 @@ The two suns: an amber sun, its shadow-twin, one line of light through both. Its
   Lint's `NewApi` check is what catches it.
 - Kotlin's inlined functions report line numbers beyond the end of the file in stack traces;
   find the real call site, not the reported line.
+- The cloud emulator's legacy SwiftShader GL translator (`-gpu guest` falls back to it on our system image, and
+  `swiftshader_indirect` is the action's default) segfaults on a RenderThread while Android draws video, and the
+  emulator vanishes with no app crash. CI's emulators use `-gpu lavapipe` (ANGLE); a vanished emulator's cause is
+  in the kernel log (`fatal signal`), which the emulator check prints.
 - Gradle parallel project execution stays off (Chaquopy + KSP fail on a project lock).
 - quickjs-kt requires compileSdk 36 and a Kotlin compiler that reads 2.4 metadata; KSP 2.3 needs
   AGP 8.13 or newer. Upgrade these together.
