@@ -110,6 +110,9 @@ The two suns: an amber sun, its shadow-twin, one line of light through both. Its
 - `minSdk` is 26 and core library desugaring is off, so a newer `java.time` call (`LocalDate.ofInstant` is API 34)
   crashes older phones while every test passes: Robolectric runs on the desktop JVM, the emulators on API 34.
   Lint's `NewApi` check is what catches it.
+- The phone compiles regexes with ICU, not the JVM the unit tests run on, and ICU refuses some of Java's syntax:
+  `Regex("(?U)\\s+")` passed every test and closed the app on the first download that touched subtitles.
+  `AndroidRegexTest` reads the sources for it; for Unicode white space use `Subtitles.isSpace`, not `(?U)`.
 - Kotlin's inlined functions report line numbers beyond the end of the file in stack traces;
   find the real call site, not the reported line.
 - The cloud emulator's legacy SwiftShader GL translator (`-gpu guest` falls back to it on our system image, and

@@ -104,7 +104,7 @@ object Subtitles {
         val arrow = line.indexOf("-->")
         if (arrow < 0) return null
         val start = time(line.substring(0, arrow).trim()) ?: return null
-        val end = line.substring(arrow + 3).trim().split(WHITESPACE).firstOrNull()?.let(::time) ?: return null
+        val end = words(line.substring(arrow + 3)).firstOrNull()?.let(::time) ?: return null
         return start to end
     }
 
@@ -133,8 +133,31 @@ object Subtitles {
         if (s.isNotEmpty() && s.length <= 18 && s.all { it in '0'..'9' }) s.toLong() else null
 
     private val POWERS = longArrayOf(1, 10, 100, 1000)
-    // Unicode's white space, as Rust's split_whitespace has it (a no-break space included)
-    private val WHITESPACE = Regex("(?U)\\s+")
+    /**
+     * Unicode's white space (its White_Space property), as Rust's split_whitespace has it, a no-break space
+     * included. Listed, not a regex: `(?U)\s`, which says the same on a desktop's Java, is a syntax error to
+     * Android's regex engine (ICU), and threw as this object was first used, closing the app.
+     */
+    internal fun isSpace(c: Char): Boolean =
+        c in '\u0009'..'\u000D' || c == ' ' || c == '\u0085' || c == '\u00A0' || c == '\u1680' ||
+            c in '\u2000'..'\u200A' || c == '\u2028' || c == '\u2029' || c == '\u202F' || c == '\u205F' ||
+            c == '\u3000'
+
+    /** The words of [s]: what lies between its runs of white space. */
+    internal fun words(s: String): List<String> {
+        val words = mutableListOf<String>()
+        var start = -1
+        for (i in s.indices) {
+            if (isSpace(s[i])) {
+                if (start >= 0) words += s.substring(start, i)
+                start = -1
+            } else if (start < 0) {
+                start = i
+            }
+        }
+        if (start >= 0) words += s.substring(start)
+        return words
+    }
 
     /**
      * A text line without its styling: HTML-like tags (`<i>`, `<font>`, VTT's `<c.yellow>`, `<v Name>` and word
@@ -169,7 +192,7 @@ object Subtitles {
             .replace("&#39;", "'")
             .replace("&apos;", "'")
             .replace("&amp;", "&")
-        return read.split(WHITESPACE).filter { it.isNotEmpty() }.joinToString(" ")
+        return words(read).joinToString(" ")
     }
 
     /** Lines as an SRT file, numbered from 1. */
