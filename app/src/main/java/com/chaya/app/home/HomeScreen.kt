@@ -1,6 +1,7 @@
 package com.chaya.app.home
 
 import android.content.ClipboardManager
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -59,6 +60,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -69,6 +71,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import com.chaya.app.ChayaApplication
+import com.chaya.app.R
 import com.chaya.app.SharedLinks
 import com.chaya.app.download.DownloadTask
 import com.chaya.app.downloads.DownloadsViewModel
@@ -133,7 +136,7 @@ fun HomeScreen(
                     onShare = { viewModel.share(listOf(hero)) { message(it) } },
                 )
             } else {
-                Welcome(progress = shelf.progress, onProgress = { onPlace(Place.LIBRARY) }, onType = { typing = true })
+                Welcome(progress = shelf.progress, onProgress = { onPlace(Place.LIBRARY) })
             }
             if (shelf.recent.isNotEmpty()) {
                 Recent(
@@ -263,9 +266,9 @@ private fun Hero(
     }
 }
 
-/** With nothing saved yet: what Chaya is for, and the way to start. */
+/** With nothing saved yet: what Chaya is for, and the way to start, which is the "+" at the foot (one way, not two). */
 @Composable
-private fun Welcome(progress: HomeShelf.Progress?, onProgress: () -> Unit, onType: () -> Unit) {
+private fun Welcome(progress: HomeShelf.Progress?, onProgress: () -> Unit) {
     Box(modifier = Modifier.fillMaxWidth().height(420.dp)) {
         TopRow(progress = progress, onProgress = onProgress)
         Column(
@@ -278,26 +281,16 @@ private fun Welcome(progress: HomeShelf.Progress?, onProgress: () -> Unit, onTyp
                 color = MaterialTheme.colorScheme.onBackground,
             )
             Text(
-                text = "Paste a link from YouTube, Instagram, TikTok, X or Pinterest, or browse to any page with a video on it.",
+                text = "Tap + to paste a link from YouTube, Instagram, TikTok, X or Pinterest, or to browse to any page " +
+                    "with a video on it.",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Button(
-                onClick = onType,
-                modifier = Modifier.padding(top = 6.dp).height(50.dp),
-                shape = RoundedCornerShape(25.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                ),
-            ) {
-                Text("Paste a link", style = MaterialTheme.typography.titleMedium)
-            }
         }
     }
 }
 
-/** Chaya's name, and while anything is saving, how far it is: a ring of Stage's amber and its share. */
+/** Chaya's mark and name, and while anything is saving, how far it is: a ring of Stage's amber and its share. */
 @Composable
 private fun TopRow(progress: HomeShelf.Progress?, onProgress: () -> Unit) {
     Row(
@@ -305,11 +298,15 @@ private fun TopRow(progress: HomeShelf.Progress?, onProgress: () -> Unit) {
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = "Chaya",
-            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-            color = MaterialTheme.colorScheme.onBackground,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // The two suns at rest (res/drawable/chaya_mark.xml, written from the mark's constants); the name says it
+            Image(painter = painterResource(R.drawable.chaya_mark), contentDescription = null, modifier = Modifier.size(32.dp))
+            Text(
+                text = "Chaya",
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                color = MaterialTheme.colorScheme.onBackground,
+            )
+        }
         if (progress != null) {
             val fraction = progress.fraction
             val words = if (fraction != null) "${(fraction * 100).roundToInt()}%" else "${progress.running} saving"
