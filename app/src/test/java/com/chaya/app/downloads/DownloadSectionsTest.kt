@@ -182,4 +182,36 @@ class DownloadSectionsTest {
         )
         assertEquals(CardProgress(null, "Picture", "512 B"), progressOf(running(DownloadStep.FetchingPicture)))
     }
+
+    @Test
+    fun `the Library's cards are grouped by the day each was saved, titled as the list's days are`() {
+        val days = libraryDays(com.chaya.app.library.libraryItems(tasks), now, ZoneOffset.UTC, Locale.ENGLISH)
+
+        assertEquals(listOf("Today", "Yesterday", "3 Oct"), days.map { it.title })
+        assertEquals(setOf("task:4", "task:7"), days[0].items.map { it.key }.toSet())
+        assertEquals(listOf("task:5"), days[1].items.map { it.key })
+        assertEquals(listOf("task:6"), days[2].items.map { it.key })
+    }
+
+    @Test
+    fun `a card saved late in the evening is on its own day in the viewer's time zone, as in the list`() {
+        val late = task(1, DownloadState.COMPLETED).copy(updatedAt = Instant.parse("2026-10-07T23:30:00Z").toEpochMilli())
+        val items = com.chaya.app.library.libraryItems(listOf(late))
+
+        assertEquals(listOf("Yesterday"), libraryDays(items, now, ZoneOffset.UTC, Locale.ENGLISH).map { it.title })
+        assertEquals(listOf("Today"), libraryDays(items, now, ZoneOffset.ofHours(2), Locale.ENGLISH).map { it.title })
+    }
+
+    @Test
+    fun `the Library says how many are saved and how much room they take, leaving out what is still going`() {
+        val saved = listOf(
+            task(1, DownloadState.COMPLETED).copy(totalBytes = 50_331_648L),
+            task(2, DownloadState.COMPLETED).copy(totalBytes = null, downloadedBytes = 1_048_576L),
+            task(3, DownloadState.DOWNLOADING).copy(totalBytes = 900_000_000L),
+        )
+
+        assertEquals("2 saved · 49.0 MB", librarySummary(saved))
+        assertEquals("1 saved", librarySummary(listOf(task(4, DownloadState.COMPLETED))))
+        assertEquals("0 saved", librarySummary(emptyList()))
+    }
 }

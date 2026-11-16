@@ -107,6 +107,7 @@ fun ChayaNavHost(navController: NavHostController) {
                 onNavigateToBookmarks = { navController.navigate(Screen.Bookmarks.route) },
                 themeMode = themeMode,
                 onThemeModeChange = themeSettings::set,
+                onPlace = ::go,
             )
         }
         composable(
