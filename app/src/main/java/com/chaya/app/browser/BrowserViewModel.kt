@@ -24,6 +24,7 @@ import com.chaya.app.platform.ProfileMatch
 import com.chaya.app.platform.ProfileMatcher
 import com.chaya.app.platform.SignIn
 import com.chaya.app.platform.WebViewSignIn
+import com.chaya.app.platform.subtitlesToSave
 import com.chaya.app.platform.toDownloadRequest
 import com.chaya.app.streaming.ManifestHelper
 import com.chaya.app.streaming.StreamTrack
@@ -684,7 +685,8 @@ class BrowserViewModel @JvmOverloads constructor(
         if (choice.file.isDirectFile) {
             downloadManager.startDownload(choice.toDownloadRequest(found.media, pageUrl = found.match.url))
         } else {
-            downloadManager.startDownload(streamMediaFor(found, choice))
+            val subtitles = if (choice.isAudioOnly) null else found.media.subtitlesToSave(choice.file.url, choice.file.headers)
+            downloadManager.startDownload(streamMediaFor(found, choice), subtitles)
         }
         onStarted(choice.label)
     }

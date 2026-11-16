@@ -46,6 +46,8 @@ Store account, no third-party SDKs.
   *Save history* switch on the History screen stops pages being kept at all. × beside a bookmark,
   or the star beside the address, removes it.
 - Ad blocker settings (whether it is on, and the sites you let show ads): **on your phone only**.
+- The subtitles saved with a video from a link, as an SRT file: **on your phone only**, in app-private files,
+  shown on the picture and as the transcript in Chaya's player. They are deleted with their download.
 - Where you stopped each saved video in Chaya's player (the time, the video's length and when you stopped), so
   it starts there again and Home offers *Continue*: **on your phone only**, in the app's preferences. It is
   deleted with its download.
@@ -70,6 +72,9 @@ Chaya talks only to the sites involved in what you do:
   pictures, a Pinterest pin, or an Instagram post yt-dlp could not read, that site again, which gallery-dl (also running
   on your phone) contacts to list the post's pictures, both when you paste or share a link and when the page you
   are viewing is a single video on one of those sites;
+- when you save a video from such a link and the site has subtitles in the language spoken, that site's server
+  again, for those subtitles, at the address yt-dlp found for them and with the video's own headers (your
+  sign-in cookie only when the subtitles are on the same site as the video);
 - for the ad blocker, about once a week, easylist.to, to fetch fresh copies of the EasyList and
   EasyPrivacy lists. The request carries no cookies and nothing about you or the pages you visit;
   the lists are then used on your phone. Blocked requests never leave the phone at all.

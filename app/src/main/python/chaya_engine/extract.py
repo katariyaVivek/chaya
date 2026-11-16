@@ -41,8 +41,8 @@ def extract(url, cache_dir, cookie_file=None, js_runtime=None, fragments=False, 
     listing a stream's qualities): its server may answer only the page's player.
 
     With [subtitles], the video's language and the subtitles the site has for it are listed too (`_subtitle_tracks`):
-    Chaya for Windows saves them next to the video. So are its chapters (`_chapters`), which it marks on the seek bar
-    and the clip timeline. The phone never asks.
+    Chaya for Windows saves them next to the video, and the phone keeps them with its download. So are its chapters
+    (`_chapters`), which Windows marks on the seek bar and the clip timeline.
     """
     options = {
         'quiet': True,

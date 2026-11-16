@@ -62,6 +62,9 @@ class ChayaApplication : Application() {
     /** Light, dark, or the same as the phone. */
     val themeSettings: ThemeSettings by lazy { ThemeSettings.from(this) }
 
+    /** A site's subtitles kept with the videos saved from it, in the app's own files. */
+    val subtitles: com.chaya.app.subtitles.SubtitleStore by lazy { com.chaya.app.subtitles.SubtitleStore(File(filesDir, "subtitles")) }
+
     /** Where each saved video was left, for the player to resume and Home to carry on with. */
     val playbackPositions: com.chaya.app.ui.player.PlaybackPositions by lazy { com.chaya.app.ui.player.PlaybackPositions.from(this) }
 
@@ -99,6 +102,7 @@ class ChayaApplication : Application() {
         downloadManager = DownloadManager(
             this, dao, eventLog = eventLog,
             archiveLister = ProfileLister(platformEngine, WebViewSignIn(this)),
+            subtitles = subtitles,
         )
         // Restore persisted downloads from Room
         appScope.launch {
