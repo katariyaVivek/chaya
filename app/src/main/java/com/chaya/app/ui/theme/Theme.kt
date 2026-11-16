@@ -12,12 +12,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.Shapes
 
-/** Semantic colors outside the M3 scheme (success states, player backdrop). */
+/**
+ * Colors outside the M3 scheme: success states, the player's backdrop, and Stage's amber as a signal (progress, a page
+ * loading), the same in both themes and never text.
+ */
 data class ChayaExtendedColors(
     val success: Color,
     val successContainer: Color,
     val onSuccessContainer: Color,
-    val playerBackdrop: Color
+    val playerBackdrop: Color,
+    val signal: Color = StageAmber
 )
 
 val LocalChayaColors = staticCompositionLocalOf {
@@ -29,78 +33,82 @@ val LocalChayaColors = staticCompositionLocalOf {
     )
 }
 
-private val LightColorScheme = lightColorScheme(
-    primary = VioletPrimaryLight,
-    onPrimary = OnVioletPrimaryLight,
-    primaryContainer = VioletContainerLight,
-    onPrimaryContainer = OnVioletContainerLight,
-    secondary = SlateSecondaryLight,
-    onSecondary = OnSlateSecondaryLight,
-    secondaryContainer = SlateContainerLight,
-    onSecondaryContainer = OnSlateContainerLight,
-    tertiary = BronzeTertiaryLight,
-    onTertiary = OnBronzeTertiaryLight,
-    tertiaryContainer = BronzeContainerLight,
-    onTertiaryContainer = OnBronzeContainerLight,
-    background = PorcelainBackground,
-    onBackground = PorcelainOnSurface,
-    surface = PorcelainSurface,
-    onSurface = PorcelainOnSurface,
-    surfaceVariant = PorcelainContainerHigh,
-    onSurfaceVariant = PorcelainOnSurfaceVariant,
-    outline = PorcelainOutline,
-    outlineVariant = PorcelainOutlineVariant,
+// Stage: `primary` is ink, the one strong control (Save, Play), as Chaya for Windows has it; the amber is a signal
+// (LocalChayaColors.signal), and the tertiary family carries it where an M3 role needs a colour (an audio file's icon).
+internal val LightColorScheme = lightColorScheme(
+    primary = DayInk,
+    onPrimary = DayGround,
+    primaryContainer = DayInkContainer,
+    onPrimaryContainer = DayInk,
+    secondary = DayMuted,
+    onSecondary = DayGround,
+    secondaryContainer = DayContainerHigh,
+    onSecondaryContainer = DayInk,
+    tertiary = DayAmberDeep,
+    onTertiary = OnDayAmberDeep,
+    tertiaryContainer = DayAmberContainer,
+    onTertiaryContainer = OnDayAmberContainer,
+    background = DayGround,
+    onBackground = DayInk,
+    surface = DaySurface,
+    onSurface = DayInk,
+    surfaceVariant = DayContainerHigh,
+    onSurfaceVariant = DayMuted,
+    outline = DayOutline,
+    outlineVariant = DayOutlineVariant,
     error = ErrorLight,
     onError = OnErrorLight,
     errorContainer = ErrorContainerLight,
     onErrorContainer = OnErrorContainerLight,
-    inverseSurface = InverseSurfaceLight,
-    inverseOnSurface = InverseOnSurfaceLight,
-    surfaceDim = SurfaceDimLight,
-    surfaceBright = SurfaceBrightLight,
-    surfaceContainerLowest = PorcelainContainerLowest,
-    surfaceContainerLow = PorcelainContainerLow,
-    surfaceContainer = PorcelainContainer,
-    surfaceContainerHigh = PorcelainContainerHigh,
-    surfaceContainerHighest = PorcelainContainerHighest,
-    scrim = ScrimLight
+    inverseSurface = DayInverseSurface,
+    inverseOnSurface = DayInverseOnSurface,
+    inversePrimary = StageAmber,
+    surfaceDim = DaySurfaceDim,
+    surfaceBright = DaySurface,
+    surfaceContainerLowest = DayContainerLowest,
+    surfaceContainerLow = DayContainerLow,
+    surfaceContainer = DayContainer,
+    surfaceContainerHigh = DayContainerHigh,
+    surfaceContainerHighest = DayContainerHighest,
+    scrim = DayScrim
 )
 
-private val DarkColorScheme = darkColorScheme(
-    primary = VioletPrimaryDark,
-    onPrimary = OnVioletPrimaryDark,
-    primaryContainer = VioletContainerDark,
-    onPrimaryContainer = OnVioletContainerDark,
-    secondary = SlateSecondaryDark,
-    onSecondary = OnSlateSecondaryDark,
-    secondaryContainer = SlateContainerDark,
-    onSecondaryContainer = OnSlateContainerDark,
-    tertiary = GoldTertiaryDark,
-    onTertiary = OnGoldTertiaryDark,
-    tertiaryContainer = GoldContainerDark,
-    onTertiaryContainer = OnGoldContainerDark,
-    background = CharcoalBackground,
-    onBackground = CharcoalOnSurface,
-    surface = CharcoalSurface,
-    onSurface = CharcoalOnSurface,
-    surfaceVariant = CharcoalContainerHigh,
-    onSurfaceVariant = CharcoalOnSurfaceVariant,
-    outline = CharcoalOutline,
-    outlineVariant = CharcoalOutlineVariant,
+internal val DarkColorScheme = darkColorScheme(
+    primary = NightInk,
+    onPrimary = NightGround,
+    primaryContainer = NightInkContainer,
+    onPrimaryContainer = NightInk,
+    secondary = NightMuted,
+    onSecondary = NightGround,
+    secondaryContainer = NightContainerHigh,
+    onSecondaryContainer = NightInk,
+    tertiary = StageAmber,
+    onTertiary = OnNightAmber,
+    tertiaryContainer = NightAmberContainer,
+    onTertiaryContainer = OnNightAmberContainer,
+    background = NightGround,
+    onBackground = NightInk,
+    surface = NightSurface,
+    onSurface = NightInk,
+    surfaceVariant = NightContainerHigh,
+    onSurfaceVariant = NightMuted,
+    outline = NightOutline,
+    outlineVariant = NightOutlineVariant,
     error = ErrorDark,
     onError = OnErrorDark,
     errorContainer = ErrorContainerDark,
     onErrorContainer = OnErrorContainerDark,
-    inverseSurface = InverseSurfaceDark,
-    inverseOnSurface = InverseOnSurfaceDark,
-    surfaceDim = SurfaceDimDark,
-    surfaceBright = SurfaceBrightDark,
-    surfaceContainerLowest = CharcoalContainerLowest,
-    surfaceContainerLow = CharcoalContainerLow,
-    surfaceContainer = CharcoalContainer,
-    surfaceContainerHigh = CharcoalContainerHigh,
-    surfaceContainerHighest = CharcoalContainerHighest,
-    scrim = ScrimDark
+    inverseSurface = NightInk,
+    inverseOnSurface = NightContainer,
+    inversePrimary = StageAmberShadow,
+    surfaceDim = NightContainerLowest,
+    surfaceBright = NightSurfaceBright,
+    surfaceContainerLowest = NightContainerLowest,
+    surfaceContainerLow = NightContainerLow,
+    surfaceContainer = NightContainer,
+    surfaceContainerHigh = NightContainerHigh,
+    surfaceContainerHighest = NightContainerHighest,
+    scrim = NightScrim
 )
 
 /** Brand shape vocabulary: generous but disciplined rounding. */

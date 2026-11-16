@@ -1,4 +1,4 @@
-<img src="docs/brand/chaya-icon.svg" width="96" alt="Chaya's icon: a media tile and its shadow-copy">
+<img src="docs/brand/chaya-icon.svg" width="96" alt="Chaya's icon: an amber sun and its shadow-twin, one line of light through both">
 
 # Chaya
 
