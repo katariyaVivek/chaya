@@ -43,6 +43,15 @@ class SubtitlesTest {
     }
 
     @Test
+    fun `words part at Unicode's white space, a no-break space included, and nowhere else`() {
+        assertEquals(listOf("a", "b", "c", "d", "e"), Subtitles.words(" a\u00A0b\u3000c\u2009\u0085d\t\r\ne "))
+        // A zero-width space and a joiner are not white space: they stay inside the word
+        assertEquals(listOf("a\u200Bb", "c\u2060d"), Subtitles.words("a\u200Bb c\u2060d"))
+        assertEquals(emptyList<String>(), Subtitles.words(" \u00A0 "))
+        assertEquals("Up here", Subtitles.clean("Up\u00A0\u00A0here"))
+    }
+
+    @Test
     fun `times are read in every spelling the files use`() {
         assertEquals(3_723_456L, Subtitles.time("01:02:03,456"))
         assertEquals(3_723_456L, Subtitles.time("01:02:03.456"))

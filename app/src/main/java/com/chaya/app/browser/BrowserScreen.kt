@@ -47,10 +47,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tab
+import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -156,6 +156,8 @@ private const val START_SCREEN_BOOKMARKS = 8
 @Composable
 fun BrowserScreen(
     onNavigateToDownloads: () -> Unit,
+    /** Chaya's Home, the place: the browser's own start page is a new tab's. */
+    onNavigateHome: () -> Unit = {},
     onNavigateToHistory: () -> Unit = {},
     onNavigateToBookmarks: () -> Unit = {},
     viewModel: BrowserViewModel = viewModel()
@@ -739,7 +741,11 @@ fun BrowserScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
+            // Out of sight (Home, the Library, another app), the pages stop: a video on one no longer plays on
+            // behind them. Back on screen, they carry on.
+            if (event == Lifecycle.Event.ON_START) tabs.all.forEach { tab -> tab.webView?.onResume() }
             if (event == Lifecycle.Event.ON_STOP) {
+                tabs.all.forEach { tab -> tab.webView?.onPause() }
                 tabs.all.forEach { tab ->
                     if (tab.id == tabs.activeId) rememberTab(tab, viewModel.uiState.value.homeVisible)
                     else tab.webView?.let { web -> WebViewStates.save(web) }?.let { bytes -> onTabDisk { tabStore.writeState(tab.id, bytes) } }
@@ -869,15 +875,14 @@ fun BrowserScreen(
                                 activeWebView()?.goForward()
                             }
 
+                            // Chaya's Home and Library, as the places bar on either goes to them, so the browser is
+                            // never a place with no way out but Back. It stays as it is, its tabs kept, for Browse.
                             NavAction(
                                 icon = Icons.Default.Home,
                                 label = "Home",
-                                enabled = true
-                            ) {
-                                invalidateDetectionSession()
-                                activeWebView()?.loadUrl("about:blank")
-                                viewModel.goHome()
-                            }
+                                enabled = true,
+                                onClick = onNavigateHome,
+                            )
 
                             NavAction(
                                 icon = Icons.Default.Tab,
@@ -891,8 +896,8 @@ fun BrowserScreen(
                             }
 
                             NavAction(
-                                icon = Icons.Default.CloudDownload,
-                                label = "Downloads",
+                                icon = Icons.Default.VideoLibrary,
+                                label = "Library",
                                 enabled = true,
                                 badge = activeDownloads,
                                 onClick = onNavigateToDownloads

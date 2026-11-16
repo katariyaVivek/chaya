@@ -88,6 +88,7 @@ fun ChayaNavHost(navController: NavHostController) {
             BrowserScreen(
                 // Over the page, so Back goes back to it
                 onNavigateToDownloads = { navController.navigate(Screen.Downloads.route) { launchSingleTop = true } },
+                onNavigateHome = { go(Place.HOME) },
                 onNavigateToHistory = { navController.navigate(Screen.History.route) },
                 onNavigateToBookmarks = { navController.navigate(Screen.Bookmarks.route) },
             )

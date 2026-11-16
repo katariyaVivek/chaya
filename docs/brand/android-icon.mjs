@@ -52,7 +52,7 @@ const twin = { x: Number(rest.cx), y: Number(rest.cy), r: MARK.twin.r };
 // Outside the sun's ring: the box clockwise, the ring anticlockwise
 const outsideRing = `M0,0 L${box},0 L${box},${box} L0,${box} Z ${circle(sun.x, sun.y, sun.r + MARK.ring, true)}`;
 
-function mark(sunColour, twinColour, twinAlpha = 1) {
+function mark(sunColour, twinColour, twinAlpha = 1, { shift = SHIFT, scale = SCALE } = {}) {
   const part = (clip, extra, d, colour, alpha) =>
     `        <group>
             <clip-path android:pathData="${clip}" />${extra ? `\n            <group>\n                <clip-path android:pathData="${extra}" />` : ''}
@@ -60,7 +60,7 @@ function mark(sunColour, twinColour, twinAlpha = 1) {
         </group>`;
   const twinD = circle(twin.x, twin.y, twin.r);
   const sunD = circle(sun.x, sun.y, sun.r);
-  return `    <group android:translateX="${n(SHIFT)}" android:translateY="${n(SHIFT)}" android:scaleX="${SCALE}" android:scaleY="${SCALE}">
+  return `    <group android:translateX="${n(shift)}" android:translateY="${n(shift)}" android:scaleX="${scale}" android:scaleY="${scale}">
         <!-- The twin, the copy: the darker, tucked behind the sun, the line of light through it -->
 ${part(above, outsideRing, twinD, twinColour, twinAlpha)}
 ${part(below, outsideRing, twinD, twinColour, twinAlpha)}
@@ -70,7 +70,7 @@ ${part(below, null, sunD, sunColour, 1)}
     </group>`;
 }
 
-const head = (what) => `<?xml version="1.0" encoding="utf-8"?>
+const head = (what, size = CANVAS) => `<?xml version="1.0" encoding="utf-8"?>
 <!--
   ${what}
   Written by docs/brand/android-icon.mjs from Chaya's mark (desktop/design/chaya-mark.js): do not edit by hand.
@@ -78,16 +78,20 @@ const head = (what) => `<?xml version="1.0" encoding="utf-8"?>
   download is a copy of what was on the page.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp"
-    android:height="108dp"
-    android:viewportWidth="${CANVAS}"
-    android:viewportHeight="${CANVAS}">
+    android:width="${size}dp"
+    android:height="${size}dp"
+    android:viewportWidth="${size}"
+    android:viewportHeight="${size}">
 `;
 
 writeFileSync(join(drawable, 'ic_launcher_foreground.xml'), `${head('The launcher icon: the mark at rest.')}${mark(MARK_COLORS.light, MARK_COLORS.shadow)}
 </vector>
 `);
 writeFileSync(join(drawable, 'ic_launcher_monochrome.xml'), `${head('The themed icon (Android 13+): one colour, the twin at half strength.')}${mark('#FFFFFF', '#FFFFFF', THEMED_TWIN_ALPHA)}
+</vector>
+`);
+// The mark by itself, in its own box, for the app to show (Home's name): no plate, no room around it
+writeFileSync(join(drawable, 'chaya_mark.xml'), `${head("Chaya's mark at rest, as the app shows it beside its name.", MARK.box)}${mark(MARK_COLORS.light, MARK_COLORS.shadow, 1, { shift: 0, scale: 1 })}
 </vector>
 `);
 writeFileSync(join(drawable, 'ic_launcher_background.xml'), `<?xml version="1.0" encoding="utf-8"?>
@@ -112,4 +116,4 @@ writeFileSync(join(root, 'docs', 'brand', 'chaya-icon.svg'), `<svg xmlns="http:/
 <g transform="translate(${n(SHIFT)} ${n(SHIFT)}) scale(${SCALE})">${markSvg}</g>
 </svg>
 `);
-console.log('wrote ic_launcher_foreground.xml, ic_launcher_monochrome.xml, ic_launcher_background.xml, docs/brand/chaya-icon.svg');
+console.log('wrote ic_launcher_foreground.xml, ic_launcher_monochrome.xml, chaya_mark.xml, ic_launcher_background.xml, docs/brand/chaya-icon.svg');

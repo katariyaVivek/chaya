@@ -396,11 +396,11 @@ def scenario_hls():
     snapshot("hls-picker-184p")
     tap_when("hls: start the download", 20, text_prefix="Download 184p")
     time.sleep(3)
-    # The download does not need the page. Leaving it stops the 720p video the page keeps decoding,
-    # which otherwise starves the emulator for the minutes the download takes.
-    tap_when("hls: go Home, which unloads the page", 20, desc_contains="Home")
+    # The download does not need the page. Leaving the browser pauses it, which stops the 720p video the page
+    # keeps decoding, which otherwise starves the emulator for the minutes the download takes.
+    tap_when("hls: go Home, which pauses the page", 20, desc_contains="Home")
     time.sleep(2)
-    tap_when("hls: open Downloads", 20, FALLBACK["downloads_button"], desc_contains="Downloads")
+    tap_when("hls: open the Library", 20, text="Library")
     monitor_download("hls", 300)
     # 184p of this stream is about 20 MB and 720p about 170 MB. A wrong stream key once pulled in the
     # 720p variant as well (190 MB in all), and the download still "finished", so check the size too. A
@@ -520,7 +520,7 @@ def scenario_local():
     if not tap_when("local: tap Save", 20, text="Save"):
         return
     time.sleep(5)
-    tap_when("local: open Downloads", 20, FALLBACK["downloads_button"], desc_contains="Downloads")
+    tap_when("local: open the Library", 20, FALLBACK["downloads_button"], desc_contains="Library")
     monitor_download("local", 90)
     if READS_FILES:
         log("saved files: " + sh(f"run-as {PKG} ls -la files/downloads 2>&1").strip())
@@ -598,7 +598,9 @@ def scenario_history():
     tap_when("history: star the page", 20, desc_contains="Add bookmark")
     wait_for("history: the star is filled", 20, desc_contains="Remove bookmark")
     snapshot("history-starred")
-    tap_when("history: go to the start screen", 20, desc_contains="Home")
+    # The start screen is a new tab's: the bar's Home is Chaya's Home
+    tap_when("history: open the tab grid", 20, desc_contains="Tabs (1)")
+    tap_when("history: a new tab, on the start screen", 20, desc_contains="New tab")
     wait_for("history: the bookmark leads the quick sites", 30, text_contains="Launch Event")
     snapshot("history-start-screen")
     tap_when("history: open History", 20, text="History")
