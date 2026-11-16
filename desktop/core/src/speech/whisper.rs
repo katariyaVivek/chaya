@@ -23,6 +23,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::watch;
 
+use crate::program::program;
 use crate::subtitles::Line;
 
 use super::SpeechError;
@@ -175,7 +176,7 @@ pub async fn transcribe(
     let out = request.work.join("words");
 
     on_stage(Stage::Sound);
-    let mut command = Command::new(ffmpeg);
+    let mut command = program(ffmpeg);
     command
         .args(["-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-i"])
         .arg(video)
@@ -203,7 +204,7 @@ pub async fn transcribe(
         on_stage(Stage::Listening { percent: 0, on: first });
         let json = out.with_extension("json");
         let _ = tokio::fs::remove_file(&json).await;
-        let mut command = Command::new(program);
+        let mut command = crate::program::program(program);
         command
             .current_dir(request.folder)
             .arg("-m")
@@ -281,8 +282,6 @@ async fn run(
     on_line: &mut (dyn FnMut(&str) + Send),
 ) -> Result<bool, SpeechError> {
     command.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
-    #[cfg(windows)]
-    command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
     let mut child = command.spawn().map_err(|_| SpeechError::NoProgram)?;
     let mut out = BufReader::new(child.stdout.take().ok_or(SpeechError::NoProgram)?).split(b'\n');
     let mut err = BufReader::new(child.stderr.take().ok_or(SpeechError::NoProgram)?).split(b'\n');
@@ -664,7 +663,9 @@ mod tests {
         let mut lines = Vec::new();
         let ran = tokio::time::timeout(
             std::time::Duration::from_secs(20),
-            run(Command::new(&noisy), &stop, &mut |line| lines.push(line.chars().take(8).collect::<String>())),
+            run(crate::program::program(&noisy), &stop, &mut |line| {
+                lines.push(line.chars().take(8).collect::<String>())
+            }),
         )
         .await;
         assert_eq!(ran.expect("it ended"), Ok(true));
