@@ -25,7 +25,7 @@ import org.robolectric.annotation.Config
 
 /**
  * The sheet for a link on a supported site, with real Compose semantics: a note while the video is found,
- * the title with the best quality as the one main button and the rest as rows, and a failure with the
+ * the title with the qualities as tiles and one Save for the one picked, and a failure with the
  * actions that could help. Robolectric hosts the composition, so no emulator is needed.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -116,58 +116,51 @@ class PlatformSheetTest {
     // ---- found ---- //
 
     @Test
-    fun `a found video shows its title, its facts and the best quality as the main button`() {
+    fun `a found video shows its title, its facts, and Save for the best at most 1080p`() {
         show(found(best, medium, sound))
 
+        composeRule.onNodeWithText("FOUND ON YOUTUBE").assertIsDisplayed()
         composeRule.onNodeWithText("Never Gonna Give You Up").assertIsDisplayed()
         composeRule.onNodeWithText("Rick Astley · 3:33 · YouTube").assertIsDisplayed()
-        composeRule.onNodeWithText("Download 1080p").assertIsDisplayed()
+        composeRule.onNodeWithText("Save 1080p").assertIsDisplayed()
         composeRule.onNodeWithText("MP4 · ≈ 48.0 MB").assertIsDisplayed()
     }
 
     @Test
-    fun `the main button picks the best quality and a row picks its own`() {
+    fun `every quality is a tile, and picking one changes what Save saves`() {
         val chosen = mutableListOf<PlatformChoice>()
         show(found(best, medium, sound), onChoose = { chosen += it })
 
-        composeRule.onNodeWithText("Download 1080p").performClick()
-        scrollTo("720p")
+        composeRule.onNodeWithText("Save 1080p").performClick()
         composeRule.onNodeWithText("720p").performClick()
-        scrollTo("Audio only")
-        composeRule.onNodeWithText("Audio only").performClick()
+        composeRule.onNodeWithText("MP4 · ≈ 22.0 MB").assertIsDisplayed()
+        composeRule.onNodeWithText("Save 720p").performClick()
+        composeRule.onNodeWithText("Audio").performClick()
+        composeRule.onNodeWithText("Save audio").performClick()
 
         assertEquals(listOf(best, medium, sound), chosen)
     }
 
     @Test
-    fun `the other qualities are listed under their own heading`() {
-        show(found(best, medium, sound))
+    fun `4K is offered but not picked first`() {
+        show(found(choice("2160p", "MP4 · ≈ 310 MB", 2160), best))
 
-        scrollTo("Other qualities")
-        composeRule.onNodeWithText("Other qualities").assertIsDisplayed()
-        composeRule.onNodeWithText("MP4 · ≈ 22.0 MB").assertIsDisplayed()
-        composeRule.onNodeWithText("M4A · ≈ 3.0 MB").assertIsDisplayed()
+        composeRule.onNodeWithText("2160p").assertIsDisplayed()
+        composeRule.onNodeWithText("Save 1080p").assertIsDisplayed()
     }
 
     @Test
-    fun `a single choice has no list of others`() {
-        show(found(best))
-
-        composeRule.onNodeWithText("Other qualities").assertDoesNotExist()
-    }
-
-    @Test
-    fun `sound alone offers a download audio button`() {
+    fun `sound alone offers Save audio`() {
         show(found(sound))
 
-        composeRule.onNodeWithText("Download audio").assertIsDisplayed()
+        composeRule.onNodeWithText("Save audio").assertIsDisplayed()
     }
 
     @Test
-    fun `a bare file with no quality to name just says Download`() {
+    fun `a bare file with no quality to name just says Save`() {
         show(found(choice("Video", "MP4", quality = null)))
 
-        composeRule.onNodeWithText("Download").assertIsDisplayed()
+        composeRule.onNodeWithText("Save").assertIsDisplayed()
     }
 
     @Test
