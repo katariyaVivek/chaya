@@ -89,9 +89,9 @@ watching* and *Recently saved* (#117); the browser with its *Found on this page*
 sidebar in its own PR. All merged (#114 to #120), in the `windows-preview` build.
 
 The phone follows in its own stack, the look first: the two-suns icon and Stage's palette (ink as the strong control,
-amber a signal); then Home, the Library, *Found on this page* and the player screen from the approved phone designs.
-Then the first of the Windows features the phone lacks: saved videos played in Chaya with their subtitles and
-transcript.
+amber a signal) (#121); then Home (#122), the Library (#123), *Found on this page* (#124) and the player screen
+from the approved phone designs: saved videos play in Chaya, start where they were left, and Home offers *Continue*.
+Then the first of the Windows features the phone lacks: subtitles on the picture and the transcript.
 
 The six-part plan after v0.4.0 has shipped (#34 to #39); it is in
 [`history/plan-after-v0.4.md`](history/plan-after-v0.4.md). What is left:

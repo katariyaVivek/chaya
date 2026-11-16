@@ -49,9 +49,10 @@ class DownloadsViewModel(application: Application) : AndroidViewModel(applicatio
     fun delete(id: Long) = deleteNow(id)
     fun saveAsFile(id: Long) = manager.saveAsFile(id)
 
-    /** Deletes a download with what the library made for it: its frame, and files taken out of its ZIP. */
+    /** Deletes a download with what the library made for it: its frame, files taken out of its ZIP, where it was left. */
     private fun deleteNow(id: Long) {
         downloads.value.firstOrNull { it.id == id }?.let(files::forget)
+        app.playbackPositions.forget(id)
         manager.deleteTask(id)
     }
 

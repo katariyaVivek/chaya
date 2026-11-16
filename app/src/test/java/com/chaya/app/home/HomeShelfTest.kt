@@ -2,6 +2,7 @@ package com.chaya.app.home
 
 import com.chaya.app.download.DownloadState
 import com.chaya.app.download.DownloadTask
+import com.chaya.app.ui.player.Watched
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -41,6 +42,26 @@ class HomeShelfTest {
 
         assertEquals(2L, shelf.hero?.id)
         assertEquals(listOf("task:4", "task:3", "task:1"), shelf.recent.map { it.key })
+    }
+
+    @Test
+    fun `the video left part-way leads instead of the newest, and one watched to the end does not`() {
+        val tasks = listOf(task(1, "Me at the zoo"), task(2, "Last light on the lake"), task(3, "Harbour at dawn"))
+        val watched = mapOf(
+            1L to Watched(atMs = 252_000, lengthMs = 760_000, stoppedAt = 50),
+            // Watched later, but to its end: nothing to continue
+            3L to Watched(atMs = 595_000, lengthMs = 600_000, stoppedAt = 90),
+        )
+
+        val shelf = HomeShelf.of(tasks, watched = watched)
+
+        assertEquals(1L, shelf.hero?.id)
+        assertEquals(252_000L, shelf.heroWatched?.resumeAtMs)
+        assertEquals(listOf("task:3", "task:2"), shelf.recent.map { it.key })
+        // Nothing left part-way: the newest leads, and Home says so
+        val newest = HomeShelf.of(tasks, watched = mapOf(3L to watched.getValue(3L)))
+        assertEquals(3L, newest.hero?.id)
+        assertNull(newest.heroWatched)
     }
 
     @Test

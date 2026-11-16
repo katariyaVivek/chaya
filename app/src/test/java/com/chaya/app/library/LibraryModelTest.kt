@@ -108,4 +108,16 @@ class LibraryModelTest {
         // Nothing known of its size: where it came from alone
         assertEquals("X", cardDetails(items.getValue("task:8")))
     }
+
+    @Test
+    fun `videos and streams play in Chaya, pictures, sound and ZIPs open as before`() {
+        val file = "/data/files/downloads/x"
+        assertTrue(playsInChaya(task(1, "Me at the zoo").copy(filePath = file)))
+        assertTrue(playsInChaya(task(1, "Me at the zoo").copy(exportedUri = "content://media/external/video/1")))
+        // A stream only Media3's cache holds: nothing else can read it
+        assertTrue(playsInChaya(task(9, "Live", "Live", "application/x-mpegURL", url = "https://cdn.example/9.m3u8")))
+        assertTrue(!playsInChaya(task(8, "Cat", "Cat.webp", "image/webp").copy(filePath = file)))
+        assertTrue(!playsInChaya(task(5, "A song", "A song.m4a", "audio/mp4").copy(filePath = file)))
+        assertTrue(!playsInChaya(task(7, "All", "someone.zip", "application/zip", url = "chaya-archive://x/someone").copy(filePath = file)))
+    }
 }

@@ -120,13 +120,15 @@ import com.chaya.app.library.ZipItem
 import com.chaya.app.library.ZipView
 import com.chaya.app.library.kindOf
 import com.chaya.app.library.libraryItems
+import com.chaya.app.library.playsInChaya
 import com.chaya.app.library.unfinishedCount
 import java.io.File
 
 @Composable
 fun DownloadsScreen(
     onNavigateBack: () -> Unit,
-    onPlayStream: (Long) -> Unit,
+    /** A saved video, or a stream, plays in Chaya's player. */
+    onPlay: (Long) -> Unit,
     onNavigateToDiagnostics: () -> Unit = {},
     onNavigateToHistory: () -> Unit = {},
     onNavigateToBookmarks: () -> Unit = {},
@@ -187,7 +189,7 @@ fun DownloadsScreen(
             cancel = viewModel::cancel,
             delete = ::requestDelete,
             open = { task -> viewModel.open(task, ::message) },
-            play = onPlayStream,
+            play = onPlay,
             saveAsFile = viewModel::saveAsFile,
             share = { chosen -> viewModel.share(chosen, ::message) },
             openFile = { file, mime -> viewModel.openFile(file, mime, ::message) },
@@ -300,13 +302,13 @@ internal fun DownloadsContent(
                 viewing = Viewing(pagesOf(pictures), pictures.indexOf(task).coerceAtLeast(0), pictures)
             }
             kindOf(task) == FileKind.ZIP && task.filePath != null -> zipTaskId = task.id
-            task.filePath != null || task.exportedUri != null -> actions.open(task)
-            else -> actions.play(task.id)
+            playsInChaya(task) -> actions.play(task.id)
+            else -> actions.open(task)
         }
     }
 
     fun openTask(task: DownloadTask) {
-        if (task.filePath != null || task.exportedUri != null) actions.open(task) else actions.play(task.id)
+        if (playsInChaya(task)) actions.play(task.id) else actions.open(task)
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -733,8 +735,8 @@ private fun DownloadCard(
     onSaveAsFile: () -> Unit,
     onShare: () -> Unit
 ) {
-    // Streams live in Media3's cache (no single file), so they play in-app instead of opening.
-    val openAction = if (task.filePath != null || task.exportedUri != null) onOpen else onPlay
+    // Videos, and streams that live only in Media3's cache, play in Chaya; anything else opens in another app.
+    val openAction = if (playsInChaya(task)) onPlay else onOpen
 
     Surface(
         shape = RoundedCornerShape(16.dp),
@@ -957,10 +959,10 @@ internal fun ActionsRow(
                 }
             }
             DownloadState.COMPLETED -> {
-                if (task.filePath != null || task.exportedUri != null) {
-                    PrimaryAction(Icons.AutoMirrored.Filled.OpenInNew, "Open", onOpen, highlighted = true)
-                } else {
+                if (playsInChaya(task)) {
                     PrimaryAction(Icons.Default.PlayArrow, "Play", onPlay, highlighted = true)
+                } else {
+                    PrimaryAction(Icons.AutoMirrored.Filled.OpenInNew, "Open", onOpen, highlighted = true)
                 }
             }
         }

@@ -192,12 +192,22 @@ class DownloadsLibraryTest {
     }
 
     @Test
-    fun `a video opens in another app as before`() {
+    fun `a video plays in Chaya's player`() {
         show()
 
         composeRule.onNodeWithContentDescription("Me at the zoo").performClick()
 
-        assertEquals(listOf("open 1"), events)
+        assertEquals(listOf("play 1"), events)
+    }
+
+    @Test
+    fun `in the list too, a saved video plays in Chaya's player and a picture opens in another app`() {
+        show(startInGrid = false, tasks = listOf(zoo, cat))
+
+        composeRule.onNodeWithText("Me at the zoo").performClick()
+        composeRule.onNodeWithText("Cat").performClick()
+
+        assertEquals(listOf("play 1", "open 5"), events)
     }
 
     @Test
