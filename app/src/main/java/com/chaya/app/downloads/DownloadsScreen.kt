@@ -1,5 +1,7 @@
 package com.chaya.app.downloads
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
@@ -173,6 +175,11 @@ fun DownloadsScreen(
         }
     }
 
+    // The phone's picker, for a video or sound of the person's own; Chaya keeps the right to read what is picked
+    val pickVideo = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) viewModel.addOwnVideo(uri, ::message)
+    }
+
     if (appearanceOpen) {
         AppearanceDialog(
             current = themeMode,
@@ -205,6 +212,7 @@ fun DownloadsScreen(
         ),
         menu = DownloadsMenu(
             onNavigateBack = onNavigateBack,
+            onAddVideo = { runCatching { pickVideo.launch(arrayOf("video/*", "audio/*")) }.onFailure { message("No app on this phone can pick a file") } },
             onBookmarks = onNavigateToBookmarks,
             onHistory = onNavigateToHistory,
             onAppearance = { appearanceOpen = true },
@@ -240,6 +248,8 @@ private const val SEARCH_PAUSE_MS = 150L
 /** Where the top bar leads. */
 internal class DownloadsMenu(
     val onNavigateBack: () -> Unit = {},
+    /** Opens the phone's picker to add a video of the person's own. */
+    val onAddVideo: () -> Unit = {},
     val onBookmarks: () -> Unit = {},
     val onHistory: () -> Unit = {},
     val onAppearance: () -> Unit = {},
@@ -410,6 +420,7 @@ internal fun DownloadsContent(
                                 }
                                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                                     listOf(
+                                        "Add a video" to menu.onAddVideo,
                                         "Bookmarks" to menu.onBookmarks,
                                         "History" to menu.onHistory,
                                         "Appearance" to menu.onAppearance,

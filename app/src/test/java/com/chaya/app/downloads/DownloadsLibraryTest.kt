@@ -115,6 +115,7 @@ class DownloadsLibraryTest {
         startInGrid: Boolean = true,
         tasks: List<DownloadTask> = all,
         searchLines: (suspend (String, List<DownloadTask>, Set<Long>) -> LineSearch.Results)? = null,
+        menu: DownloadsMenu = DownloadsMenu(),
     ) {
         composeRule.setContent {
             var grid by remember { mutableStateOf(startInGrid) }
@@ -127,6 +128,7 @@ class DownloadsLibraryTest {
                 },
                 files = files,
                 actions = actions,
+                menu = menu,
                 searchLines = searchLines,
             )
         }
@@ -155,6 +157,16 @@ class DownloadsLibraryTest {
         composeRule.onNodeWithText("The elephants are here.").performClick()
 
         assertEquals(listOf("play 1 at 5000"), events)
+    }
+
+    @Test
+    fun `the menu offers to add a video of the person's own`() {
+        show(menu = DownloadsMenu(onAddVideo = { events += "add a video" }))
+
+        composeRule.onNodeWithContentDescription("More").performClick()
+        composeRule.onNodeWithText("Add a video").performClick()
+
+        assertEquals(listOf("add a video"), events)
     }
 
     @Test

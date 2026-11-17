@@ -14,6 +14,7 @@ import android.webkit.WebSettings
 import androidx.annotation.VisibleForTesting
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.core.net.toUri
 import androidx.media3.common.StreamKey
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
@@ -395,10 +396,36 @@ class DownloadManager(
             .forEach { cancelDownload(it.id) }
     }
 
-    /** Remove a task and delete its files (private copy + public MediaStore copy). */
+    /**
+     * Lists one of the person's own videos (or sounds), the document at [uri] the phone's picker gave, as a finished
+     * download that plays in Chaya. The same file added again is the one already listed. Its id.
+     */
+    suspend fun addOwnVideo(uri: String, name: String, mimeType: String?, sizeBytes: Long?): Long {
+        ready.await()
+        _downloads.value.firstOrNull { it.ownUri == uri }?.let { return it.id }
+        val task = OwnVideos.task(nextId(), uri, name, mimeType, sizeBytes, System.currentTimeMillis())
+        append(task)
+        dao.insert(DownloadEntity.fromTask(task))
+        return task.id
+    }
+
+    /**
+     * Remove a task and delete its files (private copy + public MediaStore copy). One of the person's own videos is
+     * only taken out of Chaya: the file stays where it is, and Chaya gives back the right to read it.
+     */
     fun deleteTask(id: Long) {
         val t = find(id)
         subtitles?.forget(id)
+        if (t != null && t.isOwn) {
+            t.ownUri?.let { u ->
+                runCatching {
+                    context.contentResolver.releasePersistableUriPermission(u.toUri(), Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+            }
+            _downloads.update { list -> list.filterNot { it.id == id } }
+            scope.launch { dao.delete(id) }
+            return
+        }
         savingAsFile.remove(id)?.cancel()
         downloader.cancel(id)
         streamDownloader?.deleteStream(id)
