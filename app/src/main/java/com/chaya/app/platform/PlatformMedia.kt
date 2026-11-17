@@ -1,5 +1,8 @@
 package com.chaya.app.platform
 
+import com.chaya.app.subtitles.Chapter
+import com.chaya.app.subtitles.Chapters
+import com.chaya.app.subtitles.ListedChapter
 import com.chaya.app.subtitles.SubtitleTrack
 import org.json.JSONException
 import org.json.JSONObject
@@ -112,6 +115,8 @@ data class PlatformMedia(
     val language: String? = null,
     /** The subtitles the site has for the video, in kinds Chaya reads (`chaya_engine.extract._subtitle_tracks`). */
     val subtitles: List<SubtitleTrack> = emptyList(),
+    /** The video's chapters, put right ([Chapters.read]); none when the site lists fewer than two. */
+    val chapters: List<Chapter> = emptyList(),
 ) {
     companion object {
         /**
@@ -156,8 +161,20 @@ data class PlatformMedia(
                 subtitles = media.optJSONArray("subtitles")?.let { array ->
                     (0 until array.length()).mapNotNull { index -> array.optJSONObject(index)?.let { parseTrack(it) } }
                 }.orEmpty(),
+                chapters = Chapters.read(
+                    media.optJSONArray("chapters")?.let { array ->
+                        (0 until array.length()).mapNotNull { index -> array.optJSONObject(index)?.let { parseChapter(it) } }
+                    }.orEmpty(),
+                    media.dbl("duration"),
+                ),
             )
         }
+
+        private fun parseChapter(chapter: JSONObject) = ListedChapter(
+            start = chapter.dbl("start"),
+            end = chapter.dbl("end"),
+            title = chapter.str("title"),
+        )
 
         private fun parseTrack(track: JSONObject): SubtitleTrack? = SubtitleTrack(
             language = track.str("language") ?: return null,

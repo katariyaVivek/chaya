@@ -686,7 +686,7 @@ class BrowserViewModel @JvmOverloads constructor(
             downloadManager.startDownload(choice.toDownloadRequest(found.media, pageUrl = found.match.url))
         } else {
             val subtitles = if (choice.isAudioOnly) null else found.media.subtitlesToSave(choice.file.url, choice.file.headers)
-            downloadManager.startDownload(streamMediaFor(found, choice), subtitles)
+            downloadManager.startDownload(streamMediaFor(found, choice), subtitles, found.media.chapters)
         }
         onStarted(choice.label)
     }

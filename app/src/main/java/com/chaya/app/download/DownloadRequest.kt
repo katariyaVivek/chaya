@@ -1,5 +1,6 @@
 package com.chaya.app.download
 
+import com.chaya.app.subtitles.Chapter
 import com.chaya.app.subtitles.SubtitleSource
 
 /**
@@ -28,4 +29,6 @@ data class DownloadRequest(
     val groupKey: String? = null,
     /** The site's subtitles to keep with the video, fetched as it starts; null when it has none Chaya keeps. */
     val subtitles: SubtitleSource? = null,
+    /** The video's chapters as the site named them, kept with it for the player's seek bar. */
+    val chapters: List<Chapter> = emptyList(),
 )

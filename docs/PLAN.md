@@ -1,276 +1,116 @@
-# Working plan: watch, understand and clip (Chaya for Windows)
+# Working plan: the phone catches up with Windows
 
-Chaya already gets the video. This plan lets the person work with it inside Chaya for Windows, in the
-way [Vimpo](https://vimpo.app/) does on a Mac, still with nothing uploaded unless they choose it:
-watch it with subtitles, have subtitles made on the PC when the site has none, read them in their own
-language beside the original, see the moments worth watching, and cut those into short clips with the
-subtitles burned in. What Vimpo does, piece by piece, is in [`vimpo-reference.md`](vimpo-reference.md).
+Chaya for Windows 0.2.0 learned to watch, understand and clip what it saves (the plan it followed is in
+[`history/plan-watch-understand-clip.md`](history/plan-watch-understand-clip.md)). The phone has its first piece: a
+saved video plays in Chaya with the site's subtitles over the picture and as a transcript under it, and starts where it
+was left (#122 to #127). This plan brings the rest to the phone, so both apps do the same things, each in the way its
+screen suits.
 
-Each step is one PR (a big one may take two), merged before the next starts, and each is useful on its
-own. Steps 1 to 3 need no account, no key and no network beyond fetching the speech model once. Tick a
-step off here in the PR that finishes it.
+Each step is one PR, merged before the next starts and useful on its own, with the `ui-check` label (every step touches
+the player). Tick a step off here in the PR that finishes it. The logic is ported from `desktop/core` into plain Kotlin
+with no Android imports, tested on the JVM; the screens follow [`DESIGN.md`](../DESIGN.md) and Stage.
 
 ## Resuming in a new session
 
-> Read `CLAUDE.md` and `docs/PLAN.md`, then start on the next unticked step. One PR per step, labelled
-> for the Windows tour; tell me when it is green and wait for me to say merge.
+> Read `CLAUDE.md` and `docs/PLAN.md`, then start on the next unticked step. One PR per step, labelled `ui-check`;
+> tell me when it is green and wait for me to say merge.
 
 ## Decided
 
-- **Windows first.** The phone may follow once the Windows version has been used for a while; nothing here
-  touches the phone app.
-- **Files stay where Chaya saves them**, in the person's Downloads folder. Vimpo keeps a library folder of
-  its own; Chaya does not move anything. Subtitles are written next to the video as `name.en.srt`,
-  `name.es.srt` and so on, so VLC and other players find them too. What only Chaya needs (the words with
-  their times, translations kept as versions, highlights, clips, where playback stopped) goes in Chaya's
-  own data folder, one JSON file per video, keyed by the download's number like `downloads.json`.
-- **Speech to text is whisper.cpp**, run as its own program the installer carries, as ffmpeg is: built in
-  CI from a pinned release, by a script beside `build_ffmpeg.sh`, for Linux (the core's tests) and
-  Windows. It is MIT, as are Whisper's weights.
-- **Speech models are fetched once, when first needed**, from Hugging Face (`ggerganov/whisper.cpp`),
-  checked against SHA-256 sums Chaya pins, and kept in Chaya's data folder. The person picks one in the
-  settings; Large v3 Turbo (quantized, about 550 MB) is the default, as on Vimpo:
-
-  | Model | Size | |
-  |---|---|---|
-  | Tiny | 75 MB | fastest, least accurate |
-  | Small | 466 MB | |
-  | Large v3 Turbo, quantized | 547 MB | the default: close to the largest, much faster |
-  | Medium | 1.5 GB | |
-  | Large v3 | 3.1 GB | most accurate, slowest |
-
-- **The graphics card does the work when there is one** (whisper.cpp's Vulkan build, which runs on NVIDIA,
-  AMD and Intel), and the processor when there is not.
-- **Translation and highlights use the person's own model**: their key for OpenAI, Anthropic, Gemini,
-  DeepSeek, OpenRouter, Mistral, Groq, xAI or any service that speaks OpenAI's API, or a model on the PC
-  through Ollama or LM Studio. Two protocols cover them all: OpenAI-compatible chat completions and
-  Anthropic's Messages API. Keys are kept in Windows Credential Manager, never in a file. Nothing is sent
-  until the person sets a model up, and then only the subtitle text and the video's title, only to the
-  service they picked.
-- **Clips are encoded with Windows' own H.264 encoder** (ffmpeg's `h264_mf`, which uses the graphics card
-  where it can) and subtitles drawn with libass. That keeps the ffmpeg Chaya carries LGPL, with no x264.
-- **Privacy is part of each step.** Each step that contacts something new, or keeps something new, updates
-  `PRIVACY_POLICY.md` and `desktop/README.md` in the same PR.
+- **Same features, the phone's own shape.** What Windows puts in tabs beside the player, the phone puts under the
+  picture or in a sheet; what Windows does with a key (Ctrl+B, Ctrl+←), the phone does with a tap.
+- **Kept on the phone only**, in the app's own files beside the subtitles, by download, and deleted with the download,
+  as subtitles are now (`SubtitleStore`). Nothing is uploaded unless the person sets up a model and asks it something.
+- **The person's own AI model** speaks the two protocols Windows does (OpenAI-compatible chat completions and
+  Anthropic's Messages API). The key is encrypted with a key in the Android Keystore, never stored in plain text and
+  never backed up. A model on a PC in the same home (Ollama, LM Studio) is reached by its local address.
+- **Clips are encoded with Media3 Transformer** (already a dependency), on the phone's own hardware encoder, with the
+  subtitles drawn on as an overlay. No ffmpeg on the phone.
+- **Speech to text comes last**: whisper.cpp built for Android, with the smaller models only (a phone's memory and
+  battery), fetched once and checked against pinned SHA-256 sums, as on Windows.
+- **Not ported:** Windows' copied-link key (Ctrl+Alt+D). The phone already has its own ways in for a copied link:
+  *Share to Chaya*, and Home's paste.
+- **Privacy is part of each step.** A step that contacts something new, or keeps something new, updates
+  `PRIVACY_POLICY.md` in the same PR.
 
 ## Steps
 
-### 1. Watch it in Chaya ☑
+### 1. Chapters ☑
 
-**The person gets:** a finished video opens in Chaya instead of another program, and plays with its
-subtitles when the site had any. A list of the lines beside it follows the video; clicking a line jumps
-there. Playback speed, full window (F or a double-click), and it starts again where they stopped.
+**The person gets:** a video saved with chapters shows them on the seek bar, in pieces, one a chapter; the chapter
+playing under the video's name ("3 of 8 · The walk"), which follows the seek bar as it is dragged; and tapping it lists
+every chapter, a tap on one playing from there. Full screen, the chapter playing is under the title.
 
-- The video comes to the window through the `chaya-file` scheme the picture viewer uses, with HTTP range
-  requests so seeking works. WebView2 plays H.264, VP9, AV1, AAC and Opus, which covers what Chaya saves.
-- At download, yt-dlp also fetches the site's subtitles (`--write-subs`, the video's own language, and
-  machine captions only when there are no others) and Chaya saves them as SRT next to the video.
-- `chaya-core` reads SRT and WebVTT into lines (`core::subtitles`), and finds the line at a time. Chaya draws
-  the subtitles itself rather than with `<track>`, so step 5 can stack two languages and style each.
-- **Tests:** SRT and VTT parsing (times, styling tags, overlaps), range requests, the line at a time; the
-  Windows tour opens a saved video, sees it play, and clicks a line to seek.
+- The engine already listed them (`chaya_engine.extract._chapters`). `Chapters.read` is `core::chapters::read`, ported:
+  in order, each ending where the next begins, none past the end, fewer than two are none.
+- Kept as `12.chapters` beside `12.en.srt`, for downloads from a link and streams found on a page alike.
+- **Tests:** reading and putting right (the desktop's cases), the chapter at a time, kept and read back, kept with a
+  download and deleted with it.
 
-**Done.** The site's subtitles are not fetched by yt-dlp itself (Chaya for Windows downloads the files, not
-yt-dlp): the engine lists them (`--subtitles`), the download picks one (`core::subtitles::pick`) and fetches it
-after the video, as SRT. Where playback stopped is in `videos/ID.json` (`core::video`), the per-video file the
-later steps add to. The tour puts its own 30-second clip and subtitles in place first (`tour.py --seed`).
+### 2. Search every line said ☐
 
-### 1b. The player, organised ☑
+**The person gets:** the Library's search finds words said in a video, not only titles: each line that matches, under
+its video, and a tap opens the player there.
 
-**The person gets:** the player laid out as Vimpo's is, after a look at its demo: the bar holds only the title and
-the window's buttons; the player's own controls over the picture fade while it plays; beside it, tabs (Transcript,
-Subtitles; Highlights and subtitle styles join in steps 5 and 6), one clear action in each, and motion that follows
-Chaya's design system (reduced motion respected).
+- Port `core::search`: every video's lines in memory, folded for case and accents, read again only when a file changed.
+- `PlayerScreen` takes a time to start at.
 
-### 2. Subtitles made on the PC ☑
+### 3. Your own videos ☐
 
-**The person gets:** *Make subtitles* on any saved video, and a switch to make them for every download.
-The first time, Chaya fetches the speech model, showing the download, then shows how far it has got.
-The subtitles appear in the player and as an SRT next to the video.
+**The person gets:** *Add a video* in the Library opens the phone's picker; the video is listed where it is (not
+copied) and plays, with everything the later steps add.
 
-- **Settings › Speech recognition**: the models above with their sizes, which are fetched, and delete.
-- **Audio:** ffmpeg turns the sound into 16 kHz mono WAV for whisper.cpp. The cut-down ffmpeg gains the
-  audio decoders it needs (AAC, MP3, Opus, Vorbis, FLAC), the resampler, and the WAV muxer.
-- **whisper.cpp** runs with full JSON output (each word with its times) and progress, on the processor in
-  this step; `build_whisper.sh` builds it, and `prepare.py` puts it in the engine folder.
-- The language is detected, or the person picks it.
-- **Tests:** in the core, against the Linux build and the Tiny model (cached in CI), the JFK sample
-  whisper.cpp ships (public domain) comes back as "ask not what your country can do for you"; reading
-  whisper.cpp's JSON; the model download resumes and refuses a file whose sum is wrong (a local server). The
-  Windows tour makes subtitles for a short clip.
+- A persisted read permission on the picked document; a row in the library marked as the person's own, which Delete
+  only takes out of Chaya. A Room migration with its test.
 
-**Done.** whisper.cpp v1.9.5. The JFK test also runs on Windows, with the cross-compiled program. The model pins
-are checked against Hugging Face's own list in CI (`check_models.py`). What was heard, word by word, is kept in
-`videos/ID.json` for step 3. Lines are whisper.cpp's segments for now; step 3 makes them short.
+### 4. Subtitles put right ☐
 
-### 3. Short lines, and the graphics card ☑
+**The person gets:** a long press on a transcript line edits its words; *Timing* moves every line earlier or later, or
+stretches them between two lines; Undo for each.
 
-**The person gets:** subtitles in short lines that follow the speech (1 to 5 seconds, about 40
-characters), instead of one line held for fifteen seconds; and transcription several times faster on a PC
-with a graphics card.
+- Port `core::fix`. The SRT beside the video is written again; the first original is kept so *Undo* can go back.
 
-- **Word times** from whisper.cpp's DTW timestamps, with flash attention off (Vimpo found every time comes
-  back as -1 with it on).
-- **Line breaks** in `chaya-core`, ported from Vimpo's rules (reference §4): split at sentence ends and
-  clear pauses, then split what is still too long at the best gap. A gap scores higher after a comma, at a
-  longer pause, and before "and", "but" or "because"; lower after "the", "of" or "to", between an adjective
-  and its noun, or when it leaves one half too short. Tiny pieces join a neighbour; each line shows 0.2 s
-  early and stays 0.3 s longer. Word lists for English first, then the other languages Chaya's people use.
-  Chinese and Japanese need their own rules (reference §4) and come after.
-- **Vulkan:** a second whisper.cpp build for Windows, used when the PC has a Vulkan device; the processor
-  build stays as the fallback. Measured on the owner's PC before and after.
-- **Tests:** recorded whisper.cpp output split into lines (the reference's example went from 27 lines to
-  127, the longest 5 s); the scoring rules one by one.
+### 5. Your own AI model ☐
 
-**Short lines done** (the first of this step's two PRs). whisper-cli runs with `-dtw` (each model's preset in
-`models.json`) and `-nfa`; a word starts at its DTW time and ends at its punctuation's, or twice a usual word's length
-later, so the silence after it shows. `core::speech::lines` holds the rules and word lists (English, Spanish,
-Portuguese, French, Italian, German, Hindi). Recorded with Large v3 Turbo in CI, George W. Bush's Columbia address
-(3 min 18 s) went from whisper.cpp's 39 segments to 73 lines, averaging 2.4 s and 28 characters, the longest 4.3 s.
-With flash attention on, every DTW time came back as -1, as Vimpo found. On CI's four processor cores Large v3 Turbo
-took ten minutes for those three minutes of speech: the graphics card is next.
+**The person gets:** Settings › AI model: a service from a list (OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter,
+Mistral, Groq, xAI, any OpenAI-compatible address) or a model on a PC in the home, with its key, and *Test*.
 
-**Graphics card done** (the second PR). `build_whisper.sh windows-vulkan` cross-compiles a Vulkan build with
-mingw-w64, Khronos' headers and an import library for `vulkan-1.dll` made from the loader's export list; it needs no
-DLL but Windows' own. Chaya runs it when Windows has Vulkan and *Listen on* is *Graphics card*, and the processor
-build when it does not, or when it fails. CI runs the JFK sample through it on Lavapipe (Mesa's Vulkan for the
-processor), and the Windows tour, on a runner with no Vulkan at all, through the fallback. Measuring on the owner's
-PC: the player's note says where subtitles were made and how long it took, and *Listen on* › *Processor* gives the
-before.
+- Port `core::ai`: the two protocols, against MockWebServer. The key through the Android Keystore; the setting left
+  out of backups. `PRIVACY_POLICY.md` says what is sent, only when the person asks.
 
-### 4. Your own AI model ☑
+### 6. Translation ☐
 
-**The person gets:** **Settings › AI model**: pick a service, paste a key (or point at Ollama or LM
-Studio, found on their usual ports), pick a model from the service's list, and *Test*. Nothing else
-changes until they use it in step 5 or 6.
+**The person gets:** *Translate* in the player: the subtitles in their language under the original, on the picture
+and in the transcript, a version kept for each model.
 
-- One client in `chaya-core` with the two protocols, streaming off, JSON replies checked against what was
-  asked for. The key is read from Credential Manager each time and sent only to that service.
-- `PRIVACY_POLICY.md` says exactly what is sent, when, and to whom.
-- **Tests:** both protocols against a local stand-in server: a reply, a refused key, a rate limit, a model
-  that answers in prose instead of JSON.
+- Port `core::translate`: batches, each with the whole transcript for names and terms; carried on where it stopped.
 
-**Done.** `core::ai` (services, both protocols, `models`, `ask`, `ask_json` with a check, `test`), keys in
-Credential Manager through `keyring` in the app (`ai.rs`), Settings › AI model in the window. Gemini's 400 for a
-wrong key is told as a refused key; a model's JSON is found in a fenced block or among words. The Windows tour sets
-up a stand-in OpenAI-compatible service on the runner, saves a key, picks its model and runs *Test*: the service
-must get the key, and `ai.json` must not hold it.
+### 7. Highlights ☐
 
-### 5. Translation side by side ☑
+**The person gets:** *Highlights* in the player: the moments worth watching, listed with why, and marked on the seek
+bar; a tap plays from one.
 
-**The person gets:** the subtitles in their language, with the original under it (or over it, or alone).
-Each language has its own colour, font and size. A translation can be made again with another model and
-kept as a second version.
+- Port `core::highlights`.
 
-- **Whole-video translation** (Vimpo's Smart Translation, reference §4): every batch carries the title and
-  the whole transcript, so a misheard name is put right and a term is translated the same way each time.
-  Lines go out numbered and must come back with the same numbers, so they stay in step.
-- Batches small enough for the model's limit, retried one by one when a reply comes back short. Lines
-  already translated are kept, so nothing is paid for twice.
-- The translation is written as `name.es.srt` next to the video too.
-- **Tests:** batching, numbering and the check that every line came back; a stand-in server that drops a
-  line, or merges two.
+### 8. Clips ☐
 
-**Translating done** (the first of this step's two PRs). `core::translate`: batches of 40 lines (3,000 characters),
-the whole transcript with each up to 60,000 characters and the lines around beyond, lines numbered and read back by
-number, a line left out asked for on its own, rate limits waited out, progress handed back after every batch.
-Translations are kept in `videos/ID.json`, a version per language and model, and a whole one is written as
-`name.LANG.srt`. *Translate* is in the player's Subtitles tab. The Windows tour translates its clip with a stand-in
-service. Next: showing the original and the translation together, with each language's style, and switching versions.
+**The person gets:** lines chosen in the transcript (a long press, then more taps) or a highlight made into a clip;
+clips listed under the player and trimmed on a timeline whose edges snap to lines and chapters.
 
-**Side by side done** (the second PR). *Also show* and *On top* in the Subtitles tab, the transcript with the second
-language under each line, each language's colour, font and size (design tokens `--subtitle-yellow` … and
-`--font-serif`), and a language's versions by model to switch between (`video_translations`, `use_translation`).
+- Port `core::clips`. The timeline is drawn from the video's frames and its sound's loudness.
 
-### 6. Highlights ☑
+### 9. Export ☐
 
-**The person gets:** *Find highlights*: the moments that stand on their own, each with a title, a reason
-and its time, marked on the progress bar and listed beside the video. Clicking one plays it from the
-start. The person picks how many.
+**The person gets:** a clip saved as a video with its subtitles drawn on, or as SRT; a size to fit (10, 25 or 50 MB)
+for sending; shared or saved to the gallery.
 
-- The model gets the numbered lines and the title, and answers with line ranges; Chaya turns lines into
-  times, so a highlight never starts mid-word.
-- **Tests:** the reply checked (ranges inside the video, in order, not overlapping); markers placed.
+- Media3 Transformer: the clip's span, the subtitles as a text overlay, a bit rate from the size asked for.
+- **Tests:** the bit rate for a size (JVM); an `androidTest` that exports a short clip and reads its length back.
 
-**Done.** `core::highlights` (the question with numbered, timed lines and the language to write in; ranges checked,
-turned round, overlaps dropped by score, timed by lines; long videos in parts), kept as `video::Highlights`. The
-Highlights tab lists them, the seek bar marks them, and the Windows tour finds and plays them with a stand-in service.
+### 10. Subtitles made on the phone ☐
 
-### 7. Clips ☑
+**The person gets:** *Make subtitles* on a saved video with none, listened to on the phone; the model fetched the first
+time, with its size said first.
 
-**The person gets:** a clip view: click a line and Shift-click another, *Make clip* (Ctrl+B), trim it on a
-timeline whose edges snap to the lines, name it. Highlights become clips in one click.
-
-- Clips are kept in the video's JSON file.
-- **Tests:** selection to range, snapping, overlaps.
-
-**Done.** `core::clips` (each clip put right before it is kept: turned round, at least 0.5 s, inside the video,
-named, the same range once; overlapping clips both kept) in `video::VideoData::clips`, written under a lock. The
-window's rules in `ui/clips.js`, tested with Node: lines chosen as one range, an edge snapped to a line's start or
-end within 1.5 s (Alt: anywhere), arrow keys a line at a time, overlapping clips on rows. The transcript chooses
-lines (click, Shift-click) and Ctrl+B makes the clip; highlights are added one at a time or all; the Clips tab lists
-them; the timeline under the picture trims, names, plays and removes the one chosen; I and O set its edges at the
-playhead. The Windows tour makes a clip from lines, drags and nudges its edges, renames it, adds the highlights,
-and reads them back from the video's file.
-
-**Then, asked for after trying it:** the timeline became an editor's, as Vimpo's Studio has it: dark, with a ruler
-and tracks for the picture (frames from the video), the lines, the sound (peaks read once by ffmpeg, `core::sound`)
-and the clips; zoom and scroll; a sweep across it makes a clip; it follows the playhead.
-
-### 8. Export ☑
-
-**The person gets:** clips saved as videos with the subtitles burned in (Outline, Box or Large, one
-language or two), at 720p, 1080p or the original size; or as SRT files timed from 0:00 for each clip.
-
-- ffmpeg gains libass (with FreeType, FriBidi and HarfBuzz), the scaler, `h264_mf` and the AAC encoder.
-  Each clip is cut exactly, from the line's time, not the nearest keyframe.
-- Notifies when an export ends or fails, with Retry.
-- FCPXML (for Final Cut, Premiere and DaVinci Resolve) only if it is asked for.
-- **Tests:** an exported clip's length, size and subtitle stream; the ASS file Chaya writes for each style.
-
-**First part (8a), the engine:** `build_ffmpeg.sh` builds FreeType, FriBidi, HarfBuzz and libass from pinned
-releases and links them into ffmpeg, with FFmpeg's own SIMD code (nasm; without it the scaler garbled pictures),
-the decoders for H.264, HEVC, VP8 and VP9, `h264_mf` with Direct3D 11, MPEG-4 and AAC. `core::export` writes the ASS
-for each look and language pair, cuts exactly, picks the size, falls back from the graphics card to the processor to
-MPEG-4, and writes clips' SRTs; the app queues jobs and reports them as `export` events; the Windows tour exports a
-clip through the app and says which encoder Windows used (on CI's runner, with no graphics card: Windows' H.264
-encoder on the processor).
-
-**Second part (8b), the window:** *Export* (or Ctrl+E) opens a dialog over the player: the chosen clip or all, a
-video or SRT files, the subtitles (none, one language or two and which on top), the look (each shown as a small
-picture in the language's colours) and the quality. Exports in progress are listed under the clips with Stop; when
-one ends a notice says so, with *Show in folder* and the encoder in words, or why it failed, with *Retry*. The
-dialog's rules are in `ui/export.js`, tested with Node; the Windows tour exports through the dialog.
-
-### 9. Your own videos, and search ☑
-
-**The person gets:** drop a video from the PC into Chaya to make subtitles for it, translate it or cut it
-(a meeting, an interview), without uploading anything; and a search across every line of every video,
-which opens the video at that line.
-
-**Done.** `core::own` checks a file (there, a file, a video or sound by its extension) and `Manager::add_own` lists it
-where it is, as a finished task whose source is its own `file:///` address, so it keeps its place in `downloads.json`
-for older versions too and nothing fetches it; a file already listed keeps its entry, and removing it keeps the
-file. Files come from a drop anywhere on the window (over a page too: the page's webview hands it on, and the page
-never gets it) or from *Add from this PC* (`tauri-plugin-dialog`, opened by the app, so the window gets no dialog
-permission); one file opens in the player. `core::search` keeps every video's subtitle lines in memory, folded for
-case and accents, re-reading only files whose size or time changed; the Downloads find box (Ctrl+F) lists the lines
-with every word under the names it matches, and a line opens the player there (`openPlayer(id, { at, language })`).
-The Windows tour drops a video from `~/Videos/Chaya tour/`, plays it and removes it (the file stays as it was), and
-finds "walk" in the clip's lines and opens it at 0:25.
-
-## After the plan
-
-- **Subtitles put right** (from omniget's subtitle workshop, re-written): a line's words corrected in the transcript,
-  timing shifted or stretched between two lines, with Undo. Done.
-- **Export options:** a size to fit (10, 25 or 50 MB), a GIF, even loudness, both languages in one subtitle file. Done.
-- **Chapters:** a video's chapters from the site, on the seek bar (Ctrl+← and Ctrl+→ between them) and on the
-  timeline, where clip edges snap to them, and made into clips in one click. Done.
-- **Copied links:** an opt-in Ctrl+Alt+D that saves the link just copied, from anywhere in Windows, at the quality
-  chosen. Done; that list is finished.
-
-## Later, perhaps
-
-- **Who is speaking:** the MOSS model labels speakers; it runs on Windows through
-  [transcribe.cpp](https://github.com/handy-computer/transcribe.cpp), not whisper.cpp.
-- **Listening without downloading** (Vimpo's online playback).
-- **The same on the phone.**
+- whisper.cpp through the NDK; Tiny and Base models, pinned by SHA-256. Short lines ported from `core::speech::lines`
+  (JVM tests with Windows' recorded output). An `androidTest` with the JFK sample, as on Windows.

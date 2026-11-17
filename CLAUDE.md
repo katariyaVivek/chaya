@@ -63,10 +63,12 @@ platform 36, Gradle 8.14.3 and Python 3.13 (Chaquopy). Versions are in `gradle/l
 - **Warnings fail the build.** Kotlin warnings are errors (`allWarningsAsErrors`), and so is any Android Lint
   finding not in `app/lint-baseline.xml`. Fix a warning rather than suppress it; fixing a baselined finding means
   taking it out of the baseline too, so the list only shrinks.
-- **CI is the Android build.** In the cloud container the proxy blocks `dl.google.com`, so the
-  Android Gradle plugin cannot be fetched, and Lint cannot run either. Pure-Kotlin code can still be compiled and tested with a
-  scratch Kotlin/JVM Gradle project whose source set points at the repo's files; keep such code free
-  of Android imports so this stays possible.
+- **CI is the Android build.** Some cloud containers' proxies block `dl.google.com`, so the Android Gradle plugin
+  cannot be fetched and Lint cannot run; check with `curl -sI https://dl.google.com/android/maven2/`. Where it answers,
+  the SDK installs from `commandlinetools-linux-*_latest.zip` (`sdkmanager "platforms;android-36"`, `sdk.dir` in the
+  gitignored `local.properties`), and `gradle --max-workers=2` keeps Maven Central from answering 429. Where it does
+  not, pure-Kotlin code can still be compiled and tested with a scratch Kotlin/JVM Gradle project whose source set
+  points at the repo's files; keep such code free of Android imports so this stays possible.
 - **Chaya for Windows** (`desktop/`) is Tauri 2. Code that does not need the window goes in
   `desktop/core`, plain Rust, tested with `cargo test`. Its UI follows `desktop/design`.
 - **`chaya_engine` is shared.** The phone runs it through Chaquopy; Windows runs it as a program

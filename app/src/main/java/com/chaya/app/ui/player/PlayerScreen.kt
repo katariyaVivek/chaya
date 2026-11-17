@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Slider
@@ -94,6 +95,8 @@ import com.chaya.app.downloads.displayTitle
 import com.chaya.app.library.SourceSite
 import com.chaya.app.library.siteOf
 import com.chaya.app.streaming.StreamMime
+import com.chaya.app.subtitles.Chapter
+import com.chaya.app.subtitles.Chapters
 import com.chaya.app.subtitles.SavedSubtitles
 import com.chaya.app.ui.theme.NightContainer
 import com.chaya.app.ui.theme.NightGround
@@ -147,6 +150,11 @@ fun PlayerScreen(
     val subtitles by produceState<SavedSubtitles?>(null, taskId) {
         value = withContext(Dispatchers.IO) { app.subtitles.load(taskId) }
     }
+    // Its chapters, as the site named them; none for most videos
+    val chapters by produceState(emptyList<Chapter>(), taskId) {
+        value = withContext(Dispatchers.IO) { app.subtitles.loadChapters(taskId) }
+    }
+    var showChapters by rememberSaveable { mutableStateOf(false) }
     var showSubtitles by rememberSaveable { mutableStateOf(true) }
     val hasSubtitles by rememberUpdatedState(subtitles != null)
 
@@ -274,6 +282,9 @@ fun PlayerScreen(
     )
     val shownAt = seeking?.let { (it * lengthMs).toLong() } ?: atMs
     val playing = status == PlayerStatus.PLAYING
+    // The chapter the seek bar is at, while it is dragged too, so the person sees where they will land
+    val currentChapter = Chapters.at(chapters, shownAt)
+    val marks = chapterMarks(chapters, lengthMs)
 
     @Composable
     fun Picture(modifier: Modifier, subtitlesLift: androidx.compose.ui.unit.Dp) {
@@ -334,14 +345,25 @@ fun PlayerScreen(
                         RoundButton(onClick = onNavigateBack, label = "Close player") {
                             Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, tint = NightInk)
                         }
-                        Text(
-                            text = displayTitle(task),
-                            color = NightInk,
-                            style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f),
-                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = displayTitle(task),
+                                color = NightInk,
+                                style = TextStyle(fontSize = 16.sp, fontWeight = FontWeight.SemiBold),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            currentChapter?.let { chapters.getOrNull(it) }?.let { chapter ->
+                                Text(
+                                    text = chapter.title,
+                                    color = NightMuted,
+                                    style = TextStyle(fontSize = 13.sp),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.clickable(onClickLabel = "Chapters") { showChapters = true },
+                                )
+                            }
+                        }
                         if (task.filePath != null || task.exportedUri != null) {
                             RoundButton(onClick = { share(app, task) }, label = "Share") {
                                 Icon(Icons.Default.Share, contentDescription = null, tint = NightInk, modifier = Modifier.size(20.dp))
@@ -351,6 +373,7 @@ fun PlayerScreen(
                     SlimControls(
                         atMs = shownAt,
                         lengthMs = lengthMs,
+                        marks = marks,
                         playing = playing,
                         subtitles = if (subtitles == null) null else showSubtitles,
                         actions = controls,
@@ -408,6 +431,14 @@ fun PlayerScreen(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(top = 2.dp),
                     )
+                    if (chapters.isNotEmpty()) {
+                        ChapterButton(
+                            chapters = chapters,
+                            current = currentChapter,
+                            onClick = { showChapters = true },
+                            modifier = Modifier.padding(top = 12.dp),
+                        )
+                    }
                 }
                 val said = subtitles
                 if (said != null) {
@@ -428,11 +459,25 @@ fun PlayerScreen(
             Controls(
                 atMs = shownAt,
                 lengthMs = lengthMs,
+                marks = marks,
                 playing = playing,
                 actions = controls,
                 modifier = Modifier.align(Alignment.BottomCenter),
             )
         }
+    }
+
+    if (showChapters && chapters.isNotEmpty()) {
+        ChapterSheet(
+            chapters = chapters,
+            current = currentChapter,
+            onSeek = { at ->
+                player.seekTo(at)
+                showChapters = false
+                touched = System.currentTimeMillis()
+            },
+            onDismiss = { showChapters = false },
+        )
     }
 }
 
@@ -450,22 +495,40 @@ private class ControlActions(
     val onTurn: () -> Unit,
 )
 
+/** The seek bar; a video with chapters has its track in pieces, one a chapter ([marks], from 0 to 1). */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SeekBar(atMs: Long, lengthMs: Long, actions: ControlActions, modifier: Modifier = Modifier) {
-    Slider(
-        value = if (lengthMs > 0) (atMs.toFloat() / lengthMs).coerceIn(0f, 1f) else 0f,
-        onValueChange = actions.onSeeking,
-        onValueChangeFinished = actions.onSeekDone,
-        enabled = lengthMs > 0,
-        colors = SliderDefaults.colors(
-            thumbColor = NightInk,
-            activeTrackColor = NightInk,
-            inactiveTrackColor = Color.White.copy(alpha = 0.22f),
-            disabledThumbColor = NightMuted,
-            disabledInactiveTrackColor = Color.White.copy(alpha = 0.12f),
-        ),
-        modifier = modifier.height(28.dp).semantics { contentDescription = "Seek" },
+private fun SeekBar(atMs: Long, lengthMs: Long, marks: List<Float>, actions: ControlActions, modifier: Modifier = Modifier) {
+    val value = if (lengthMs > 0) (atMs.toFloat() / lengthMs).coerceIn(0f, 1f) else 0f
+    val enabled = lengthMs > 0
+    val colors = SliderDefaults.colors(
+        thumbColor = NightInk,
+        activeTrackColor = NightInk,
+        inactiveTrackColor = Color.White.copy(alpha = 0.22f),
+        disabledThumbColor = NightMuted,
+        disabledInactiveTrackColor = Color.White.copy(alpha = 0.12f),
     )
+    val seekBar = modifier.height(28.dp).semantics { contentDescription = "Seek" }
+    if (marks.isEmpty()) {
+        Slider(
+            value = value,
+            onValueChange = actions.onSeeking,
+            onValueChangeFinished = actions.onSeekDone,
+            enabled = enabled,
+            colors = colors,
+            modifier = seekBar,
+        )
+    } else {
+        Slider(
+            value = value,
+            onValueChange = actions.onSeeking,
+            onValueChangeFinished = actions.onSeekDone,
+            enabled = enabled,
+            colors = colors,
+            track = { state -> ChapterTrack(fraction = state.value, marks = marks, enabled = enabled) },
+            modifier = seekBar,
+        )
+    }
 }
 
 @Composable
@@ -492,7 +555,14 @@ private fun SkipButton(text: String, label: String, onClick: () -> Unit) {
 
 /** The bar at the foot, upright: the seek bar, then the time, −10, play in ink, +10 and the length. */
 @Composable
-private fun Controls(atMs: Long, lengthMs: Long, playing: Boolean, actions: ControlActions, modifier: Modifier = Modifier) {
+private fun Controls(
+    atMs: Long,
+    lengthMs: Long,
+    marks: List<Float>,
+    playing: Boolean,
+    actions: ControlActions,
+    modifier: Modifier = Modifier,
+) {
     Surface(
         shape = RoundedCornerShape(26.dp),
         color = NightContainer,
@@ -501,7 +571,7 @@ private fun Controls(atMs: Long, lengthMs: Long, playing: Boolean, actions: Cont
         modifier = modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
         Column(modifier = Modifier.padding(start = 14.dp, end = 14.dp, top = 4.dp, bottom = 8.dp)) {
-            SeekBar(atMs, lengthMs, actions, Modifier.fillMaxWidth())
+            SeekBar(atMs, lengthMs, marks, actions, Modifier.fillMaxWidth())
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -536,6 +606,7 @@ private fun Controls(atMs: Long, lengthMs: Long, playing: Boolean, actions: Cont
 private fun SlimControls(
     atMs: Long,
     lengthMs: Long,
+    marks: List<Float>,
     playing: Boolean,
     /** Whether subtitles show; null when the video has none. */
     subtitles: Boolean?,
@@ -555,7 +626,7 @@ private fun SlimControls(
         SkipButton("−10", "Back 10 seconds", actions.onBack)
         SkipButton("+10", "Forward 10 seconds", actions.onForward)
         Text(clockOf(atMs), color = NightInk, style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold))
-        SeekBar(atMs, lengthMs, actions, Modifier.weight(1f).padding(horizontal = 8.dp))
+        SeekBar(atMs, lengthMs, marks, actions, Modifier.weight(1f).padding(horizontal = 8.dp))
         Text(if (lengthMs > 0) clockOf(lengthMs) else "", color = NightMuted, style = TextStyle(fontSize = 13.sp))
         SubtitlesButton(subtitles = subtitles, onClick = actions.onSubtitles)
         RoundButton(onClick = actions.onTurn, label = "Exit full screen") {

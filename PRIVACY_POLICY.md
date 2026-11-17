@@ -46,8 +46,9 @@ Store account, no third-party SDKs.
   *Save history* switch on the History screen stops pages being kept at all. × beside a bookmark,
   or the star beside the address, removes it.
 - Ad blocker settings (whether it is on, and the sites you let show ads): **on your phone only**.
-- The subtitles saved with a video from a link, as an SRT file: **on your phone only**, in app-private files,
-  shown on the picture and as the transcript in Chaya's player. They are deleted with their download.
+- The subtitles saved with a video from a link, as an SRT file, and its chapters (their times and titles, as the
+  site lists them): **on your phone only**, in app-private files, shown on the picture, as the transcript and on the
+  seek bar in Chaya's player. They are deleted with their download.
 - Where you stopped each saved video in Chaya's player (the time, the video's length and when you stopped), so
   it starts there again and Home offers *Continue*: **on your phone only**, in the app's preferences. It is
   deleted with its download.

@@ -1,10 +1,12 @@
 package com.chaya.app.platform
 
+import com.chaya.app.subtitles.Chapter
 import com.chaya.app.subtitles.SubtitleSource
 import com.chaya.app.subtitles.SubtitleTrack
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertThrows
 import org.junit.Test
 
@@ -157,6 +159,16 @@ class DownloadRequestsTest {
         val audio = PlatformChoice("Audio", "", null, sound, null, isAudioOnly = true).toDownloadRequest(talk)
         assertNull(audio.subtitles)
         assertNull(choice("240p", quality = 240, file = video).toDownloadRequest(media(title = "Clip")).subtitles)
+    }
+
+    @Test
+    fun `a video's chapters go with it, sound alone included`() {
+        val chapters = listOf(Chapter(0, 30_000, "Intro"), Chapter(30_000, 90_000, "The answer"))
+        val talk = media(title = "Talk").copy(chapters = chapters)
+
+        assertEquals(chapters, choice("240p", quality = 240, file = video, sound = sound).toDownloadRequest(talk).chapters)
+        assertEquals(chapters, PlatformChoice("Audio", "", null, sound, null, isAudioOnly = true).toDownloadRequest(talk).chapters)
+        assertTrue(choice("240p", quality = 240, file = video).toDownloadRequest(media(title = "Clip")).chapters.isEmpty())
     }
 
     private fun choice(label: String, quality: Int?, file: PlatformFormat, sound: PlatformFormat? = null) =

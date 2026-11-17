@@ -69,7 +69,7 @@ class PlatformEngine(context: Context, private val sets: EngineSets? = null) : L
         val cacheDir = cacheDir()
         return try {
             python().getModule("chaya_engine.extract")
-                // The site's subtitles too, saved with the video; and its chapters, which the phone does not use yet
+                // The site's subtitles too, saved with the video; its chapters come with every answer
                 .callAttr("extract", url, cacheDir.absolutePath, cookieFile?.absolutePath, Kwarg("subtitles", true))
                 .toString()
                 .also { sets?.runFinished(engineFailed = false) }

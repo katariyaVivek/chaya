@@ -91,4 +91,21 @@ class SubtitleStoreTest {
             SubtitleStore.headersFor("https://subs.example/en.vtt", "https://rr1.googlevideo.com/v", headers),
         )
     }
+
+    @Test
+    fun `chapters are kept beside the subtitles, need two to be kept, and go when the download does`() {
+        val chapters = listOf(Chapter(0, 30_000, "Intro"), Chapter(30_000, 90_000, "The answer"))
+
+        assertTrue(store.saveChapters(7, chapters))
+        assertEquals(chapters, store.loadChapters(7))
+        // Chapters are not subtitles
+        assertFalse(store.has(7))
+        assertNull(store.load(7))
+        assertFalse(store.saveChapters(8, chapters.take(1)))
+        assertTrue(store.loadChapters(8).isEmpty())
+
+        store.forget(7)
+
+        assertTrue(store.loadChapters(7).isEmpty())
+    }
 }
