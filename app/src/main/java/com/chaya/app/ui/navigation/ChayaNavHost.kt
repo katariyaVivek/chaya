@@ -101,6 +101,7 @@ fun ChayaNavHost(navController: NavHostController) {
                 onPlay = { taskId ->
                     navController.navigate(Screen.playerRoute(taskId))
                 },
+                onPlayAt = { taskId, atMs -> navController.navigate(Screen.playerRoute(taskId, atMs)) },
                 onNavigateToDiagnostics = {
                     navController.navigate(Screen.Diagnostics.route)
                 },
@@ -114,11 +115,16 @@ fun ChayaNavHost(navController: NavHostController) {
         composable(
             route = Screen.Player.route,
             arguments = listOf(
-                navArgument(Screen.PLAYER_ARGS) { type = NavType.LongType }
+                navArgument(Screen.PLAYER_ARGS) { type = NavType.LongType },
+                navArgument(Screen.PLAYER_AT) {
+                    type = NavType.LongType
+                    defaultValue = -1L
+                },
             )
         ) { backStackEntry ->
             val taskId = backStackEntry.arguments?.getLong(Screen.PLAYER_ARGS) ?: -1L
-            PlayerScreen(taskId = taskId, onNavigateBack = { navController.popBackStack() })
+            val at = backStackEntry.arguments?.getLong(Screen.PLAYER_AT)?.takeIf { it >= 0 }
+            PlayerScreen(taskId = taskId, startAtMs = at, onNavigateBack = { navController.popBackStack() })
         }
         composable(Screen.Diagnostics.route) {
             DiagnosticsScreen(onNavigateBack = { navController.popBackStack() })

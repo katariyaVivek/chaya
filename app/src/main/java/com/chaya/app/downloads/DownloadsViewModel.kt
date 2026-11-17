@@ -3,6 +3,7 @@ package com.chaya.app.downloads
 import android.app.Application
 import android.content.Context
 import android.os.Build
+import android.os.SystemClock
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.chaya.app.ChayaApplication
@@ -10,11 +11,14 @@ import com.chaya.app.download.DownloadManager
 import com.chaya.app.download.DownloadTask
 import com.chaya.app.library.LibraryFiles
 import com.chaya.app.library.LibraryIntents
+import com.chaya.app.subtitles.LineSearch
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
 class DownloadsViewModel(application: Application) : AndroidViewModel(application) {
@@ -129,4 +133,15 @@ class DownloadsViewModel(application: Application) : AndroidViewModel(applicatio
     private companion object {
         const val KEY_GRID = "downloads_grid"
     }
+
+    /**
+     * The lines said in [videos] (finished downloads, in the Library's order) that hold every word of [query], among
+     * those whose ids are in [among]. The index looks again at the subtitle files first, reading only what changed.
+     */
+    suspend fun searchLines(query: String, videos: List<DownloadTask>, among: Set<Long>): LineSearch.Results =
+        withContext(Dispatchers.IO) {
+            val lines = app.lineSearch
+            lines.keepUp(videos.map { LineSearch.Video(it.id, displayTitle(it)) }, SystemClock.elapsedRealtime())
+            lines.search(query, among)
+        }
 }

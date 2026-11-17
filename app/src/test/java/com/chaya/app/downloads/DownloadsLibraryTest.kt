@@ -25,6 +25,7 @@ import com.chaya.app.library.FileKind
 import com.chaya.app.library.LibraryFiles
 import com.chaya.app.library.VIEWER_TITLE_TAG
 import com.chaya.app.library.ZipItem
+import com.chaya.app.subtitles.LineSearch
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -102,6 +103,7 @@ class DownloadsLibraryTest {
     private val actions = DownloadActions(
         open = { events += "open ${it.id}" },
         play = { events += "play $it" },
+        playAt = { id, at -> events += "play $id at $at" },
         delete = { chosen -> events += "delete ${chosen.map { it.id }}" },
         share = { chosen -> events += "share ${chosen.map { it.id }}" },
         openFile = { file, mime -> events += "open file ${file.name} $mime" },
@@ -109,7 +111,11 @@ class DownloadsLibraryTest {
         saveFile = { file, name, _ -> events += "save file ${file.name} as $name" },
     )
 
-    private fun show(startInGrid: Boolean = true, tasks: List<DownloadTask> = all) {
+    private fun show(
+        startInGrid: Boolean = true,
+        tasks: List<DownloadTask> = all,
+        searchLines: (suspend (String, List<DownloadTask>, Set<Long>) -> LineSearch.Results)? = null,
+    ) {
         composeRule.setContent {
             var grid by remember { mutableStateOf(startInGrid) }
             DownloadsContent(
@@ -121,8 +127,56 @@ class DownloadsLibraryTest {
                 },
                 files = files,
                 actions = actions,
+                searchLines = searchLines,
             )
         }
+    }
+
+    @Test
+    fun `the search finds what is said in finished videos, and a line plays from its time`() {
+        val subtitles = File(dir, "subtitles").apply { mkdirs() }
+        File(subtitles, "1.en.srt").writeText(
+            "1\n00:00:05,000 --> 00:00:07,000\nThe elephants are here.\n\n2\n00:00:09,000 --> 00:00:10,000\nThey are big.\n"
+        )
+        // Still downloading: its subtitles are not searched yet
+        File(subtitles, "8.en.srt").writeText("1\n00:00:01,000 --> 00:00:02,000\nMore elephants.\n")
+        val lines = LineSearch(subtitles)
+        show(searchLines = { query, finished, among ->
+            lines.refresh(finished.map { LineSearch.Video(it.id, displayTitle(it)) })
+            lines.search(query, among)
+        })
+
+        composeRule.onNodeWithContentDescription("Search downloads").performClick()
+        composeRule.onNode(hasSetTextAction()).performTextInput("Elephant")
+        composeRule.waitUntil(5_000) { composeRule.onAllNodesWithText("Said once in 1 video").fetchSemanticsNodes().isNotEmpty() }
+        composeRule.onNodeWithText("Said once in 1 video").performClick()
+
+        composeRule.onNodeWithText("Me at the zoo").assertExists()
+        composeRule.onNodeWithText("The elephants are here.").performClick()
+
+        assertEquals(listOf("play 1 at 5000"), events)
+    }
+
+    @Test
+    fun `the kind chosen narrows what is said too`() {
+        val subtitles = File(dir, "subtitles").apply { mkdirs() }
+        File(subtitles, "1.en.srt").writeText("1\n00:00:05,000 --> 00:00:07,000\nThe elephants are here.\n")
+        val lines = LineSearch(subtitles)
+        val asked = mutableListOf<Set<Long>>()
+        show(searchLines = { query, finished, among ->
+            asked += among
+            lines.refresh(finished.map { LineSearch.Video(it.id, displayTitle(it)) })
+            lines.search(query, among)
+        })
+
+        composeRule.onNodeWithText("Pictures").performClick()
+        composeRule.onNodeWithContentDescription("Search downloads").performClick()
+        composeRule.onNode(hasSetTextAction()).performTextInput("elephants")
+        composeRule.waitUntil(5_000) { asked.isNotEmpty() }
+        composeRule.waitForIdle()
+
+        assertTrue(asked.last().none { it == zoo.id })
+        composeRule.onAllNodesWithText("Said once in 1 video").assertCountEquals(0)
     }
 
     @Test

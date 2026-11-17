@@ -124,7 +124,9 @@ private const val SKIP_MS = 10_000L
 @Composable
 fun PlayerScreen(
     taskId: Long,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    /** Where to start, in milliseconds (a line found by the Library's search); null starts where it was left. */
+    startAtMs: Long? = null,
 ) {
     val context = LocalContext.current
     val app = context.applicationContext as ChayaApplication
@@ -178,7 +180,7 @@ fun PlayerScreen(
             }
         }
         player.addListener(listener)
-        positions.watched.value[taskId]?.resumeAtMs?.takeIf { it > 0 }?.let { player.seekTo(it) }
+        (startAtMs ?: positions.watched.value[taskId]?.resumeAtMs)?.takeIf { it > 0 }?.let { player.seekTo(it) }
         player.prepare()
         player.playWhenReady = true
         onDispose {

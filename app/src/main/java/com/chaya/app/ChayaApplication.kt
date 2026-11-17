@@ -64,6 +64,8 @@ class ChayaApplication : Application() {
 
     /** A site's subtitles kept with the videos saved from it, in the app's own files. */
     val subtitles: com.chaya.app.subtitles.SubtitleStore by lazy { com.chaya.app.subtitles.SubtitleStore(File(filesDir, "subtitles")) }
+    /** Every line said in the saved videos, kept in memory for the Library's search; read from the subtitles above. */
+    val lineSearch: com.chaya.app.subtitles.LineSearch by lazy { com.chaya.app.subtitles.LineSearch(File(filesDir, "subtitles")) }
 
     /** Where each saved video was left, for the player to resume and Home to carry on with. */
     val playbackPositions: com.chaya.app.ui.player.PlaybackPositions by lazy { com.chaya.app.ui.player.PlaybackPositions.from(this) }
