@@ -14,7 +14,7 @@ class ChaptersTest {
     fun `chapters are read in milliseconds and in order`() {
         val chapters = Chapters.read(
             listOf(
-                ListedChapter(42.0, 300.5, "The   walk"),
+                ListedChapter(42.0, 300.5, "The \u00A0 walk\n"),
                 ListedChapter(0.0, 42.0, "Intro"),
                 ListedChapter(300.5, 420.0, ""),
             ),
