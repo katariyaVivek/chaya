@@ -20,6 +20,8 @@ class SavedSubtitles(val language: String, val lines: List<SubtitleLine>) {
  * The subtitles saved with videos: fetched from the site when the download starts (its addresses expire), kept as SRT
  * in the app's own files ("12.en.srt", by download), read by the player, and deleted with the download. Nothing is
  * kept when the site's answer is not subtitles, and a fetch that fails never touches the download itself.
+ *
+ * A video's chapters are kept beside them the same way ("12.chapters", [Chapters.toText]), and go with them.
  */
 class SubtitleStore(
     private val dir: File,
@@ -72,10 +74,28 @@ class SubtitleStore(
         return SavedSubtitles(language, lines)
     }
 
+    /** Keeps [chapters] for download [id], or nothing when it has none; whether they were kept. Never throws. */
+    fun saveChapters(id: Long, chapters: List<Chapter>): Boolean {
+        if (chapters.size < 2) return false
+        return runCatching {
+            dir.mkdirs()
+            val file = chaptersFile(id)
+            val partial = File(dir, "${file.name}.part")
+            partial.writeText(Chapters.toText(chapters))
+            partial.renameTo(file).also { kept -> if (!kept) partial.delete() }
+        }.getOrDefault(false)
+    }
+
+    /** The chapters kept for download [id]; none when it has none. Reads a file, so not on the main thread. */
+    fun loadChapters(id: Long): List<Chapter> =
+        runCatching { chaptersFile(id).takeIf { it.isFile }?.readText()?.let(Chapters::fromText) }.getOrNull().orEmpty()
+
+    private fun chaptersFile(id: Long) = File(dir, "$id.chapters")
+
     /** Whether download [id] has subtitles kept. */
     fun has(id: Long): Boolean = fileFor(id) != null
 
-    /** A download deleted: its subtitles go with it. */
+    /** A download deleted: its subtitles and chapters go with it. */
     fun forget(id: Long) {
         dir.listFiles { file -> file.name.startsWith("$id.") }?.forEach { it.delete() }
     }

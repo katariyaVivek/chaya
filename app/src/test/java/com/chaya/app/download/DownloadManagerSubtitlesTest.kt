@@ -3,6 +3,7 @@ package com.chaya.app.download
 import android.content.Context
 import androidx.room.Room
 import com.chaya.app.database.ChayaDatabase
+import com.chaya.app.subtitles.Chapter
 import com.chaya.app.subtitles.SubtitleSource
 import com.chaya.app.subtitles.SubtitleStore
 import kotlinx.coroutines.delay
@@ -50,9 +51,9 @@ class DownloadManagerSubtitlesTest {
         db.close()
     }
 
-    private fun request(subtitles: SubtitleSource?) = DownloadRequest(
+    private fun request(subtitles: SubtitleSource?, chapters: List<Chapter> = emptyList()) = DownloadRequest(
         url = "https://cdn.example/talk.mp4", fileName = "Talk (720p).mp4", mimeType = "video/mp4", title = "Talk",
-        subtitles = subtitles,
+        subtitles = subtitles, chapters = chapters,
     )
 
     private suspend fun waitFor(what: String, check: () -> Boolean) {
@@ -76,6 +77,23 @@ class DownloadManagerSubtitlesTest {
         manager.deleteTask(id)
 
         assertFalse(store.has(id))
+    }
+
+    @Test
+    fun `a video's chapters are kept with it, and deleted with it`() = runBlocking {
+        manager.restore()
+        val chapters = listOf(Chapter(0, 30_000, "Intro"), Chapter(30_000, 90_000, "The answer"))
+
+        manager.startDownload(request(subtitles = null, chapters = chapters))
+
+        waitFor("the download started") { manager.downloads.value.isNotEmpty() }
+        val id = manager.downloads.value.single().id
+        waitFor("the chapters were kept") { store.loadChapters(id).isNotEmpty() }
+        assertEquals(chapters, store.loadChapters(id))
+
+        manager.deleteTask(id)
+
+        assertTrue(store.loadChapters(id).isEmpty())
     }
 
     @Test

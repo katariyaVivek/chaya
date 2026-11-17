@@ -32,6 +32,8 @@ fun PlatformChoice.toDownloadRequest(media: PlatformMedia, pageUrl: String? = nu
         qualityHeight = quality,
         expectedBytes = sizeBytes,
         subtitles = if (isAudioOnly) null else media.subtitlesToSave(file.url, file.headers),
+        // A talk or an album saved as sound alone still plays in Chaya, chapter by chapter
+        chapters = media.chapters,
     )
 }
 

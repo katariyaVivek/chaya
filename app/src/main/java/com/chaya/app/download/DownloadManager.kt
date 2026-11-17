@@ -25,6 +25,7 @@ import com.chaya.app.model.DetectedMedia
 import com.chaya.app.streaming.Media3StreamExporter
 import com.chaya.app.streaming.StreamDownloader
 import com.chaya.app.streaming.StreamExporter
+import com.chaya.app.subtitles.Chapter
 import com.chaya.app.subtitles.SubtitleSource
 import com.chaya.app.subtitles.SubtitleStore
 import kotlinx.coroutines.CancellationException
@@ -171,12 +172,16 @@ class DownloadManager(
         }
     }
 
-    /** A stream the engine found for a link, with the site's [subtitles] for it, kept as the stream saves. */
-    fun startDownload(media: DetectedMedia, subtitles: SubtitleSource?) {
+    /**
+     * A stream the engine found for a link, with the site's [subtitles] and [chapters] for it, kept as the stream
+     * saves.
+     */
+    fun startDownload(media: DetectedMedia, subtitles: SubtitleSource?, chapters: List<Chapter> = emptyList()) {
         ensureServiceRunning()
         scope.launch {
             val id = nextId()
             keepSubtitles(id, subtitles)
+            keepChapters(id, chapters)
             val (ua, ck) = sessionHeaders(media.url)
             startStream(id, media, ua, ck, null)
         }
@@ -190,6 +195,13 @@ class DownloadManager(
         val store = subtitles ?: return
         source ?: return
         scope.launch { store.save(id, source) }
+    }
+
+    /** Keeps a video's [chapters] with download [id], for the player; a video with none keeps nothing. */
+    private fun keepChapters(id: Long, chapters: List<Chapter>) {
+        val store = subtitles ?: return
+        if (chapters.isEmpty()) return
+        scope.launch(Dispatchers.IO) { store.saveChapters(id, chapters) }
     }
 
     @androidx.annotation.OptIn(UnstableApi::class)
@@ -246,6 +258,7 @@ class DownloadManager(
             append(task)
             dao.insert(DownloadEntity.fromTask(task))
             keepSubtitles(id, request.subtitles)
+            keepChapters(id, request.chapters)
             transfer(task)
         }
     }

@@ -220,6 +220,10 @@ faster than APKs ship, so the app fetches newer releases itself.
   download id, as SRT in app-private files; a cookie goes only to the video's own site). The player reads them off
   the main thread and draws them itself (`SubtitleOverlay`), and lists them as the transcript (`Transcript`), the
   line being said in ink and kept in view; a line tapped plays from it. Deleting the download deletes them.
+- **Chapters** (`subtitles/Chapters.kt`, a port of `chaya-core`'s `chapters`): the engine lists a video's chapters with
+  every answer; `Chapters.read` puts them right (in order, none overlapping or past the end, fewer than two are none),
+  and `SubtitleStore` keeps them beside the subtitles as "12.chapters". The player draws the seek bar in pieces, one a
+  chapter (`ChapterTrack`), names the chapter playing, and lists them in a sheet (`ChapterSheet`).
 
 ## Storage (`database/`)
 
