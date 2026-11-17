@@ -91,6 +91,7 @@ import com.chaya.app.ChayaApplication
 import com.chaya.app.R
 import com.chaya.app.download.DownloadManager
 import com.chaya.app.download.DownloadTask
+import com.chaya.app.download.isOwn
 import com.chaya.app.downloads.displayTitle
 import com.chaya.app.library.SourceSite
 import com.chaya.app.library.siteOf
@@ -684,9 +685,9 @@ private fun sourceOf(app: ChayaApplication, task: DownloadTask): Source? {
     return app.downloadManager.streamPlaybackFor(task.id)?.let { Source(it.uri, it.mimeType, it) }
 }
 
-/** "YouTube · 1080p": where it came from, and its quality when known. */
+/** "YouTube · 1080p": where it came from, and its quality when known; "On this phone" for the person's own. */
 private fun factsOf(task: DownloadTask): String =
-    listOfNotNull(siteOf(task).takeIf { it != SourceSite.OTHER }?.label, task.qualityHeight?.takeIf { it >= 144 }?.let { "${it}p" }).joinToString(" · ")
+    if (task.isOwn) "On this phone" else listOfNotNull(siteOf(task).takeIf { it != SourceSite.OTHER }?.label, task.qualityHeight?.takeIf { it >= 144 }?.let { "${it}p" }).joinToString(" · ")
 
 private fun openElsewhere(app: ChayaApplication, task: DownloadTask) {
     val intent = app.downloadManager.openIntentFor(task) ?: return

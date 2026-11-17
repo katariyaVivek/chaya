@@ -229,6 +229,11 @@ faster than APKs ship, so the app fetches newer releases itself.
   when its size or time changed. The Library's search box asks it as the typing pauses (`DownloadsViewModel.searchLines`)
   for the videos the kind and site chips leave in view; `SaidRow` says how often the words are said and `SaidSheet`
   lists the lines, a tap playing from that time (`Screen.playerRoute(id, atMs)`).
+- **The person's own videos** (`download/OwnVideo.kt`): Library › ⋮ › *Add a video* opens the phone's picker
+  (`OpenDocument`); `DownloadsViewModel.addOwnVideo` keeps the read permission and `DownloadManager.addOwnVideo` lists
+  the file as a finished download whose address is `chaya-own:` plus the document's (`isOwn`, `ownUri`), playing
+  through `exportedUri`. `deleteTask` only takes it out of Chaya and releases the permission; `CachedLibraryFiles`
+  takes its tile's frame from the document.
 
 ## Storage (`database/`)
 

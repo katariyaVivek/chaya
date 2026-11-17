@@ -3,7 +3,9 @@ package com.chaya.app.library
 import android.content.Context
 import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
+import androidx.core.net.toUri
 import com.chaya.app.download.DownloadTask
+import com.chaya.app.download.ownUri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -28,20 +30,28 @@ interface LibraryFiles {
  * download is deleted or Android needs the room.
  */
 class CachedLibraryFiles(context: Context) : LibraryFiles {
+    private val appContext = context.applicationContext
     private val root = File(context.cacheDir, LIBRARY_DIR)
     private val frames = File(root, "frames")
 
     /** Named by the download and its file, so a later download that reuses the number never shows this frame. */
     private fun frameFile(task: DownloadTask) =
-        File(frames, "${task.id}-${task.filePath.orEmpty().hashCode().toUInt().toString(16)}.jpg")
+        File(frames, "${task.id}-${(task.filePath ?: task.ownUri).orEmpty().hashCode().toUInt().toString(16)}.jpg")
 
     private fun zipDir(task: DownloadTask) = File(root, "zip/${task.id}")
 
     override suspend fun frameFor(task: DownloadTask): File? = withContext(Dispatchers.IO) {
-        val source = task.filePath?.let(::File)?.takeIf { it.isFile } ?: return@withContext null
+        // A download's file, or one of the person's own videos where it is on the phone
+        val source = task.filePath?.let(::File)?.takeIf { it.isFile }
+        val own = task.ownUri?.toUri()
+        val open: (MediaMetadataRetriever) -> Unit = when {
+            source != null -> { retriever -> retriever.setDataSource(source.absolutePath) }
+            own != null -> { retriever -> retriever.setDataSource(appContext, own) }
+            else -> return@withContext null
+        }
         val target = frameFile(task)
         if (target.isFile) return@withContext target
-        val frame = runCatching { grabFrame(source) }.getOrNull() ?: return@withContext null
+        val frame = runCatching { grabFrame(open) }.getOrNull() ?: return@withContext null
         frames.mkdirs()
         val partial = File(frames, "${target.name}.part")
         runCatching {
@@ -53,10 +63,10 @@ class CachedLibraryFiles(context: Context) : LibraryFiles {
     }
 
     /** A frame a second in (the first is often black), at most [FRAME_WIDTH] wide. */
-    private fun grabFrame(video: File): Bitmap? {
+    private fun grabFrame(open: (MediaMetadataRetriever) -> Unit): Bitmap? {
         val retriever = MediaMetadataRetriever()
         try {
-            retriever.setDataSource(video.absolutePath)
+            open(retriever)
             val frame = retriever.getFrameAtTime(1_000_000, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
                 ?: retriever.getFrameAtTime()
                 ?: return null

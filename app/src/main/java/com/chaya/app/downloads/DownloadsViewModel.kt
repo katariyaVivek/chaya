@@ -2,13 +2,17 @@ package com.chaya.app.downloads
 
 import android.app.Application
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.SystemClock
+import android.provider.OpenableColumns
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.chaya.app.ChayaApplication
 import com.chaya.app.download.DownloadManager
 import com.chaya.app.download.DownloadTask
+import com.chaya.app.download.OwnVideos
 import com.chaya.app.library.LibraryFiles
 import com.chaya.app.library.LibraryIntents
 import com.chaya.app.subtitles.LineSearch
@@ -144,4 +148,34 @@ class DownloadsViewModel(application: Application) : AndroidViewModel(applicatio
             lines.keepUp(videos.map { LineSearch.Video(it.id, displayTitle(it)) }, SystemClock.elapsedRealtime())
             lines.search(query, among)
         }
+
+    /**
+     * Lists the video or sound at [uri], picked from the phone's files, in the Library: Chaya keeps the right to read
+     * it across restarts and leaves the file where it is. [message] says what happened.
+     */
+    fun addOwnVideo(uri: Uri, message: (String) -> Unit) {
+        viewModelScope.launch {
+            val resolver = app.contentResolver
+            val added = withContext(Dispatchers.IO) {
+                val mime = runCatching { resolver.getType(uri) }.getOrNull()
+                if (!OwnVideos.plays(mime)) return@withContext null
+                runCatching { resolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+                    .onFailure { return@withContext null }
+                var name: String? = null
+                var size: Long? = null
+                runCatching {
+                    resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)?.use { row ->
+                        if (row.moveToFirst()) {
+                            name = row.getString(0)
+                            size = if (row.isNull(1)) null else row.getLong(1)
+                        }
+                    }
+                }
+                val shown = name ?: uri.lastPathSegment ?: "Video"
+                manager.addOwnVideo(uri.toString(), shown, mime, size)
+                OwnVideos.titleOf(shown)
+            }
+            message(if (added == null) "Chaya can't play that file" else "Added $added")
+        }
+    }
 }

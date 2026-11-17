@@ -29,6 +29,11 @@ Store account, no third-party SDKs.
   download is also copied to your phone's public media folders (Movies, Music, Pictures, Downloads), where
   other apps can see it. Download history (addresses, file names, progress) is kept in
   a database on your phone.
+- **Your own videos, only the ones you pick.** Library › ⋮ › *Add a video* opens Android's file picker; Chaya
+  can read only the video or sound you choose there, and keeps that permission so it still plays after a
+  restart. It keeps the file's address, name and size in its database, on your phone only. The file stays where
+  it is: Chaya never copies, changes, uploads or deletes it. Deleting it in Chaya only takes it out of the
+  Library and gives the permission back.
 - **Notifications.** Download progress, only after you grant the system permission, and only after
   an in-app explanation on first use.
 

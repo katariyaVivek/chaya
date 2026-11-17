@@ -58,13 +58,15 @@ lines under their videos' names, the words in bold, and a tap on a line plays th
   size or time changed. The index lives in memory only; nothing new is kept.
 - The player's address takes a time to start at (`player/12?at=5000`).
 
-### 3. Your own videos ☐
+### 3. Your own videos ☑
 
-**The person gets:** *Add a video* in the Library opens the phone's picker; the video is listed where it is (not
-copied) and plays, with everything the later steps add.
+**The person gets:** Library › ⋮ › *Add a video* opens the phone's picker for a video or sound; it is listed where it
+is (not copied), with a frame of it as its tile, and plays in Chaya ("On this phone" under its name), with everything
+the later steps add. Deleting it only takes it out of Chaya.
 
-- A persisted read permission on the picked document; a row in the library marked as the person's own, which Delete
-  only takes out of Chaya. A Room migration with its test.
+- An own file is a finished download whose address is `chaya-own:` and the document's (`OwnVideos`, as
+  `chaya-archive:` marks an account's ZIP), so no Room migration was needed. Chaya keeps the picker's read permission
+  and gives it back on Delete, which never asks the file's provider to delete anything.
 
 ### 4. Subtitles put right ☐
 
