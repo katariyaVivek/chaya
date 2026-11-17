@@ -224,6 +224,11 @@ faster than APKs ship, so the app fetches newer releases itself.
   every answer; `Chapters.read` puts them right (in order, none overlapping or past the end, fewer than two are none),
   and `SubtitleStore` keeps them beside the subtitles as "12.chapters". The player draws the seek bar in pieces, one a
   chapter (`ChapterTrack`), names the chapter playing, and lists them in a sheet (`ChapterSheet`).
+- **Search across every line said** (`subtitles/LineSearch.kt`, a port of `chaya-core`'s `search`): every finished
+  video's subtitle lines in memory (`ChayaApplication.lineSearch`), folded for case and accents, a file read again only
+  when its size or time changed. The Library's search box asks it as the typing pauses (`DownloadsViewModel.searchLines`)
+  for the videos the kind and site chips leave in view; `SaidRow` says how often the words are said and `SaidSheet`
+  lists the lines, a tap playing from that time (`Screen.playerRoute(id, atMs)`).
 
 ## Storage (`database/`)
 

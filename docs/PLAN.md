@@ -47,13 +47,16 @@ every chapter, a tap on one playing from there. Full screen, the chapter playing
 - **Tests:** reading and putting right (the desktop's cases), the chapter at a time, kept and read back, kept with a
   download and deleted with it.
 
-### 2. Search every line said ☐
+### 2. Search every line said ☑
 
-**The person gets:** the Library's search finds words said in a video, not only titles: each line that matches, under
-its video, and a tap opens the player there.
+**The person gets:** the Library's search box looks in what is said as well as in titles. Under it, "Said 12 times in
+3 videos" when the words are said in any finished video the kind and site chips leave in view; tapping that lists the
+lines under their videos' names, the words in bold, and a tap on a line plays the video from there.
 
-- Port `core::search`: every video's lines in memory, folded for case and accents, read again only when a file changed.
-- `PlayerScreen` takes a time to start at.
+- `LineSearch` is `core::search`, ported with its tests: every video's lines in memory, folded for case and accents
+  ("ecole" finds "École", "strasse" finds "Straße"), every word anywhere in the line, a file read again only when its
+  size or time changed. The index lives in memory only; nothing new is kept.
+- The player's address takes a time to start at (`player/12?at=5000`).
 
 ### 3. Your own videos ☐
 

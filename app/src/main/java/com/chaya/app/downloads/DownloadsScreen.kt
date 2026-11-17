@@ -63,6 +63,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -96,6 +97,7 @@ import com.chaya.app.ui.components.AppearanceDialog
 import com.chaya.app.ui.theme.StaggeredAppear
 import com.chaya.app.ui.theme.ThemeMode
 import com.chaya.app.ui.theme.pressScale
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.horizontalScroll
@@ -107,6 +109,7 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.produceState
 import com.chaya.app.history.SearchField
+import com.chaya.app.subtitles.LineSearch
 import com.chaya.app.library.FileKind
 import com.chaya.app.library.LibraryFiles
 import com.chaya.app.library.LibraryFilter
@@ -129,6 +132,8 @@ fun DownloadsScreen(
     onNavigateBack: () -> Unit,
     /** A saved video, or a stream, plays in Chaya's player. */
     onPlay: (Long) -> Unit,
+    /** A saved video plays in Chaya's player from a time (milliseconds). */
+    onPlayAt: (Long, Long) -> Unit = { id, _ -> onPlay(id) },
     onNavigateToDiagnostics: () -> Unit = {},
     onNavigateToHistory: () -> Unit = {},
     onNavigateToBookmarks: () -> Unit = {},
@@ -183,6 +188,7 @@ fun DownloadsScreen(
         onGridChange = viewModel::setGrid,
         files = viewModel.files,
         snackbarHostState = snackbarHostState,
+        searchLines = viewModel::searchLines,
         actions = DownloadActions(
             pause = viewModel::pause,
             resume = viewModel::resume,
@@ -190,6 +196,7 @@ fun DownloadsScreen(
             delete = ::requestDelete,
             open = { task -> viewModel.open(task, ::message) },
             play = onPlay,
+            playAt = onPlayAt,
             saveAsFile = viewModel::saveAsFile,
             share = { chosen -> viewModel.share(chosen, ::message) },
             openFile = { file, mime -> viewModel.openFile(file, mime, ::message) },
@@ -217,6 +224,8 @@ internal class DownloadActions(
     val open: (DownloadTask) -> Unit = {},
     /** Plays a stream that lives in the cache, in the app. */
     val play: (Long) -> Unit = {},
+    /** Plays a saved video from a time (milliseconds): a line found by the search. */
+    val playAt: (Long, Long) -> Unit = { _, _ -> },
     val saveAsFile: (Long) -> Unit = {},
     val share: (List<DownloadTask>) -> Unit = {},
     /** A file taken out of a ZIP: opened, shared or saved to the phone's folders. */
@@ -224,6 +233,9 @@ internal class DownloadActions(
     val shareFile: (File, String) -> Unit = { _, _ -> },
     val saveFile: (File, String, String) -> Unit = { _, _, _ -> },
 )
+
+/** How long typing must pause before what is said in the saved videos is searched. */
+private const val SEARCH_PAUSE_MS = 150L
 
 /** Where the top bar leads. */
 internal class DownloadsMenu(
@@ -253,6 +265,11 @@ internal fun DownloadsContent(
     actions: DownloadActions,
     menu: DownloadsMenu = DownloadsMenu(),
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
+    /**
+     * Finds the lines said in these finished downloads that hold every word searched for, among the ids given; none
+     * where the Library is shown on its own (tests).
+     */
+    searchLines: (suspend (String, List<DownloadTask>, Set<Long>) -> LineSearch.Results)? = null,
 ) {
     var filterIndex by rememberSaveable { mutableIntStateOf(0) }
     val filter = DownloadFilter.entries[filterIndex]
@@ -269,6 +286,21 @@ internal fun DownloadsContent(
     val scope = rememberCoroutineScope()
 
     val narrowed = LibraryFilter(kind, site, query)
+    // What is said in the saved videos, searched as the words are typed: the videos the kind and site leave in view
+    var said by remember { mutableStateOf(LineSearch.Results()) }
+    var saidOpen by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(searchLines, searching, query, kind, site, tasks) {
+        val find = searchLines
+        if (find == null || !searching || query.isBlank()) {
+            said = LineSearch.Results()
+            return@LaunchedEffect
+        }
+        // Waits for a pause in the typing
+        delay(SEARCH_PAUSE_MS)
+        val finished = tasks.filter { it.state == DownloadState.COMPLETED }
+        val among = finished.filter(LibraryFilter(kind, site)::matches).map { it.id }.toSet()
+        said = find(query, finished, among)
+    }
     val listed = remember(tasks, narrowed) { tasks.filter(narrowed::matches) }
     val sections = remember(listed, filter) { groupDownloads(listed, filter) }
     val items = remember(tasks, narrowed) { libraryItems(tasks, narrowed) }
@@ -406,7 +438,8 @@ internal fun DownloadsContent(
                     .fillMaxSize()
                     .padding(padding)
             ) {
-                if (searching) SearchField(query, onChange = { query = it }, placeholder = "Search by title")
+                if (searching) SearchField(query, onChange = { query = it }, placeholder = "Search titles and what's said")
+                if (searching && said.total > 0) SaidRow(said, onClick = { saidOpen = true })
                 if (!grid) FilterRow(selected = filter, onSelect = { filterIndex = it.ordinal })
                 NarrowRow(kind = kind, site = site, onKind = { kind = it }, onSite = { site = it })
 
@@ -461,6 +494,17 @@ internal fun DownloadsContent(
                     }
                 }
             }
+        }
+
+        if (saidOpen && said.total > 0) {
+            SaidSheet(
+                results = said,
+                onPlay = { hit ->
+                    saidOpen = false
+                    actions.playAt(hit.id, hit.start)
+                },
+                onDismiss = { saidOpen = false },
+            )
         }
 
         val zipTask = zipTaskId?.let { id -> tasks.firstOrNull { it.id == id } }

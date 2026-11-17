@@ -94,8 +94,8 @@ from the approved phone designs: saved videos play in Chaya, start where they we
 Then the first of the Windows features the phone lacks: a link's subtitles saved with its video, on the picture and
 as the transcript in the player (#127).
 
-**The phone catches up with Windows**, step by step in [`PLAN.md`](PLAN.md): chapters on the seek bar (step 1), then
-search across every line said, the person's own videos, subtitles put right, their own AI model, translation,
+**The phone catches up with Windows**, step by step in [`PLAN.md`](PLAN.md): chapters on the seek bar (step 1, #130),
+search across every line said from the Library (step 2), then the person's own videos, subtitles put right, their own AI model, translation,
 highlights, clips, export with subtitles drawn on, and last, subtitles made on the phone.
 
 The six-part plan after v0.4.0 has shipped (#34 to #39); it is in
