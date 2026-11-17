@@ -22,8 +22,6 @@ object Chapters {
     /** The longest title kept, in characters. */
     const val LONGEST_TITLE = 100
 
-    private val WHITE_SPACE = Regex("\\s+")
-
     /**
      * The chapters the engine listed, put right: in order of their start, each ending where the next begins at the
      * latest, none past the video's end ([durationSeconds], when it is known), one without a title named for its place
@@ -35,7 +33,8 @@ object Chapters {
             .mapNotNull { chapter ->
                 val start = chapter.start?.takeIf { it.isFinite() && it >= 0 } ?: return@mapNotNull null
                 val end = chapter.end?.takeIf { it.isFinite() && it >= 0 } ?: return@mapNotNull null
-                val title = chapter.title.orEmpty().trim().split(WHITE_SPACE).filter { it.isNotEmpty() }.joinToString(" ")
+                // Any run of white space is one space, a no-break space or a line break too, as on Windows
+                val title = Subtitles.words(chapter.title.orEmpty()).joinToString(" ")
                 Chapter(ms(start), ms(end), title.take(LONGEST_TITLE))
             }
             .sortedBy { it.start }
@@ -67,7 +66,7 @@ object Chapters {
      * a tab or a line break ([read] folds white space), so nothing needs escaping.
      */
     fun toText(chapters: List<Chapter>): String =
-        chapters.joinToString("") { "${it.start}\t${it.end}\t${it.title.replace(WHITE_SPACE, " ")}\n" }
+        chapters.joinToString("") { "${it.start}\t${it.end}\t${Subtitles.words(it.title).joinToString(" ")}\n" }
 
     /** Chapters read back from [toText]; a line that is not one is left out, and fewer than two are none. */
     fun fromText(text: String): List<Chapter> {
