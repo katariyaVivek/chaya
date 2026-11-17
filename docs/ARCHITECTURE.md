@@ -234,6 +234,10 @@ faster than APKs ship, so the app fetches newer releases itself.
   the file as a finished download whose address is `chaya-own:` plus the document's (`isOwn`, `ownUri`), playing
   through `exportedUri`. `deleteTask` only takes it out of Chaya and releases the permission; `CachedLibraryFiles`
   takes its tile's frame from the document.
+- **Subtitles put right** (`subtitles/SubtitleFixes.kt`, a port of `chaya-core`'s `fix`; `SubtitleEdits.kt`): a line's
+  words corrected or taken out, the track shifted, or stretched between two lines put right (`Retime.of`). `SubtitleEdits`
+  writes the SRT through `SubtitleStore.write` and keeps each file as it was for Undo (the last 20 per video, in memory).
+  The player opens `FixSheet` from the transcript (a long press, or its pencil) and shows `FixedBar` with Undo.
 
 ## Storage (`database/`)
 

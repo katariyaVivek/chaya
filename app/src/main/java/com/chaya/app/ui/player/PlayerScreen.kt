@@ -61,6 +61,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -98,7 +99,11 @@ import com.chaya.app.library.siteOf
 import com.chaya.app.streaming.StreamMime
 import com.chaya.app.subtitles.Chapter
 import com.chaya.app.subtitles.Chapters
+import com.chaya.app.subtitles.Retime
+import com.chaya.app.subtitles.Retiming
 import com.chaya.app.subtitles.SavedSubtitles
+import com.chaya.app.subtitles.SubtitleEdits
+import com.chaya.app.subtitles.SubtitleFixes
 import com.chaya.app.ui.theme.NightContainer
 import com.chaya.app.ui.theme.NightGround
 import com.chaya.app.ui.theme.NightInk
@@ -107,6 +112,7 @@ import com.chaya.app.ui.theme.NightOutlineVariant
 import com.chaya.app.ui.theme.PlayerBackdrop
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -149,10 +155,18 @@ fun PlayerScreen(
     var atMs by remember { mutableLongStateOf(0L) }
     var lengthMs by remember { mutableLongStateOf(0L) }
     var seeking by remember { mutableStateOf<Float?>(null) }
-    // The site's subtitles kept with the video, read from their file off the main thread; null without any
-    val subtitles by produceState<SavedSubtitles?>(null, taskId) {
-        value = withContext(Dispatchers.IO) { app.subtitles.load(taskId) }
+    // The site's subtitles kept with the video, read from their file off the main thread; null without any. Putting
+    // them right replaces them
+    var subtitles by remember { mutableStateOf<SavedSubtitles?>(null) }
+    LaunchedEffect(taskId) {
+        subtitles = withContext(Dispatchers.IO) { app.subtitles.load(taskId) }
     }
+    // The line being put right, by its index; where a line was last said to be "now" (for a stretch); and what the last
+    // change did
+    var fixing by remember { mutableStateOf<Int?>(null) }
+    var synced by remember { mutableStateOf<Long?>(null) }
+    var fixed by remember { mutableStateOf<Fixed?>(null) }
+    val scope = rememberCoroutineScope()
     // Its chapters, as the site named them; none for most videos
     val chapters by produceState(emptyList<Chapter>(), taskId) {
         value = withContext(Dispatchers.IO) { app.subtitles.loadChapters(taskId) }
@@ -285,6 +299,41 @@ fun PlayerScreen(
     )
     val shownAt = seeking?.let { (it * lengthMs).toLong() } ?: atMs
     val playing = status == PlayerStatus.PLAYING
+
+    /** Changes the subtitles by [change], shows them as they are now, and says [said] with Undo. */
+    fun changeSubtitles(said: String, change: SubtitleEdits.Change, after: () -> Unit = {}) {
+        val language = subtitles?.language ?: return
+        scope.launch {
+            val lines = withContext(Dispatchers.IO) { app.subtitleEdits.change(taskId, change) }
+            fixed = if (lines == null) {
+                Fixed("Chaya couldn't change the subtitles.", canUndo = false)
+            } else {
+                subtitles = SavedSubtitles(language, lines)
+                after()
+                Fixed(said, canUndo = app.subtitleEdits.undoable(taskId) > 0)
+            }
+        }
+    }
+
+    fun undoChange() {
+        val language = subtitles?.language ?: return
+        scope.launch {
+            val lines = withContext(Dispatchers.IO) { app.subtitleEdits.undo(taskId) }
+            if (lines != null) {
+                subtitles = SavedSubtitles(language, lines)
+                synced = null
+            }
+            fixed = Fixed(if (lines == null) "Nothing to undo." else "Undone.", canUndo = app.subtitleEdits.undoable(taskId) > 0)
+        }
+    }
+
+    // What a change did shows for a while, then goes
+    LaunchedEffect(fixed) {
+        if (fixed != null) {
+            delay(FIXED_SHOWS_MS)
+            fixed = null
+        }
+    }
     // The chapter the seek bar is at, while it is dragged too, so the person sees where they will land
     val currentChapter = Chapters.at(chapters, shownAt)
     val marks = chapterMarks(chapters, lengthMs)
@@ -450,6 +499,11 @@ fun PlayerScreen(
                         language = said.language,
                         current = currentLine,
                         onSeek = { player.seekTo(it) },
+                        onFix = { index ->
+                            // Held still while it is put right, so "said now" is where the person stopped it
+                            player.pause()
+                            fixing = index
+                        },
                         // Clear of the controls floating at the foot
                         bottomPadding = 150.dp,
                         modifier = Modifier.weight(1f),
@@ -459,15 +513,54 @@ fun PlayerScreen(
                 }
             }
 
-            Controls(
-                atMs = shownAt,
-                lengthMs = lengthMs,
-                marks = marks,
-                playing = playing,
-                actions = controls,
-                modifier = Modifier.align(Alignment.BottomCenter),
-            )
+            Column(modifier = Modifier.align(Alignment.BottomCenter)) {
+                fixed?.let { shown ->
+                    FixedBar(said = shown.said, canUndo = shown.canUndo, onUndo = ::undoChange)
+                }
+                Controls(
+                    atMs = shownAt,
+                    lengthMs = lengthMs,
+                    marks = marks,
+                    playing = playing,
+                    actions = controls,
+                )
+            }
         }
+    }
+
+    val fixingLine = fixing?.let { subtitles?.lines?.getOrNull(it) }
+    if (fixingLine != null) {
+        val index = fixing ?: 0
+        FixSheet(
+            line = fixingLine,
+            atMs = atMs,
+            synced = synced,
+            onKeep = { text ->
+                fixing = null
+                changeSubtitles(if (text.isBlank()) "Line taken out." else "Line corrected.", { SubtitleFixes.withText(it, index, text) })
+            },
+            onSaidNow = {
+                fixing = null
+                val at = player.currentPosition
+                val before = synced
+                val asked = if (before != null && saidNowStretches(before, fixingLine.start)) {
+                    Retiming.Through(fixed = before, from = fixingLine.start, to = at)
+                } else {
+                    Retiming.Shift(at - fixingLine.start)
+                }
+                val said = if (asked is Retiming.Through) {
+                    "Lines stretched to fit between ${clockOf(asked.fixed)} and ${clockOf(at)}."
+                } else {
+                    SubtitleFixes.moved(at - fixingLine.start)
+                }
+                changeSubtitles(said, { Retime.of(asked).apply(it) }, after = { synced = at })
+            },
+            onNudge = { by ->
+                fixing = null
+                changeSubtitles(SubtitleFixes.moved(by), { Retime.shift(by).apply(it) })
+            },
+            onDismiss = { fixing = null },
+        )
     }
 
     if (showChapters && chapters.isNotEmpty()) {
@@ -483,6 +576,12 @@ fun PlayerScreen(
         )
     }
 }
+
+/** How long what a change to the subtitles did stays shown. */
+private const val FIXED_SHOWS_MS = 6_000L
+
+/** What the last change to the subtitles did, and whether it can be undone. */
+private data class Fixed(val said: String, val canUndo: Boolean)
 
 /** What the player is doing: one value, so it cannot be playing and failed at once. */
 private enum class PlayerStatus { PLAYING, PAUSED, FAILED }
