@@ -102,12 +102,15 @@ far it has got, with *Stop*; and a version kept for each language and model, one
   the app's scope (leaving the player does not stop it) and keeps every batch in `12.translations.json` beside the
   subtitles, so a stopped or failed translation carries on where it stopped; it goes with the download.
 
-### 7. Highlights ☐
+### 7. Highlights ☑
 
-**The person gets:** *Highlights* in the player: the moments worth watching, listed with why, and marked on the seek
-bar; a tap plays from one.
+**The person gets:** *Highlights* (the sparkle button) in the player: 5, 10 or 20 moments worth watching, found by
+their own AI model, listed with their times, titles and why, and marked in amber under the seek bar; a tap plays from
+one. *Find again* replaces them.
 
-- Port `core::highlights`.
+- `HighlightFinder` is `core::highlights`, ported with its tests: the title and the lines numbered with their times,
+  ranges checked and timed by their lines, a long video in parts with the best kept. `HighlightJobs` runs it in the
+  app's scope (`Finding`: `Idle`, `Running`, `Failed`); `12.highlights.json` beside the subtitles keeps them.
 
 ### 8. Clips ☐
 

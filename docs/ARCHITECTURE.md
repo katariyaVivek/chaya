@@ -246,6 +246,10 @@ faster than APKs ship, so the app fetches newer releases itself.
   model in `12.translations.json`, written after every batch, and which is shown. The player's `TranslateSheet` starts,
   stops and chooses; `SubtitleOverlay` and `Transcript` draw the version shown under the original.
 
+- **Highlights** (`subtitles/Highlights.kt`, a port of `chaya-core`'s `highlights`; `HighlightJobs.kt`): ranges of
+  lines the model picks, checked and timed by their lines, kept in `12.highlights.json`. The player's `HighlightsSheet`
+  lists and finds them; `HighlightMarks` draws them in amber under the seek bar.
+
 ## The person's own AI model (`ai/`)
 
 A port of `chaya-core`'s `ai`, for translation and highlights. `AiModel.kt` lists the services (`AiService.ALL`), what
@@ -348,6 +352,7 @@ not another flag beside it.
 | An engine set | `NEW → TRUSTED \| BAD`, `checking` while its first start runs | `platform/EngineSets` (`state.json`) | Enum, stored; a check the app died during counts as failed |
 | *Test* or the model list in Settings › AI model | `Idle`, `Asking`, `Said` (its words, worked or not) | `ai/AiModelScreen.kt` (`Checking`) | Sealed type |
 | A video's translation | `Idle`, `Running` (lines done of all), `Failed` (its words) | `subtitles/TranslationJobs.kt` (`Translating`) | Sealed type, one per video in a `StateFlow`; what is translated is on disk, so a stop loses nothing |
+| Finding a video's highlights | `Idle`, `Running`, `Failed` (its words) | `subtitles/HighlightJobs.kt` (`Finding`) | Sealed type, one per video in a `StateFlow` |
 | An engine update check | `NOT_DUE`, `UP_TO_DATE`, `DOWNLOADED`, `REFUSED`, `FAILED` | `EngineUpdater.Outcome` | Enum |
 | Windows: a download | `Queued → Downloading ⇄ Paused → Completed \| Failed`, steps `Picture`, `Sound`, `Joining`, `Saving` | `desktop/core/src/download/manager.rs` | Rust enums, stored |
 | Windows: the panel open | none, Settings, the ad blocker's shield, what the page holds | `desktop/app/ui/panels.js` (`onePanel`), used by `main.js` | One value: opening a panel closes the one open; Escape closes it |

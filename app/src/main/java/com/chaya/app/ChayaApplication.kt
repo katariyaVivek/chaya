@@ -78,6 +78,19 @@ class ChayaApplication : Application() {
         )
     }
 
+    /** The moments of each video worth watching, found by the person's AI model, kept beside its subtitles. */
+    val highlightStore: com.chaya.app.subtitles.HighlightStore by lazy { com.chaya.app.subtitles.HighlightStore(File(filesDir, "subtitles")) }
+    val highlights: com.chaya.app.subtitles.HighlightJobs by lazy {
+        com.chaya.app.subtitles.HighlightJobs(
+            scope = appScope,
+            store = highlightStore,
+            subtitles = subtitles::load,
+            finder = com.chaya.app.subtitles.HighlightFinder(aiClient),
+            settings = { aiKeys.settings },
+            endpoint = { aiKeys.endpoint(it) },
+        )
+    }
+
     /** Light, dark, or the same as the phone. */
     val themeSettings: ThemeSettings by lazy { ThemeSettings.from(this) }
 
