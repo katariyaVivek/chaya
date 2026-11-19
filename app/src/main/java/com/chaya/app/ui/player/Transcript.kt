@@ -39,6 +39,7 @@ import com.chaya.app.subtitles.SubtitleLine
 import com.chaya.app.ui.theme.NightContainer
 import com.chaya.app.ui.theme.NightInk
 import com.chaya.app.ui.theme.NightMuted
+import com.chaya.app.ui.theme.NightOutlineVariant
 import java.util.Locale
 
 /** "English" for "en", "Portuguese (Brazil)" for "pt-BR"; the tag itself when the phone has no name for it. */
@@ -65,6 +66,10 @@ fun Transcript(
     onFix: ((Int) -> Unit)? = null,
     /** A translation shown under each line, one for each (null for a line not translated yet); none without one. */
     translated: List<String?>? = null,
+    /** Lines chosen for a clip, lit; while some are, a tap chooses up to that line instead of playing it. */
+    chosen: IntRange? = null,
+    /** A long press starts choosing lines (for a clip, or to put one right); null leaves a long press to [onFix]. */
+    onChoose: ((Int) -> Unit)? = null,
 ) {
     val list = rememberLazyListState()
     // Follows the line being said, with the one before it in view (item 0 is the heading), unless the person is scrolling
@@ -93,16 +98,17 @@ fun Transcript(
         }
         itemsIndexed(lines, key = { index, _ -> index }) { index, line ->
             val now = index == current
+            val lit = chosen != null && index in chosen
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
-                    .background(if (now) NightContainer else Color.Transparent)
+                    .background(if (lit) NightOutlineVariant else if (now) NightContainer else Color.Transparent)
                     .combinedClickable(
-                        onClickLabel = "Play from here",
-                        onLongClickLabel = if (onFix != null) "Put this line right" else null,
-                        onLongClick = onFix?.let { fix -> { fix(index) } },
-                        onClick = { onSeek(line.start) },
+                        onClickLabel = if (chosen != null && onChoose != null) "Choose up to here" else "Play from here",
+                        onLongClickLabel = if (onChoose != null) "Choose lines" else if (onFix != null) "Put this line right" else null,
+                        onLongClick = (onChoose ?: onFix)?.let { act -> { act(index) } },
+                        onClick = { if (chosen != null && onChoose != null) onChoose(index) else onSeek(line.start) },
                     )
                     .semantics { selected = now }
                     .padding(horizontal = 8.dp, vertical = 8.dp),

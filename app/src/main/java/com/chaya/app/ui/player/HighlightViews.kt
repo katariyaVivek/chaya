@@ -86,6 +86,8 @@ fun HighlightsSheet(
     onStop: () -> Unit,
     onSetUp: () -> Unit,
     onDismiss: () -> Unit,
+    /** Makes a highlight a clip; none where clips are not offered. */
+    onClip: ((Highlight) -> Unit)? = null,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var count by rememberSaveable { mutableIntStateOf(HIGHLIGHT_COUNTS.first()) }
@@ -113,6 +115,11 @@ fun HighlightsSheet(
                             Text(highlight.title, color = NightInk, style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold))
                             if (highlight.reason.isNotEmpty()) {
                                 Text(highlight.reason, color = NightMuted, style = TextStyle(fontSize = 13.sp))
+                            }
+                            if (onClip != null) {
+                                TextButton(onClick = { onClip(highlight) }) {
+                                    Text("Make a clip", color = NightInk, style = TextStyle(fontWeight = FontWeight.SemiBold))
+                                }
                             }
                         }
                     }

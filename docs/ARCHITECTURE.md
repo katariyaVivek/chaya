@@ -250,6 +250,11 @@ faster than APKs ship, so the app fetches newer releases itself.
   lines the model picks, checked and timed by their lines, kept in `12.highlights.json`. The player's `HighlightsSheet`
   lists and finds them; `HighlightMarks` draws them in amber under the seek bar.
 
+- **Clips** (`subtitles/Clips.kt`, a port of `chaya-core`'s `clips` and the snapping in Windows' `clips.js`):
+  clips put right and kept in `12.clips.json`. The transcript chooses lines (`chosen`, `onChoose`); the player's
+  `ChosenBar`, `ClipsSheet` and `ClipEditor` make, list and trim them on `ClipTimeline`, drawn from frames and the
+  sound's loudness (`ui/player/ClipMedia.kt`: `MediaCodec` into `PeakMeter`, `MediaMetadataRetriever`).
+
 ## The person's own AI model (`ai/`)
 
 A port of `chaya-core`'s `ai`, for translation and highlights. `AiModel.kt` lists the services (`AiService.ALL`), what
