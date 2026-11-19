@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -54,6 +55,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -104,6 +106,8 @@ import com.chaya.app.subtitles.Retiming
 import com.chaya.app.subtitles.SavedSubtitles
 import com.chaya.app.subtitles.SubtitleEdits
 import com.chaya.app.subtitles.SubtitleFixes
+import com.chaya.app.subtitles.Translating
+import com.chaya.app.subtitles.VideoTranslations
 import com.chaya.app.ui.theme.NightContainer
 import com.chaya.app.ui.theme.NightGround
 import com.chaya.app.ui.theme.NightInk
@@ -134,6 +138,8 @@ fun PlayerScreen(
     onNavigateBack: () -> Unit,
     /** Where to start, in milliseconds (a line found by the Library's search); null starts where it was left. */
     startAtMs: Long? = null,
+    /** Opens Settings › AI model, from *Translate* before a model is set up. */
+    onOpenAiModel: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val app = context.applicationContext as ChayaApplication
@@ -161,6 +167,14 @@ fun PlayerScreen(
     LaunchedEffect(taskId) {
         subtitles = withContext(Dispatchers.IO) { app.subtitles.load(taskId) }
     }
+    // Its translations, a version for each language and model, read again as a translation goes on
+    val translating by app.translations.states.collectAsState()
+    val translationState = translating[taskId] ?: Translating.Idle
+    var translations by remember { mutableStateOf(VideoTranslations()) }
+    LaunchedEffect(taskId, translationState) {
+        translations = withContext(Dispatchers.IO) { app.translationStore.load(taskId) }
+    }
+    var showTranslate by rememberSaveable { mutableStateOf(false) }
     // The line being put right, by its index; where a line was last said to be "now" (for a stretch); and what the last
     // change did
     var fixing by remember { mutableStateOf<Int?>(null) }
@@ -232,6 +246,9 @@ fun PlayerScreen(
     }
     val currentLine = subtitles?.lineAt(atMs)
     val saying = currentLine?.let { subtitles?.lines?.getOrNull(it)?.text }?.takeIf { showSubtitles && status != PlayerStatus.FAILED }
+    // The version shown under the original, when it still fits the lines (a line taken out since changes their count)
+    val translated = subtitles?.let { translations.shown(it.lines.size) }?.lines
+    val sayingTranslated = currentLine?.let { translated?.getOrNull(it) }?.takeIf { saying != null }
 
     // Upright or across, from the screen's shape; the full-screen button turns the phone, and leaving the player lets
     // it turn as it likes again
@@ -354,7 +371,7 @@ fun PlayerScreen(
                 modifier = Modifier.fillMaxSize(),
             )
             if (saying != null) {
-                SubtitleOverlay(saying, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = subtitlesLift))
+                SubtitleOverlay(saying, under = sayingTranslated, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = subtitlesLift))
             }
             if (status == PlayerStatus.FAILED) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(16.dp)) {
@@ -449,6 +466,11 @@ fun PlayerScreen(
                         Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, tint = NightInk)
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (subtitles != null) {
+                            RoundButton(onClick = { showTranslate = true }, label = "Translate") {
+                                Icon(Icons.Default.Translate, contentDescription = null, tint = NightInk, modifier = Modifier.size(20.dp))
+                            }
+                        }
                         SubtitlesButton(subtitles = if (subtitles == null) null else showSubtitles, onClick = toggleSubtitles)
                         if (task.filePath != null || task.exportedUri != null) {
                             RoundButton(onClick = { share(app, task) }, label = "Share") {
@@ -497,6 +519,7 @@ fun PlayerScreen(
                     Transcript(
                         lines = said.lines,
                         language = said.language,
+                        translated = translated,
                         current = currentLine,
                         onSeek = { player.seekTo(it) },
                         onFix = { index ->
@@ -560,6 +583,25 @@ fun PlayerScreen(
                 changeSubtitles(SubtitleFixes.moved(by), { Retime.shift(by).apply(it) })
             },
             onDismiss = { fixing = null },
+        )
+    }
+
+    val from = subtitles?.language
+    if (showTranslate && from != null) {
+        TranslateSheet(
+            from = from,
+            translations = translations,
+            state = translationState,
+            onTranslate = { to -> app.translations.start(taskId, displayTitle(task), to) },
+            onStop = { app.translations.stop(taskId) },
+            onShow = { index ->
+                scope.launch { translations = withContext(Dispatchers.IO) { app.translationStore.show(taskId, index) } }
+            },
+            onSetUp = {
+                showTranslate = false
+                onOpenAiModel()
+            },
+            onDismiss = { showTranslate = false },
         )
     }
 

@@ -239,6 +239,13 @@ faster than APKs ship, so the app fetches newer releases itself.
   writes the SRT through `SubtitleStore.write` and keeps each file as it was for Undo (the last 20 per video, in memory).
   The player opens `FixSheet` from the transcript (a long press, or its pencil) and shows `FixedBar` with Undo.
 
+- **Translation** (`subtitles/Translate.kt`, a port of `chaya-core`'s `translate`; `Translations.kt`,
+  `TranslationJobs.kt`): `Translator` asks the person's model in batches, each with the title and the transcript, and
+  keeps every line in step by its number. `TranslationJobs` runs one per video in the app's scope and reports
+  `Translating` (one value: `Idle`, `Running`, `Failed`); `TranslationStore` keeps a version for each language and
+  model in `12.translations.json`, written after every batch, and which is shown. The player's `TranslateSheet` starts,
+  stops and chooses; `SubtitleOverlay` and `Transcript` draw the version shown under the original.
+
 ## The person's own AI model (`ai/`)
 
 A port of `chaya-core`'s `ai`, for translation and highlights. `AiModel.kt` lists the services (`AiService.ALL`), what
@@ -340,6 +347,7 @@ not another flag beside it.
 | A tab | shown, live in the background, discarded; renderer lost | `BrowserTab`: `saved == null` is shown, `webView == null` is discarded; `RendererLoss` | Nullable fields, used from the main thread only |
 | An engine set | `NEW → TRUSTED \| BAD`, `checking` while its first start runs | `platform/EngineSets` (`state.json`) | Enum, stored; a check the app died during counts as failed |
 | *Test* or the model list in Settings › AI model | `Idle`, `Asking`, `Said` (its words, worked or not) | `ai/AiModelScreen.kt` (`Checking`) | Sealed type |
+| A video's translation | `Idle`, `Running` (lines done of all), `Failed` (its words) | `subtitles/TranslationJobs.kt` (`Translating`) | Sealed type, one per video in a `StateFlow`; what is translated is on disk, so a stop loses nothing |
 | An engine update check | `NOT_DUE`, `UP_TO_DATE`, `DOWNLOADED`, `REFUSED`, `FAILED` | `EngineUpdater.Outcome` | Enum |
 | Windows: a download | `Queued → Downloading ⇄ Paused → Completed \| Failed`, steps `Picture`, `Sound`, `Joining`, `Saving` | `desktop/core/src/download/manager.rs` | Rust enums, stored |
 | Windows: the panel open | none, Settings, the ad blocker's shield, what the page holds | `desktop/app/ui/panels.js` (`onePanel`), used by `main.js` | One value: opening a panel closes the one open; Escape closes it |
