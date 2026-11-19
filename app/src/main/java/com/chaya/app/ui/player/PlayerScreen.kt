@@ -107,6 +107,8 @@ import com.chaya.app.subtitles.Retiming
 import com.chaya.app.subtitles.SavedSubtitles
 import com.chaya.app.subtitles.SubtitleEdits
 import com.chaya.app.subtitles.SubtitleFixes
+import com.chaya.app.speech.Making
+import com.chaya.app.speech.Whisper
 import com.chaya.app.subtitles.Clip
 import com.chaya.app.subtitles.Clips
 import com.chaya.app.subtitles.Finding
@@ -189,6 +191,12 @@ fun PlayerScreen(
         found = withContext(Dispatchers.IO) { app.highlightStore.load(taskId) }
     }
     var showHighlights by rememberSaveable { mutableStateOf(false) }
+    // A video saved without subtitles can have them made on the phone; when that ends, they are read again
+    val makingAll by app.speech.states.collectAsState()
+    val making = makingAll[taskId] ?: Making.Idle
+    LaunchedEffect(making) {
+        if (making == Making.Idle && subtitles == null) subtitles = withContext(Dispatchers.IO) { app.subtitles.load(taskId) }
+    }
     // Its clips; lines being chosen in the transcript (from where the long press was, to the line tapped last); the
     // clip open on its timeline; and the clip playing, which stops at its end
     var clips by remember { mutableStateOf(emptyList<Clip>()) }
@@ -593,6 +601,15 @@ fun PlayerScreen(
                         bottomPadding = 150.dp,
                         modifier = Modifier.weight(1f),
                     )
+                } else if (source.cached == null && Whisper.available) {
+                    Column(Modifier.weight(1f)) {
+                        MakeSubtitlesCard(
+                            state = making,
+                            fetched = app.speechModels::isFetched,
+                            onMake = { model -> app.speech.start(taskId, model, lengthMs) },
+                            onStop = { app.speech.stop(taskId) },
+                        )
+                    }
                 } else {
                     Spacer(Modifier.weight(1f))
                 }

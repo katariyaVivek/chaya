@@ -34,20 +34,30 @@ object ClipMedia {
 
     /** Decodes the first sound track of [uri] to PCM and measures it as it comes; nothing but the peaks is kept. */
     fun decodePeaks(context: Context, uri: Uri): ByteArray? {
+        var meter: PeakMeter? = null
+        val decoded = decodePcm(context, uri, onFormat = { rate, channels -> meter = PeakMeter(rate, channels) }) { meter?.add(it) }
+        return if (decoded) meter?.peaks() else null
+    }
+
+    /**
+     * Decodes the first sound track of [uri] with the phone's own decoder, handing each 16-bit sample to [onSample]
+     * (a float decoder's are turned into 16-bit), after [onFormat] says the rate and channels. False without sound.
+     */
+    fun decodePcm(context: Context, uri: Uri, onFormat: (rate: Int, channels: Int) -> Unit, onSample: (Short) -> Unit): Boolean {
         val extractor = MediaExtractor()
         var codec: MediaCodec? = null
         try {
             extractor.setDataSource(context, uri, null)
             val track = (0 until extractor.trackCount).firstOrNull {
                 extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
-            } ?: return null
+            } ?: return false
             extractor.selectTrack(track)
             val format = extractor.getTrackFormat(track)
             val decoder = MediaCodec.createDecoderByType(format.getString(MediaFormat.KEY_MIME)!!)
             codec = decoder
             decoder.configure(format, null, null, 0)
             decoder.start()
-            var meter: PeakMeter? = null
+            var told = false
             var float = false
             val info = MediaCodec.BufferInfo()
             var inputDone = false
@@ -71,32 +81,31 @@ object ClipMedia {
                     val out = decoder.outputFormat
                     float = out.containsKey(MediaFormat.KEY_PCM_ENCODING) &&
                         out.getInteger(MediaFormat.KEY_PCM_ENCODING) == AudioFormat.ENCODING_PCM_FLOAT
-                    meter = PeakMeter(out.getInteger(MediaFormat.KEY_SAMPLE_RATE), out.getInteger(MediaFormat.KEY_CHANNEL_COUNT))
+                    onFormat(out.getInteger(MediaFormat.KEY_SAMPLE_RATE), out.getInteger(MediaFormat.KEY_CHANNEL_COUNT))
+                    told = true
                 } else if (output >= 0) {
+                    if (!told) {
+                        onFormat(format.getInteger(MediaFormat.KEY_SAMPLE_RATE), format.getInteger(MediaFormat.KEY_CHANNEL_COUNT))
+                        told = true
+                    }
                     val buffer = decoder.getOutputBuffer(output)
-                    val measuring = meter ?: PeakMeter(
-                        format.getInteger(MediaFormat.KEY_SAMPLE_RATE),
-                        format.getInteger(MediaFormat.KEY_CHANNEL_COUNT),
-                    ).also { meter = it }
                     if (buffer != null && info.size > 0) {
                         buffer.position(info.offset)
                         buffer.limit(info.offset + info.size)
                         val ordered = buffer.order(ByteOrder.nativeOrder())
                         if (float) {
                             val samples = ordered.asFloatBuffer()
-                            while (samples.hasRemaining()) {
-                                measuring.add((samples.get().coerceIn(-1f, 1f) * Short.MAX_VALUE).toInt().toShort())
-                            }
+                            while (samples.hasRemaining()) onSample((samples.get().coerceIn(-1f, 1f) * Short.MAX_VALUE).toInt().toShort())
                         } else {
                             val samples = ordered.asShortBuffer()
-                            while (samples.hasRemaining()) measuring.add(samples.get())
+                            while (samples.hasRemaining()) onSample(samples.get())
                         }
                     }
                     decoder.releaseOutputBuffer(output, false)
                     if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) break
                 }
             }
-            return meter?.peaks()
+            return told
         } finally {
             runCatching { codec?.stop() }
             runCatching { codec?.release() }

@@ -261,6 +261,16 @@ faster than APKs ship, so the app fetches newer releases itself.
   is made in the cache (`clips/`, shared through the FileProvider) and saved to Movies on request. `ExportPanel` sits
   under the clip's timeline (`Exporting`: `Idle`, `Running`, `Done`, `Failed`).
 
+## Subtitles made on the phone (`speech/`, `src/main/cpp`)
+
+whisper.cpp, built by CMake from the commit Windows uses, with `chaya_whisper.c` as its bridge: `Whisper.transcribe`
+hands it 16 kHz samples and a model and gets back whisper-cli's `-ojf` JSON (DTW word times on), read by
+`Transcript.parse` and cut into lines by `SpeechLines`, both Windows' `speech` ported with its tests and fixtures
+(read from `desktop/core/tests/fixtures`). `SpeechModels` fetches Tiny or Base once, resumably, kept only when its
+SHA-256 is the pinned one. `SpeechJobs` runs one video at a time in the app's scope (`Making`: `Idle`, `Fetching`,
+`Listening`, `Failed`): the sound decoded by `ClipMedia.decodePcm` into `Sound16k`'s five-minute pieces, each heard
+and shifted to its place, and the lines written as the video's SRT through `SubtitleStore.write`.
+
 ## The person's own AI model (`ai/`)
 
 A port of `chaya-core`'s `ai`, for translation and highlights. `AiModel.kt` lists the services (`AiService.ALL`), what
@@ -365,6 +375,7 @@ not another flag beside it.
 | A video's translation | `Idle`, `Running` (lines done of all), `Failed` (its words) | `subtitles/TranslationJobs.kt` (`Translating`) | Sealed type, one per video in a `StateFlow`; what is translated is on disk, so a stop loses nothing |
 | Finding a video's highlights | `Idle`, `Running`, `Failed` (its words) | `subtitles/HighlightJobs.kt` (`Finding`) | Sealed type, one per video in a `StateFlow` |
 | Saving a clip | `Idle`, `Running` (how far), `Done` (the file), `Failed` (its words) | `ui/player/ExportViews.kt` (`Exporting`) | Sealed type, in the player only |
+| Making a video's subtitles | `Idle`, `Fetching` (the model, bytes of all), `Listening` (percent), `Failed` (its words) | `speech/SpeechJobs.kt` (`Making`) | Sealed type, one per video in a `StateFlow`; one video at a time |
 | An engine update check | `NOT_DUE`, `UP_TO_DATE`, `DOWNLOADED`, `REFUSED`, `FAILED` | `EngineUpdater.Outcome` | Enum |
 | Windows: a download | `Queued → Downloading ⇄ Paused → Completed \| Failed`, steps `Picture`, `Sound`, `Joining`, `Saving` | `desktop/core/src/download/manager.rs` | Rust enums, stored |
 | Windows: the panel open | none, Settings, the ad blocker's shield, what the page holds | `desktop/app/ui/panels.js` (`onePanel`), used by `main.js` | One value: opening a panel closes the one open; Escape closes it |

@@ -45,6 +45,29 @@ android {
         ndk {
             abiFilters += listOf("arm64-v8a", "x86_64")
         }
+
+        // whisper.cpp for "Make subtitles", built for the phone's processor (src/main/cpp)
+        externalNativeBuild {
+            cmake {
+                arguments += listOf("-DANDROID_STL=c++_static", "-DCMAKE_BUILD_TYPE=Release")
+                cFlags += listOf("-O3")
+                cppFlags += listOf("-O3")
+            }
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
+    }
+
+    // The JFK sample whisper.cpp's on-device test listens to: Chaya for Windows' own test fixture, one copy for both.
+    sourceSets {
+        getByName("androidTest") {
+            assets.srcDir("../desktop/core/tests/fixtures")
+        }
     }
 
     // Release signing (Phase 5.1): credentials never live in the repo.
