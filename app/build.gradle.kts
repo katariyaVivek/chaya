@@ -169,6 +169,8 @@ dependencies {
     implementation(libs.androidx.media3.ui)
     // Saves a finished stream download, which lives in Media3's cache, as an MP4 file (StreamExporter).
     implementation(libs.androidx.media3.transformer)
+    // A clip's subtitles drawn on as it is saved (OverlayEffect), and its picture made smaller to fit a size
+    implementation(libs.androidx.media3.effect)
     // Its MP4 writer (InAppMuxer's Muxer type), which Transformer keeps to itself; also builds the HLS stream the
     // on-device export test downloads.
     implementation(libs.androidx.media3.muxer)
