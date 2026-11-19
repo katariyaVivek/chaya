@@ -3,21 +3,21 @@ package com.chaya.app.browser
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.os.Build
+import android.os.SystemClock
 import android.view.View
 import android.view.ViewGroup
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import androidx.webkit.WebViewCompat
-import androidx.webkit.WebViewFeature
-import android.webkit.RenderProcessGoneDetail
-import android.os.SystemClock
 import android.widget.FrameLayout
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -71,6 +71,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -80,7 +81,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -92,7 +92,10 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
 import com.chaya.app.ChayaApplication
 import com.chaya.app.SharedLinks
 import com.chaya.app.adblock.AdBlockSession
@@ -103,7 +106,11 @@ import com.chaya.app.detection.MediaNamer
 import com.chaya.app.detection.MediaRanker
 import com.chaya.app.detection.RankedMedia
 import com.chaya.app.download.DownloadState
+import com.chaya.app.history.BrowsingRecord
+import com.chaya.app.history.PagesToOpen
+import com.chaya.app.history.Suggestion
 import com.chaya.app.model.DetectedMedia
+import com.chaya.app.model.DetectionSource
 import com.chaya.app.model.MediaKind
 import com.chaya.app.platform.LinkState
 import com.chaya.app.platform.Platform
@@ -115,17 +122,14 @@ import com.chaya.app.ui.components.PlatformSheet
 import com.chaya.app.ui.components.ProfileSheet
 import com.chaya.app.ui.components.QualitySelectorSheet
 import com.chaya.app.ui.components.TabGrid
-import com.chaya.app.ui.theme.LocalChayaColors
 import com.chaya.app.ui.theme.ChayaMotion
+import com.chaya.app.ui.theme.LocalChayaColors
 import com.chaya.app.ui.theme.pressScale
 import java.net.URLEncoder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
-import com.chaya.app.history.BrowsingRecord
-import com.chaya.app.history.PagesToOpen
-import com.chaya.app.history.Suggestion
 import kotlinx.coroutines.launch
 
 /**
@@ -298,6 +302,11 @@ fun BrowserScreen(
     val tabsVersion = tabs.version.collectAsState().value
     // A link the page wanted in a new window; opened by the effect below, outside the WebView's callback.
     var pendingNewTabUrl by remember { mutableStateOf<String?>(null) }
+    // What a long press on the page landed on, for its menu; null when no menu is open.
+    var pressedOn by remember { mutableStateOf<PressedOn?>(null) }
+    // How far the page is pulled down at its top (0 to 1), and whether it was let go far enough to load again.
+    var pulled by remember { mutableFloatStateOf(0f) }
+    var pullRefreshRequested by remember { mutableStateOf(false) }
 
     // Packages all destination-specific WebView callbacks so one atomic router update owns their lifetime together.
     val callbackState = RetainedWebViewCallbackState(
@@ -310,6 +319,10 @@ fun BrowserScreen(
         onExitFullscreen = ::exitFullscreen,
         onAddressChanged = viewModel::onPageAddressChanged,
         onOpenInNewTab = { pendingNewTabUrl = it },
+        onPressed = { pressedOn = it },
+        onSearchSelected = { pendingNewTabUrl = it },
+        onPulled = { pulled = it },
+        onPullToRefresh = { pullRefreshRequested = true },
     )
 
     /** Routes the tab shown to the browser's state, and every other tab to the state it keeps for itself. */
@@ -771,6 +784,62 @@ fun BrowserScreen(
         openNewTab(url)
     }
 
+    // The page let go after being pulled down far enough at its top: it loads again.
+    LaunchedEffect(pullRefreshRequested) {
+        if (!pullRefreshRequested) return@LaunchedEffect
+        pullRefreshRequested = false
+        pulled = 0f
+        if (!viewModel.uiState.value.homeVisible) reloadPage()
+    }
+
+    /** Puts [text] on the clipboard; Android 13 and newer say so themselves. */
+    fun copy(label: String, text: String, said: String) {
+        context.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText(label, text))
+        if (Build.VERSION.SDK_INT < 33) showMessage(said)
+    }
+
+    /** Hands [url] to the app the person picks. */
+    fun shareAddress(url: String) {
+        val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, url)
+        runCatching { context.startActivity(Intent.createChooser(send, null)) }
+            .onFailure { showMessage("No app on this phone can share a link") }
+    }
+
+    /** Saves [url]: a video site's link opens its sheet, as a pasted one does; anything else downloads as a file. */
+    fun downloadAddress(url: String) {
+        if (viewModel.openLink(url)) return
+        val page = viewModel.uiState.value.url.takeIf { it.isNotEmpty() }
+        requestPermissionAndDownload(DetectedMedia(url = url, pageUrl = page, mimeType = null, source = DetectionSource.DOM))
+    }
+
+    /** One row of a long press's menu, done. */
+    fun act(pressed: PressedOn, action: PageAction) {
+        val link = (pressed as? PressedOn.Link)?.url ?: (pressed as? PressedOn.Image)?.link
+        val picture = (pressed as? PressedOn.Image)?.src
+        when (action) {
+            PageAction.OPEN_IN_NEW_TAB -> link?.let(::openNewTab)
+            PageAction.COPY_LINK -> link?.let { copy("Link", it, "Link copied") }
+            PageAction.COPY_LINK_TEXT -> (pressed as? PressedOn.Link)?.let { copy("Link text", it.text, "Link text copied") }
+            PageAction.DOWNLOAD_LINK -> link?.let(::downloadAddress)
+            PageAction.SHARE_LINK -> link?.let(::shareAddress)
+            PageAction.OPEN_IMAGE_IN_NEW_TAB -> picture?.let(::openNewTab)
+            PageAction.DOWNLOAD_IMAGE -> picture?.let(::downloadAddress)
+            PageAction.COPY_IMAGE_ADDRESS -> picture?.let { copy("Image address", it, "Image address copied") }
+            PageAction.SHARE_IMAGE -> picture?.let(::shareAddress)
+        }
+    }
+
+    pressedOn?.let { pressed ->
+        PageMenu(
+            pressed = pressed,
+            onAction = { action ->
+                pressedOn = null
+                act(pressed, action)
+            },
+            onDismiss = { pressedOn = null },
+        )
+    }
+
     // A link shared to Chaya from another app opens its sheet once the browser is on screen.
     val sharedText by SharedLinks.pending.collectAsState()
     LaunchedEffect(sharedText) {
@@ -932,6 +1001,12 @@ fun BrowserScreen(
                     modifier = Modifier.fillMaxSize(),
                     // The WebViews live on for reattachment; only this screen's container goes.
                     onRelease = { host -> host.removeAllViews() }
+                )
+
+                // Pulled down at its top, the page shows how far; let go past the end, it loads again.
+                PullIndicator(
+                    pulled = if (uiState.homeVisible) 0f else pulled,
+                    modifier = Modifier.align(Alignment.TopCenter),
                 )
 
                 HomeContent(
@@ -1236,7 +1311,7 @@ internal fun createChayaWebView(
     /** The page's renderer stopped; this WebView can no longer be used and must be replaced. */
     onRendererGone: () -> Unit = {},
 ): WebView {
-    return WebView(ctx).apply {
+    return ChayaWebView(ctx, callbacks).apply {
         // Tracks injection eligibility so a superseded redirect cannot reintroduce an old capability on finish.
         var activeDetectorSession: DetectorNavigationSession? = null
 
