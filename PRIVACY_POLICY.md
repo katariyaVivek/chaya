@@ -59,6 +59,10 @@ Store account, no third-party SDKs.
 - Where you stopped each saved video in Chaya's player (the time, the video's length and when you stopped), so
   it starts there again and Home offers *Continue*: **on your phone only**, in the app's preferences. It is
   deleted with its download.
+- Settings › AI model (the service you chose, its address and model, and its key): **on your phone only**, in the
+  app's preferences. The key is encrypted with a key kept in the Android Keystore, which never leaves the phone and
+  which Chaya itself cannot read out; it is never stored as you typed it. These settings are left out of Android's
+  backups and of moving to a new phone. *Forget* deletes the key.
 - Open tabs (their addresses, titles, back and forward history, a small picture of each page and
   the site's icon), so they come back after Android closes the app: **on your phone only**, in
   app-private files. Closing a tab deletes its files; *Close all tabs* in the tab grid's ⋮ menu
@@ -91,6 +95,13 @@ Chaya talks only to the sites involved in what you do:
   files) to fetch one when they do. The requests carry no cookies and nothing about you, the links
   you look up or the pages you visit. Turn this off under Downloads › ⋮ › Diagnostics › *Keep it up
   to date*.
+- your own AI model, only once you set one up under Downloads › ⋮ › *AI model*, and only when you ask for something
+  that needs it: *List models* and *Test* there, and (from later versions) translating a video's subtitles or finding
+  its highlights. Chaya sends the service you chose what that needs (for translation and highlights, the video's
+  subtitles and its title) with your key, to that service only: OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter,
+  Mistral, Groq, xAI, an address you give, or a program such as Ollama or LM Studio on a PC on your own network. What
+  the service does with it is up to its own privacy policy. A key is sent only over `https://`, or over `http://` to an
+  address on your own network.
 
 ## Chaya for Windows
 

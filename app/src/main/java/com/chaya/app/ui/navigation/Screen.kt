@@ -1,6 +1,7 @@
 package com.chaya.app.ui.navigation
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.History
@@ -22,6 +23,7 @@ sealed class Screen(
     data object Diagnostics : Screen("diagnostics", "Diagnostics", Icons.Default.Description)
     data object History : Screen("history", "History", Icons.Default.History)
     data object Bookmarks : Screen("bookmarks", "Bookmarks", Icons.Default.Star)
+    data object AiModel : Screen("ai-model", "AI model", Icons.Default.AutoAwesome)
 
     companion object {
         const val PLAYER_ARGS = "taskId"
