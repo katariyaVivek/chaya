@@ -58,7 +58,8 @@ Store account, no third-party SDKs.
   change is kept in memory for *Undo* while the app runs, and nowhere else. A translation of them made by your own AI
   model (*Translate* in the player), a version for each language and model: **on your phone only**, beside them, and
   deleted with the download. The highlights your model found in them (*Highlights* in the player), and the clips you cut (their names and times):
-  the same. How loud a video's sound is, measured on the phone for the clip timeline, and a clip saved as a video or SRT: in
+  the same. Subtitles made on the phone are kept as the video's own subtitles, above, and the speech model in the app's files.
+  How loud a video's sound is, measured on the phone for the clip timeline, and a clip saved as a video or SRT: in
   the app's cache, until Android clears it. *Share* hands a clip only to the app you pick; *Save to phone* puts a
   copy in your phone's Movies (or Downloads, for SRT).
 - Where you stopped each saved video in Chaya's player (the time, the video's length and when you stopped), so
@@ -100,6 +101,9 @@ Chaya talks only to the sites involved in what you do:
   files) to fetch one when they do. The requests carry no cookies and nothing about you, the links
   you look up or the pages you visit. Turn this off under Downloads › ⋮ › Diagnostics › *Keep it up
   to date*.
+- for *Make subtitles*, the first time a model is used, huggingface.co (and the server it sends the file from), to
+  fetch whisper.cpp's Tiny or Base model, which is then kept in the app's files. The request carries nothing about
+  you or the video. The video's sound is listened to on the phone and never sent anywhere.
 - your own AI model, only once you set one up under Downloads › ⋮ › *AI model*, and only when you ask for something
   that needs it: *List models* and *Test* there, *Translate* and *Highlights* in the player. Chaya sends the service you chose what that needs (for translation and highlights, the video's
   subtitles and its title) with your key, to that service only: OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter,

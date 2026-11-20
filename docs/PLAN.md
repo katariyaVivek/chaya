@@ -136,10 +136,15 @@ cache is saved as an MP4 from the Library first.
   the picture made smaller by `Presentation` and the bit rates set when a size is asked for. `ClipExporterTest`
   saves a short clip on a device and reads its length back, and checks a size to fit.
 
-### 10. Subtitles made on the phone ☐
+### 10. Subtitles made on the phone ☑
 
-**The person gets:** *Make subtitles* on a saved video with none, listened to on the phone; the model fetched the first
-time, with its size said first.
+**The person gets:** where the transcript would be, a video saved without subtitles offers *Make subtitles*: Tiny
+(fastest) or Base (more accurate), each with its size said until it is on the phone ("Fetch 148 MB and make
+subtitles"); then how far it has listened, with *Stop*. The lines become the video's subtitles, so the transcript,
+search, translation, highlights and clips all have them.
 
-- whisper.cpp through the NDK; Tiny and Base models, pinned by SHA-256. Short lines ported from `core::speech::lines`
-  (JVM tests with Windows' recorded output). An `androidTest` with the JFK sample, as on Windows.
+- whisper.cpp v1.9.5 (Windows' commit) through the NDK (`src/main/cpp`, fetched by CMake at that commit), with DTW
+  word times as on Windows; a small bridge writes whisper-cli's `-ojf` JSON, so `Transcript.parse` and `SpeechLines`
+  (Windows' `speech::whisper::parse` and `speech::lines`) are ported with Windows' tests and its recorded output. The
+  models are pinned by SHA-256 (Base's from Hugging Face's LFS pointer) and fetched resumably. The sound is decoded
+  by the phone to 16 kHz (`Sound16k`), five minutes at a time. `WhisperOnDeviceTest` hears the JFK sample on a device.

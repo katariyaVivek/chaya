@@ -78,6 +78,34 @@ class ChayaApplication : Application() {
         )
     }
 
+    /** whisper.cpp's models, fetched once from Hugging Face and checked against their pinned sums. */
+    val speechModels: com.chaya.app.speech.SpeechModels by lazy { com.chaya.app.speech.SpeechModels(File(filesDir, "speech")) }
+    /** *Make subtitles*: a video listened to on the phone, its lines kept as its subtitles. */
+    val speech: com.chaya.app.speech.SpeechJobs by lazy {
+        com.chaya.app.speech.SpeechJobs(
+            scope = appScope,
+            models = speechModels,
+            decode = { id, onPiece ->
+                val task = downloadManager.downloads.value.firstOrNull { it.id == id }
+                val uri = task?.filePath?.let(::File)?.takeIf { it.isFile }?.let(android.net.Uri::fromFile)
+                    ?: task?.exportedUri?.let(android.net.Uri::parse)
+                var sound: com.chaya.app.speech.Sound16k? = null
+                val decoded = uri != null && com.chaya.app.ui.player.ClipMedia.decodePcm(
+                    this,
+                    uri,
+                    onFormat = { rate, channels -> sound = com.chaya.app.speech.Sound16k(rate, channels, onChunk = onPiece) },
+                ) { sound?.add(it) }
+                sound?.finish()
+                decoded
+            },
+            listen = { file, model, samples, language, listener ->
+                com.chaya.app.speech.Whisper.transcribe(file, model.dtw, samples, language, listener)
+            },
+            keep = { id, language, lines -> subtitles.write(id, "$id.$language.srt", com.chaya.app.subtitles.Subtitles.toSrt(lines)) },
+            stopListening = com.chaya.app.speech.Whisper::stop,
+        )
+    }
+
     /** Each video's clips, kept beside its subtitles. */
     val clipStore: com.chaya.app.subtitles.ClipStore by lazy { com.chaya.app.subtitles.ClipStore(File(filesDir, "subtitles")) }
 

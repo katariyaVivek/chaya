@@ -8,6 +8,9 @@
   directly (what CI does), run `gradle wrapper --gradle-version 8.14.3` once to get `./gradlew`, or
   open the project in Android Studio, which generates it.
 - Python 3.13 on the `PATH`. Chaquopy uses it at build time to install yt-dlp into the app.
+- The Android NDK and CMake 3.22.1 (`sdkmanager "ndk;27.0.12077973" "cmake;3.22.1"`; GitHub's runners have them, and
+  the Android Gradle plugin fetches what is missing), and `git`: the build fetches whisper.cpp at the commit
+  `app/src/main/cpp/CMakeLists.txt` pins, for *Make subtitles*. The first build compiles it (a few minutes).
 
 Library versions are in `gradle/libs.versions.toml`.
 
