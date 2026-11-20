@@ -1,5 +1,6 @@
 package com.chaya.app.ui.player
 
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -71,7 +72,8 @@ fun FixSheet(
     var text by rememberSaveable(line) { mutableStateOf(line.text) }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = NightGround) {
         Column(
-            modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(start = 20.dp, end = 20.dp, bottom = 20.dp),
+            // Above the keyboard while the line's words are typed
+            modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(start = 20.dp, end = 20.dp, bottom = 20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Heading("LINE AT ${clockOf(line.start)}")

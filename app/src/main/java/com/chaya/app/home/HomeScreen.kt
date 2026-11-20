@@ -1,5 +1,6 @@
 package com.chaya.app.home
 
+import androidx.compose.foundation.layout.imePadding
 import android.content.ClipboardManager
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -517,7 +518,8 @@ internal fun TypeSheet(onDismiss: () -> Unit, onGo: (Typed) -> Unit) {
         containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(start = 24.dp, end = 24.dp, bottom = 28.dp, top = 4.dp),
+            // Above the keyboard while a link is typed
+            modifier = Modifier.fillMaxWidth().imePadding().padding(start = 24.dp, end = 24.dp, bottom = 28.dp, top = 4.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Text("Paste a link, or search", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)

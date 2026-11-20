@@ -123,3 +123,22 @@ class PageMenusTest {
         assertEquals(listOf(PageAction.COPY_LINK_TEXT), tapped)
     }
 }
+
+/** A tab opened for a page (the link menu's Open in new tab, a page's new window, Search in new tab). */
+class NewTabTest {
+    @org.junit.Test
+    fun `a tab opened for a page shows the page loading, never its start screen`() {
+        val state = openingState("https://app.roteo.ai/", 7)
+        org.junit.Assert.assertFalse("not the start screen with the address in its field", state.homeVisible)
+        org.junit.Assert.assertEquals("https://app.roteo.ai/", state.url)
+        org.junit.Assert.assertTrue(state.isLoading)
+        org.junit.Assert.assertEquals(7L, state.navigationGeneration)
+    }
+
+    @org.junit.Test
+    fun `what is opened is an address, a site, or a search`() {
+        org.junit.Assert.assertEquals("https://app.roteo.ai/", addressFor(" https://app.roteo.ai/ "))
+        org.junit.Assert.assertEquals("https://roteo.ai", addressFor("roteo.ai"))
+        org.junit.Assert.assertEquals("https://www.google.com/search?q=Connect+once", addressFor("Connect once"))
+    }
+}
