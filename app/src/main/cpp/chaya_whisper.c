@@ -83,7 +83,13 @@ static void on_progress(struct whisper_context *ctx, struct whisper_state *state
     (void) ctx;
     (void) state;
     Progress *p = data;
-    if (p->listener) (*p->env)->CallVoidMethod(p->env, p->listener, p->heard, (jint) progress);
+    if (!p->listener) return;
+    (*p->env)->CallVoidMethod(p->env, p->listener, p->heard, (jint) progress);
+    // A listener that throws is not listened to again; the exception is not left pending.
+    if ((*p->env)->ExceptionCheck(p->env)) {
+        (*p->env)->ExceptionClear(p->env);
+        p->listener = NULL;
+    }
 }
 
 static bool on_abort(void *data) {
@@ -137,7 +143,13 @@ JNIEXPORT jbyteArray JNICALL Java_com_chaya_app_speech_Whisper_transcribeNative(
     if (listener) {
         jclass listener_class = (*env)->GetObjectClass(env, listener);
         progress.heard = (*env)->GetMethodID(env, listener_class, "heard", "(I)V");
-        if (!progress.heard) progress.listener = NULL;
+        // A method not found leaves an exception pending, which would end the app at the next JNI call: listening
+        // goes on without progress instead.
+        if (!progress.heard || (*env)->ExceptionCheck(env)) {
+            (*env)->ExceptionClear(env);
+            progress.listener = NULL;
+        }
+        (*env)->DeleteLocalRef(env, listener_class);
     }
     params.progress_callback = on_progress;
     params.progress_callback_user_data = &progress;

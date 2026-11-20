@@ -1,5 +1,6 @@
 package com.chaya.app.ui.player
 
+import androidx.compose.foundation.layout.imePadding
 import android.net.Uri
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
@@ -192,7 +193,8 @@ fun ClipEditor(
     }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = NightGround) {
         Column(
-            modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(start = 20.dp, end = 20.dp, bottom = 20.dp),
+            // Above the keyboard while the clip's name is typed
+            modifier = Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(start = 20.dp, end = 20.dp, bottom = 20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Heading("CLIP · ${clipFacts(edited.start, edited.end).uppercase(Locale.getDefault())}")

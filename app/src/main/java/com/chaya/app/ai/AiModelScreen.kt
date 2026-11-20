@@ -1,5 +1,7 @@
 package com.chaya.app.ai
 
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.consumeWindowInsets
 import android.content.Intent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -170,6 +172,9 @@ fun AiModelContent(
         Column(
             Modifier
                 .padding(padding)
+                .consumeWindowInsets(padding)
+                // Above the keyboard, so the field being typed in scrolls into view instead of under it
+                .imePadding()
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp, vertical = 8.dp),

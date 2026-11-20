@@ -86,6 +86,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.view.doOnAttach
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -570,11 +571,7 @@ fun BrowserScreen(
         val query = rawInput.trim()
         if (query.isEmpty()) return
 
-        val targetUrl = when {
-            query.startsWith("http://") || query.startsWith("https://") -> query
-            query.contains(".") && !query.contains(" ") -> "https://$query"
-            else -> "https://www.google.com/search?q=${URLEncoder.encode(query, "UTF-8")}"
-        }
+        val targetUrl = addressFor(query)
         urlInput = targetUrl
         invalidateDetectionSession()
         activeWebView()?.loadUrl(targetUrl)
@@ -699,9 +696,18 @@ fun BrowserScreen(
             return
         }
         val tab = newTab()
+        val target = url?.trim()?.takeIf { it.isNotEmpty() }?.let(::addressFor)
+        // A tab opened for a page shows that page from the start, as a tab restored from disk does, rather than its
+        // start screen until the page says it began: a link opened from the long-press menu was left on the start
+        // screen with its address in the field.
+        if (target != null) tab.saved = openingState(target, viewModel.nextNavigationGeneration())
         tabs.add(tab)
         showTab(tab)
-        if (url != null) navigateToUrl(url)
+        if (target != null) {
+            urlInput = target
+            // Loaded once its WebView is on screen (at once if it already is).
+            tab.webView?.let { web -> web.doOnAttach { web.loadUrl(target) } }
+        }
     }
 
     /** Closes [target]; closing the tab shown shows its neighbour, and closing the last opens a fresh one. */
@@ -1292,6 +1298,20 @@ private data class DetectorNavigationSession(
     val navigationGeneration: Long,
     val capability: String,
 )
+
+/** What the address bar's [input] opens: an address as it is, a bare site with https://, anything else searched. */
+internal fun addressFor(input: String): String {
+    val query = input.trim()
+    return when {
+        query.startsWith("http://") || query.startsWith("https://") -> query
+        query.contains(".") && !query.contains(" ") -> "https://$query"
+        else -> "https://www.google.com/search?q=${URLEncoder.encode(query, "UTF-8")}"
+    }
+}
+
+/** A new tab's state when it opens for [url]: that page, loading, never the start screen. */
+internal fun openingState(url: String, navigationGeneration: Long): BrowserUiState =
+    BrowserUiState().startedPage(url, navigationGeneration)
 
 /** Creates a WebView whose clients always dispatch through the mutable retained callback router. */
 @SuppressLint("SetJavaScriptEnabled")
