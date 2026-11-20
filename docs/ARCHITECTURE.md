@@ -269,7 +269,8 @@ several times faster), chosen by `/proc/cpuinfo` and run on the fast cores (`Cpu
 hands it 16 kHz samples and a model and gets back whisper-cli's `-ojf` JSON (DTW word times on), read by
 `Transcript.parse` and cut into lines by `SpeechLines`, both Windows' `speech` ported with its tests and fixtures
 (read from `desktop/core/tests/fixtures`). `SpeechModels` fetches Tiny or Base once, resumably, kept only when its
-SHA-256 is the pinned one. `SpeechJobs` runs one video at a time in the app's scope (`Making`: `Idle`, `Fetching`,
+SHA-256 is the pinned one. Every piece is evened out first (`Leveler`: soft speech lifted up to +20 dB, silence left alone, nothing clipped), so
+a quiet voice is heard. `SpeechJobs` runs one video at a time in the app's scope (`Making`: `Idle`, `Fetching`,
 `Listening`, `Failed`): the sound decoded by `ClipMedia.decodePcm` into `Sound16k`'s five-minute pieces, each heard
 and shifted to its place, and the lines written as the video's SRT through `SubtitleStore.write`.
 
