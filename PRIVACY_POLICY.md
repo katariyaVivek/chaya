@@ -57,7 +57,8 @@ Store account, no third-party SDKs.
   player (a line's words, or their timing), Chaya writes the change to that same file; what it said before each
   change is kept in memory for *Undo* while the app runs, and nowhere else. A translation of them made by your own AI
   model (*Translate* in the player), a version for each language and model: **on your phone only**, beside them, and
-  deleted with the download. The highlights your model found in them (*Highlights* in the player): the same.
+  deleted with the download. The highlights your model found in them (*Highlights* in the player), and the clips you cut (their names and times):
+  the same. How loud a video's sound is, measured on the phone for the clip timeline: in the app's cache.
 - Where you stopped each saved video in Chaya's player (the time, the video's length and when you stopped), so
   it starts there again and Home offers *Continue*: **on your phone only**, in the app's preferences. It is
   deleted with its download.

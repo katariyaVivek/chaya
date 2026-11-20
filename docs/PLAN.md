@@ -112,12 +112,17 @@ one. *Find again* replaces them.
   ranges checked and timed by their lines, a long video in parts with the best kept. `HighlightJobs` runs it in the
   app's scope (`Finding`: `Idle`, `Running`, `Failed`); `12.highlights.json` beside the subtitles keeps them.
 
-### 8. Clips ☐
+### 8. Clips ☑
 
-**The person gets:** lines chosen in the transcript (a long press, then more taps) or a highlight made into a clip;
-clips listed under the player and trimmed on a timeline whose edges snap to lines and chapters.
+**The person gets:** a long press on a transcript line starts choosing lines (a tap on another takes the choice to
+it); a bar says how many and their span, with *Clip* (and *Put right* for one line, as the long press did before). A
+highlight's *Make a clip* does the same. *3 clips* beside the chapters lists them; one opens on a timeline of the part
+of the video around it, its frames along the top and its sound's loudness under them, whose two edges are dragged to
+trim it and settle on the nearest line or chapter; with its name, *Play* (which stops at its end), *Save* and *Delete*.
 
-- Port `core::clips`. The timeline is drawn from the video's frames and its sound's loudness.
+- `Clips` is `core::clips` with the snapping of Windows' `clips.js`, ported with their tests; `12.clips.json` keeps
+  them. `PeakMeter` is `sound::peaks`' measure; on the phone `ClipMedia` decodes the sound with `MediaCodec` (kept as
+  `12.peaks` in the cache) and reads frames with `MediaMetadataRetriever`; `ClipMediaTest` checks both on a device.
 
 ### 9. Export ☐
 

@@ -107,7 +107,10 @@ import com.chaya.app.subtitles.Retiming
 import com.chaya.app.subtitles.SavedSubtitles
 import com.chaya.app.subtitles.SubtitleEdits
 import com.chaya.app.subtitles.SubtitleFixes
+import com.chaya.app.subtitles.Clip
+import com.chaya.app.subtitles.Clips
 import com.chaya.app.subtitles.Finding
+import com.chaya.app.subtitles.NewClip
 import com.chaya.app.subtitles.FoundHighlights
 import com.chaya.app.subtitles.Translating
 import com.chaya.app.subtitles.VideoTranslations
@@ -186,6 +189,15 @@ fun PlayerScreen(
         found = withContext(Dispatchers.IO) { app.highlightStore.load(taskId) }
     }
     var showHighlights by rememberSaveable { mutableStateOf(false) }
+    // Its clips; lines being chosen in the transcript (from where the long press was, to the line tapped last); the
+    // clip open on its timeline; and the clip playing, which stops at its end
+    var clips by remember { mutableStateOf(emptyList<Clip>()) }
+    LaunchedEffect(taskId) { clips = withContext(Dispatchers.IO) { app.clipStore.load(taskId) } }
+    var choosingFrom by remember { mutableStateOf<Int?>(null) }
+    var choosingTo by remember { mutableStateOf<Int?>(null) }
+    var showClips by rememberSaveable { mutableStateOf(false) }
+    var editing by remember { mutableStateOf<Clip?>(null) }
+    var playingClip by remember { mutableStateOf<Clip?>(null) }
     // The line being put right, by its index; where a line was last said to be "now" (for a stretch); and what the last
     // change did
     var fixing by remember { mutableStateOf<Int?>(null) }
@@ -366,6 +378,32 @@ fun PlayerScreen(
     val currentChapter = Chapters.at(chapters, shownAt)
     val marks = chapterMarks(chapters, lengthMs)
     val spans = highlightSpans(found?.items.orEmpty(), lengthMs)
+    val chosen = subtitles?.let { said -> choosingFrom?.let { from -> Clips.chosen(said.lines.size, from, choosingTo ?: from) } }
+    val duration = lengthMs.takeIf { it > 0 }
+
+    // A clip played stops at its end
+    LaunchedEffect(atMs, playingClip) {
+        val clip = playingClip ?: return@LaunchedEffect
+        if (atMs >= clip.end) {
+            player.pause()
+            playingClip = null
+        }
+    }
+
+    /** Keeps [wanted] as clips and opens the first on its timeline. */
+    fun makeClips(wanted: List<NewClip>) {
+        val (kept, ids) = Clips.add(clips, wanted, duration)
+        clips = kept
+        scope.launch(Dispatchers.IO) { app.clipStore.keep(taskId, kept) }
+        editing = ids.firstOrNull()?.let { id -> kept.firstOrNull { it.id == id } }
+        if (ids.firstOrNull() == null) Toast.makeText(context, "Chaya couldn't make that clip.", Toast.LENGTH_SHORT).show()
+    }
+
+    fun keepClips(changed: List<Clip>?) {
+        val kept = changed ?: return
+        clips = kept
+        scope.launch(Dispatchers.IO) { app.clipStore.keep(taskId, kept) }
+    }
 
     @Composable
     fun Picture(modifier: Modifier, subtitlesLift: androidx.compose.ui.unit.Dp) {
@@ -521,13 +559,13 @@ fun PlayerScreen(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(top = 2.dp),
                     )
-                    if (chapters.isNotEmpty()) {
-                        ChapterButton(
-                            chapters = chapters,
-                            current = currentChapter,
-                            onClick = { showChapters = true },
-                            modifier = Modifier.padding(top = 12.dp),
-                        )
+                    if (chapters.isNotEmpty() || clips.isNotEmpty()) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 12.dp)) {
+                            if (chapters.isNotEmpty()) {
+                                ChapterButton(chapters = chapters, current = currentChapter, onClick = { showChapters = true })
+                            }
+                            if (clips.isNotEmpty()) ClipsButton(count = clips.size, onClick = { showClips = true })
+                        }
                     }
                 }
                 val said = subtitles
@@ -536,6 +574,11 @@ fun PlayerScreen(
                         lines = said.lines,
                         language = said.language,
                         translated = translated,
+                        chosen = chosen,
+                        onChoose = { index ->
+                            if (choosingFrom == null) choosingFrom = index
+                            choosingTo = index
+                        },
                         current = currentLine,
                         onSeek = { player.seekTo(it) },
                         onFix = { index ->
@@ -553,6 +596,26 @@ fun PlayerScreen(
             }
 
             Column(modifier = Modifier.align(Alignment.BottomCenter)) {
+                val lines = subtitles?.lines
+                if (chosen != null && lines != null) {
+                    ChosenBar(
+                        count = chosen.last - chosen.first + 1,
+                        start = lines[chosen.first].start,
+                        end = lines[chosen.last].end,
+                        onClip = {
+                            makeClips(listOf(NewClip(Clips.nameFrom(lines[chosen.first].text), lines[chosen.first].start, lines[chosen.last].end)))
+                            choosingFrom = null
+                        },
+                        onFix = if (chosen.first == chosen.last) {
+                            {
+                                player.pause()
+                                fixing = chosen.first
+                                choosingFrom = null
+                            }
+                        } else null,
+                        onCancel = { choosingFrom = null },
+                    )
+                }
                 fixed?.let { shown ->
                     FixedBar(said = shown.said, canUndo = shown.canUndo, onUndo = ::undoChange)
                 }
@@ -638,6 +701,48 @@ fun PlayerScreen(
                 onOpenAiModel()
             },
             onDismiss = { showHighlights = false },
+            onClip = { highlight ->
+                showHighlights = false
+                makeClips(listOf(NewClip(highlight.title, highlight.start, highlight.end)))
+            },
+        )
+    }
+
+    if (showClips && clips.isNotEmpty()) {
+        ClipsSheet(
+            clips = clips,
+            onOpen = { clip ->
+                showClips = false
+                editing = clip
+            },
+            onDismiss = { showClips = false },
+        )
+    }
+
+    editing?.let { clip ->
+        val lines = subtitles?.lines.orEmpty()
+        ClipEditor(
+            clip = clip,
+            durationMs = lengthMs,
+            atMs = atMs,
+            edges = Clips.edges(lines, chapters, start = true) to Clips.edges(lines, chapters, start = false),
+            videoId = taskId,
+            file = source.uri.takeIf { source.cached == null },
+            onPlay = { played ->
+                player.seekTo(played.start)
+                player.play()
+                playingClip = played
+            },
+            onSeek = { player.seekTo(it) },
+            onSave = { changed ->
+                keepClips(Clips.change(clips, changed, duration))
+                editing = null
+            },
+            onDelete = {
+                keepClips(Clips.remove(clips, clip.id))
+                editing = null
+            },
+            onDismiss = { editing = null },
         )
     }
 

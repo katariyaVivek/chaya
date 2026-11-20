@@ -78,6 +78,9 @@ class ChayaApplication : Application() {
         )
     }
 
+    /** Each video's clips, kept beside its subtitles. */
+    val clipStore: com.chaya.app.subtitles.ClipStore by lazy { com.chaya.app.subtitles.ClipStore(File(filesDir, "subtitles")) }
+
     /** The moments of each video worth watching, found by the person's AI model, kept beside its subtitles. */
     val highlightStore: com.chaya.app.subtitles.HighlightStore by lazy { com.chaya.app.subtitles.HighlightStore(File(filesDir, "subtitles")) }
     val highlights: com.chaya.app.subtitles.HighlightJobs by lazy {
