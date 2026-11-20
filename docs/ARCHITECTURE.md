@@ -263,7 +263,9 @@ faster than APKs ship, so the app fetches newer releases itself.
 
 ## Subtitles made on the phone (`speech/`, `src/main/cpp`)
 
-whisper.cpp, built by CMake from the commit Windows uses, with `chaya_whisper.c` as its bridge: `Whisper.transcribe`
+whisper.cpp, built by CMake from the commit Windows uses, with `chaya_whisper.c` as its bridge, twice for arm64: a
+baseline (`chaya_whisper`) and one for ARMv8.2 cores with half precision and dot products (`chaya_whisper_fp16`,
+several times faster), chosen by `/proc/cpuinfo` and run on the fast cores (`CpuChoice`): `Whisper.transcribe`
 hands it 16 kHz samples and a model and gets back whisper-cli's `-ojf` JSON (DTW word times on), read by
 `Transcript.parse` and cut into lines by `SpeechLines`, both Windows' `speech` ported with its tests and fixtures
 (read from `desktop/core/tests/fixtures`). `SpeechModels` fetches Tiny or Base once, resumably, kept only when its
