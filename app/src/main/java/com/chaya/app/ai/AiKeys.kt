@@ -80,7 +80,15 @@ class AiKeys(private val prefs: SharedPreferences, private val lock: KeyLock) {
 
     var settings: AiSettings
         get() = AiSettings.fromJson(prefs.getString(SETTINGS, null))
-        set(value) = prefs.edit { putString(SETTINGS, value.toJson()) }
+        set(value) = prefs.edit {
+            putString(SETTINGS, value.toJson())
+            // Each service's own model and address, so choosing another service and back loses neither
+            value.service?.let { putString(SETTINGS_FOR + it, value.toJson()) }
+        }
+
+    /** What was last chosen with [service]: its model and address; null when it was never used. */
+    fun settingsFor(service: String): AiSettings? =
+        prefs.getString(SETTINGS_FOR + service, null)?.let(AiSettings::fromJson)?.takeIf { it.service == service }
 
     /** `service`'s key, or null when none is kept or it can no longer be opened. */
     fun key(service: String): String? {
@@ -117,6 +125,7 @@ class AiKeys(private val prefs: SharedPreferences, private val lock: KeyLock) {
         /** The preferences file, named in the backup rules. */
         const val FILE = "chaya_ai"
         private const val SETTINGS = "settings"
+        private const val SETTINGS_FOR = "settings."
         private const val KEY_PREFIX = "key."
 
         fun from(context: Context) = AiKeys(context.getSharedPreferences(FILE, Context.MODE_PRIVATE), KeystoreLock())

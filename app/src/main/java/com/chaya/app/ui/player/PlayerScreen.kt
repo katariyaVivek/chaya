@@ -58,6 +58,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -196,6 +197,21 @@ fun PlayerScreen(
     // A video saved without subtitles can have them made on the phone; when that ends, they are read again
     val makingAll by app.speech.states.collectAsState()
     val making = makingAll[taskId] ?: Making.Idle
+    // How far an earlier making got, offered to carry on from; read again whenever making changes
+    var partial by remember { mutableStateOf<com.chaya.app.speech.Partial?>(null) }
+    var partialRead by remember { mutableIntStateOf(0) }
+    LaunchedEffect(making, partialRead) {
+        partial = if (making.isWorking) null else withContext(Dispatchers.IO) { app.speech.partial(taskId) }
+    }
+    // The services a key is saved for under AI model, looked at again each time the player comes back to the front,
+    // so a key saved meanwhile is offered at once
+    val lifecycleState by LocalLifecycleOwner.current.lifecycle.currentStateFlow.collectAsState()
+    var clouds by remember { mutableStateOf(emptyList<com.chaya.app.speech.CloudSpeech>()) }
+    LaunchedEffect(lifecycleState) {
+        if (lifecycleState == Lifecycle.State.RESUMED) {
+            clouds = withContext(Dispatchers.IO) { com.chaya.app.speech.CloudSpeech.entries.filter { app.aiKeys.hasKey(it.service) } }
+        }
+    }
     LaunchedEffect(making) {
         if (making == Making.Idle && subtitles == null) subtitles = withContext(Dispatchers.IO) { app.subtitles.load(taskId) }
     }
@@ -611,7 +627,14 @@ fun PlayerScreen(
                             fetched = app.speechModels::isFetched,
                             onMake = { engine -> app.speech.start(taskId, engine, lengthMs) },
                             // The services a key is saved for under AI model
-                            clouds = remember { com.chaya.app.speech.CloudSpeech.entries.filter { app.aiKeys.hasKey(it.service) } },
+                            clouds = clouds,
+                            partial = partial,
+                            onStartOver = {
+                                scope.launch {
+                                    withContext(Dispatchers.IO) { app.speech.startOver(taskId) }
+                                    partialRead++
+                                }
+                            },
                             // Parakeet first: the most accurate on the phone, for the languages it knows
                             models = remember {
                                 listOf(com.chaya.app.speech.SpeechModel.PARAKEET).filter { com.chaya.app.speech.Parakeet.available } +
@@ -668,9 +691,25 @@ fun PlayerScreen(
             line = fixingLine,
             atMs = atMs,
             synced = synced,
-            onKeep = { text ->
+            translation = translations.shown(subtitles?.lines?.size ?: 0)?.let { v -> v.lines.getOrNull(index)?.let { it to languageName(v.to) } },
+            onKeep = { text, translatedText ->
                 fixing = null
-                changeSubtitles(if (text.isBlank()) "Line taken out." else "Line corrected.", { SubtitleFixes.withText(it, index, text) })
+                val count = subtitles?.lines?.size ?: 0
+                val shownVersion = translations.shown
+                if (text.isBlank()) {
+                    // The line's translation goes with it, so the rest stay beside their lines
+                    scope.launch { translations = withContext(Dispatchers.IO) { app.translationStore.takeOut(taskId, index, count) } }
+                    changeSubtitles("Line taken out.", { SubtitleFixes.withText(it, index, text) })
+                } else {
+                    if (translatedText != null && shownVersion != null) {
+                        scope.launch { translations = withContext(Dispatchers.IO) { app.translationStore.setLine(taskId, shownVersion, index, translatedText) } }
+                    }
+                    if (text.trim() != fixingLine.text.trim()) {
+                        changeSubtitles("Line corrected.", { SubtitleFixes.withText(it, index, text) })
+                    } else {
+                        fixed = Fixed("Translation corrected.", canUndo = false)
+                    }
+                }
             },
             onSaidNow = {
                 fixing = null

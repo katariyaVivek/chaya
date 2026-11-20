@@ -46,6 +46,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import com.chaya.app.ChayaApplication
+import com.chaya.app.speech.CloudSpeech
 import kotlinx.coroutines.launch
 import java.util.Locale
 
@@ -77,6 +78,8 @@ fun AiModelScreen(onNavigateBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     var settings by remember { mutableStateOf(keys.settings) }
     var keySaved by remember { mutableStateOf(settings.service?.let(keys::hasKey) ?: false) }
+    // Which services a key is kept for, marked in the list
+    var savedKeys by remember { mutableStateOf(AiService.ALL.filter { it.key && keys.hasKey(it.id) }.map { it.id }.toSet()) }
     var models by remember { mutableStateOf(emptyList<String>()) }
     var checking by remember { mutableStateOf<Checking>(Checking.Idle) }
 
@@ -85,25 +88,35 @@ fun AiModelScreen(onNavigateBack: () -> Unit) {
     AiModelContent(
         settings = settings,
         keySaved = keySaved,
+        savedKeys = savedKeys,
         models = models,
         checking = checking,
         onNavigateBack = onNavigateBack,
         actions = AiModelActions(
-            choose = { chosen ->
-                if (chosen.service != settings.service) {
+            choose = { asked ->
+                var chosen = asked
+                if (asked.service != settings.service) {
                     models = emptyList()
-                    keySaved = chosen.service?.let(keys::hasKey) ?: false
+                    keySaved = asked.service?.let(keys::hasKey) ?: false
+                    // Back to a service used before: its model as it was
+                    chosen = asked.service?.let(keys::settingsFor) ?: asked
                 }
                 settings = chosen
                 keys.settings = chosen
                 checking = Checking.Idle
             },
             saveKey = { service, key ->
-                keys.setKey(service, key).also { if (it == null) keySaved = true }
+                keys.setKey(service, key).also {
+                    if (it == null) {
+                        keySaved = true
+                        savedKeys = savedKeys + service
+                    }
+                }
             },
             forgetKey = { service ->
                 keys.forgetKey(service)
                 keySaved = false
+                savedKeys = savedKeys - service
             },
             listModels = {
                 checking = Checking.Asking
@@ -153,6 +166,8 @@ fun AiModelContent(
     checking: Checking,
     onNavigateBack: () -> Unit,
     actions: AiModelActions,
+    /** The services a key is kept for. */
+    savedKeys: Set<String> = emptySet(),
 ) {
     val service = settings.service()
     Scaffold(
@@ -180,13 +195,15 @@ fun AiModelContent(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            InUse(settings, keySaved, savedKeys)
             Text(
-                "Translation and highlights use your own AI model: a service you have a key for, or a model on a PC " +
-                    "in your home. Chaya sends a video's subtitles to it only when you ask for one of them.",
+                "Translation and highlights use the service chosen here, with its model: one you have a key for, or a " +
+                    "model on a PC in your home. Chaya sends a video's subtitles to it only when you ask for one of them. " +
+                    "Keys are kept for each service, so you can switch between them.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Text("Service", style = MaterialTheme.typography.titleMedium)
+            Text("Service for translation and highlights", style = MaterialTheme.typography.titleMedium)
             Column(Modifier.selectableGroup()) {
                 AiService.ALL.forEach { option ->
                     Row(
@@ -201,7 +218,20 @@ fun AiModelContent(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         RadioButton(selected = option.id == settings.service, onClick = null)
-                        Text(option.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = 16.dp))
+                        Column(Modifier.padding(start = 16.dp)) {
+                            Text(option.name, style = MaterialTheme.typography.bodyLarge)
+                            val note = listOfNotNull(
+                                "Key saved".takeIf { option.id in savedKeys },
+                                CloudSpeech.entries.firstOrNull { it.service == option.id }?.let { "also makes subtitles" },
+                            )
+                            if (note.isNotEmpty()) {
+                                Text(
+                                    note.joinToString(" · ").replaceFirstChar { it.uppercase() },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -209,6 +239,41 @@ fun AiModelContent(
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 ServiceFields(service, settings, keySaved, models, checking, actions)
             }
+        }
+    }
+}
+
+/**
+ * What is in use, at the head of the screen: the service and model translation and highlights go to, and whether they
+ * can (a key, a model); then what *Make subtitles* can use, which is chosen on each video.
+ */
+@Composable
+private fun InUse(settings: AiSettings, keySaved: Boolean, savedKeys: Set<String>) {
+    val service = settings.service()
+    androidx.compose.material3.Surface(
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("IN USE", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Translation and highlights", style = MaterialTheme.typography.titleSmall)
+            Text(
+                when {
+                    service == null -> "None chosen yet. Choose a service below."
+                    service.key && !keySaved -> "${service.name} · needs its key"
+                    settings.model.isNullOrBlank() -> "${service.name} · choose a model below"
+                    else -> "${service.name} · ${settings.model}"
+                },
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Text("Make subtitles", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 6.dp))
+            val clouds = CloudSpeech.entries.filter { it.service in savedKeys }
+            Text(
+                if (clouds.isEmpty()) "On the phone. Save a Groq or OpenAI key to have them listen instead."
+                else "On the phone, or " + clouds.joinToString(" or ") { "${it.label} (${it.model})" } + ": chosen on each video.",
+                style = MaterialTheme.typography.bodyLarge,
+            )
         }
     }
 }
@@ -244,6 +309,14 @@ private fun ServiceFields(
         )
     }
     if (service.key) KeyField(service, keySaved, actions)
+    CloudSpeech.entries.firstOrNull { it.service == service.id }?.let { speech ->
+        Text(
+            "This key also lets Make subtitles send a video's sound to ${speech.label}'s ${speech.model}. It only turns " +
+                "speech into text, so it is not in the list of models below, which are for translation and highlights.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
 
     var model by remember(service.id) { mutableStateOf(settings.model.orEmpty()) }
     OutlinedTextField(

@@ -31,15 +31,17 @@ object Parakeet {
 
     /**
      * What was said in [samples] (16 kHz mono), heard with the model in [folder] on [threads] threads; [heard] hears
-     * how far, in percent. Null when the model would not load.
+     * how far, in percent; [stopped] is asked between windows, and ends it with null.
+     * Null when the model would not load.
      */
     @Synchronized
-    fun transcribe(folder: File, samples: FloatArray, threads: Int, heard: (Int) -> Unit): Transcript? {
+    fun transcribe(folder: File, samples: FloatArray, threads: Int, heard: (Int) -> Unit, stopped: () -> Boolean = { false }): Transcript? {
         if (!available) return null
         val recognizer = recognizer(folder, threads) ?: return null
         val cuts = windows(samples)
         val segments = mutableListOf<Segment>()
         cuts.forEachIndexed { i, range ->
+            if (stopped()) return null
             val stream = recognizer.createStream()
             try {
                 stream.acceptWaveform(samples.copyOfRange(range.first, range.last + 1), Sound16k.RATE)

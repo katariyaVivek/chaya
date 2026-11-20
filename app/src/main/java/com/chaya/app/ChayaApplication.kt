@@ -105,8 +105,16 @@ class ChayaApplication : Application() {
             },
             keep = { id, language, lines -> subtitles.write(id, "$id.$language.srt", com.chaya.app.subtitles.Subtitles.toSrt(lines)) },
             stopListening = com.chaya.app.speech.Whisper::stop,
-            listenParakeet = { folder, samples, heard ->
-                com.chaya.app.speech.Parakeet.transcribe(folder, samples, com.chaya.app.speech.Whisper.threads(), heard)
+            stopCloud = { cloudListener.cancel() },
+            listenParakeet = { folder, samples, heard, stopped ->
+                com.chaya.app.speech.Parakeet.transcribe(folder, samples, com.chaya.app.speech.Whisper.threads(), heard, stopped)
+            },
+            progress = com.chaya.app.speech.SpeechProgress(File(filesDir, "subtitles")),
+            // Kept running in the background while it works, with a notification and Stop
+            onBusy = { com.chaya.app.speech.SpeechService.start(this) },
+            onFinished = { id, ended ->
+                val task = downloadManager.downloads.value.firstOrNull { it.id == id }
+                com.chaya.app.speech.SpeechService.finished(this, id, task?.title ?: task?.fileName ?: "Subtitles", ended)
             },
             done = com.chaya.app.speech.Parakeet::release,
             listenCloud = { speech, samples, language ->

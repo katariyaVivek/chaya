@@ -60,6 +60,10 @@ These are deliberate scope decisions, not open bugs.
   22 more European languages only; for others (Hindi, Chinese, Japanese, Arabic…) choose Tiny or Base, or a service
   with your key. Parakeet is a 671 MB download, needs about 1 GB of free memory while it listens, and adds about
   20 MB to the app for each of its two processor types (sherpa-onnx's ONNX Runtime).
+- **Carrying on mid-piece, and more than one video per lane.** Making subtitles carries on from the last whole
+  five-minute piece heard, so a stop loses up to five minutes of listening. The phone listens to one video at a time
+  and the services to one between them; others wait their turn. Android 15 stops background work of this kind after
+  six hours a day; what was heard is kept, and *Carry on* picks it up.
 - **Subtitles as good as Windows' (the phone).** A video saved from a link keeps the site's own subtitles in the
   language spoken, when the site has them. One without can have them made on the phone, but only with whisper.cpp's
   Tiny or Base model (a phone's memory and battery), which mishear more than Windows' larger ones, and a long video

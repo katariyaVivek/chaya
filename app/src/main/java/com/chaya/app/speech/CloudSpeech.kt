@@ -4,6 +4,7 @@ import com.chaya.app.ai.AiError
 import com.chaya.app.ai.AiResult
 import com.chaya.app.ai.Endpoint
 import com.chaya.app.ai.failure
+import okhttp3.Call
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
@@ -57,14 +58,27 @@ class CloudListener(private val client: OkHttpClient = defaultClient()) {
             .apply { endpoint.key?.let { header("Authorization", "Bearer $it") } }
             .build()
         return try {
-            client.newCall(request).execute().use { response ->
+            val call = client.newCall(request)
+            current = call
+            call.execute().use { response ->
                 val text = response.body?.string().orEmpty()
                 if (!response.isSuccessful) return AiResult.Failed(failure(response.code, response.header("Retry-After"), text))
                 fromVerbose(text)?.let { AiResult.Done(it) } ?: AiResult.Failed(AiError.Status(response.code))
             }
         } catch (_: IOException) {
             AiResult.Failed(AiError.Unreachable)
+        } finally {
+            current = null
         }
+    }
+
+    /** The upload or answer under way. */
+    @Volatile
+    private var current: Call? = null
+
+    /** Ends the upload or answer under way: *Stop*. It answers [AiError.Unreachable], which is not shown once stopped. */
+    fun cancel() {
+        current?.cancel()
     }
 
     companion object {

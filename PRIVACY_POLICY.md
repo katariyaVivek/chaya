@@ -110,6 +110,9 @@ Chaya talks only to the sites involved in what you do:
   and is offered only once you have saved that service's key under *AI model*): the video's sound, as five-minute
   pieces of 16 kHz WAV, with your key, to that service only (api.groq.com or api.openai.com). The card says so before
   you send it. Nothing else about the video is sent. What the service does with it is up to its own privacy policy.
+  While subtitles are made, a notification says so (with *Stop*), and what has been heard so far is kept in the app's
+  files beside the video's subtitles, so making can carry on after it stops; it is deleted when the subtitles are made
+  or the video is deleted.
 - your own AI model, only once you set one up under Downloads › ⋮ › *AI model*, and only when you ask for something
   that needs it: *List models* and *Test* there, *Translate* and *Highlights* in the player. Chaya sends the service you chose what that needs (for translation and highlights, the video's
   subtitles and its title) with your key, to that service only: OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter,

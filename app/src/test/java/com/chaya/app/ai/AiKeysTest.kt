@@ -75,6 +75,10 @@ class AiKeysTest {
         val chosen = AiSettings(service = "groq", model = "llama-3.3-70b")
         keys.settings = chosen
         assertEquals(chosen, keys.settings)
+        keys.settings = AiSettings(service = "openai", model = "gpt-5-mini")
+        assertEquals("each service keeps its own model", chosen, keys.settingsFor("groq"))
+        assertNull(keys.settingsFor("mistral"))
+        keys.settings = chosen
         assertEquals(AiResult.Failed(AiError.NoKey), keys.endpoint())
         keys.setKey("groq", "gsk_1")
         assertEquals("gsk_1", (keys.endpoint() as AiResult.Done).value.key)
@@ -140,6 +144,25 @@ class AiKeysTest {
 
     private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.onAllNodesWithTextCount(text: String) =
         onAllNodes(androidx.compose.ui.test.hasText(text)).fetchSemanticsNodes().size
+
+    @Test
+    fun `the screen says what is in use, which services have a key, and that Groq's key makes subtitles too`() {
+        composeRule.setContent {
+            AiModelContent(
+                settings = AiSettings(service = "groq", model = "llama-3.3-70b-versatile"),
+                keySaved = true,
+                savedKeys = setOf("groq"),
+                models = emptyList(),
+                checking = Checking.Idle,
+                onNavigateBack = {},
+                actions = AiModelActions(),
+            )
+        }
+        composeRule.onNodeWithText("Groq · llama-3.3-70b-versatile").assertExists()
+        composeRule.onNodeWithText("On the phone, or Groq (whisper-large-v3): chosen on each video.").assertExists()
+        composeRule.onNodeWithText("Key saved · also makes subtitles").assertExists()
+        composeRule.onNodeWithText("Also makes subtitles").assertExists() // OpenAI, with no key
+    }
 }
 
 /** A `var` the composition reads and the test writes, without the test needing Compose's state imports at each use. */

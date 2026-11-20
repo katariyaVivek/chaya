@@ -92,11 +92,6 @@ fun Transcript(
                     style = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.8.sp),
                     modifier = Modifier.padding(start = 4.dp).weight(1f),
                 )
-                if (onFix != null && lines.isNotEmpty()) {
-                    IconButton(onClick = { onFix(current ?: 0) }, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Default.Edit, contentDescription = "Put the subtitles right", tint = NightMuted, modifier = Modifier.size(18.dp))
-                    }
-                }
                 if (onDelete != null) {
                     IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
                         Icon(Icons.Default.DeleteOutline, contentDescription = "Delete these subtitles", tint = NightMuted, modifier = Modifier.size(18.dp))
@@ -128,7 +123,7 @@ fun Transcript(
                     style = TextStyle(fontSize = 12.sp, lineHeight = 20.sp),
                     modifier = Modifier.width(48.dp),
                 )
-                Column {
+                Column(Modifier.weight(1f)) {
                     Text(
                         text = line.text,
                         color = if (now) NightInk else NightMuted,
@@ -144,6 +139,17 @@ fun Transcript(
                             color = if (now) NightInk.copy(alpha = 0.78f) else NightMuted.copy(alpha = 0.8f),
                             style = TextStyle(fontSize = 14.sp, lineHeight = 19.sp),
                             modifier = Modifier.padding(top = 2.dp),
+                        )
+                    }
+                }
+                // Beside each line: its words, and its translation's, put right
+                if (onFix != null && chosen == null) {
+                    IconButton(onClick = { onFix(index) }, modifier = Modifier.size(32.dp)) {
+                        Icon(
+                            Icons.Default.Edit,
+                            contentDescription = "Put the line at ${clockOf(line.start)} right",
+                            tint = NightMuted.copy(alpha = if (now) 1f else 0.6f),
+                            modifier = Modifier.size(16.dp),
                         )
                     }
                 }

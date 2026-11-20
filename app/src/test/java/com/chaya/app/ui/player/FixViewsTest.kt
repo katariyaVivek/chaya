@@ -9,6 +9,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import com.chaya.app.subtitles.SubtitleLine
 import org.junit.Assert.assertEquals
@@ -30,12 +31,13 @@ class FixViewsTest {
     private val line = SubtitleLine(12_000, 14_000, "Helo there.")
     private val events = mutableListOf<String>()
 
-    private fun sheet(synced: Long? = null) = composeRule.setContent {
+    private fun sheet(synced: Long? = null, translation: Pair<String, String>? = null) = composeRule.setContent {
         FixSheet(
             line = line,
             atMs = 15_000,
             synced = synced,
-            onKeep = { events += "keep $it" },
+            translation = translation,
+            onKeep = { text, translated -> events += if (translated == null) "keep $text" else "keep $text / $translated" },
             onSaidNow = { events += "said now" },
             onNudge = { events += "nudge $it" },
             onDismiss = { events += "dismiss" },
@@ -92,7 +94,7 @@ class FixViewsTest {
     }
 
     @Test
-    fun `a long press on a line, or the pencil, puts it right`() {
+    fun `a long press on a line, or the pencil beside it, puts it right`() {
         val lines = listOf(SubtitleLine(1_000, 2_000, "One."), SubtitleLine(5_000, 6_000, "Two."))
         composeRule.setContent {
             Transcript(lines, language = "en", current = 1, onSeek = { events += "seek $it" }, onFix = { events += "fix $it" })
@@ -100,9 +102,21 @@ class FixViewsTest {
 
         composeRule.onNodeWithText("One.").performTouchInput { longClick() }
         composeRule.onNodeWithText("One.").performClick()
-        composeRule.onNodeWithContentDescription("Put the subtitles right").performClick()
+        composeRule.onNodeWithContentDescription("Put the line at 0:05 right").performClick()
 
         assertEquals(listOf("fix 0", "seek 1000", "fix 1"), events)
+    }
+
+    @Test
+    fun `the translation's line under it is put right in the same sheet`() {
+        sheet(translation = "Hola." to "Spanish")
+
+        composeRule.onNodeWithText("SPANISH").assertExists()
+        composeRule.onNodeWithText("Keep").assertIsNotEnabled()
+        composeRule.onNodeWithContentDescription("The translation's words").performTextReplacement("Hola, buenas.")
+        composeRule.onNodeWithText("Keep").performClick()
+
+        assertEquals(listOf("keep Helo there. / Hola, buenas."), events)
     }
 
     @Test
