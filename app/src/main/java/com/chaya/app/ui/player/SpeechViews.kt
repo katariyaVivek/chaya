@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.sp
 import com.chaya.app.speech.CloudSpeech
 import com.chaya.app.speech.Engine
 import com.chaya.app.speech.Making
+import com.chaya.app.speech.Partial
 import com.chaya.app.speech.SpeechModel
 import com.chaya.app.ui.theme.NightContainer
 import com.chaya.app.ui.theme.NightGround
@@ -37,18 +38,14 @@ import com.chaya.app.ui.theme.NightOutlineVariant
 import com.chaya.app.ui.theme.StageAmber
 
 /** An engine as the card names it, and back, so the choice survives the phone turning. */
-internal fun engineKey(engine: Engine): String = when (engine) {
-    is Engine.OnPhone -> "phone:${engine.model.name}"
-    is Engine.Cloud -> "cloud:${engine.speech.name}"
-}
+internal fun engineKey(engine: Engine): String = engine.key
 
-internal fun engineOf(key: String): Engine? {
-    val (kind, name) = key.split(':', limit = 2).takeIf { it.size == 2 } ?: return null
-    return when (kind) {
-        "phone" -> SpeechModel.entries.firstOrNull { it.name == name }?.let { Engine.OnPhone(it) }
-        "cloud" -> CloudSpeech.entries.firstOrNull { it.name == name }?.let { Engine.Cloud(it) }
-        else -> null
-    }
+internal fun engineOf(key: String): Engine? = Engine.of(key)
+
+/** An engine's name on the card: the model's, or the service's. */
+internal fun engineName(engine: Engine): String = when (engine) {
+    is Engine.OnPhone -> engine.model.label
+    is Engine.Cloud -> engine.speech.label
 }
 
 /**
@@ -67,6 +64,9 @@ fun MakeSubtitlesCard(
     clouds: List<CloudSpeech> = emptyList(),
     /** The models this phone can run (Parakeet needs sherpa-onnx's library), the first chosen until another is. */
     models: List<SpeechModel> = SpeechModel.entries,
+    /** How far an earlier making got, stopped or ended with the app: offered to carry on from. */
+    partial: Partial? = null,
+    onStartOver: () -> Unit = {},
 ) {
     val first = Engine.OnPhone(models.firstOrNull() ?: SpeechModel.TINY)
     var chosenKey by rememberSaveable { mutableStateOf(engineKey(first)) }
@@ -80,6 +80,15 @@ fun MakeSubtitlesCard(
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Heading("NO SUBTITLES")
             when (state) {
+                Making.Waiting -> {
+                    Text("Waiting for the video before it", color = NightInk, style = TextStyle(fontSize = 15.sp))
+                    Text(
+                        "The phone and a service each make one video's subtitles at a time, both at once. This one starts when its turn comes, even if you leave Chaya.",
+                        color = NightMuted,
+                        style = TextStyle(fontSize = 13.sp),
+                    )
+                    TextButton(onClick = onStop) { Text("Stop", color = NightInk, style = TextStyle(fontWeight = FontWeight.SemiBold)) }
+                }
                 is Making.Fetching -> {
                     Text(
                         "Fetching the ${state.model.label} model · ${state.done / 1_000_000} of ${state.total / 1_000_000} MB",
@@ -102,8 +111,8 @@ fun MakeSubtitlesCard(
                     )
                     LinearProgressIndicator(progress = { state.percent / 100f }, color = StageAmber, trackColor = NightGround, modifier = Modifier.fillMaxWidth())
                     Text(
-                        if (state.service == null) "On this phone, nothing sent. A long video takes a while; you can leave the player."
-                        else "The sound is sent to ${state.service} five minutes at a time. You can leave the player.",
+                        if (state.service == null) "On this phone, nothing sent. A long video takes a while; you can leave Chaya, it carries on with a notification."
+                        else "The sound is sent to ${state.service} five minutes at a time. You can leave Chaya; it carries on with a notification.",
                         color = NightMuted,
                         style = TextStyle(fontSize = 13.sp),
                     )
@@ -116,6 +125,26 @@ fun MakeSubtitlesCard(
                         style = TextStyle(fontSize = 15.sp),
                     )
                     if (state is Making.Failed) Text(state.message, color = NightInk, style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold))
+                    if (partial != null) {
+                        // Stopped, or ended with the app: carry on where it got to, or start again with another engine
+                        Text(
+                            "${partial.percent}% was heard with ${engineName(partial.engine)} before it stopped.",
+                            color = NightMuted,
+                            style = TextStyle(fontSize = 13.sp),
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                            Surface(onClick = { onMake(partial.engine) }, shape = RoundedCornerShape(14.dp), color = NightInk) {
+                                Text(
+                                    "Carry on · ${partial.percent}%",
+                                    color = NightGround,
+                                    style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
+                                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 11.dp),
+                                )
+                            }
+                            TextButton(onClick = onStartOver) { Text("Start over", color = NightInk, style = TextStyle(fontWeight = FontWeight.SemiBold)) }
+                        }
+                        return@Column
+                    }
                     val options = models.map { Engine.OnPhone(it) } + clouds.map { Engine.Cloud(it) }
                     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         options.forEach { option ->

@@ -130,7 +130,7 @@ class ParakeetTest {
             models = models,
             decode = { _, onPiece -> onPiece(FloatArray(16_000), 0); true },
             listen = { _, _, _, _, _ -> error("not whisper.cpp") },
-            listenParakeet = { modelFolder, _, heard ->
+            listenParakeet = { modelFolder, _, heard, _ ->
                 folders += modelFolder
                 heard(100)
                 val words = Parakeet.words(listOf("▁Я", "▁не", "▁знаю,", "▁что", "▁это", "▁было."), listOf(0f, 0.3f, 0.6f, 1.1f, 1.4f, 1.7f), 0, 2_200)

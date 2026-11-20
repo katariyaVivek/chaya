@@ -280,8 +280,13 @@ highlights), keeping chapters and clips, so new ones can be made; `TranslationSt
 and ends a full batch where a sentence does. An `Engine` is chosen per video: `OnPhone` (whisper.cpp or Parakeet) or `Cloud` (`CloudSpeech`: Groq's
 `whisper-large-v3` or OpenAI's `whisper-1` with the key saved under AI model, through `CloudListener`, which sends each
 piece as WAV to `/audio/transcriptions` and reads back `verbose_json` with word times into a `Transcript`, so the same
-`SpeechLines` cut it). `SpeechJobs` runs one video at a time in the app's scope (`Making`: `Idle`, `Fetching`,
-`Listening`, `Failed`): the sound decoded by `ClipMedia.decodePcm` into `Sound16k`'s five-minute pieces, each heard
+`SpeechLines` cut it). `SpeechJobs` runs in the app's scope in two lanes (`Lane`): one video on the phone and one sent
+to a service at the same time, others waiting their turn (`Making`: `Idle`, `Waiting`, `Fetching`, `Listening`,
+`Failed`; `isWorking`). While any works, `SpeechService` (a data-sync foreground service with a partial wake lock) keeps
+the app running with a notification (`SpeechNotice`) and *Stop*. After each piece what was heard is kept as a `Partial`
+(`SpeechProgress`, `<id>.partial.json` beside the subtitles), so making that was stopped, refused, or ended with the
+app carries on from the next piece with the same engine. *Stop* says `Idle` at once and ends the engine under way:
+`Whisper.stop`, Parakeet between windows, `CloudListener.cancel`. The sound decoded by `ClipMedia.decodePcm` into `Sound16k`'s five-minute pieces, each heard
 and shifted to its place, and the lines written as the video's SRT through `SubtitleStore.write`.
 
 ## The person's own AI model (`ai/`)
@@ -392,7 +397,7 @@ not another flag beside it.
 | A video's translation | `Idle`, `Running` (lines done of all), `Failed` (its words) | `subtitles/TranslationJobs.kt` (`Translating`) | Sealed type, one per video in a `StateFlow`; what is translated is on disk, so a stop loses nothing |
 | Finding a video's highlights | `Idle`, `Running`, `Failed` (its words) | `subtitles/HighlightJobs.kt` (`Finding`) | Sealed type, one per video in a `StateFlow` |
 | Saving a clip | `Idle`, `Running` (how far), `Done` (the file), `Failed` (its words) | `ui/player/ExportViews.kt` (`Exporting`) | Sealed type, in the player only |
-| Making a video's subtitles | `Idle`, `Fetching` (the model, bytes of all), `Listening` (percent), `Failed` (its words) | `speech/SpeechJobs.kt` (`Making`) | Sealed type, one per video in a `StateFlow`; one video at a time |
+| Making a video's subtitles | `Idle`, `Waiting`, `Fetching` (the model, bytes of all), `Listening` (percent), `Failed` (its words) | `speech/SpeechJobs.kt` (`Making`) | Sealed type, one per video in a `StateFlow`; one video at a time on the phone and one at a service; how far each got kept on disk as a `Partial` |
 | An engine update check | `NOT_DUE`, `UP_TO_DATE`, `DOWNLOADED`, `REFUSED`, `FAILED` | `EngineUpdater.Outcome` | Enum |
 | Windows: a download | `Queued → Downloading ⇄ Paused → Completed \| Failed`, steps `Picture`, `Sound`, `Joining`, `Saving` | `desktop/core/src/download/manager.rs` | Rust enums, stored |
 | Windows: the panel open | none, Settings, the ad blocker's shield, what the page holds | `desktop/app/ui/panels.js` (`onePanel`), used by `main.js` | One value: opening a panel closes the one open; Escape closes it |

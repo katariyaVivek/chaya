@@ -55,6 +55,18 @@ class DeleteAndSentencesTest {
     }
 
     @Test
+    fun `a translation's line is put right, and a line taken out goes from each version made for those lines`() {
+        val store = TranslationStore(folder.newFolder())
+        store.keep(12, Translation("en", "hi", "Groq · llama", 1, listOf("एक", "दो", "तीन")))
+        store.keep(12, Translation("en", "es", "Groq · llama", 2, listOf("Uno", "Dos", "Tres")))
+        store.keep(12, Translation("en", "fr", "old", 3, listOf("Un", "Deux"))) // made for other lines
+        assertEquals(listOf("Uno", "Dos!", "Tres"), store.setLine(12, 1, 1, " Dos! ").versions[1].lines)
+        val left = store.takeOut(12, 0, lineCount = 3)
+        assertEquals(listOf(listOf("दो", "तीन"), listOf("Dos!", "Tres"), listOf("Un", "Deux")), left.versions.map { it.lines })
+        assertEquals(left, store.load(12))
+    }
+
+    @Test
     fun `lines that make one sentence are found, and the request says so`() {
         val lines = listOf("This is the most beautiful", "pair of hands I have ever seen.", "Thank you.", "And then", "we", "left!")
         assertEquals(listOf(1..2, 4..6), Translator.sentences(lines, lines.indices.toList()))

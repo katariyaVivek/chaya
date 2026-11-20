@@ -75,6 +75,30 @@ class TranslationStore(private val dir: File) {
         return write(id, now.copy(shown = index?.takeIf { it in now.versions.indices }))
     }
 
+    /** Line [line] of version [index] put right by the person, as the original's lines are. */
+    @Synchronized
+    fun setLine(id: Long, index: Int, line: Int, text: String): VideoTranslations {
+        val now = load(id)
+        val version = now.versions.getOrNull(index) ?: return now
+        if (line !in version.lines.indices) return now
+        val lines = version.lines.toMutableList().also { it[line] = text.trim() }
+        return write(id, now.copy(versions = now.versions.toMutableList().also { it[index] = version.copy(lines = lines) }))
+    }
+
+    /**
+     * Line [line] of the original taken out of its [lineCount]: taken out of every version made for those lines too,
+     * so they stay beside the lines they translate.
+     */
+    @Synchronized
+    fun takeOut(id: Long, line: Int, lineCount: Int): VideoTranslations {
+        val now = load(id)
+        if (now.versions.none { it.lines.size == lineCount && line in it.lines.indices }) return now
+        val versions = now.versions.map { v ->
+            if (v.lines.size == lineCount && line in v.lines.indices) v.copy(lines = v.lines.filterIndexed { i, _ -> i != line }) else v
+        }
+        return write(id, now.copy(versions = versions))
+    }
+
     /** The version of [to] by [model] from [from], to carry on with; null when there is none. */
     fun find(id: Long, from: String, to: String, model: String): Translation? =
         load(id).versions.firstOrNull { it.from == from && it.to == to && it.model == model }

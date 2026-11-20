@@ -53,7 +53,8 @@ fun saidNowStretches(synced: Long?, lineStart: Long): Boolean =
     synced != null && abs(lineStart - synced) >= Retime.NEAREST_ANCHORS
 
 /**
- * A line put right, as Windows has it in its transcript: its words, corrected (empty takes it out); "said now", which
+ * A line put right, as Windows has it in its transcript: its words, corrected (empty takes it out), and the line of the
+ * translation shown under it, when there is one; "said now", which
  * moves the lines so this one starts where the video is ([atMs]), or stretches them since the line put right at
  * [synced]; and every line a little earlier or later.
  */
@@ -63,13 +64,23 @@ fun FixSheet(
     line: SubtitleLine,
     atMs: Long,
     synced: Long?,
-    onKeep: (String) -> Unit,
+    onKeep: (text: String, translated: String?) -> Unit,
     onSaidNow: () -> Unit,
     onNudge: (Long) -> Unit,
     onDismiss: () -> Unit,
+    /** The translation's line under this one, and its language's name, when a translation is shown. */
+    translation: Pair<String, String>? = null,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var text by rememberSaveable(line) { mutableStateOf(line.text) }
+    var translated by rememberSaveable(line, translation) { mutableStateOf(translation?.first.orEmpty()) }
+    val fieldColors = TextFieldDefaults.colors(
+        focusedContainerColor = NightContainer,
+        unfocusedContainerColor = NightContainer,
+        focusedIndicatorColor = NightContainer,
+        unfocusedIndicatorColor = NightContainer,
+        cursorColor = NightInk,
+    )
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = NightGround) {
         Column(
             // Above the keyboard while the line's words are typed
@@ -82,15 +93,20 @@ fun FixSheet(
                 onValueChange = { text = it },
                 textStyle = TextStyle(fontSize = 16.sp, color = NightInk),
                 shape = RoundedCornerShape(14.dp),
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = NightContainer,
-                    unfocusedContainerColor = NightContainer,
-                    focusedIndicatorColor = NightContainer,
-                    unfocusedIndicatorColor = NightContainer,
-                    cursorColor = NightInk,
-                ),
+                colors = fieldColors,
                 modifier = Modifier.fillMaxWidth().semantics { contentDescription = "The line's words" },
             )
+            if (translation != null) {
+                Heading(translation.second.uppercase())
+                TextField(
+                    value = translated,
+                    onValueChange = { translated = it },
+                    textStyle = TextStyle(fontSize = 16.sp, color = NightInk),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = fieldColors,
+                    modifier = Modifier.fillMaxWidth().semantics { contentDescription = "The translation's words" },
+                )
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     "Leave it empty to take the line out.",
@@ -98,8 +114,9 @@ fun FixSheet(
                     style = TextStyle(fontSize = 13.sp),
                     modifier = Modifier.weight(1f),
                 )
-                val changed = text.trim() != line.text.trim()
-                TextButton(onClick = { onKeep(text) }, enabled = changed) {
+                val translationChanged = translation != null && translated.trim() != translation.first.trim()
+                val changed = text.trim() != line.text.trim() || translationChanged
+                TextButton(onClick = { onKeep(text, translated.takeIf { translationChanged }) }, enabled = changed) {
                     Text(
                         if (text.isBlank()) "Take out" else "Keep",
                         color = if (changed) NightInk else NightMuted,

@@ -64,6 +64,30 @@ class SpeechViewsTest {
         composeRule.onNodeWithText("Save a Groq or OpenAI key under Library › ⋮ › AI model to have them listen instead: far more accurate, in seconds, for a few cents.").assertExists()
         state = Making.Listening(40, service = "Groq")
         composeRule.onNodeWithText("Groq is listening · 40%").assertExists()
-        composeRule.onNodeWithText("The sound is sent to Groq five minutes at a time. You can leave the player.").assertExists()
+        composeRule.onNodeWithText("The sound is sent to Groq five minutes at a time. You can leave Chaya; it carries on with a notification.").assertExists()
+    }
+
+    @Test
+    fun `making that stopped is offered to carry on or start over, and a video waiting its turn can be stopped`() {
+        val made = mutableListOf<Engine>()
+        var startedOver = 0
+        var stopped = 0
+        var state by androidx.compose.runtime.mutableStateOf<Making>(Making.Idle)
+        val partial = com.chaya.app.speech.Partial(Engine.Cloud(CloudSpeech.GROQ), 2, 5, "en", emptyList())
+        composeRule.setContent {
+            MakeSubtitlesCard(
+                state = state, fetched = { true }, onMake = { made += it }, onStop = { stopped++ },
+                partial = partial, onStartOver = { startedOver++ },
+            )
+        }
+        composeRule.onNodeWithText("40% was heard with Groq before it stopped.").assertExists()
+        composeRule.onNodeWithText("Carry on · 40%").performClick()
+        composeRule.onNodeWithText("Start over").performClick()
+        assertEquals(listOf<Engine>(Engine.Cloud(CloudSpeech.GROQ)), made)
+        assertEquals(1, startedOver)
+        state = Making.Waiting
+        composeRule.onNodeWithText("Waiting for the video before it").assertExists()
+        composeRule.onNodeWithText("Stop").performClick()
+        assertEquals(1, stopped)
     }
 }

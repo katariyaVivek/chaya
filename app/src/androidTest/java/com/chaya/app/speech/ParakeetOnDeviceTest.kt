@@ -42,7 +42,7 @@ class ParakeetOnDeviceTest {
 
         val started = System.nanoTime()
         var heard = 0
-        val transcript = Parakeet.transcribe(folder, Leveler.even(pieces.single()), Whisper.threads()) { heard = it }
+        val transcript = Parakeet.transcribe(folder, Leveler.even(pieces.single()), Whisper.threads(), heard = { heard = it })
         Log.i("ChayaDevice", "Parakeet heard the JFK sample in ${(System.nanoTime() - started) / 1_000_000} ms")
         Parakeet.release()
         assertNotNull(transcript)
