@@ -270,7 +270,11 @@ hands it 16 kHz samples and a model and gets back whisper-cli's `-ojf` JSON (DTW
 `Transcript.parse` and cut into lines by `SpeechLines`, both Windows' `speech` ported with its tests and fixtures
 (read from `desktop/core/tests/fixtures`). `SpeechModels` fetches Tiny or Base once, resumably, kept only when its
 SHA-256 is the pinned one. Every piece is evened out first (`Leveler`: soft speech lifted up to +20 dB, silence left alone, nothing clipped), so
-a quiet voice is heard. An `Engine` is chosen per video: `OnPhone` (whisper.cpp) or `Cloud` (`CloudSpeech`: Groq's
+a quiet voice is heard. On the phone, `SpeechModel.PARAKEET` runs NVIDIA's Parakeet TDT 0.6B v3 through sherpa-onnx (`speech/Parakeet.kt`;
+its prebuilt Android library fetched by `fetchSherpaOnnx` in `app/build.gradle.kts`, pinned by SHA-256, and its Kotlin
+API vendored in `com/k2fsa/sherpa/onnx`, kept whole from R8): each piece is cut into windows of about 25 s at their
+quietest moment, each window's timed tokens become words, and the language is guessed from them (`LanguageGuess`).
+An `Engine` is chosen per video: `OnPhone` (whisper.cpp or Parakeet) or `Cloud` (`CloudSpeech`: Groq's
 `whisper-large-v3` or OpenAI's `whisper-1` with the key saved under AI model, through `CloudListener`, which sends each
 piece as WAV to `/audio/transcriptions` and reads back `verbose_json` with word times into a `Transcript`, so the same
 `SpeechLines` cut it). `SpeechJobs` runs one video at a time in the app's scope (`Making`: `Idle`, `Fetching`,

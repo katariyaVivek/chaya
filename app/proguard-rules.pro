@@ -18,3 +18,7 @@
 -keepclasseswithmembernames class com.chaya.app.speech.Whisper {
     native <methods>;
 }
+
+# sherpa-onnx's JNI library finds its Kotlin classes and reads their fields by name (src/main/java/com/k2fsa/sherpa/onnx):
+# kept whole, so R8 renames nothing it looks up.
+-keep class com.k2fsa.sherpa.onnx.** { *; }

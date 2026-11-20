@@ -52,11 +52,15 @@ class SpeechJobs(
     private val decode: (Long, (FloatArray, Long) -> Unit) -> Boolean,
     /** whisper.cpp: the JSON it writes for a piece, or null. */
     private val listen: (File, SpeechModel, FloatArray, String?, Whisper.Listener) -> String?,
+    /** Parakeet (sherpa-onnx): what it heard in a piece, with the model's folder, hearing how far in percent; or null. */
+    private val listenParakeet: (File, FloatArray, (Int) -> Unit) -> Transcript? = { _, _, _ -> null },
     /** A service: what it heard in a piece (sent with the person's key), or why not. Blocking, as [listen] is. */
     private val listenCloud: (CloudSpeech, FloatArray, String?) -> CloudHeard = { _, _, _ -> CloudHeard.Failed("No service is set up.") },
     /** Keeps the lines as download [Long]'s subtitles in [String] (a language tag); whether they were kept. */
     private val keep: (Long, String, List<SubtitleLine>) -> Boolean,
     private val stopListening: () -> Unit = {},
+    /** Making is over (done, failed or stopped): a model loaded for it lets its memory go. */
+    private val done: () -> Unit = {},
 ) {
     private val _states = MutableStateFlow<Map<Long, Making>>(emptyMap())
     val states: StateFlow<Map<Long, Making>> = _states.asStateFlow()
@@ -68,7 +72,10 @@ class SpeechJobs(
     @Synchronized
     fun start(id: Long, engine: Engine, lengthMs: Long) {
         val now = running
-        if (now != null && now.second.isActive) {
+        // Busy only while the job is fetching or listening: one that has said it is done may still be letting go of its
+        // model, and starting another then was refused.
+        val working = now?.let { _states.value[it.first] }.let { it is Making.Fetching || it is Making.Listening }
+        if (now != null && now.second.isActive && working) {
             if (now.first != id) set(id, Making.Failed("Chaya is making another video's subtitles. Try again when it's done."))
             return
         }
@@ -105,9 +112,15 @@ class SpeechJobs(
                 // Soft voices lifted to be heard as well as loud ones (Leveler), for whichever engine listens
                 val even = Leveler.even(samples)
                 val transcript = when (engine) {
-                    is Engine.OnPhone -> listen(file!!, engine.model, even, language) { percent ->
-                        set(id, Making.Listening(((done * 100L + percent) / pieces).toInt().coerceIn(0, 99), service))
-                    }?.let(Transcript::parse)
+                    is Engine.OnPhone -> {
+                        val heard = { percent: Int ->
+                            set(id, Making.Listening(((done * 100L + percent) / pieces).toInt().coerceIn(0, 99), service))
+                        }
+                        when (engine.model.engine) {
+                            SpeechEngine.WHISPER -> listen(file!!, engine.model, even, language) { heard(it) }?.let(Transcript::parse)
+                            SpeechEngine.PARAKEET -> listenParakeet(file!!, even, heard)
+                        }
+                    }
                     is Engine.Cloud -> when (val heard = listenCloud(engine.speech, even, language)) {
                         is CloudHeard.Said -> heard.transcript
                         is CloudHeard.Failed -> throw CloudStopped(heard.message)
@@ -146,6 +159,7 @@ class SpeechJobs(
             set(id, Making.Idle)
             throw stopped
         } finally {
+            runCatching { done() }
             synchronized(this) { if (running?.first == id && running?.second?.isActive != true) running = null }
         }
     }

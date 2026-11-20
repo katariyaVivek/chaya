@@ -56,6 +56,10 @@ These are deliberate scope decisions, not open bugs.
   yt-dlp-ejs and gallery-dl are fetched. Python itself, the libraries bundled beside them
   (`requests`, `urllib3` and the rest) and Chaya's own code change only with a new APK, so a release
   that needs a newer library than the APK carries, or another Python, is skipped until then.
+- **Parakeet for every language.** *Make subtitles* on the phone with Parakeet hears English, Russian, Ukrainian and
+  22 more European languages only; for others (Hindi, Chinese, Japanese, Arabic…) choose Tiny or Base, or a service
+  with your key. Parakeet is a 671 MB download, needs about 1 GB of free memory while it listens, and adds about
+  20 MB to the app for each of its two processor types (sherpa-onnx's ONNX Runtime).
 - **Subtitles as good as Windows' (the phone).** A video saved from a link keeps the site's own subtitles in the
   language spoken, when the site has them. One without can have them made on the phone, but only with whisper.cpp's
   Tiny or Base model (a phone's memory and battery), which mishear more than Windows' larger ones, and a long video

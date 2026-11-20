@@ -1,3 +1,5 @@
+import java.net.URI
+import java.security.MessageDigest
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -60,6 +62,13 @@ android {
         cmake {
             path = file("src/main/cpp/CMakeLists.txt")
             version = "3.22.1"
+        }
+    }
+
+    // sherpa-onnx's native library and ONNX Runtime, for Make subtitles with Parakeet (fetchSherpaOnnx, below)
+    sourceSets {
+        getByName("main") {
+            jniLibs.srcDir(layout.buildDirectory.dir("sherpa-onnx/jniLibs"))
         }
     }
 
@@ -258,3 +267,59 @@ tasks.withType<Test>().configureEach {
         showStackTraces = true
     }
 }
+
+// sherpa-onnx (https://github.com/k2-fsa/sherpa-onnx) runs NVIDIA's Parakeet TDT 0.6B v3 for "Make subtitles": its
+// prebuilt Android libraries, from its author's own copy of the release on Hugging Face, pinned by SHA-256 and
+// fetched once into Gradle's home, never committed. Only what the offline recognizer needs is packaged: its JNI
+// library and ONNX Runtime, for the ABIs the app ships. Its Kotlin API is vendored in
+// src/main/java/com/k2fsa/sherpa/onnx at the same release. Change the three together.
+val sherpaOnnxVersion = "1.12.21"
+val sherpaOnnxSha256 = "e7651c7ddee3c32b4d5f7cac97dd418d65d8d2ee5330a62cf36a5aa580c45215"
+val sherpaOnnxUrl =
+    "https://huggingface.co/csukuangfj/sherpa-onnx-libs/resolve/da78432ea90a1fda33002e933825e3cbf3a5ac78/" +
+        "sherpa-onnx-v$sherpaOnnxVersion-android.tar.bz2"
+
+val fetchSherpaOnnx by tasks.registering {
+    description = "Fetches sherpa-onnx's Android libraries (pinned by SHA-256) for Make subtitles with Parakeet"
+    val out = layout.buildDirectory.dir("sherpa-onnx/jniLibs")
+    val archive = File(gradle.gradleUserHomeDir, "caches/chaya/sherpa-onnx-v$sherpaOnnxVersion-android.tar.bz2")
+    inputs.property("sha256", sherpaOnnxSha256)
+    outputs.dir(out)
+    doLast {
+        fun sha256(file: File): String {
+            val digest = MessageDigest.getInstance("SHA-256")
+            file.inputStream().use { input ->
+                val buffer = ByteArray(1 shl 16)
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read < 0) break
+                    digest.update(buffer, 0, read)
+                }
+            }
+            return digest.digest().joinToString("") { "%02x".format(it) }
+        }
+        if (!archive.isFile || sha256(archive) != sherpaOnnxSha256) {
+            archive.parentFile.mkdirs()
+            val part = File(archive.path + ".part")
+            URI(sherpaOnnxUrl).toURL().openStream().use { input -> part.outputStream().use { output -> input.copyTo(output) } }
+            val got = sha256(part)
+            if (got != sherpaOnnxSha256) {
+                part.delete()
+                throw GradleException("sherpa-onnx $sherpaOnnxVersion's archive is not the one pinned (SHA-256 $got)")
+            }
+            part.renameTo(archive)
+        }
+        val target = out.get().asFile
+        target.deleteRecursively()
+        copy {
+            from(tarTree(resources.bzip2(archive)))
+            include("jniLibs/arm64-v8a/libsherpa-onnx-jni.so", "jniLibs/arm64-v8a/libonnxruntime.so")
+            include("jniLibs/x86_64/libsherpa-onnx-jni.so", "jniLibs/x86_64/libonnxruntime.so")
+            eachFile { path = path.removePrefix("jniLibs/") }
+            includeEmptyDirs = false
+            into(target)
+        }
+    }
+}
+
+tasks.named("preBuild") { dependsOn(fetchSherpaOnnx) }

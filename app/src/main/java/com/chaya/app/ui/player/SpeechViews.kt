@@ -65,9 +65,12 @@ fun MakeSubtitlesCard(
     modifier: Modifier = Modifier,
     /** The services a key is saved for, which can be chosen. */
     clouds: List<CloudSpeech> = emptyList(),
+    /** The models this phone can run (Parakeet needs sherpa-onnx's library), the first chosen until another is. */
+    models: List<SpeechModel> = SpeechModel.entries,
 ) {
-    var chosenKey by rememberSaveable { mutableStateOf(engineKey(Engine.OnPhone(SpeechModel.TINY))) }
-    val chosen = engineOf(chosenKey)?.takeIf { it !is Engine.Cloud || it.speech in clouds } ?: Engine.OnPhone(SpeechModel.TINY)
+    val first = Engine.OnPhone(models.firstOrNull() ?: SpeechModel.TINY)
+    var chosenKey by rememberSaveable { mutableStateOf(engineKey(first)) }
+    val chosen = engineOf(chosenKey)?.takeIf { (it as? Engine.Cloud)?.speech?.let { s -> s in clouds } ?: ((it as Engine.OnPhone).model in models) } ?: first
     Surface(
         shape = RoundedCornerShape(18.dp),
         color = NightContainer,
@@ -113,7 +116,7 @@ fun MakeSubtitlesCard(
                         style = TextStyle(fontSize = 15.sp),
                     )
                     if (state is Making.Failed) Text(state.message, color = NightInk, style = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold))
-                    val options = SpeechModel.entries.map { Engine.OnPhone(it) } + clouds.map { Engine.Cloud(it) }
+                    val options = models.map { Engine.OnPhone(it) } + clouds.map { Engine.Cloud(it) }
                     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         options.forEach { option ->
                             val on = option == chosen
