@@ -68,12 +68,18 @@ the later steps add. Deleting it only takes it out of Chaya.
   `chaya-archive:` marks an account's ZIP), so no Room migration was needed. Chaya keeps the picker's read permission
   and gives it back on Delete, which never asks the file's provider to delete anything.
 
-### 4. Subtitles put right ☐
+### 4. Subtitles put right ☑
 
-**The person gets:** a long press on a transcript line edits its words; *Timing* moves every line earlier or later, or
-stretches them between two lines; Undo for each.
+**The person gets:** a long press on a transcript line, or the pencil by the transcript's heading (for the line being
+said), opens a sheet: the line's words to correct (empty takes it out); *This line is said at 0:15*, which moves every
+line so it starts where the video is, or, after another line was put right far enough before, stretches the lines
+between the two (subtitles that drift); and every line 0.5 or 0.1 s earlier or later. After each change a bar says what
+changed, with *Undo*.
 
-- Port `core::fix`. The SRT beside the video is written again; the first original is kept so *Undo* can go back.
+- `SubtitleFixes` and `Retime` are `core::fix`, ported with its tests. `SubtitleEdits` writes the change to the SRT Chaya
+  keeps (so the transcript, the picture and the Library's search all follow) and keeps the file as it was, byte for
+  byte, for *Undo*: the last 20 changes of each video, in memory while the app runs, as on Windows. The phone keeps one
+  language per video, so Windows' "every language" choice is not needed yet.
 
 ### 5. Your own AI model ☐
 

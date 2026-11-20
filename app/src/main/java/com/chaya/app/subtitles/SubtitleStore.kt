@@ -92,6 +92,26 @@ class SubtitleStore(
 
     private fun chaptersFile(id: Long) = File(dir, "$id.chapters")
 
+    /** The file of download [id]'s subtitles, by name ("12.en.srt"), and what it says; null when it has none. */
+    fun raw(id: Long): Pair<String, String>? {
+        val file = fileFor(id) ?: return null
+        return runCatching { file.name to file.readText() }.getOrNull()
+    }
+
+    /**
+     * Writes [text] as download [id]'s subtitles file [name] (one [raw] gave), whole to a file beside it first so a
+     * crash never leaves half. Whether it was written.
+     */
+    fun write(id: Long, name: String, text: String): Boolean {
+        if (!name.startsWith("$id.") || !name.endsWith(".srt") || '/' in name) return false
+        return runCatching {
+            dir.mkdirs()
+            val partial = File(dir, "$name.part")
+            partial.writeText(text)
+            partial.renameTo(File(dir, name)).also { written -> if (!written) partial.delete() }
+        }.getOrDefault(false)
+    }
+
     /** Whether download [id] has subtitles kept. */
     fun has(id: Long): Boolean = fileFor(id) != null
 
