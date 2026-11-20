@@ -13,18 +13,69 @@ import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.coroutineContext
 
+/** One file of a model, as Chaya pins it: its name, size and SHA-256. */
+data class ModelFile(val name: String, val size: Long, val sha256: String)
+
+/** Which engine runs a model. */
+enum class SpeechEngine {
+    /** whisper.cpp (`src/main/cpp`), any of 99 languages. */
+    WHISPER,
+
+    /** sherpa-onnx, with NVIDIA's Parakeet TDT: 25 European languages, far more accurate and faster than Whisper Base. */
+    PARAKEET,
+}
+
 /**
- * A speech model whisper.cpp listens with: the smaller ones only, for a phone's memory and battery. Its file, size and
- * the SHA-256 Chaya pins for it (as Windows pins its models in `speech/models.json`), and the attention heads that time
- * its words.
+ * A speech model the phone listens with, the smaller and quicker ones only, for a phone's memory and battery: its
+ * files, sizes and the SHA-256 Chaya pins for each (as Windows pins its models in `speech/models.json`), where they
+ * come from (null: whisper.cpp's own, [SpeechModels.SOURCE]), and for Whisper the attention heads that time its words.
  */
-enum class SpeechModel(val label: String, val file: String, val size: Long, val sha256: String, val dtw: String, val note: String) {
-    TINY("Tiny", "ggml-tiny.bin", 77_691_713, "be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21", "tiny", "Fastest"),
-    BASE("Base", "ggml-base.bin", 147_951_465, "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe", "base", "More accurate"),
+enum class SpeechModel(
+    val label: String,
+    val note: String,
+    val engine: SpeechEngine,
+    val files: List<ModelFile>,
+    val source: String? = null,
+    /** The folder its files are kept in, under the models' own; empty for one file kept on its own. */
+    val folder: String = "",
+    val dtw: String = "",
+) {
+    TINY(
+        "Tiny", "Fastest", SpeechEngine.WHISPER,
+        listOf(ModelFile("ggml-tiny.bin", 77_691_713, "be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21")),
+        dtw = "tiny",
+    ),
+    BASE(
+        "Base", "More accurate", SpeechEngine.WHISPER,
+        listOf(ModelFile("ggml-base.bin", 147_951_465, "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe")),
+        dtw = "base",
+    ),
+
+    /**
+     * NVIDIA's Parakeet TDT 0.6B v3, int8, as sherpa-onnx's author exports it, at a pinned commit: English, Russian,
+     * Ukrainian and 22 more European languages, with punctuation and capitals, heard far better than by Whisper Base.
+     */
+    PARAKEET(
+        "Parakeet", "Best on the phone · European languages", SpeechEngine.PARAKEET,
+        listOf(
+            ModelFile("encoder.int8.onnx", 652_282_294, "1afbe69c1ffdabee94755f42e4daf1d93549131a3da11356bda84fcef0f2c479"),
+            ModelFile("decoder.int8.onnx", 11_845_274, "0222a86147299d4dee90edf95b6d13827edb42ad8b7c9cf0b2582f030937c0b5"),
+            ModelFile("joiner.int8.onnx", 6_355_277, "cbd02f3696e9944970111fb439d9c3fd365a80374565f13f2b9c7007d253fc98"),
+            ModelFile("tokens.txt", 93_939, "d58544679ea4bc6ac563d1f545eb7d474bd6cfa467f0a6e2c1dc1c7d37e3c35d"),
+        ),
+        source = "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/resolve/ed5d745623472f97cfc2e6c2916ee248798fc5a8",
+        folder = "parakeet-tdt-0.6b-v3",
+    ),
     ;
+
+    /** All its files together, in bytes. */
+    val size: Long get() = files.sumOf { it.size }
 
     /** "78 MB". */
     val megabytes: String get() = "${(size + 500_000) / 1_000_000} MB"
+
+    /** A Whisper model's one file. */
+    val file: String get() = files.single().name
 }
 
 /** Why a model could not be had, in words. */
@@ -41,27 +92,47 @@ class SpeechModels(
     private val client: OkHttpClient = defaultClient(),
     private val source: String = SOURCE,
 ) {
-    fun path(model: SpeechModel) = File(dir, model.file)
+    /** A Whisper model's file, or the folder holding a model of several files. */
+    fun path(model: SpeechModel) = if (model.folder.isEmpty()) File(dir, model.file) else File(dir, model.folder)
 
-    /** Whether [model] is here, whole. Its sum was checked when it arrived, so here only its size is. */
-    fun isFetched(model: SpeechModel) = path(model).length() == model.size
+    private fun fileOf(model: SpeechModel, file: ModelFile) =
+        if (model.folder.isEmpty()) file.name else "${model.folder}/${file.name}"
 
-    /** Fetches [model] unless it is here, carrying on from a part; [onProgress] hears bytes so far of all. */
-    suspend fun fetch(model: SpeechModel, onProgress: (Long, Long) -> Unit): File =
-        fetchPinned(Pin(model.label, model.file, model.size, model.sha256), onProgress)
+    /** Whether [model] is here, whole. Each file's sum was checked when it arrived, so here only their sizes are. */
+    fun isFetched(model: SpeechModel) = model.files.all { File(dir, fileOf(model, it)).length() == it.size }
 
-    /** A file Chaya fetches only as it pins it: its name in words, its file, its size and its SHA-256. */
-    internal class Pin(val label: String, val file: String, val size: Long, val sha256: String)
+    /**
+     * Fetches whatever of [model] is not here, each file carrying on from its part; [onProgress] hears bytes so far of
+     * all its files. Its [path].
+     */
+    suspend fun fetch(model: SpeechModel, onProgress: (Long, Long) -> Unit): File {
+        var before = 0L
+        for (file in model.files) {
+            val name = fileOf(model, file)
+            val from = model.source ?: source
+            fetchPinned(Pin(model.label, name, file.size, file.sha256, "$from/${file.name}")) { done, _ ->
+                onProgress(before + done, model.size)
+            }
+            before += file.size
+        }
+        return path(model)
+    }
+
+    /**
+     * A file Chaya fetches only as it pins it: its name in words, its file (under the models' folder), its size and
+     * SHA-256, and where it comes from (null: [source] and the file's name).
+     */
+    internal class Pin(val label: String, val file: String, val size: Long, val sha256: String, val url: String? = null)
 
     internal suspend fun fetchPinned(model: Pin, onProgress: (Long, Long) -> Unit): File = withContext(Dispatchers.IO) {
         val whole = File(dir, model.file)
         if (whole.length() == model.size) return@withContext whole
-        dir.mkdirs()
+        whole.parentFile?.mkdirs()
         val part = File(dir, "${model.file}.part")
         if (part.length() > model.size) part.delete()
         if (part.length() < model.size) {
             val from = part.length()
-            val request = Request.Builder().url("$source/${model.file}").apply { if (from > 0) header("Range", "bytes=$from-") }.build()
+            val request = Request.Builder().url(model.url ?: "$source/${model.file}").apply { if (from > 0) header("Range", "bytes=$from-") }.build()
             val call = client.newCall(request)
             try {
                 call.execute().use { response ->
@@ -100,8 +171,8 @@ class SpeechModels(
 
     /** Deletes [model], to free its room. */
     fun delete(model: SpeechModel) {
-        path(model).delete()
-        File(dir, "${model.file}.part").delete()
+        model.files.forEach { File(dir, fileOf(model, it)).delete(); File(dir, "${fileOf(model, it)}.part").delete() }
+        if (model.folder.isNotEmpty()) File(dir, model.folder).delete()
     }
 
     companion object {

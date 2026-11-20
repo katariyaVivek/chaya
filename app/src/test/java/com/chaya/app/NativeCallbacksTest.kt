@@ -24,4 +24,12 @@ class NativeCallbacksTest {
         val unkept = looked.filter { name -> !Regex("""\b$name\s*\(""").containsMatchIn(rules) }
         assertTrue("Methods the native code calls by name that R8 may rename: $unkept", unkept.isEmpty())
     }
+
+    @Test
+    fun `sherpa-onnx's classes, which its native library reads by name, are kept whole`() {
+        val rules = File("proguard-rules.pro").readText()
+        assertTrue("-keep class com.k2fsa.sherpa.onnx.** { *; }" in rules)
+        val vendored = File("src/main/java/com/k2fsa/sherpa/onnx").listFiles().orEmpty().map { it.name }
+        assertTrue("the Kotlin API is vendored beside its README: $vendored", "OfflineRecognizer.kt" in vendored && "README.md" in vendored)
+    }
 }

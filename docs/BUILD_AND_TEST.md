@@ -11,6 +11,8 @@
 - The Android NDK and CMake 3.22.1 (`sdkmanager "ndk;27.0.12077973" "cmake;3.22.1"`; GitHub's runners have them, and
   the Android Gradle plugin fetches what is missing), and `git`: the build fetches whisper.cpp at the commit
   `app/src/main/cpp/CMakeLists.txt` pins, for *Make subtitles*. The first build compiles it (a few minutes).
+- Access to huggingface.co at build time: `fetchSherpaOnnx` fetches sherpa-onnx's prebuilt Android libraries (36 MB,
+  pinned by SHA-256) once into Gradle's home, for Parakeet.
 
 Library versions are in `gradle/libs.versions.toml`.
 

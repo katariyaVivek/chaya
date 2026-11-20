@@ -105,6 +105,10 @@ class ChayaApplication : Application() {
             },
             keep = { id, language, lines -> subtitles.write(id, "$id.$language.srt", com.chaya.app.subtitles.Subtitles.toSrt(lines)) },
             stopListening = com.chaya.app.speech.Whisper::stop,
+            listenParakeet = { folder, samples, heard ->
+                com.chaya.app.speech.Parakeet.transcribe(folder, samples, com.chaya.app.speech.Whisper.threads(), heard)
+            },
+            done = com.chaya.app.speech.Parakeet::release,
             listenCloud = { speech, samples, language ->
                 // The service's own address, with the key saved for it under AI model
                 val settings = com.chaya.app.ai.AiSettings(service = speech.service)

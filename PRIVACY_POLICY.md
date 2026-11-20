@@ -102,7 +102,8 @@ Chaya talks only to the sites involved in what you do:
   you look up or the pages you visit. Turn this off under Downloads › ⋮ › Diagnostics › *Keep it up
   to date*.
 - for *Make subtitles*, the first time a model is used, huggingface.co (and the server it sends the file from), to
-  fetch whisper.cpp's Tiny or Base model, which is then kept in the app's files. The request carries nothing about
+  fetch whisper.cpp's Tiny or Base model, or NVIDIA's Parakeet model (as sherpa-onnx's author publishes it), which
+  is then kept in the app's files. The request carries nothing about
   you or the video. With the phone's own models, the video's sound is listened to on the phone and never sent
   anywhere.
 - for *Make subtitles* with Groq or OpenAI, only when you choose that service on the card (it is never the default,

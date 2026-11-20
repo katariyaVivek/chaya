@@ -609,6 +609,11 @@ fun PlayerScreen(
                             onMake = { engine -> app.speech.start(taskId, engine, lengthMs) },
                             // The services a key is saved for under AI model
                             clouds = remember { com.chaya.app.speech.CloudSpeech.entries.filter { app.aiKeys.hasKey(it.service) } },
+                            // Parakeet first: the most accurate on the phone, for the languages it knows
+                            models = remember {
+                                listOf(com.chaya.app.speech.SpeechModel.PARAKEET).filter { com.chaya.app.speech.Parakeet.available } +
+                                    listOf(com.chaya.app.speech.SpeechModel.TINY, com.chaya.app.speech.SpeechModel.BASE)
+                            },
                             onStop = { app.speech.stop(taskId) },
                         )
                     }
