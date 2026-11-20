@@ -115,6 +115,20 @@ class SubtitleStore(
     /** Whether download [id] has subtitles kept. */
     fun has(id: Long): Boolean = fileFor(id) != null
 
+    /**
+     * Download [id]'s subtitles deleted, so new ones can be made (a better model, or a service): with them go what was
+     * made from their lines, the translations and highlights, which would no longer match. Its chapters and clips,
+     * which are times in the video, stay. Whether anything was there to delete.
+     */
+    fun forgetSubtitles(id: Long): Boolean {
+        val made = dir.listFiles { file ->
+            file.name.startsWith("$id.") &&
+                (file.name.endsWith(".srt") || file.name == "$id.translations.json" || file.name == "$id.highlights.json")
+        }.orEmpty()
+        made.forEach { it.delete() }
+        return made.any { it.name.endsWith(".srt") }
+    }
+
     /** A download deleted: its subtitles and chapters go with it. */
     fun forget(id: Long) {
         dir.listFiles { file -> file.name.startsWith("$id.") }?.forEach { it.delete() }

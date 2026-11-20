@@ -274,7 +274,10 @@ a quiet voice is heard. On the phone, `SpeechModel.PARAKEET` runs NVIDIA's Parak
 its prebuilt Android library fetched by `fetchSherpaOnnx` in `app/build.gradle.kts`, pinned by SHA-256, and its Kotlin
 API vendored in `com/k2fsa/sherpa/onnx`, kept whole from R8): each piece is cut into windows of about 25 s at their
 quietest moment, each window's timed tokens become words, and the language is guessed from them (`LanguageGuess`).
-An `Engine` is chosen per video: `OnPhone` (whisper.cpp or Parakeet) or `Cloud` (`CloudSpeech`: Groq's
+`SubtitleStore.forgetSubtitles` deletes a video's subtitles with what was made from their lines (translations,
+highlights), keeping chapters and clips, so new ones can be made; `TranslationStore.remove` deletes one version;
+`SpeechModels.delete` frees a model. Translation asks for a sentence over several lines as a whole (`Translator.sentences`)
+and ends a full batch where a sentence does. An `Engine` is chosen per video: `OnPhone` (whisper.cpp or Parakeet) or `Cloud` (`CloudSpeech`: Groq's
 `whisper-large-v3` or OpenAI's `whisper-1` with the key saved under AI model, through `CloudListener`, which sends each
 piece as WAV to `/audio/transcriptions` and reads back `verbose_json` with word times into a `Transcript`, so the same
 `SpeechLines` cut it). `SpeechJobs` runs one video at a time in the app's scope (`Making`: `Idle`, `Fetching`,

@@ -1,5 +1,6 @@
 package com.chaya.app.ui.player
 
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -66,6 +67,8 @@ fun Transcript(
     onFix: ((Int) -> Unit)? = null,
     /** A translation shown under each line, one for each (null for a line not translated yet); none without one. */
     translated: List<String?>? = null,
+    /** Deletes these subtitles (asked first), so new ones can be made; none where they can't be. */
+    onDelete: (() -> Unit)? = null,
     /** Lines chosen for a clip, lit; while some are, a tap chooses up to that line instead of playing it. */
     chosen: IntRange? = null,
     /** A long press starts choosing lines (for a clip, or to put one right); null leaves a long press to [onFix]. */
@@ -92,6 +95,11 @@ fun Transcript(
                 if (onFix != null && lines.isNotEmpty()) {
                     IconButton(onClick = { onFix(current ?: 0) }, modifier = Modifier.size(36.dp)) {
                         Icon(Icons.Default.Edit, contentDescription = "Put the subtitles right", tint = NightMuted, modifier = Modifier.size(18.dp))
+                    }
+                }
+                if (onDelete != null) {
+                    IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Default.DeleteOutline, contentDescription = "Delete these subtitles", tint = NightMuted, modifier = Modifier.size(18.dp))
                     }
                 }
             }

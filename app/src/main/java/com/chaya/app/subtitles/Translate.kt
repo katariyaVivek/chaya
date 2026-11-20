@@ -104,21 +104,59 @@ class Translator(private val client: AiClient) {
         /** How long a translation may run on, for Anthropic's protocol, which asks. */
         const val MAX_TOKENS = 8_192
 
-        private const val SYSTEM = "You translate a video's subtitles. Translate each numbered line on its own and keep " +
-            "its number: never merge lines, split one, leave one out or change their order. Use the title and the whole " +
-            "transcript to get names and terms right (put right a name the transcript misheard) and to translate each " +
-            "term the same way every time. Write natural, short subtitles. Answer with one JSON object and nothing else."
+        // Beyond Windows' core::translate: a sentence said over two lines ("this is the most beautiful hands" | "I have
+        // ever seen") made no sense in another language translated line by line, so a sentence's lines go together.
+        private const val SYSTEM = "You translate a video's subtitles. Keep every line's number: give exactly one " +
+            "non-empty item for each number asked for, never merging two numbers into one or leaving one out. When a " +
+            "sentence runs over several numbered lines, translate that whole sentence so it reads naturally in the " +
+            "target language, in its own word order, then share the translation out over those same lines, in order, " +
+            "each line taking the part that reads well as it is shown. Use the title and the whole transcript to get " +
+            "names and terms right (put right a name the transcript misheard) and to translate each term the same way " +
+            "every time. Write natural, short subtitles. Answer with one JSON object and nothing else."
 
-        /** The lines not yet translated, in runs of consecutive lines no longer than a batch. */
+        /** Whether [line] ends a sentence: a stop, a question or an exclamation (in the scripts Chaya's people use). */
+        fun endsSentence(line: String): Boolean {
+            val end = line.trimEnd().trimEnd('"', '\'', '”', '’', ')', ']', '»')
+            return end.isEmpty() || end.last() in ".?!…。？！؟।♪"
+        }
+
+        /** The runs of lines among [asked] that make one sentence together, as their numbers from 1 ("4–5"). */
+        fun sentences(lines: List<String>, asked: List<Int>): List<IntRange> {
+            val runs = mutableListOf<IntRange>()
+            var from = asked.firstOrNull() ?: return runs
+            for ((i, n) in asked.withIndex()) {
+                val next = asked.getOrNull(i + 1)
+                if (endsSentence(lines[n]) || next == null || next != n + 1) {
+                    if (n > from) runs += (from + 1)..(n + 1)
+                    from = next ?: break
+                }
+            }
+            return runs
+        }
+
+        /**
+         * The lines not yet translated, in runs of consecutive lines no longer than a batch; a batch that is full ends
+         * where a sentence does when it can, so a sentence's lines are translated together.
+         */
         fun batches(lines: List<String>, done: List<String?>): List<List<Int>> {
             val batches = mutableListOf<MutableList<Int>>()
             var chars = 0
             for (n in lines.indices.filter { done[it] == null }) {
                 val last = batches.lastOrNull()
-                val fits = last != null && last.size < BATCH_LINES && chars + lines[n].length <= BATCH_CHARS && last.last() == n - 1
+                val follows = last != null && last.last() == n - 1
+                val fits = last != null && last.size < BATCH_LINES && chars + lines[n].length <= BATCH_CHARS && follows
                 if (!fits) {
-                    batches.add(mutableListOf())
-                    chars = 0
+                    val next = mutableListOf<Int>()
+                    // A full batch cut mid-sentence gives the sentence's start to the next batch, if it ends somewhere
+                    if (last != null && follows && !endsSentence(lines[last.last()])) {
+                        val cut = last.indexOfLast { endsSentence(lines[it]) }
+                        if (cut >= 0) {
+                            next += last.subList(cut + 1, last.size)
+                            repeat(last.size - cut - 1) { last.removeAt(last.lastIndex) }
+                        }
+                    }
+                    batches.add(next)
+                    chars = next.sumOf { lines[it].length }
                 }
                 chars += lines[n].length
                 batches.last().add(n)
@@ -159,9 +197,12 @@ class Translator(private val client: AiClient) {
             val transcript = around.joinToString("\n") { numbered(it) }
             val lines = asked.joinToString("\n") { numbered(it) }
             val numbers = asked.joinToString(", ") { (it + 1).toString() }
+            val runs = sentences(job.lines, asked)
+            val together = if (runs.isEmpty()) "" else "\n\nThese lines are one sentence each, translated as a whole and shared " +
+                "out over the same lines: ${runs.joinToString(", ") { "${it.first}–${it.last}" }}."
             return "Video title: ${job.title}\n\nThe transcript, for context (number: line):\n$transcript\n\nTranslate these " +
                 "lines into ${job.into}. Answer with {\"lines\": [{\"n\": number, \"text\": \"the translation\"}]}, one item " +
-                "for each of the numbers $numbers and no others:\n$lines"
+                "for each of the numbers $numbers and no others:\n$lines$together"
         }
 
         /** The lines in a reply, by line (from 0), each translation trimmed and not empty. */

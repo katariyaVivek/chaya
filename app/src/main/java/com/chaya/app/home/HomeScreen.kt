@@ -154,7 +154,8 @@ fun HomeScreen(
             Spacer(Modifier.height(120.dp))
         }
 
-        SnackbarHost(snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 100.dp))
+        // Above the places bar and the phone's own navigation, so a message is never under them
+        SnackbarHost(snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = PlacesBarClearance))
 
         PlacesBar(
             current = Place.HOME,
@@ -187,7 +188,8 @@ private fun Hero(
     onShare: () -> Unit,
 ) {
     val ground = MaterialTheme.colorScheme.background
-    val picture = rememberCover(task, files)
+    // A frame as wide as the screen: a tile's small one, stretched across 500dp, was a blur
+    val picture = rememberCover(task, files, large = true)
     Box(modifier = Modifier.fillMaxWidth().height(500.dp)) {
         if (picture != null) {
             AsyncImage(
@@ -430,6 +432,9 @@ private fun RecentCard(item: LibraryItem, files: LibraryFiles, onClick: () -> Un
         )
     }
 }
+
+/** How far above the phone's navigation the places bar reaches (62dp tall, 16dp either side), and a little room. */
+val PlacesBarClearance = 100.dp
 
 /**
  * Chaya's places, floating at the foot of the screen (Stage), the one shown lit; and "+", in ink, to paste a link or

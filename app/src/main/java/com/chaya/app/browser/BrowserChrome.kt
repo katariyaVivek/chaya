@@ -1,5 +1,7 @@
 package com.chaya.app.browser
 
+import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.Image
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.fadeIn
@@ -30,7 +32,6 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.StarOutline
@@ -684,20 +685,13 @@ internal fun HomeContent(
 
                 StaggeredAppear(index = 0) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(48.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primaryContainer),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Bolt,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
+                        // Chaya's own mark, the two suns, as Home has it (res/drawable/chaya_mark.xml, written from the
+                        // mark's constants), not a stock icon
+                        Image(
+                            painter = painterResource(com.chaya.app.R.drawable.chaya_mark),
+                            contentDescription = null,
+                            modifier = Modifier.size(48.dp),
+                        )
                         Spacer(Modifier.width(14.dp))
                         Column {
                             Text(

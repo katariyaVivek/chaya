@@ -1,5 +1,9 @@
 package com.chaya.app.ui.player
 
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.Icons
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -63,6 +67,8 @@ fun TranslateSheet(
     onTranslate: (String) -> Unit,
     onStop: () -> Unit,
     onShow: (Int?) -> Unit,
+    /** Deletes version [Int] (a language and model) for good. */
+    onDelete: (Int) -> Unit = {},
     onSetUp: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -146,6 +152,7 @@ fun TranslateSheet(
                         facts = version.model + if (version.whole) "" else " · ${version.done} of ${version.lines.size} lines",
                         chosen = translations.shown == index,
                         onClick = { onShow(index) },
+                        onDelete = { onDelete(index) },
                     )
                 }
             }
@@ -154,7 +161,7 @@ fun TranslateSheet(
 }
 
 @Composable
-private fun VersionRow(title: String, facts: String, chosen: Boolean, onClick: () -> Unit) {
+private fun VersionRow(title: String, facts: String, chosen: Boolean, onClick: () -> Unit, onDelete: (() -> Unit)? = null) {
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(14.dp),
@@ -162,9 +169,16 @@ private fun VersionRow(title: String, facts: String, chosen: Boolean, onClick: (
         border = BorderStroke(1.dp, if (chosen) NightInk else NightOutlineVariant),
         modifier = Modifier.fillMaxWidth().semantics { selected = chosen },
     ) {
-        Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-            Text(title, color = NightInk, style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold))
-            if (facts.isNotEmpty()) Text(facts, color = NightMuted, style = TextStyle(fontSize = 13.sp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f).padding(horizontal = 14.dp, vertical = 10.dp)) {
+                Text(title, color = NightInk, style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold))
+                if (facts.isNotEmpty()) Text(facts, color = NightMuted, style = TextStyle(fontSize = 13.sp))
+            }
+            if (onDelete != null) {
+                IconButton(onClick = onDelete) {
+                    Icon(Icons.Default.Close, contentDescription = "Delete the $title translation", tint = NightMuted)
+                }
+            }
         }
     }
 }

@@ -51,6 +51,23 @@ class TranslationStore(private val dir: File) {
         return write(id, VideoTranslations(versions, shown = if (at >= 0) at else versions.lastIndex))
     }
 
+    /**
+     * Deletes version [index]; the one shown stays shown (or none is, if it was the one deleted). Nothing is kept
+     * when no version is left.
+     */
+    @Synchronized
+    fun remove(id: Long, index: Int): VideoTranslations {
+        val now = load(id)
+        if (index !in now.versions.indices) return now
+        val versions = now.versions.filterIndexed { i, _ -> i != index }
+        val shown = now.shown?.let { s -> when { s == index -> null; s > index -> s - 1; else -> s } }
+        if (versions.isEmpty()) {
+            file(id).delete()
+            return VideoTranslations()
+        }
+        return write(id, VideoTranslations(versions, shown))
+    }
+
     /** Shows version [index] under the original, or none. */
     @Synchronized
     fun show(id: Long, index: Int?): VideoTranslations {
