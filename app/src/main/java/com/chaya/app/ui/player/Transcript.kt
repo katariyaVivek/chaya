@@ -4,6 +4,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -62,6 +63,8 @@ fun Transcript(
     modifier: Modifier = Modifier,
     bottomPadding: Dp = 0.dp,
     onFix: ((Int) -> Unit)? = null,
+    /** A translation shown under each line, one for each (null for a line not translated yet); none without one. */
+    translated: List<String?>? = null,
 ) {
     val list = rememberLazyListState()
     // Follows the line being said, with the one before it in view (item 0 is the heading), unless the person is scrolling
@@ -111,15 +114,25 @@ fun Transcript(
                     style = TextStyle(fontSize = 12.sp, lineHeight = 20.sp),
                     modifier = Modifier.width(48.dp),
                 )
-                Text(
-                    text = line.text,
-                    color = if (now) NightInk else NightMuted,
-                    style = TextStyle(
-                        fontSize = 15.sp,
-                        lineHeight = 20.sp,
-                        fontWeight = if (now) FontWeight.SemiBold else FontWeight.Normal,
-                    ),
-                )
+                Column {
+                    Text(
+                        text = line.text,
+                        color = if (now) NightInk else NightMuted,
+                        style = TextStyle(
+                            fontSize = 15.sp,
+                            lineHeight = 20.sp,
+                            fontWeight = if (now) FontWeight.SemiBold else FontWeight.Normal,
+                        ),
+                    )
+                    translated?.getOrNull(index)?.let { under ->
+                        Text(
+                            text = under,
+                            color = if (now) NightInk.copy(alpha = 0.78f) else NightMuted.copy(alpha = 0.8f),
+                            style = TextStyle(fontSize = 14.sp, lineHeight = 19.sp),
+                            modifier = Modifier.padding(top = 2.dp),
+                        )
+                    }
+                }
             }
         }
     }
@@ -130,10 +143,10 @@ fun Transcript(
  * accessibility services, which read the transcript's line instead of the same words twice.
  */
 @Composable
-fun SubtitleOverlay(text: String, modifier: Modifier = Modifier) {
+fun SubtitleOverlay(text: String, modifier: Modifier = Modifier, under: String? = null) {
     Box(modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), contentAlignment = Alignment.BottomCenter) {
         Text(
-            text = text,
+            text = if (under == null) text else "$text\n$under",
             color = Color.White,
             textAlign = TextAlign.Center,
             style = TextStyle(fontSize = 15.sp, lineHeight = 20.sp, fontWeight = FontWeight.Medium),

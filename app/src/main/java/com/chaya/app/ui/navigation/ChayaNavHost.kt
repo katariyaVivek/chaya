@@ -125,7 +125,12 @@ fun ChayaNavHost(navController: NavHostController) {
         ) { backStackEntry ->
             val taskId = backStackEntry.arguments?.getLong(Screen.PLAYER_ARGS) ?: -1L
             val at = backStackEntry.arguments?.getLong(Screen.PLAYER_AT)?.takeIf { it >= 0 }
-            PlayerScreen(taskId = taskId, startAtMs = at, onNavigateBack = { navController.popBackStack() })
+            PlayerScreen(
+                taskId = taskId,
+                startAtMs = at,
+                onNavigateBack = { navController.popBackStack() },
+                onOpenAiModel = { navController.navigate(Screen.AiModel.route) },
+            )
         }
         composable(Screen.Diagnostics.route) {
             DiagnosticsScreen(onNavigateBack = { navController.popBackStack() })

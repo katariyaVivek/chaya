@@ -55,7 +55,9 @@ Store account, no third-party SDKs.
   site lists them): **on your phone only**, in app-private files, shown on the picture, as the transcript and on the
   seek bar in Chaya's player. They are deleted with their download. When you put the subtitles right in the
   player (a line's words, or their timing), Chaya writes the change to that same file; what it said before each
-  change is kept in memory for *Undo* while the app runs, and nowhere else.
+  change is kept in memory for *Undo* while the app runs, and nowhere else. A translation of them made by your own AI
+  model (*Translate* in the player), a version for each language and model: **on your phone only**, beside them, and
+  deleted with the download.
 - Where you stopped each saved video in Chaya's player (the time, the video's length and when you stopped), so
   it starts there again and Home offers *Continue*: **on your phone only**, in the app's preferences. It is
   deleted with its download.
@@ -96,8 +98,8 @@ Chaya talks only to the sites involved in what you do:
   you look up or the pages you visit. Turn this off under Downloads › ⋮ › Diagnostics › *Keep it up
   to date*.
 - your own AI model, only once you set one up under Downloads › ⋮ › *AI model*, and only when you ask for something
-  that needs it: *List models* and *Test* there, and (from later versions) translating a video's subtitles or finding
-  its highlights. Chaya sends the service you chose what that needs (for translation and highlights, the video's
+  that needs it: *List models* and *Test* there, *Translate* in the player, and (from a later version) finding a
+  video's highlights. Chaya sends the service you chose what that needs (for translation and highlights, the video's
   subtitles and its title) with your key, to that service only: OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter,
   Mistral, Groq, xAI, an address you give, or a program such as Ollama or LM Studio on a PC on your own network. What
   the service does with it is up to its own privacy policy. A key is sent only over `https://`, or over `http://` to an

@@ -175,7 +175,7 @@ fun FixedBar(said: String, canUndo: Boolean, onUndo: () -> Unit, modifier: Modif
 }
 
 @Composable
-private fun Heading(text: String) {
+internal fun Heading(text: String) {
     Text(
         text = text,
         color = NightMuted,

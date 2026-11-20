@@ -91,12 +91,16 @@ address), with its key, *List models* and *Test* ("llama-3.3-70b answered in 0.8
   service's key with AES-GCM under a key in the Android Keystore (`KeystoreLockTest` on a device); the `chaya_ai`
   preferences are left out of backups and device transfers. `PRIVACY_POLICY.md` says what is sent, only when asked.
 
-### 6. Translation ☐
+### 6. Translation ☑
 
-**The person gets:** *Translate* in the player: the subtitles in their language under the original, on the picture
-and in the transcript, a version kept for each model.
+**The person gets:** *Translate* (the translate button by the subtitles button) in the player: the phone's language
+first among the languages offered; the subtitles in it under the original, on the picture and in the transcript; how
+far it has got, with *Stop*; and a version kept for each language and model, one shown under the original or none.
 
-- Port `core::translate`: batches, each with the whole transcript for names and terms; carried on where it stopped.
+- `Translator` is `core::translate`, ported with its tests: batches, each with the title and the whole transcript for
+  names and terms, a line left out asked for alone, a rate limit waited out. `TranslationJobs` runs one per video in
+  the app's scope (leaving the player does not stop it) and keeps every batch in `12.translations.json` beside the
+  subtitles, so a stopped or failed translation carries on where it stopped; it goes with the download.
 
 ### 7. Highlights ☐
 

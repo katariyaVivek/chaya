@@ -64,6 +64,20 @@ class ChayaApplication : Application() {
     /** Asks the person's AI model, only when they ask for something that needs it. */
     val aiClient: com.chaya.app.ai.AiClient by lazy { com.chaya.app.ai.AiClient() }
 
+    /** Videos' subtitles translated by the person's AI model, a version for each language and model. */
+    val translationStore: com.chaya.app.subtitles.TranslationStore by lazy { com.chaya.app.subtitles.TranslationStore(File(filesDir, "subtitles")) }
+    /** Translations under way, one per video; leaving the player does not stop one. */
+    val translations: com.chaya.app.subtitles.TranslationJobs by lazy {
+        com.chaya.app.subtitles.TranslationJobs(
+            scope = appScope,
+            store = translationStore,
+            subtitles = subtitles::load,
+            translator = com.chaya.app.subtitles.Translator(aiClient),
+            settings = { aiKeys.settings },
+            endpoint = { aiKeys.endpoint(it) },
+        )
+    }
+
     /** Light, dark, or the same as the phone. */
     val themeSettings: ThemeSettings by lazy { ThemeSettings.from(this) }
 
