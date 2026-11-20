@@ -124,13 +124,17 @@ trim it and settle on the nearest line or chapter; with its name, *Play* (which 
   them. `PeakMeter` is `sound::peaks`' measure; on the phone `ClipMedia` decodes the sound with `MediaCodec` (kept as
   `12.peaks` in the cache) and reads frames with `MediaMetadataRetriever`; `ClipMediaTest` checks both on a device.
 
-### 9. Export ☐
+### 9. Export ☑
 
-**The person gets:** a clip saved as a video with its subtitles drawn on, or as SRT; a size to fit (10, 25 or 50 MB)
-for sending; shared or saved to the gallery.
+**The person gets:** under a clip's timeline, *SAVE AS* a video with its subtitles drawn on (with the translation
+under them when one is shown), a clean video, or its subtitles as SRT; a size to fit (as it is, 10, 25 or 50 MB) for
+sending; *Save clip* with how far and *Stop*; then *Share* or *Save to phone* (Movies). A stream kept only in the
+cache is saved as an MP4 from the Library first.
 
-- Media3 Transformer: the clip's span, the subtitles as a text overlay, a bit rate from the size asked for.
-- **Tests:** the bit rate for a size (JVM); an `androidTest` that exports a short clip and reads its length back.
+- `ClipExport` is `core::export`'s size to fit, bit rate, SRT and naming, ported with its tests. `ClipExporter` cuts
+  with Media3 Transformer on the phone's encoder: the subtitles as an `OverlayEffect` drawn as the player draws them,
+  the picture made smaller by `Presentation` and the bit rates set when a size is asked for. `ClipExporterTest`
+  saves a short clip on a device and reads its length back, and checks a size to fit.
 
 ### 10. Subtitles made on the phone ☐
 

@@ -198,6 +198,9 @@ fun PlayerScreen(
     var showClips by rememberSaveable { mutableStateOf(false) }
     var editing by remember { mutableStateOf<Clip?>(null) }
     var playingClip by remember { mutableStateOf<Clip?>(null) }
+    // A clip being saved as a video or SRT, and the work doing it (Stop cancels it)
+    var exporting by remember { mutableStateOf<Exporting>(Exporting.Idle) }
+    var exportJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     // The line being put right, by its index; where a line was last said to be "now" (for a stretch); and what the last
     // change did
     var fixing by remember { mutableStateOf<Int?>(null) }
@@ -742,7 +745,65 @@ fun PlayerScreen(
                 keepClips(Clips.remove(clips, clip.id))
                 editing = null
             },
-            onDismiss = { editing = null },
+            onDismiss = {
+                exportJob?.cancel()
+                exporting = Exporting.Idle
+                editing = null
+            },
+            extra = { cut ->
+                val said = subtitles
+                ExportPanel(
+                    hasSubtitles = said != null,
+                    state = exporting,
+                    onExport = { kind, size ->
+                        val file = source.uri.takeIf { source.cached == null }
+                        if (file == null && kind != ExportKind.SRT) {
+                            exporting = Exporting.Failed("This video is kept as a stream. Save it as an MP4 from the Library first.")
+                            return@ExportPanel
+                        }
+                        val lines = said?.let { com.chaya.app.subtitles.ClipExport.together(it.lines, translated) }.orEmpty()
+                        val out = com.chaya.app.subtitles.ClipExport.fileFor(File(context.cacheDir, "clips"), displayTitle(task), cut.name, kind.extension)
+                        exportJob = scope.launch {
+                            exporting = Exporting.Running(0f)
+                            exporting = try {
+                                if (kind == ExportKind.SRT) {
+                                    withContext(Dispatchers.IO) { ClipExporter.writeSrt(lines, cut.start, cut.end, out) }
+                                } else {
+                                    ClipExporter.export(
+                                        context,
+                                        ClipExporter.Job(file!!, cut.start, cut.end, if (kind == ExportKind.WITH_SUBTITLES) lines else emptyList(), size, out),
+                                    ) { exporting = Exporting.Running(it) }
+                                }
+                                Exporting.Done(out, kind.mimeType)
+                            } catch (e: ClipExportException) {
+                                out.delete()
+                                Exporting.Failed(e.message ?: "Chaya couldn't make the clip.")
+                            } catch (e: java.io.IOException) {
+                                out.delete()
+                                Exporting.Failed("Chaya couldn't write the clip.")
+                            } catch (stopped: kotlinx.coroutines.CancellationException) {
+                                out.delete()
+                                exporting = Exporting.Idle
+                                throw stopped
+                            }
+                        }
+                    },
+                    onStop = { exportJob?.cancel() },
+                    onShare = { file, mime ->
+                        runCatching {
+                            val share = com.chaya.app.library.LibraryIntents.shareIntent(listOf(com.chaya.app.library.LibraryIntents.uriForFile(app, file)), listOf(mime))
+                            if (share != null) context.startActivity(share)
+                        }.onFailure { Toast.makeText(context, "No app can take this", Toast.LENGTH_SHORT).show() }
+                    },
+                    onSave = { file, mime ->
+                        scope.launch {
+                            val saved = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q &&
+                                com.chaya.app.library.LibraryIntents.saveToPhone(app, file, file.name, mime)
+                            Toast.makeText(context, if (saved) "Saved ${file.name} to your phone" else "Couldn't save ${file.name}", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                )
+            },
         )
     }
 

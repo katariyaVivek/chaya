@@ -255,6 +255,12 @@ faster than APKs ship, so the app fetches newer releases itself.
   `ChosenBar`, `ClipsSheet` and `ClipEditor` make, list and trim them on `ClipTimeline`, drawn from frames and the
   sound's loudness (`ui/player/ClipMedia.kt`: `MediaCodec` into `PeakMeter`, `MediaMetadataRetriever`).
 
+- **Export** (`subtitles/ClipExport.kt`, a port of `chaya-core`'s `export` without ffmpeg; `ui/player/ClipExporter.kt`):
+  Media3 Transformer cuts the clip (`ClippingConfiguration`), draws its lines with `SubtitleBurn` (a `BitmapOverlay`,
+  one bitmap per line), and with a size to fit scales it (`Presentation`) and sets the encoders' bit rates. The file
+  is made in the cache (`clips/`, shared through the FileProvider) and saved to Movies on request. `ExportPanel` sits
+  under the clip's timeline (`Exporting`: `Idle`, `Running`, `Done`, `Failed`).
+
 ## The person's own AI model (`ai/`)
 
 A port of `chaya-core`'s `ai`, for translation and highlights. `AiModel.kt` lists the services (`AiService.ALL`), what
@@ -362,6 +368,7 @@ not another flag beside it.
 | *Test* or the model list in Settings › AI model | `Idle`, `Asking`, `Said` (its words, worked or not) | `ai/AiModelScreen.kt` (`Checking`) | Sealed type |
 | A video's translation | `Idle`, `Running` (lines done of all), `Failed` (its words) | `subtitles/TranslationJobs.kt` (`Translating`) | Sealed type, one per video in a `StateFlow`; what is translated is on disk, so a stop loses nothing |
 | Finding a video's highlights | `Idle`, `Running`, `Failed` (its words) | `subtitles/HighlightJobs.kt` (`Finding`) | Sealed type, one per video in a `StateFlow` |
+| Saving a clip | `Idle`, `Running` (how far), `Done` (the file), `Failed` (its words) | `ui/player/ExportViews.kt` (`Exporting`) | Sealed type, in the player only |
 | An engine update check | `NOT_DUE`, `UP_TO_DATE`, `DOWNLOADED`, `REFUSED`, `FAILED` | `EngineUpdater.Outcome` | Enum |
 | Windows: a download | `Queued → Downloading ⇄ Paused → Completed \| Failed`, steps `Picture`, `Sound`, `Joining`, `Saving` | `desktop/core/src/download/manager.rs` | Rust enums, stored |
 | Windows: the panel open | none, Settings, the ad blocker's shield, what the page holds | `desktop/app/ui/panels.js` (`onePanel`), used by `main.js` | One value: opening a panel closes the one open; Escape closes it |
