@@ -135,6 +135,9 @@ JNIEXPORT jbyteArray JNICALL Java_com_chaya_app_speech_Whisper_transcribeNative(
     params.language = lang ? lang : "auto";
     params.translate = false;
     params.token_timestamps = true;
+    // A stretch whisper.cpp thinks holds no speech is dropped only when it is surer of that than its default (0.6):
+    // a soft voice under music was being dropped as silence.
+    params.no_speech_thold = 0.8f;
     params.print_progress = false;
     params.print_realtime = false;
     params.print_timestamps = false;

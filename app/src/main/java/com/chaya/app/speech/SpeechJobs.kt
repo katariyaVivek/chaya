@@ -82,7 +82,8 @@ class SpeechJobs(
             val hasSound = decode(id) { samples, offset ->
                 if (!context.isActive) throw CancellationException("Stopped")
                 val done = piece
-                val json = listen(file, model, samples, language) { percent ->
+                // Soft voices lifted to be heard as well as loud ones (Leveler), for whichever engine listens
+                val json = listen(file, model, Leveler.even(samples), language) { percent ->
                     set(id, Making.Listening(((done * 100L + percent) / pieces).toInt().coerceIn(0, 99)))
                 }
                 if (!context.isActive) throw CancellationException("Stopped")
