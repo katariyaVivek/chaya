@@ -80,6 +80,8 @@ class ChayaApplication : Application() {
 
     /** whisper.cpp's models, fetched once from Hugging Face and checked against their pinned sums. */
     val speechModels: com.chaya.app.speech.SpeechModels by lazy { com.chaya.app.speech.SpeechModels(File(filesDir, "speech")) }
+    /** Subtitles made by a service with the person's own key, when they choose it. */
+    val cloudListener: com.chaya.app.speech.CloudListener by lazy { com.chaya.app.speech.CloudListener() }
     /** *Make subtitles*: a video listened to on the phone, its lines kept as its subtitles. */
     val speech: com.chaya.app.speech.SpeechJobs by lazy {
         com.chaya.app.speech.SpeechJobs(
@@ -103,6 +105,18 @@ class ChayaApplication : Application() {
             },
             keep = { id, language, lines -> subtitles.write(id, "$id.$language.srt", com.chaya.app.subtitles.Subtitles.toSrt(lines)) },
             stopListening = com.chaya.app.speech.Whisper::stop,
+            listenCloud = { speech, samples, language ->
+                // The service's own address, with the key saved for it under AI model
+                val settings = com.chaya.app.ai.AiSettings(service = speech.service)
+                when (val endpoint = aiKeys.endpoint(settings)) {
+                    is com.chaya.app.ai.AiResult.Failed ->
+                        com.chaya.app.speech.CloudHeard.Failed(endpoint.error.message(speech.label))
+                    is com.chaya.app.ai.AiResult.Done -> when (val heard = cloudListener.transcribe(endpoint.value, speech, samples, language)) {
+                        is com.chaya.app.ai.AiResult.Done -> com.chaya.app.speech.CloudHeard.Said(heard.value)
+                        is com.chaya.app.ai.AiResult.Failed -> com.chaya.app.speech.CloudHeard.Failed(heard.error.message(speech.label))
+                    }
+                }
+            },
         )
     }
 

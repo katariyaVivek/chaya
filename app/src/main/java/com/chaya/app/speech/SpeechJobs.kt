@@ -14,6 +14,18 @@ import kotlinx.coroutines.launch
 import java.io.File
 import kotlin.coroutines.cancellation.CancellationException
 
+/** What listens: a model on the phone, or a service with the person's key (the sound is then sent to it). */
+sealed class Engine {
+    data class OnPhone(val model: SpeechModel) : Engine()
+    data class Cloud(val speech: CloudSpeech) : Engine()
+}
+
+/** A service's answer for a piece: what was said, or why not in words. */
+sealed class CloudHeard {
+    data class Said(val transcript: Transcript) : CloudHeard()
+    data class Failed(val message: String) : CloudHeard()
+}
+
 /** How making a video's subtitles is going. One value per video. */
 sealed class Making {
     data object Idle : Making()
@@ -21,8 +33,8 @@ sealed class Making {
     /** The model arriving, the first time: bytes so far of all. */
     data class Fetching(val model: SpeechModel, val done: Long, val total: Long) : Making()
 
-    /** whisper.cpp listening, this far through the video. */
-    data class Listening(val percent: Int) : Making()
+    /** Listening, this far through the video; [service] names the service the sound is sent to, null on the phone. */
+    data class Listening(val percent: Int, val service: String? = null) : Making()
 
     data class Failed(val message: String) : Making()
 }
@@ -40,6 +52,8 @@ class SpeechJobs(
     private val decode: (Long, (FloatArray, Long) -> Unit) -> Boolean,
     /** whisper.cpp: the JSON it writes for a piece, or null. */
     private val listen: (File, SpeechModel, FloatArray, String?, Whisper.Listener) -> String?,
+    /** A service: what it heard in a piece (sent with the person's key), or why not. Blocking, as [listen] is. */
+    private val listenCloud: (CloudSpeech, FloatArray, String?) -> CloudHeard = { _, _, _ -> CloudHeard.Failed("No service is set up.") },
     /** Keeps the lines as download [Long]'s subtitles in [String] (a language tag); whether they were kept. */
     private val keep: (Long, String, List<SubtitleLine>) -> Boolean,
     private val stopListening: () -> Unit = {},
@@ -50,15 +64,15 @@ class SpeechJobs(
 
     private fun set(id: Long, state: Making) = _states.update { it + (id to state) }
 
-    /** Makes download [id]'s subtitles with [model]; [lengthMs] says how far along it is. One video at a time. */
+    /** Makes download [id]'s subtitles with [engine]; [lengthMs] says how far along it is. One video at a time. */
     @Synchronized
-    fun start(id: Long, model: SpeechModel, lengthMs: Long) {
+    fun start(id: Long, engine: Engine, lengthMs: Long) {
         val now = running
         if (now != null && now.second.isActive) {
             if (now.first != id) set(id, Making.Failed("Chaya is making another video's subtitles. Try again when it's done."))
             return
         }
-        running = id to scope.launch { run(id, model, lengthMs) }
+        running = id to scope.launch { run(id, engine, lengthMs) }
     }
 
     @Synchronized
@@ -69,10 +83,16 @@ class SpeechJobs(
         stopListening()
     }
 
-    private suspend fun run(id: Long, model: SpeechModel, lengthMs: Long) {
+    /** A service refused a piece: making stops there, saying why. */
+    private class CloudStopped(message: String) : Exception(message)
+
+    private suspend fun run(id: Long, engine: Engine, lengthMs: Long) {
         try {
-            val file = models.fetch(model) { done, total -> set(id, Making.Fetching(model, done, total)) }
-            set(id, Making.Listening(0))
+            val file = (engine as? Engine.OnPhone)?.let { phone ->
+                models.fetch(phone.model) { done, total -> set(id, Making.Fetching(phone.model, done, total)) }
+            }
+            val service = (engine as? Engine.Cloud)?.speech?.label
+            set(id, Making.Listening(0, service))
             val pieces = maxOf(1L, (lengthMs + Sound16k.CHUNK_SECONDS * 1000L - 1) / (Sound16k.CHUNK_SECONDS * 1000L))
             val heard = mutableListOf<Segment>()
             var language: String? = null
@@ -83,11 +103,18 @@ class SpeechJobs(
                 if (!context.isActive) throw CancellationException("Stopped")
                 val done = piece
                 // Soft voices lifted to be heard as well as loud ones (Leveler), for whichever engine listens
-                val json = listen(file, model, Leveler.even(samples), language) { percent ->
-                    set(id, Making.Listening(((done * 100L + percent) / pieces).toInt().coerceIn(0, 99)))
+                val even = Leveler.even(samples)
+                val transcript = when (engine) {
+                    is Engine.OnPhone -> listen(file!!, engine.model, even, language) { percent ->
+                        set(id, Making.Listening(((done * 100L + percent) / pieces).toInt().coerceIn(0, 99), service))
+                    }?.let(Transcript::parse)
+                    is Engine.Cloud -> when (val heard = listenCloud(engine.speech, even, language)) {
+                        is CloudHeard.Said -> heard.transcript
+                        is CloudHeard.Failed -> throw CloudStopped(heard.message)
+                    }
                 }
                 if (!context.isActive) throw CancellationException("Stopped")
-                val transcript = json?.let(Transcript::parse)
+                set(id, Making.Listening(((done + 1) * 100L / pieces).toInt().coerceIn(0, 99), service))
                 if (transcript == null) {
                     failed = true
                 } else {
@@ -111,6 +138,8 @@ class SpeechJobs(
                     else -> Making.Idle
                 },
             )
+        } catch (e: CloudStopped) {
+            set(id, Making.Failed(e.message ?: "The service couldn't make the subtitles."))
         } catch (e: ModelException) {
             set(id, Making.Failed(e.message ?: "Chaya couldn't fetch the model."))
         } catch (stopped: CancellationException) {

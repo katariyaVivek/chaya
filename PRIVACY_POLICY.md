@@ -103,7 +103,12 @@ Chaya talks only to the sites involved in what you do:
   to date*.
 - for *Make subtitles*, the first time a model is used, huggingface.co (and the server it sends the file from), to
   fetch whisper.cpp's Tiny or Base model, which is then kept in the app's files. The request carries nothing about
-  you or the video. The video's sound is listened to on the phone and never sent anywhere.
+  you or the video. With the phone's own models, the video's sound is listened to on the phone and never sent
+  anywhere.
+- for *Make subtitles* with Groq or OpenAI, only when you choose that service on the card (it is never the default,
+  and is offered only once you have saved that service's key under *AI model*): the video's sound, as five-minute
+  pieces of 16 kHz WAV, with your key, to that service only (api.groq.com or api.openai.com). The card says so before
+  you send it. Nothing else about the video is sent. What the service does with it is up to its own privacy policy.
 - your own AI model, only once you set one up under Downloads › ⋮ › *AI model*, and only when you ask for something
   that needs it: *List models* and *Test* there, *Translate* and *Highlights* in the player. Chaya sends the service you chose what that needs (for translation and highlights, the video's
   subtitles and its title) with your key, to that service only: OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter,

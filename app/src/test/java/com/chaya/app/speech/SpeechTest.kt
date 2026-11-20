@@ -338,7 +338,7 @@ class SpeechTest {
             },
             keep = { id, language, lines -> kept += Triple(id, language, lines); true },
         )
-        jobs.start(12, SpeechModel.TINY, 600_000)
+        jobs.start(12, Engine.OnPhone(SpeechModel.TINY), 600_000)
         withTimeout(10_000) { jobs.states.first { it[12] == Making.Idle && kept.isNotEmpty() } }
         val (id, language, lines) = kept.single()
         assertEquals(12L to "en", id to language)

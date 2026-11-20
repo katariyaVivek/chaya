@@ -606,7 +606,9 @@ fun PlayerScreen(
                         MakeSubtitlesCard(
                             state = making,
                             fetched = app.speechModels::isFetched,
-                            onMake = { model -> app.speech.start(taskId, model, lengthMs) },
+                            onMake = { engine -> app.speech.start(taskId, engine, lengthMs) },
+                            // The services a key is saved for under AI model
+                            clouds = remember { com.chaya.app.speech.CloudSpeech.entries.filter { app.aiKeys.hasKey(it.service) } },
                             onStop = { app.speech.stop(taskId) },
                         )
                     }
