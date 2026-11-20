@@ -37,6 +37,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.ClosedCaptionDisabled
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -106,6 +107,8 @@ import com.chaya.app.subtitles.Retiming
 import com.chaya.app.subtitles.SavedSubtitles
 import com.chaya.app.subtitles.SubtitleEdits
 import com.chaya.app.subtitles.SubtitleFixes
+import com.chaya.app.subtitles.Finding
+import com.chaya.app.subtitles.FoundHighlights
 import com.chaya.app.subtitles.Translating
 import com.chaya.app.subtitles.VideoTranslations
 import com.chaya.app.ui.theme.NightContainer
@@ -175,6 +178,14 @@ fun PlayerScreen(
         translations = withContext(Dispatchers.IO) { app.translationStore.load(taskId) }
     }
     var showTranslate by rememberSaveable { mutableStateOf(false) }
+    // The moments worth watching, found by the person's model, read again when a search ends
+    val findingAll by app.highlights.states.collectAsState()
+    val finding = findingAll[taskId] ?: Finding.Idle
+    var found by remember { mutableStateOf<FoundHighlights?>(null) }
+    LaunchedEffect(taskId, finding) {
+        found = withContext(Dispatchers.IO) { app.highlightStore.load(taskId) }
+    }
+    var showHighlights by rememberSaveable { mutableStateOf(false) }
     // The line being put right, by its index; where a line was last said to be "now" (for a stretch); and what the last
     // change did
     var fixing by remember { mutableStateOf<Int?>(null) }
@@ -354,6 +365,7 @@ fun PlayerScreen(
     // The chapter the seek bar is at, while it is dragged too, so the person sees where they will land
     val currentChapter = Chapters.at(chapters, shownAt)
     val marks = chapterMarks(chapters, lengthMs)
+    val spans = highlightSpans(found?.items.orEmpty(), lengthMs)
 
     @Composable
     fun Picture(modifier: Modifier, subtitlesLift: androidx.compose.ui.unit.Dp) {
@@ -443,6 +455,7 @@ fun PlayerScreen(
                         atMs = shownAt,
                         lengthMs = lengthMs,
                         marks = marks,
+                        spans = spans,
                         playing = playing,
                         subtitles = if (subtitles == null) null else showSubtitles,
                         actions = controls,
@@ -467,6 +480,9 @@ fun PlayerScreen(
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         if (subtitles != null) {
+                            RoundButton(onClick = { showHighlights = true }, label = "Highlights") {
+                                Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = NightInk, modifier = Modifier.size(20.dp))
+                            }
                             RoundButton(onClick = { showTranslate = true }, label = "Translate") {
                                 Icon(Icons.Default.Translate, contentDescription = null, tint = NightInk, modifier = Modifier.size(20.dp))
                             }
@@ -544,6 +560,7 @@ fun PlayerScreen(
                     atMs = shownAt,
                     lengthMs = lengthMs,
                     marks = marks,
+                    spans = spans,
                     playing = playing,
                     actions = controls,
                 )
@@ -605,6 +622,25 @@ fun PlayerScreen(
         )
     }
 
+    if (showHighlights && subtitles != null) {
+        HighlightsSheet(
+            found = found,
+            state = finding,
+            onPlay = { highlight ->
+                showHighlights = false
+                player.seekTo(highlight.start)
+                player.play()
+            },
+            onFind = { count -> app.highlights.start(taskId, displayTitle(task), count) },
+            onStop = { app.highlights.stop(taskId) },
+            onSetUp = {
+                showHighlights = false
+                onOpenAiModel()
+            },
+            onDismiss = { showHighlights = false },
+        )
+    }
+
     if (showChapters && chapters.isNotEmpty()) {
         ChapterSheet(
             chapters = chapters,
@@ -639,10 +675,29 @@ private class ControlActions(
     val onTurn: () -> Unit,
 )
 
-/** The seek bar; a video with chapters has its track in pieces, one a chapter ([marks], from 0 to 1). */
+/**
+ * The seek bar; a video with chapters has its track in pieces, one a chapter ([marks], from 0 to 1), and its highlights
+ * ([spans]) are amber under it.
+ */
+@Composable
+private fun SeekBar(
+    atMs: Long,
+    lengthMs: Long,
+    marks: List<Float>,
+    actions: ControlActions,
+    modifier: Modifier = Modifier,
+    spans: List<ClosedFloatingPointRange<Float>> = emptyList(),
+) {
+    // The highlights, as amber strokes just under the track
+    Box(modifier = modifier) {
+        SeekSlider(atMs, lengthMs, marks, actions, Modifier.fillMaxWidth())
+        HighlightMarks(spans, Modifier.align(Alignment.BottomCenter).padding(bottom = 2.dp))
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SeekBar(atMs: Long, lengthMs: Long, marks: List<Float>, actions: ControlActions, modifier: Modifier = Modifier) {
+private fun SeekSlider(atMs: Long, lengthMs: Long, marks: List<Float>, actions: ControlActions, modifier: Modifier = Modifier) {
     val value = if (lengthMs > 0) (atMs.toFloat() / lengthMs).coerceIn(0f, 1f) else 0f
     val enabled = lengthMs > 0
     val colors = SliderDefaults.colors(
@@ -703,6 +758,7 @@ private fun Controls(
     atMs: Long,
     lengthMs: Long,
     marks: List<Float>,
+    spans: List<ClosedFloatingPointRange<Float>>,
     playing: Boolean,
     actions: ControlActions,
     modifier: Modifier = Modifier,
@@ -715,7 +771,7 @@ private fun Controls(
         modifier = modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
         Column(modifier = Modifier.padding(start = 14.dp, end = 14.dp, top = 4.dp, bottom = 8.dp)) {
-            SeekBar(atMs, lengthMs, marks, actions, Modifier.fillMaxWidth())
+            SeekBar(atMs, lengthMs, marks, actions, Modifier.fillMaxWidth(), spans)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -751,6 +807,7 @@ private fun SlimControls(
     atMs: Long,
     lengthMs: Long,
     marks: List<Float>,
+    spans: List<ClosedFloatingPointRange<Float>>,
     playing: Boolean,
     /** Whether subtitles show; null when the video has none. */
     subtitles: Boolean?,
@@ -770,7 +827,7 @@ private fun SlimControls(
         SkipButton("−10", "Back 10 seconds", actions.onBack)
         SkipButton("+10", "Forward 10 seconds", actions.onForward)
         Text(clockOf(atMs), color = NightInk, style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold))
-        SeekBar(atMs, lengthMs, marks, actions, Modifier.weight(1f).padding(horizontal = 8.dp))
+        SeekBar(atMs, lengthMs, marks, actions, Modifier.weight(1f).padding(horizontal = 8.dp), spans)
         Text(if (lengthMs > 0) clockOf(lengthMs) else "", color = NightMuted, style = TextStyle(fontSize = 13.sp))
         SubtitlesButton(subtitles = subtitles, onClick = actions.onSubtitles)
         RoundButton(onClick = actions.onTurn, label = "Exit full screen") {
