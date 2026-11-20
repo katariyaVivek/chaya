@@ -932,6 +932,14 @@ fun BrowserScreen(
                             horizontalArrangement = Arrangement.SpaceEvenly,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            // Home first, on the left, as Home and the Library have it on their places bar
+                            NavAction(
+                                icon = Icons.Default.Home,
+                                label = "Home",
+                                enabled = true,
+                                onClick = onNavigateHome,
+                            )
+
                             NavAction(
                                 icon = Icons.AutoMirrored.Filled.ArrowBack,
                                 label = "Back",
@@ -952,13 +960,6 @@ fun BrowserScreen(
 
                             // Chaya's Home and Library, as the places bar on either goes to them, so the browser is
                             // never a place with no way out but Back. It stays as it is, its tabs kept, for Browse.
-                            NavAction(
-                                icon = Icons.Default.Home,
-                                label = "Home",
-                                enabled = true,
-                                onClick = onNavigateHome,
-                            )
-
                             NavAction(
                                 icon = Icons.Default.Tab,
                                 label = "Tabs (${tabs.size})",

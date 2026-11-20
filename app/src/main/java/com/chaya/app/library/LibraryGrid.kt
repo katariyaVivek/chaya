@@ -290,12 +290,12 @@ internal fun tintFor(kind: FileKind?): Color =
  * Worked out off the main thread.
  */
 @Composable
-internal fun rememberCover(task: DownloadTask, files: LibraryFiles?): Any? {
-    val cover by produceState<Any?>(initialValue = null, task.id, task.filePath, task.thumbnailUrl) {
+internal fun rememberCover(task: DownloadTask, files: LibraryFiles?, large: Boolean = false): Any? {
+    val cover by produceState<Any?>(initialValue = null, task.id, task.filePath, task.thumbnailUrl, large) {
         value = when (kindOf(task)) {
             FileKind.PICTURE -> withContext(Dispatchers.IO) { task.filePath?.let(::File)?.takeIf { it.isFile } }
                 ?: task.thumbnailUrl
-            FileKind.VIDEO -> files?.frameFor(task) ?: task.thumbnailUrl
+            FileKind.VIDEO -> (if (large) files?.largeFrameFor(task) else files?.frameFor(task)) ?: task.thumbnailUrl
             else -> null
         }
     }

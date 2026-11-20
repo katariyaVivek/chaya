@@ -166,3 +166,38 @@ fun MakeSubtitlesCard(
         }
     }
 }
+
+/**
+ * Library › ⋮ › *Speech models*: the models fetched for *Make subtitles*, each with the room it takes and *Delete*, to
+ * free it (it is fetched again the next time it is chosen). Subtitles made with one stay.
+ */
+@Composable
+fun SpeechModelsDialog(fetched: List<SpeechModel>, onDelete: (SpeechModel) -> Unit, onDismiss: () -> Unit) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Speech models") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (fetched.isEmpty()) {
+                    Text("No speech model is on this phone. One is fetched the first time you make subtitles with it.")
+                } else {
+                    Text("Fetched for Make subtitles. Deleting one frees its room; subtitles made with it stay.")
+                    fetched.forEach { model ->
+                        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(model.label, style = androidx.compose.material3.MaterialTheme.typography.bodyLarge)
+                                Text(
+                                    "${model.note} · ${model.megabytes}",
+                                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            TextButton(onClick = { onDelete(model) }) { Text("Delete") }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
+    )
+}

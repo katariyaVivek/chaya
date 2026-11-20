@@ -92,6 +92,7 @@ import androidx.compose.ui.text.font.FontWeight
 import com.chaya.app.home.goTyped
 import com.chaya.app.home.TypeSheet
 import com.chaya.app.home.PlacesBar
+import com.chaya.app.home.PlacesBarClearance
 import com.chaya.app.home.Place
 import com.chaya.app.ui.theme.ChayaMotion
 import com.chaya.app.ui.theme.LocalChayaColors
@@ -101,6 +102,9 @@ import com.chaya.app.ui.theme.ThemeMode
 import com.chaya.app.ui.theme.pressScale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -150,6 +154,7 @@ fun DownloadsScreen(
     val hidden by viewModel.pendingDeletes.collectAsState()
     val grid by viewModel.grid.collectAsState()
     var appearanceOpen by remember { mutableStateOf(false) }
+    var speechModelsOpen by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
@@ -179,6 +184,22 @@ fun DownloadsScreen(
     // The phone's picker, for a video or sound of the person's own; Chaya keeps the right to read what is picked
     val pickVideo = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) viewModel.addOwnVideo(uri, ::message)
+    }
+
+    if (speechModelsOpen) {
+        val app = LocalContext.current.applicationContext as com.chaya.app.ChayaApplication
+        var fetched by remember { mutableStateOf(com.chaya.app.speech.SpeechModel.entries.filter(app.speechModels::isFetched)) }
+        com.chaya.app.ui.player.SpeechModelsDialog(
+            fetched = fetched,
+            onDelete = { model ->
+                scope.launch {
+                    withContext(Dispatchers.IO) { app.speechModels.delete(model) }
+                    fetched = fetched - model
+                    message("Deleted the ${model.label} model (${model.megabytes})")
+                }
+            },
+            onDismiss = { speechModelsOpen = false },
+        )
     }
 
     if (appearanceOpen) {
@@ -218,6 +239,7 @@ fun DownloadsScreen(
             onHistory = onNavigateToHistory,
             onAppearance = { appearanceOpen = true },
             onAiModel = onNavigateToAiModel,
+            onSpeechModels = { speechModelsOpen = true },
             onDiagnostics = onNavigateToDiagnostics,
         ),
     )
@@ -257,6 +279,8 @@ internal class DownloadsMenu(
     val onAppearance: () -> Unit = {},
     /** Settings › AI model: the person's own model, for translation and highlights. */
     val onAiModel: () -> Unit = {},
+    /** The speech models fetched for Make subtitles, to delete one and free its room. */
+    val onSpeechModels: () -> Unit = {},
     val onDiagnostics: () -> Unit = {},
 )
 
@@ -429,6 +453,7 @@ internal fun DownloadsContent(
                                         "History" to menu.onHistory,
                                         "Appearance" to menu.onAppearance,
                                         "AI model" to menu.onAiModel,
+                                        "Speech models" to menu.onSpeechModels,
                                         "Diagnostics" to menu.onDiagnostics,
                                     ).forEach { (label, action) ->
                                         DropdownMenuItem(
@@ -446,7 +471,13 @@ internal fun DownloadsContent(
                     )
                 }
             },
-            snackbarHost = { SnackbarHost(snackbarHostState) },
+            // Above the places bar floating at the foot, which would cover it ("Deleted …" could not be read)
+            snackbarHost = {
+                SnackbarHost(
+                    snackbarHostState,
+                    modifier = if (onPlace != null && !choosing) Modifier.padding(bottom = PlacesBarClearance) else Modifier,
+                )
+            },
             containerColor = MaterialTheme.colorScheme.background
         ) { padding ->
             Column(

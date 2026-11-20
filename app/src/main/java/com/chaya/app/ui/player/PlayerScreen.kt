@@ -183,6 +183,8 @@ fun PlayerScreen(
         translations = withContext(Dispatchers.IO) { app.translationStore.load(taskId) }
     }
     var showTranslate by rememberSaveable { mutableStateOf(false) }
+    // Deleting the subtitles is asked first: their translations and highlights go with them
+    var askDeleteSubtitles by remember { mutableStateOf(false) }
     // The moments worth watching, found by the person's model, read again when a search ends
     val findingAll by app.highlights.states.collectAsState()
     val finding = findingAll[taskId] ?: Finding.Idle
@@ -585,6 +587,7 @@ fun PlayerScreen(
                         lines = said.lines,
                         language = said.language,
                         translated = translated,
+                        onDelete = { askDeleteSubtitles = true },
                         chosen = chosen,
                         onChoose = { index ->
                             if (choosingFrom == null) choosingFrom = index
@@ -704,11 +707,44 @@ fun PlayerScreen(
             onShow = { index ->
                 scope.launch { translations = withContext(Dispatchers.IO) { app.translationStore.show(taskId, index) } }
             },
+            onDelete = { index ->
+                scope.launch { translations = withContext(Dispatchers.IO) { app.translationStore.remove(taskId, index) } }
+            },
             onSetUp = {
                 showTranslate = false
                 onOpenAiModel()
             },
             onDismiss = { showTranslate = false },
+        )
+    }
+
+    if (askDeleteSubtitles) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { askDeleteSubtitles = false },
+            title = { Text("Delete these subtitles?") },
+            text = {
+                Text(
+                    "Their translations and highlights go with them. Clips and chapters stay. You can make new subtitles " +
+                        "straight away, on the phone or with a service.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    askDeleteSubtitles = false
+                    app.translations.stop(taskId)
+                    app.highlights.stop(taskId)
+                    scope.launch {
+                        withContext(Dispatchers.IO) { app.subtitles.forgetSubtitles(taskId) }
+                        app.subtitleEdits.forget(taskId)
+                        subtitles = null
+                        translations = VideoTranslations()
+                        found = null
+                        choosingFrom = null
+                        Toast.makeText(context, "Subtitles deleted", Toast.LENGTH_SHORT).show()
+                    }
+                }) { Text("Delete") }
+            },
+            dismissButton = { TextButton(onClick = { askDeleteSubtitles = false }) { Text("Keep") } },
         )
     }
 
