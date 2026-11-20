@@ -123,7 +123,8 @@ class ParakeetTest {
         assertTrue(models.isFetched(SpeechModel.PARAKEET))
         val folders = mutableListOf<File>()
         val kept = mutableListOf<Pair<String, List<SubtitleLine>>>()
-        var released = 0
+        // The model is let go after the job says it is done, so the test waits for that rather than looking at once
+        val released = kotlinx.coroutines.CompletableDeferred<Unit>()
         val jobs = SpeechJobs(
             scope = CoroutineScope(Dispatchers.IO),
             models = models,
@@ -136,14 +137,14 @@ class ParakeetTest {
                 Transcript(LanguageGuess.of(words.joinToString(" ") { it.text }), listOf(Segment(0, 2_200, "Я не знаю, что это было.", words)))
             },
             keep = { _, language, lines -> kept += language to lines; true },
-            done = { released++ },
+            done = { released.complete(Unit) },
         )
         jobs.start(3, Engine.OnPhone(SpeechModel.PARAKEET), 60_000)
         withTimeout(10_000) { jobs.states.first { it[3] == Making.Idle && kept.isNotEmpty() } }
         assertEquals(listOf(File(dir, "parakeet-tdt-0.6b-v3")), folders)
         assertEquals("ru", kept.single().first)
         assertEquals("Я не знаю, что это было.", kept.single().second.single().text)
-        assertEquals("the model lets its memory go when done", 1, released)
+        withTimeout(10_000) { released.await() }
     }
 
     @Test
