@@ -59,6 +59,11 @@ class ChayaApplication : Application() {
     /** The open tabs on disk, so they come back after Android closes the app. */
     val tabStore: com.chaya.app.browser.TabStore by lazy { com.chaya.app.browser.TabStore(File(filesDir, "tabs")) }
 
+    /** Settings › AI model: the service chosen and its keys, sealed with a key in the Android Keystore. */
+    val aiKeys: com.chaya.app.ai.AiKeys by lazy { com.chaya.app.ai.AiKeys.from(this) }
+    /** Asks the person's AI model, only when they ask for something that needs it. */
+    val aiClient: com.chaya.app.ai.AiClient by lazy { com.chaya.app.ai.AiClient() }
+
     /** Light, dark, or the same as the phone. */
     val themeSettings: ThemeSettings by lazy { ThemeSettings.from(this) }
 

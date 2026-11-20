@@ -139,6 +139,7 @@ fun DownloadsScreen(
     onNavigateToDiagnostics: () -> Unit = {},
     onNavigateToHistory: () -> Unit = {},
     onNavigateToBookmarks: () -> Unit = {},
+    onNavigateToAiModel: () -> Unit = {},
     themeMode: ThemeMode = ThemeMode.SYSTEM,
     onThemeModeChange: (ThemeMode) -> Unit = {},
     /** Chaya's places, at the Library's foot (Stage); none where the Library is shown on its own (tests). */
@@ -216,6 +217,7 @@ fun DownloadsScreen(
             onBookmarks = onNavigateToBookmarks,
             onHistory = onNavigateToHistory,
             onAppearance = { appearanceOpen = true },
+            onAiModel = onNavigateToAiModel,
             onDiagnostics = onNavigateToDiagnostics,
         ),
     )
@@ -253,6 +255,8 @@ internal class DownloadsMenu(
     val onBookmarks: () -> Unit = {},
     val onHistory: () -> Unit = {},
     val onAppearance: () -> Unit = {},
+    /** Settings › AI model: the person's own model, for translation and highlights. */
+    val onAiModel: () -> Unit = {},
     val onDiagnostics: () -> Unit = {},
 )
 
@@ -424,6 +428,7 @@ internal fun DownloadsContent(
                                         "Bookmarks" to menu.onBookmarks,
                                         "History" to menu.onHistory,
                                         "Appearance" to menu.onAppearance,
+                                        "AI model" to menu.onAiModel,
                                         "Diagnostics" to menu.onDiagnostics,
                                     ).forEach { (label, action) ->
                                         DropdownMenuItem(

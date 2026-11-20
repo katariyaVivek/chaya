@@ -107,6 +107,7 @@ fun ChayaNavHost(navController: NavHostController) {
                 },
                 onNavigateToHistory = { navController.navigate(Screen.History.route) },
                 onNavigateToBookmarks = { navController.navigate(Screen.Bookmarks.route) },
+                onNavigateToAiModel = { navController.navigate(Screen.AiModel.route) },
                 themeMode = themeMode,
                 onThemeModeChange = themeSettings::set,
                 onPlace = ::go,
@@ -131,6 +132,9 @@ fun ChayaNavHost(navController: NavHostController) {
         }
         composable(Screen.History.route) {
             HistoryScreen(onNavigateBack = { navController.popBackStack() }, onOpen = PagesToOpen::open)
+        }
+        composable(Screen.AiModel.route) {
+            com.chaya.app.ai.AiModelScreen(onNavigateBack = { navController.popBackStack() })
         }
         composable(Screen.Bookmarks.route) {
             BookmarksScreen(onNavigateBack = { navController.popBackStack() }, onOpen = PagesToOpen::open)

@@ -239,6 +239,18 @@ faster than APKs ship, so the app fetches newer releases itself.
   writes the SRT through `SubtitleStore.write` and keeps each file as it was for Undo (the last 20 per video, in memory).
   The player opens `FixSheet` from the transcript (a long press, or its pencil) and shows `FixedBar` with Undo.
 
+## The person's own AI model (`ai/`)
+
+A port of `chaya-core`'s `ai`, for translation and highlights. `AiModel.kt` lists the services (`AiService.ALL`), what
+the person chose (`AiSettings`), why a request failed (`AiError`, one sealed type, each with a sentence) and where a
+service is reached (`Endpoint.of`: plain `http://` only on the home network, so a key never crosses the internet
+unencrypted). `AiClient` speaks the two protocols over OkHttp (OpenAI's chat completions, Anthropic's Messages), lists
+models and runs *Test*; it is tested against MockWebServer. `AiKeys` keeps the choice and each service's key in the
+`chaya_ai` preferences, the key sealed with AES-GCM by a key made in the Android Keystore (`KeystoreLock`, checked on a
+device by `KeystoreLockTest`); `backup_rules.xml` and `data_extraction_rules.xml` leave that file out of backups and
+transfers. On the phone a model on a PC (Ollama, LM Studio) has no address of its own: the person gives the PC's.
+Settings › AI model is `AiModelScreen`, from the Library's ⋮.
+
 ## Storage (`database/`)
 
 Room, currently schema version 7. Every version change has an explicit migration; destructive
@@ -327,6 +339,7 @@ not another flag beside it.
 | A stream's qualities | `Loading`, `Ready`, `Error` | `ui/components/QualityPickerState`, inside `BrowserSheet.Quality` | Sealed type; an answer fills only the picker still waiting for it |
 | A tab | shown, live in the background, discarded; renderer lost | `BrowserTab`: `saved == null` is shown, `webView == null` is discarded; `RendererLoss` | Nullable fields, used from the main thread only |
 | An engine set | `NEW → TRUSTED \| BAD`, `checking` while its first start runs | `platform/EngineSets` (`state.json`) | Enum, stored; a check the app died during counts as failed |
+| *Test* or the model list in Settings › AI model | `Idle`, `Asking`, `Said` (its words, worked or not) | `ai/AiModelScreen.kt` (`Checking`) | Sealed type |
 | An engine update check | `NOT_DUE`, `UP_TO_DATE`, `DOWNLOADED`, `REFUSED`, `FAILED` | `EngineUpdater.Outcome` | Enum |
 | Windows: a download | `Queued → Downloading ⇄ Paused → Completed \| Failed`, steps `Picture`, `Sound`, `Joining`, `Saving` | `desktop/core/src/download/manager.rs` | Rust enums, stored |
 | Windows: the panel open | none, Settings, the ad blocker's shield, what the page holds | `desktop/app/ui/panels.js` (`onePanel`), used by `main.js` | One value: opening a panel closes the one open; Escape closes it |

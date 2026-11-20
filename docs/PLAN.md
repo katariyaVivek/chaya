@@ -81,13 +81,15 @@ changed, with *Undo*.
   byte, for *Undo*: the last 20 changes of each video, in memory while the app runs, as on Windows. The phone keeps one
   language per video, so Windows' "every language" choice is not needed yet.
 
-### 5. Your own AI model ☐
+### 5. Your own AI model ☑
 
-**The person gets:** Settings › AI model: a service from a list (OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter,
-Mistral, Groq, xAI, any OpenAI-compatible address) or a model on a PC in the home, with its key, and *Test*.
+**The person gets:** Library › ⋮ › *AI model*: a service from a list (OpenAI, Anthropic, Gemini, DeepSeek,
+OpenRouter, Mistral, Groq, xAI, any OpenAI-compatible address) or Ollama or LM Studio on a PC in the home (at the PC's
+address), with its key, *List models* and *Test* ("llama-3.3-70b answered in 0.8 s").
 
-- Port `core::ai`: the two protocols, against MockWebServer. The key through the Android Keystore; the setting left
-  out of backups. `PRIVACY_POLICY.md` says what is sent, only when the person asks.
+- `ai/AiModel.kt` and `AiClient` are `core::ai`, ported with its tests against MockWebServer. `AiKeys` seals each
+  service's key with AES-GCM under a key in the Android Keystore (`KeystoreLockTest` on a device); the `chaya_ai`
+  preferences are left out of backups and device transfers. `PRIVACY_POLICY.md` says what is sent, only when asked.
 
 ### 6. Translation ☐
 
