@@ -111,12 +111,17 @@ internal val DarkColorScheme = darkColorScheme(
     scrim = NightScrim
 )
 
-/** Brand shape vocabulary: generous but disciplined rounding. */
+/**
+ * Brand shape vocabulary, the radius scale in DESIGN.md (Shape): 28 sheets and floating bars, 24 search fields and tab
+ * cards, 18 pictures inside a card, 16 cards and chips, 14 cards and fields in the player, 12 small chips, 10 badges,
+ * 6 the tab count square, and a pill (CircleShape) for every button and anything rounded to half its height.
+ * `ShapeScaleTest` holds the sources to it.
+ */
 private val ChayaShapes = Shapes(
-    extraSmall = RoundedCornerShape(8.dp),
+    extraSmall = RoundedCornerShape(10.dp),
     small = RoundedCornerShape(12.dp),
     medium = RoundedCornerShape(16.dp),
-    large = RoundedCornerShape(20.dp),
+    large = RoundedCornerShape(24.dp),
     extraLarge = RoundedCornerShape(28.dp)
 )
 

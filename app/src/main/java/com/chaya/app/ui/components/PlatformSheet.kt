@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ErrorOutline
@@ -142,7 +143,7 @@ private fun Found(state: LinkState.Found, onChoose: (PlatformChoice) -> Unit) {
         Qualities(choices, picked, onPick = { picked = it })
         Button(
             onClick = { onChoose(choice) },
-            shape = RoundedCornerShape(27.dp),
+            shape = CircleShape,
             colors = ButtonDefaults.buttonColors(
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
@@ -294,7 +295,7 @@ private fun Post(state: LinkState.FoundPost, onSave: (List<Int>) -> Unit) {
                 Spacer(Modifier.height(16.dp))
                 Button(
                     onClick = { onSave(postItems.indices.toList()) },
-                    shape = RoundedCornerShape(14.dp),
+                    shape = CircleShape,
                     modifier = Modifier.fillMaxWidth().height(48.dp).pressScale(0.98f),
                 ) {
                     Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(20.dp))
@@ -412,7 +413,7 @@ private fun Failed(state: LinkState.Failed, onRetry: () -> Unit, onRetryWithSign
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = state.problem.message ?: "Something went wrong.",
+                    text = state.problem.message ?: "The site didn't say why. The video may be private, removed or not shown where you are.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -422,7 +423,7 @@ private fun Failed(state: LinkState.Failed, onRetry: () -> Unit, onRetryWithSign
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(
                 onClick = onRetry,
-                shape = RoundedCornerShape(14.dp),
+                shape = CircleShape,
                 modifier = Modifier.height(48.dp).pressScale(0.98f),
             ) {
                 Text("Try again", style = MaterialTheme.typography.labelLarge)
@@ -430,7 +431,7 @@ private fun Failed(state: LinkState.Failed, onRetry: () -> Unit, onRetryWithSign
             if (state.signInMayHelp) {
                 FilledTonalButton(
                     onClick = onRetryWithSignIn,
-                    shape = RoundedCornerShape(14.dp),
+                    shape = CircleShape,
                     modifier = Modifier.height(48.dp).pressScale(0.98f),
                 ) {
                     Text("Use my sign-in", style = MaterialTheme.typography.labelLarge)

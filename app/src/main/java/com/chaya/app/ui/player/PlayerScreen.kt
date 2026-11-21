@@ -1029,10 +1029,10 @@ private fun Controls(
     modifier: Modifier = Modifier,
 ) {
     Surface(
-        shape = RoundedCornerShape(26.dp),
+        shape = RoundedCornerShape(28.dp),
         color = NightContainer,
         border = androidx.compose.foundation.BorderStroke(1.dp, NightOutlineVariant),
-        shadowElevation = 12.dp,
+        shadowElevation = 2.dp,
         modifier = modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
         Column(modifier = Modifier.padding(start = 14.dp, end = 14.dp, top = 4.dp, bottom = 8.dp)) {

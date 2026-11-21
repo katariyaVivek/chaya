@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Surface
@@ -80,7 +81,7 @@ fun ExportPanel(
             else -> {
                 if (state is Exporting.Failed) Text(state.message, color = NightInk, style = TextStyle(fontSize = 14.sp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Surface(onClick = { onExport(kind, size.takeIf { kind != ExportKind.SRT }) }, shape = RoundedCornerShape(14.dp), color = NightInk) {
+                    Surface(onClick = { onExport(kind, size.takeIf { kind != ExportKind.SRT }) }, shape = CircleShape, color = NightInk) {
                         Text("Save clip", color = NightGround, style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold), modifier = Modifier.padding(horizontal = 18.dp, vertical = 11.dp))
                     }
                     if (state is Exporting.Done) {

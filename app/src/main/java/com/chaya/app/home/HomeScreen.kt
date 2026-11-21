@@ -244,7 +244,7 @@ private fun Hero(
                 Button(
                     onClick = onPlay,
                     modifier = Modifier.weight(1f).height(50.dp),
-                    shape = RoundedCornerShape(25.dp),
+                    shape = CircleShape,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary,
                         contentColor = MaterialTheme.colorScheme.onPrimary,
@@ -315,7 +315,7 @@ private fun TopRow(progress: HomeShelf.Progress?, onProgress: () -> Unit) {
             val words = if (fraction != null) "${(fraction * 100).roundToInt()}%" else "${progress.running} saving"
             Surface(
                 onClick = onProgress,
-                shape = RoundedCornerShape(22.dp),
+                shape = CircleShape,
                 color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.8f),
                 border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 modifier = Modifier.height(44.dp).semantics {
@@ -394,7 +394,7 @@ private fun RecentCard(item: LibraryItem, files: LibraryFiles, onClick: () -> Un
             modifier = Modifier
                 .fillMaxWidth()
                 .height(104.dp)
-                .shadow(10.dp, RoundedCornerShape(14.dp))
+                .shadow(2.dp, RoundedCornerShape(14.dp))
                 .clip(RoundedCornerShape(14.dp))
                 .background(MaterialTheme.colorScheme.surfaceContainerHigh),
         ) {
@@ -448,10 +448,10 @@ fun PlacesBar(current: Place, onPlace: (Place) -> Unit, onType: () -> Unit, modi
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Surface(
-            shape = RoundedCornerShape(31.dp),
+            shape = CircleShape,
             color = MaterialTheme.colorScheme.surfaceContainer,
             border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-            shadowElevation = 12.dp,
+            shadowElevation = 2.dp,
             modifier = Modifier.weight(1f).height(62.dp),
         ) {
             Row(modifier = Modifier.padding(5.dp)) {
@@ -461,7 +461,7 @@ fun PlacesBar(current: Place, onPlace: (Place) -> Unit, onType: () -> Unit, modi
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
-                            .clip(RoundedCornerShape(26.dp))
+                            .clip(CircleShape)
                             .background(if (on) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer)
                             .clickable { if (!on) onPlace(place) }
                             .semantics { selected = on },
@@ -481,7 +481,7 @@ fun PlacesBar(current: Place, onPlace: (Place) -> Unit, onType: () -> Unit, modi
             shape = CircleShape,
             color = MaterialTheme.colorScheme.primary,
             contentColor = MaterialTheme.colorScheme.onPrimary,
-            shadowElevation = 12.dp,
+            shadowElevation = 2.dp,
             modifier = Modifier.size(62.dp).semantics { contentDescription = "Paste a link or search" },
         ) {
             Box(contentAlignment = Alignment.Center) {
@@ -545,7 +545,7 @@ internal fun TypeSheet(onDismiss: () -> Unit, onGo: (Typed) -> Unit) {
                 onClick = { Typed.of(input)?.let(onGo) },
                 enabled = input.isNotBlank(),
                 modifier = Modifier.fillMaxWidth().height(50.dp),
-                shape = RoundedCornerShape(25.dp),
+                shape = CircleShape,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary,

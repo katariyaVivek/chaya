@@ -84,7 +84,7 @@ class DownloadErrorTest {
         val error = DownloadError.from(RuntimeException("weird"))
 
         assertTrue(error is DownloadError.Unknown)
-        assertEquals("Something went wrong", error.userMessage)
+        assertEquals("Couldn't finish the download — try again", error.userMessage)
         assertTrue(error.retryable)
     }
 

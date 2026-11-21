@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -153,7 +154,7 @@ fun HighlightsSheet(
                         }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Surface(onClick = { onFind(count) }, shape = RoundedCornerShape(14.dp), color = NightInk) {
+                        Surface(onClick = { onFind(count) }, shape = CircleShape, color = NightInk) {
                             Text(
                                 if (found == null) "Find highlights" else "Find again",
                                 color = NightGround,

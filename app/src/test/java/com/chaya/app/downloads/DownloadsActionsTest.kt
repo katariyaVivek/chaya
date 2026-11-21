@@ -94,15 +94,15 @@ class DownloadsActionsTest {
     @Test
     fun `retryable failure shows retry`() {
         val retryable = render(DownloadState.FAILED, DownloadError.HttpStatus(503))
-        composeRule.onNodeWithContentDescription("Retry").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("Retry").performClick()
+        composeRule.onNodeWithContentDescription("Try again").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Try again").performClick()
         assertEquals(listOf("resume"), retryable)
     }
 
     @Test
     fun `fatal failure hides retry but keeps delete in the menu`() {
         val fired = render(DownloadState.FAILED, DownloadError.HttpStatus(404))
-        assertEquals(0, composeRule.onAllNodesWithContentDescription("Retry").fetchSemanticsNodes().size)
+        assertEquals(0, composeRule.onAllNodesWithContentDescription("Try again").fetchSemanticsNodes().size)
 
         composeRule.onNodeWithContentDescription("More actions").performClick()
         composeRule.onNodeWithText("Delete").performClick()
