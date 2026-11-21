@@ -74,7 +74,7 @@ internal fun PullIndicator(pulled: Float, modifier: Modifier = Modifier) {
         Surface(
             shape = CircleShape,
             color = if (ready) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh,
-            shadowElevation = 3.dp,
+            shadowElevation = 2.dp,
             modifier = Modifier.size(40.dp),
         ) {
             Box(contentAlignment = Alignment.Center) {

@@ -928,7 +928,7 @@ private fun ProgressBlock(task: DownloadTask) {
     val barModifier = Modifier
         .fillMaxWidth()
         .height(5.dp)
-        .clip(RoundedCornerShape(3.dp))
+        .clip(CircleShape)
 
     Column {
         // Streams never report a total size, so they get a moving bar instead of a stuck 0%.
@@ -1046,7 +1046,7 @@ internal fun ActionsRow(
                 // Retry only when the classified error says it could help
                 // (pointless for 404s, denied links, full disks).
                 if (task.error?.retryable != false) {
-                    PrimaryAction(Icons.Default.Refresh, "Retry", onResume, highlighted = true)
+                    PrimaryAction(Icons.Default.Refresh, "Try again", onResume, highlighted = true)
                 }
             }
             DownloadState.COMPLETED -> {

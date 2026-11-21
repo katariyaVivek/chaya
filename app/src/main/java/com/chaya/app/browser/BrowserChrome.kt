@@ -255,7 +255,7 @@ private fun PasteChip(onClick: () -> Unit) {
         color = MaterialTheme.colorScheme.onSurface,
         modifier = Modifier
             .padding(end = 8.dp)
-            .clip(RoundedCornerShape(17.dp))
+            .clip(CircleShape)
             .background(MaterialTheme.colorScheme.surface)
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 8.dp)
@@ -426,7 +426,7 @@ internal fun MediaPill(
 
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(28.dp),
+        shape = CircleShape,
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
         shadowElevation = 2.dp,
@@ -539,7 +539,7 @@ internal fun PlatformPill(
 
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(28.dp),
+        shape = CircleShape,
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
         shadowElevation = 2.dp,
@@ -683,73 +683,67 @@ internal fun HomeContent(
             ) {
                 Spacer(Modifier.height(28.dp))
 
-                StaggeredAppear(index = 0) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        // Chaya's own mark, the two suns, as Home has it (res/drawable/chaya_mark.xml, written from the
-                        // mark's constants), not a stock icon
-                        Image(
-                            painter = painterResource(com.chaya.app.R.drawable.chaya_mark),
-                            contentDescription = null,
-                            modifier = Modifier.size(48.dp),
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Chaya's own mark, the two suns, as Home has it (res/drawable/chaya_mark.xml, written from the
+                    // mark's constants), not a stock icon
+                    Image(
+                        painter = painterResource(com.chaya.app.R.drawable.chaya_mark),
+                        contentDescription = null,
+                        modifier = Modifier.size(48.dp),
+                    )
+                    Spacer(Modifier.width(14.dp))
+                    Column {
+                        Text(
+                            text = "Chaya",
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = MaterialTheme.colorScheme.onBackground
                         )
-                        Spacer(Modifier.width(14.dp))
-                        Column {
-                            Text(
-                                text = "Chaya",
-                                style = MaterialTheme.typography.headlineMedium,
-                                color = MaterialTheme.colorScheme.onBackground
-                            )
-                            Text(
-                                text = "Find the video on any page.",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                        Text(
+                            text = "Find the video on any page.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
 
                 Spacer(Modifier.height(32.dp))
 
-                StaggeredAppear(index = 1) {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        SectionTitle("Quick sites")
-                        // Bookmarks first, then the sites Chaya knows; one row, scrolled sideways when long.
-                        // Just the four known sites spread across the width, as before any bookmark.
-                        val sites = (bookmarks + quickSites).distinctBy { it.url }
-                        val sideways = rememberScrollState()
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .then(if (bookmarks.isEmpty()) Modifier else Modifier.horizontalScroll(sideways)),
-                            horizontalArrangement = if (bookmarks.isEmpty()) Arrangement.SpaceBetween else Arrangement.spacedBy(8.dp)
-                        ) {
-                            sites.forEach { site -> SiteTile(site, onSelectUrl) }
-                        }
-                        Spacer(Modifier.height(12.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            HomeChip(Icons.Default.Star, "Bookmarks", onOpenBookmarks)
-                            HomeChip(Icons.Default.History, "History", onOpenHistory)
-                        }
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    SectionTitle("Quick sites")
+                    // Bookmarks first, then the sites Chaya knows; one row, scrolled sideways when long.
+                    // Just the four known sites spread across the width, as before any bookmark.
+                    val sites = (bookmarks + quickSites).distinctBy { it.url }
+                    val sideways = rememberScrollState()
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .then(if (bookmarks.isEmpty()) Modifier else Modifier.horizontalScroll(sideways)),
+                        horizontalArrangement = if (bookmarks.isEmpty()) Arrangement.SpaceBetween else Arrangement.spacedBy(8.dp)
+                    ) {
+                        sites.forEach { site -> SiteTile(site, onSelectUrl) }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        HomeChip(Icons.Default.Star, "Bookmarks", onOpenBookmarks)
+                        HomeChip(Icons.Default.History, "History", onOpenHistory)
                     }
                 }
 
                 Spacer(Modifier.height(32.dp))
 
-                StaggeredAppear(index = 2) {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        SectionTitle("Recent")
-                        if (recent.isEmpty()) {
-                            EmptyRecent()
-                        } else {
-                            recent.forEach { task -> RecentRow(task, onOpenDownloads) }
-                        }
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    SectionTitle("Recent")
+                    if (recent.isEmpty()) {
+                        EmptyRecent()
+                    } else {
+                        recent.forEach { task -> RecentRow(task, onOpenDownloads) }
                     }
                 }
 
                 // First-run hint: part of the start screen itself — no overlay, no carousel.
                 if (showOnboardingHint) {
                     Spacer(Modifier.height(24.dp))
-                    StaggeredAppear(index = 3) {
+                    StaggeredAppear(index = 0) {
                         OnboardingHint(onDismiss = onDismissOnboardingHint)
                     }
                 }
@@ -828,7 +822,6 @@ private fun RecentRow(task: DownloadTask, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .pressScale(0.99f)
             .clip(RoundedCornerShape(14.dp))
             .clickable(onClick = onClick)
             .padding(vertical = 6.dp),
@@ -918,7 +911,6 @@ private fun OnboardingHint(onDismiss: () -> Unit) {
         color = MaterialTheme.colorScheme.primaryContainer,
         modifier = Modifier
             .fillMaxWidth()
-            .pressScale(0.99f)
             .clickable { onDismiss() }
     ) {
         Row(
@@ -951,7 +943,7 @@ internal fun ProfilePill(
 ) {
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(28.dp),
+        shape = CircleShape,
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
         shadowElevation = 2.dp,

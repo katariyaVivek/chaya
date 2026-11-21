@@ -81,7 +81,7 @@ class SpeechViewsTest {
             )
         }
         composeRule.onNodeWithText("40% was heard with Groq before it stopped.").assertExists()
-        composeRule.onNodeWithText("Carry on · 40%").performClick()
+        composeRule.onNodeWithText("Resume · 40%").performClick()
         composeRule.onNodeWithText("Start over").performClick()
         assertEquals(listOf<Engine>(Engine.Cloud(CloudSpeech.GROQ)), made)
         assertEquals(1, startedOver)

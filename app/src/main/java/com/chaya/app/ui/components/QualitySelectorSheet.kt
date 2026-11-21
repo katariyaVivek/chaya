@@ -141,10 +141,10 @@ fun QualitySelectorSheet(
                         Spacer(Modifier.height(18.dp))
                         FilledTonalButton(
                             onClick = { onDownload(emptyList()) },
-                            shape = RoundedCornerShape(14.dp),
+                            shape = CircleShape,
                             modifier = Modifier.pressScale()
                         ) {
-                            Text("Download anyway")
+                            Text("Save anyway")
                         }
                     }
                 }
@@ -193,7 +193,7 @@ fun QualitySelectorSheet(
                             onDownload(state.tracks.filterIndexed { i, _ -> i == selectedVideo || i in selectedAudio })
                         },
                         enabled = chosenVideo != null || selectedAudio.isNotEmpty(),
-                        shape = RoundedCornerShape(14.dp),
+                        shape = CircleShape,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.primary
                         ),
@@ -205,8 +205,8 @@ fun QualitySelectorSheet(
                     ) {
                         Text(
                             text = when {
-                                chosenVideo != null -> "Download ${chosenVideo.label}"
-                                selectedAudio.isNotEmpty() -> "Download audio only"
+                                chosenVideo != null -> "Save ${chosenVideo.label}"
+                                selectedAudio.isNotEmpty() -> "Save audio"
                                 else -> "Choose a quality"
                             },
                             style = MaterialTheme.typography.labelLarge
@@ -276,7 +276,6 @@ private fun TrackRow(
                 .padding(horizontal = 16.dp, vertical = 2.dp)
                 .clip(RoundedCornerShape(12.dp))
                 .background(rowBg)
-                .pressScale(0.985f)
                 .clickable(onClick = onClick)
                 .padding(horizontal = 10.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically

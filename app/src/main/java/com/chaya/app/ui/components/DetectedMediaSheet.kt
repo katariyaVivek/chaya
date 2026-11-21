@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExpandMore
@@ -182,7 +183,7 @@ private fun PrimaryMediaCard(
     val showStage = item.thumbnailUrl != null && !thumbnailFailed
 
     Surface(
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surface,
         modifier = Modifier
             .padding(horizontal = 16.dp, vertical = 8.dp)
@@ -233,7 +234,7 @@ private fun PrimaryMediaCard(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
                         onClick = { onDownload(item) },
-                        shape = RoundedCornerShape(27.dp),
+                        shape = CircleShape,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.primary,
                             contentColor = MaterialTheme.colorScheme.onPrimary,
@@ -255,7 +256,7 @@ private fun PrimaryMediaCard(
                     if (item.kind == MediaKind.STREAM) {
                         OutlinedButton(
                             onClick = { onChooseQuality(item) },
-                            shape = RoundedCornerShape(27.dp),
+                            shape = CircleShape,
                             modifier = Modifier
                                 .height(54.dp)
                                 .pressScale(0.98f),
@@ -278,7 +279,6 @@ private fun MediaRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .pressScale()
             .clickable { onDownload(item) }
             .padding(horizontal = 20.dp, vertical = 10.dp)
             .alpha(if (dimmed) 0.72f else 1f),
@@ -311,7 +311,7 @@ private fun MediaRow(
         Spacer(Modifier.width(8.dp))
         Icon(
             imageVector = Icons.Default.FileDownload,
-            contentDescription = "Download",
+            contentDescription = "Save",
             tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.size(22.dp),
         )

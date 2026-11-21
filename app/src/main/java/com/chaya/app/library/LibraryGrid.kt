@@ -192,7 +192,7 @@ private fun Picture(item: LibraryItem, selected: Boolean, files: LibraryFiles?) 
         modifier = Modifier
             .fillMaxWidth()
             .aspectRatio(16f / 10f)
-            .shadow(8.dp, RoundedCornerShape(14.dp))
+            .shadow(2.dp, RoundedCornerShape(14.dp))
             .clip(RoundedCornerShape(14.dp))
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)
             .then(

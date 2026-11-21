@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FolderZip
@@ -95,7 +96,7 @@ private fun visitorNote(platform: Platform): String = when (platform) {
 private fun MainButton(label: String, onClick: () -> Unit) {
     Button(
         onClick = onClick,
-        shape = RoundedCornerShape(14.dp),
+        shape = CircleShape,
         modifier = Modifier.fillMaxWidth().height(48.dp).pressScale(0.98f),
     ) {
         Icon(Icons.Default.FolderZip, contentDescription = null, modifier = Modifier.size(20.dp))
@@ -108,7 +109,7 @@ private fun MainButton(label: String, onClick: () -> Unit) {
 private fun SecondButton(label: String, onClick: () -> Unit) {
     OutlinedButton(
         onClick = onClick,
-        shape = RoundedCornerShape(14.dp),
+        shape = CircleShape,
         modifier = Modifier.fillMaxWidth().height(48.dp).pressScale(0.98f),
     ) {
         Text(label, style = MaterialTheme.typography.labelLarge)

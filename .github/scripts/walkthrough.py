@@ -394,7 +394,7 @@ def scenario_hls():
     tap_when("hls: pick 184p", 20, text_prefix="184p")
     time.sleep(1)
     snapshot("hls-picker-184p")
-    tap_when("hls: start the download", 20, text_prefix="Download 184p")
+    tap_when("hls: start the download", 20, text_prefix="Save 184p")
     time.sleep(3)
     # The download does not need the page. Leaving the browser pauses it, which stops the 720p video the page
     # keeps decoding, which otherwise starves the emulator for the minutes the download takes.

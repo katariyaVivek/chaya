@@ -313,7 +313,7 @@ class ChayaDatabaseMigrationTest {
         val error = DownloadEntity.decodeError(null, null, "HTTP 403: Forbidden")
 
         assertTrue(error is DownloadError.Unknown)
-        assertEquals("Something went wrong", error?.userMessage)
+        assertEquals("Couldn't finish the download — try again", error?.userMessage)
         assertEquals(true, error?.retryable)
     }
 

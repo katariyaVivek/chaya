@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -107,7 +108,7 @@ fun ChosenBar(count: Int, start: Long, end: Long, onClip: () -> Unit, onFix: (()
         shape = RoundedCornerShape(16.dp),
         color = NightContainer,
         border = BorderStroke(1.dp, NightOutlineVariant),
-        shadowElevation = 8.dp,
+        shadowElevation = 2.dp,
         modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp),
     ) {
         Row(modifier = Modifier.padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -224,7 +225,7 @@ fun ClipEditor(
             )
             Text("Drag an edge to trim it; it settles on the nearest line.", color = NightMuted, style = TextStyle(fontSize = 13.sp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Surface(onClick = { onSave(edited) }, shape = RoundedCornerShape(14.dp), color = NightInk) {
+                Surface(onClick = { onSave(edited) }, shape = CircleShape, color = NightInk) {
                     Text("Save", color = NightGround, style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold), modifier = Modifier.padding(horizontal = 18.dp, vertical = 11.dp))
                 }
                 TextButton(onClick = { onPlay(edited) }) { Text("Play", color = NightInk) }

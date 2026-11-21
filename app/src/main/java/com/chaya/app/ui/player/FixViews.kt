@@ -179,7 +179,7 @@ fun FixedBar(said: String, canUndo: Boolean, onUndo: () -> Unit, modifier: Modif
         shape = RoundedCornerShape(16.dp),
         color = NightContainer,
         border = androidx.compose.foundation.BorderStroke(1.dp, NightOutlineVariant),
-        shadowElevation = 8.dp,
+        shadowElevation = 2.dp,
         modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp),
     ) {
         Row(modifier = Modifier.padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {

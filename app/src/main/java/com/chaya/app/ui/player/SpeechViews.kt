@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Surface
@@ -133,9 +134,9 @@ fun MakeSubtitlesCard(
                             style = TextStyle(fontSize = 13.sp),
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                            Surface(onClick = { onMake(partial.engine) }, shape = RoundedCornerShape(14.dp), color = NightInk) {
+                            Surface(onClick = { onMake(partial.engine) }, shape = CircleShape, color = NightInk) {
                                 Text(
-                                    "Carry on · ${partial.percent}%",
+                                    "Resume · ${partial.percent}%",
                                     color = NightGround,
                                     style = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold),
                                     modifier = Modifier.padding(horizontal = 18.dp, vertical = 11.dp),
@@ -179,7 +180,7 @@ fun MakeSubtitlesCard(
                             style = TextStyle(fontSize = 13.sp),
                         )
                     }
-                    Surface(onClick = { onMake(chosen) }, shape = RoundedCornerShape(14.dp), color = NightInk) {
+                    Surface(onClick = { onMake(chosen) }, shape = CircleShape, color = NightInk) {
                         Text(
                             when (chosen) {
                                 is Engine.Cloud -> "Send to ${chosen.speech.label} and make subtitles"
