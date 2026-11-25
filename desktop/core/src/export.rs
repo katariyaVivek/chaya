@@ -1384,14 +1384,44 @@ mod tests {
         }
     }
 
-    /// With CI's ffmpeg (`CHAYA_FFMPEG`), Highlight drawn by libass on a dark picture: no yellow before the first word
-    /// is said, yellow while one is.
+    /// The colours a GIF holds: its global table and its first image's own, read from the header (uncompressed).
+    fn gif_colours(gif: &[u8]) -> Vec<[u8; 3]> {
+        let table = |at: usize, packed: u8| -> Vec<[u8; 3]> {
+            let n = 2usize << (packed & 7);
+            (0..n).map(|k| [gif[at + 3 * k], gif[at + 3 * k + 1], gif[at + 3 * k + 2]]).collect()
+        };
+        assert_eq!(&gif[..3], b"GIF", "not a GIF");
+        let mut colours = Vec::new();
+        let mut at = 13;
+        if gif[10] & 0x80 != 0 {
+            colours = table(at, gif[10]);
+            at += 3 * colours.len();
+        }
+        // Extensions (a loop count, a frame's timing) come before the image: each is sub-blocks ending at a 0.
+        while gif[at] == 0x21 {
+            at += 2;
+            while gif[at] != 0 {
+                at += gif[at] as usize + 1;
+            }
+            at += 1;
+        }
+        if gif[at] == 0x2C && gif[at + 9] & 0x80 != 0 {
+            colours.extend(table(at + 10, gif[at + 9]));
+        }
+        colours
+    }
+
+    /// With CI's ffmpeg (`CHAYA_FFMPEG`, Chaya's own cut-down build: its subtitles filter, palette filters and GIF
+    /// encoder), Highlight drawn by libass over a dark field (an ASS drawing over the whole picture, drawn first): no
+    /// accent colour among the frame's colours before the first word is said, the accent while one is.
     #[tokio::test]
     async fn libass_lights_the_word_being_said() {
         let Some(ffmpeg) = std::env::var_os("CHAYA_FFMPEG").map(PathBuf::from) else {
             eprintln!("skipped: no CHAYA_FFMPEG");
             return;
         };
+        let video = Path::new(env!("CARGO_MANIFEST_DIR")).join("../app/tour/fixtures/A walk in the park.mp4");
+        let fonts = Path::new("/usr/share/fonts/truetype/dejavu");
         let (lines, words) = heard();
         let dir = tempfile::tempdir().unwrap();
         let file = dir.path().join("words.ass");
@@ -1401,35 +1431,47 @@ mod tests {
             second: None,
             second_on_top: false,
         };
-        std::fs::write(&file, ass(&burn, 0, 3_000, 640, 360)).unwrap();
-        let yellow_at = |ms: u64| {
-            let ffmpeg = ffmpeg.clone();
-            let file = file.clone();
+        let header = "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n";
+        let field = "Dialogue: 0,0:00:00.00,0:01:00.00,First,,0,0,0,,\
+                     {\\an7\\pos(0,0)\\1c&H202020&\\bord0\\shad0\\p1}m 0 0 l 320 0 320 180 0 180{\\p0}\n";
+        std::fs::write(&file, ass(&burn, 0, 3_000, 320, 180).replace(header, &format!("{header}{field}"))).unwrap();
+        let mut filter = format!("subtitles=filename={}", filter_path(&file));
+        if fonts.exists() {
+            filter += &format!(":fontsdir={}", filter_path(fonts));
+        }
+        let accent_at = |ms: u64| {
+            let (ffmpeg, video, filter, out) =
+                (ffmpeg.clone(), video.clone(), filter.clone(), dir.path().join(format!("{ms}.gif")));
             async move {
-                let filter = format!("ass={}", file.display());
-                let out = program(&ffmpeg)
+                // Seeking the input keeps the video's own times (-copyts), which the subtitles are drawn by.
+                let graph = format!(
+                    "[0:v]{filter},split[a][b];[a]palettegen=max_colors=32:stats_mode=single[p];[b][p]paletteuse"
+                );
+                let done = program(&ffmpeg)
                     .args([
                         "-hide_banner",
                         "-loglevel",
                         "error",
-                        "-f",
-                        "lavfi",
-                        "-i",
-                        "color=c=0x202020:s=640x360:d=3:r=25",
+                        "-y",
+                        "-copyts",
+                        "-ss",
+                        &format!("{:.3}", ms as f64 / 1000.0),
                     ])
-                    .args(["-vf", &filter, "-ss", &format!("{:.3}", ms as f64 / 1000.0), "-frames:v", "1"])
-                    .args(["-f", "rawvideo", "-pix_fmt", "rgb24", "-"])
+                    .arg("-i")
+                    .arg(&video)
+                    .args(["-filter_complex", &graph, "-frames:v", "1", "-f", "gif"])
+                    .arg(&out)
                     .output()
                     .await
                     .unwrap();
-                assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
-                // Yellow (255, 228, 92), give or take the letters' soft edges.
-                out.stdout.chunks(3).filter(|p| p[0] > 200 && p[1] > 180 && p[2] < 140).count()
+                assert!(done.status.success(), "{}", String::from_utf8_lossy(&done.stderr));
+                // Yellow (255, 228, 92) as the palette keeps it, give or take.
+                let near = |c: &[u8; 3]| c[0].abs_diff(255) < 40 && c[1].abs_diff(228) < 40 && c[2].abs_diff(92) < 50;
+                gif_colours(&std::fs::read(&out).unwrap()).iter().any(near)
             }
         };
-        let (before, during) = (yellow_at(900).await, yellow_at(2_200).await);
-        assert_eq!(before, 0, "nothing lit before the first word");
-        assert!(during > 50, "the word being said is lit: {during} yellow pixels");
+        assert!(!accent_at(900).await, "nothing lit before the first word");
+        assert!(accent_at(2_200).await, "the word being said is lit");
     }
 
     #[test]
