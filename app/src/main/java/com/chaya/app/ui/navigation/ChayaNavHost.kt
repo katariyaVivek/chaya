@@ -86,9 +86,8 @@ fun ChayaNavHost(navController: NavHostController) {
         }
         composable(Screen.Browser.route) {
             BrowserScreen(
-                // Over the page, so Back goes back to it
-                onNavigateToDownloads = { navController.navigate(Screen.Downloads.route) { launchSingleTop = true } },
-                onNavigateHome = { go(Place.HOME) },
+                // The bar's Home and Library are places, as on Home and in the Library; the tabs stay as they were
+                onPlace = ::go,
                 onNavigateToHistory = { navController.navigate(Screen.History.route) },
                 onNavigateToBookmarks = { navController.navigate(Screen.Bookmarks.route) },
             )

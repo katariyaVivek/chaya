@@ -80,7 +80,7 @@ fun LibraryGrid(
 ) {
     val choosing = selected.isNotEmpty()
     val days = remember(items) { libraryDays(items) }
-    // Stage's cards, two or more to a row, under the day each was saved; room at the foot for the places bar
+    // Stage's cards, two or more to a row, under the day each was saved; room at the foot for Chaya's bar
     LazyVerticalGrid(
         columns = GridCells.Adaptive(minSize = 150.dp),
         modifier = modifier.fillMaxSize(),

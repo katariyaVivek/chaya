@@ -42,8 +42,8 @@ PIN = "https://www.pinterest.com/pin/664281013778109217/"  # a public video pin;
 # Positions as fractions of the screen, used only when a node cannot be found by text.
 FALLBACK = {
     "url_bar": (0.44, 0.065),
-    "downloads_button": (0.875, 0.945),  # fourth tab of the bottom bar
-    "fab": (0.5, 0.868),                 # the floating download pill, centred above the bar
+    "downloads_button": (0.70, 0.92),    # the bar's Library slot, at the right end of its pill
+    "fab": (0.89, 0.92),                 # the bar's ink circle, Save when the page has something
 }
 
 PAGE = """<!doctype html>
@@ -276,7 +276,7 @@ def launch_fresh():
     sh(f"pm grant {PKG} android.permission.POST_NOTIFICATIONS")
     adb("logcat", "-c")
     adb("shell", "am", "start", "-W", "-n", f"{PKG}/.MainActivity", timeout=180)
-    # Chaya opens on Home (Stage); the browser is Browse, from the places bar at its foot
+    # Chaya opens on Home (Stage); the browser is Browse, from Chaya's bar at its foot
     _, browse = wait_for("Home shows its places", 90, text="Browse")
     if browse is None:
         return False
@@ -380,10 +380,10 @@ def scenario_hls():
         return
     snapshot("hls-home")
     open_url(HLS_DEMO)
-    wait_for("hls: media button appears", 120, desc_contains="Detected media")
+    wait_for("hls: the bar offers Save", 120, desc_contains="Save ")
     time.sleep(20)  # let the stream play so the page reports its player and the stream pieces
     snapshot("hls-page")
-    tap_when("hls: open the media sheet", 20, FALLBACK["fab"], desc_contains="Detected media")
+    tap_when("hls: open the media sheet", 20, FALLBACK["fab"], desc_contains="Save ")
     wait_for("hls: media sheet shows", 30, text="Found on this page")
     snapshot("hls-sheet")
     # Download on a stream starts the best quality straight away; Quality opens the picker.
@@ -508,10 +508,10 @@ def scenario_local():
     if not launch_fresh():
         return
     open_url(f"{HOST_URL}/index.html")
-    wait_for("local: media button appears", 90, desc_contains="Detected media")
+    wait_for("local: the bar offers Save", 90, desc_contains="Save ")
     time.sleep(15)
     snapshot("local-page")
-    tap_when("local: open the media sheet", 20, FALLBACK["fab"], desc_contains="Detected media")
+    tap_when("local: open the media sheet", 20, FALLBACK["fab"], desc_contains="Save ")
     wait_for("local: media sheet shows", 30, text="Found on this page")
     snapshot("local-sheet")
     if tap_when("local: show likely ads", 10, desc_contains="likely ads"):

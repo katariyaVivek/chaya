@@ -16,11 +16,13 @@ import org.json.JSONTokener
 
 /**
  * The browser's WebView, with what a browser adds to a page: a menu for a long press on a link or a picture
- * ([PressedOn]), *Search in new tab* beside Copy and Share when words are chosen, and pulling the page down at its
- * top to load it again ([PullGesture]). Everything goes through [callbacks], so it reaches the screen shown now.
+ * ([PressedOn]), *Web search* on chosen words on every phone ([Selection]), and pulling the page down at its top to
+ * load it again ([PullGesture]). Everything goes through [callbacks], so it reaches the screen shown now.
+ *
+ * Open only so a device test can watch the menu for chosen words.
  */
 @SuppressLint("ViewConstructor")
-internal class ChayaWebView(context: Context, private val callbacks: RetainedWebViewCallbacks) : WebView(context) {
+internal open class ChayaWebView(context: Context, private val callbacks: RetainedWebViewCallbacks) : WebView(context) {
     private val pull = PullGesture(threshold = PULL_DP * resources.displayMetrics.density)
     private var overScrolledAtTop = false
 
@@ -77,11 +79,17 @@ internal class ChayaWebView(context: Context, private val callbacks: RetainedWeb
     override fun startActionMode(callback: ActionMode.Callback, type: Int): ActionMode? =
         super.startActionMode(Selection(callback), type)
 
-    /** WebView's own menu for chosen words, with *Search in new tab* added. */
+    /**
+     * WebView's own menu for chosen words. WebView offers *Web search* only when an app on the phone takes web
+     * searches; without one, Chaya offers it, so it is always there. Either way it is the same search, which
+     * [com.chaya.app.MainActivity] opens in a new Chaya tab.
+     */
     private inner class Selection(private val inner: ActionMode.Callback) : ActionMode.Callback2() {
         override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
             val shown = inner.onCreateActionMode(mode, menu)
-            if (shown && menu.findItem(SEARCH_ID) == null) menu.add(Menu.NONE, SEARCH_ID, SEARCH_ORDER, "Search in new tab")
+            if (shown && menu.findItem(SEARCH_ID) == null && !context.hasWebSearchApp()) {
+                menu.add(Menu.NONE, SEARCH_ID, SEARCH_ORDER, "Web search")
+            }
             return shown
         }
 
@@ -90,7 +98,8 @@ internal class ChayaWebView(context: Context, private val callbacks: RetainedWeb
         override fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean {
             if (item.itemId != SEARCH_ID) return inner.onActionItemClicked(mode, item)
             evaluateJavascript(SELECTED_TEXT_JS) { result ->
-                selectedText(result)?.let(callbacks::onSearchSelected)
+                // Started as WebView starts its own, so both reach the same new tab
+                selectedText(result)?.let { words -> runCatching { context.startActivity(webSearchIntent(words)) } }
             }
             mode.finish()
             return true
@@ -108,8 +117,8 @@ internal class ChayaWebView(context: Context, private val callbacks: RetainedWeb
         /** How far the page is pulled, in dp, before letting go loads it again. */
         const val PULL_DP = 96f
         private const val SEARCH_ID = 0x43_68_61 // "Cha"
-        /** Early in WebView's menu, so it shows with Copy and Share rather than under ⋮. */
-        private const val SEARCH_ORDER = 1
+        /** Where WebView puts its own Web search, after Copy, Share and Select all. */
+        private const val SEARCH_ORDER = 7
         private const val SELECTED_TEXT_JS = "(function(){return String(window.getSelection());})()"
 
         /** The words `evaluateJavascript` hands back (a JSON string), trimmed and kept short; null for none. */

@@ -12,6 +12,14 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
 
+    <!-- Whether an app takes web searches: WebView offers its own Web search on chosen words only then, and Chaya
+         offers it otherwise (browser/WebSearch.kt). Both ask from this app, so both see the same apps. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.WEB_SEARCH" />
+        </intent>
+    </queries>
+
     <application
         android:name=".ChayaApplication"
         android:allowBackup="true"

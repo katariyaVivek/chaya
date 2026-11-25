@@ -131,13 +131,11 @@ fun HomeScreen(
                     task = hero,
                     watched = shelf.heroWatched,
                     files = viewModel.files,
-                    progress = shelf.progress,
-                    onProgress = { onPlace(Place.LIBRARY) },
                     onPlay = { open(hero) },
                     onShare = { viewModel.share(listOf(hero)) { message(it) } },
                 )
             } else {
-                Welcome(progress = shelf.progress, onProgress = { onPlace(Place.LIBRARY) })
+                Welcome()
             }
             if (shelf.recent.isNotEmpty()) {
                 Recent(
@@ -150,17 +148,20 @@ fun HomeScreen(
                     },
                 )
             }
-            // Room for the places bar over the foot of the page
+            // Room for Chaya's bar over the foot of the page
             Spacer(Modifier.height(120.dp))
         }
 
-        // Above the places bar and the phone's own navigation, so a message is never under them
-        SnackbarHost(snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = PlacesBarClearance))
+        // Above Chaya's bar and the phone's own navigation, so a message is never under them
+        SnackbarHost(snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = ChayaBarClearance))
 
-        PlacesBar(
-            current = Place.HOME,
+        ChayaBar(
+            place = Place.HOME,
+            middle = BarMiddle.Browse,
+            action = BarAction.Go,
+            progress = shelf.progress,
             onPlace = onPlace,
-            onType = { typing = true },
+            onAction = { typing = true },
             modifier = Modifier.align(Alignment.BottomCenter),
         )
     }
@@ -182,8 +183,6 @@ private fun Hero(
     task: DownloadTask,
     watched: Watched?,
     files: LibraryFiles,
-    progress: HomeShelf.Progress?,
-    onProgress: () -> Unit,
     onPlay: () -> Unit,
     onShare: () -> Unit,
 ) {
@@ -215,7 +214,7 @@ private fun Hero(
                 ),
             ),
         )
-        TopRow(progress = progress, onProgress = onProgress)
+        TopRow()
         Column(
             modifier = Modifier.align(Alignment.BottomStart).padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -271,9 +270,9 @@ private fun Hero(
 
 /** With nothing saved yet: what Chaya is for, and the way to start, which is the "+" at the foot (one way, not two). */
 @Composable
-private fun Welcome(progress: HomeShelf.Progress?, onProgress: () -> Unit) {
+private fun Welcome() {
     Box(modifier = Modifier.fillMaxWidth().height(420.dp)) {
-        TopRow(progress = progress, onProgress = onProgress)
+        TopRow()
         Column(
             modifier = Modifier.align(Alignment.BottomStart).padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -293,60 +292,21 @@ private fun Welcome(progress: HomeShelf.Progress?, onProgress: () -> Unit) {
     }
 }
 
-/** Chaya's mark and name, and while anything is saving, how far it is: a ring of Stage's amber and its share. */
+/** Chaya's mark and name. How far the downloads are is the bar's Library slot's, on every screen. */
 @Composable
-private fun TopRow(progress: HomeShelf.Progress?, onProgress: () -> Unit) {
+private fun TopRow() {
     Row(
         modifier = Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 20.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            // The two suns at rest (res/drawable/chaya_mark.xml, written from the mark's constants); the name says it
-            Image(painter = painterResource(R.drawable.chaya_mark), contentDescription = null, modifier = Modifier.size(32.dp))
-            Text(
-                text = "Chaya",
-                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.onBackground,
-            )
-        }
-        if (progress != null) {
-            val fraction = progress.fraction
-            val words = if (fraction != null) "${(fraction * 100).roundToInt()}%" else "${progress.running} saving"
-            Surface(
-                onClick = onProgress,
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.8f),
-                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                modifier = Modifier.height(44.dp).semantics {
-                    contentDescription = if (fraction != null) "$words saved, in the Library" else "$words, in the Library"
-                },
-            ) {
-                Row(
-                    modifier = Modifier.padding(start = 10.dp, end = 14.dp).fillMaxHeight(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    if (fraction != null) {
-                        CircularProgressIndicator(
-                            progress = { fraction },
-                            modifier = Modifier.size(22.dp),
-                            color = LocalChayaColors.current.signal,
-                            trackColor = MaterialTheme.colorScheme.outlineVariant,
-                            strokeWidth = 2.5.dp,
-                        )
-                    } else {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(22.dp),
-                            color = LocalChayaColors.current.signal,
-                            trackColor = MaterialTheme.colorScheme.outlineVariant,
-                            strokeWidth = 2.5.dp,
-                        )
-                    }
-                    Text(words, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
-                }
-            }
-        }
+        // The two suns at rest (res/drawable/chaya_mark.xml, written from the mark's constants); the name says it
+        Image(painter = painterResource(R.drawable.chaya_mark), contentDescription = null, modifier = Modifier.size(32.dp))
+        Text(
+            text = "Chaya",
+            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+            color = MaterialTheme.colorScheme.onBackground,
+        )
     }
 }
 
@@ -430,64 +390,6 @@ private fun RecentCard(item: LibraryItem, files: LibraryFiles, onClick: () -> Un
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-    }
-}
-
-/** How far above the phone's navigation the places bar reaches (62dp tall, 16dp either side), and a little room. */
-val PlacesBarClearance = 100.dp
-
-/**
- * Chaya's places, floating at the foot of the screen (Stage), the one shown lit; and "+", in ink, to paste a link or
- * search. A solid sheet: blurring what is behind it needs Android 12, and the phone's oldest is 8.
- */
-@Composable
-fun PlacesBar(current: Place, onPlace: (Place) -> Unit, onType: () -> Unit, modifier: Modifier = Modifier) {
-    Row(
-        modifier = modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 14.dp, vertical = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Surface(
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.surfaceContainer,
-            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-            shadowElevation = 2.dp,
-            modifier = Modifier.weight(1f).height(62.dp),
-        ) {
-            Row(modifier = Modifier.padding(5.dp)) {
-                for (place in Place.entries) {
-                    val on = place == current
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .clip(CircleShape)
-                            .background(if (on) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer)
-                            .clickable { if (!on) onPlace(place) }
-                            .semantics { selected = on },
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = place.label,
-                            style = MaterialTheme.typography.titleSmall,
-                            color = if (on) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
-        }
-        Surface(
-            onClick = onType,
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.primary,
-            contentColor = MaterialTheme.colorScheme.onPrimary,
-            shadowElevation = 2.dp,
-            modifier = Modifier.size(62.dp).semantics { contentDescription = "Paste a link or search" },
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(26.dp))
-            }
-        }
     }
 }
 

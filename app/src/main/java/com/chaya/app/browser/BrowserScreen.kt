@@ -109,6 +109,11 @@ import com.chaya.app.detection.RankedMedia
 import com.chaya.app.download.DownloadState
 import com.chaya.app.history.BrowsingRecord
 import com.chaya.app.history.PagesToOpen
+import com.chaya.app.home.BarAction
+import com.chaya.app.home.BarMiddle
+import com.chaya.app.home.ChayaBar
+import com.chaya.app.home.HomeShelf
+import com.chaya.app.home.Place
 import com.chaya.app.history.Suggestion
 import com.chaya.app.model.DetectedMedia
 import com.chaya.app.model.DetectionSource
@@ -160,9 +165,8 @@ private const val START_SCREEN_BOOKMARKS = 8
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun BrowserScreen(
-    onNavigateToDownloads: () -> Unit,
-    /** Chaya's Home, the place: the browser's own start page is a new tab's. */
-    onNavigateHome: () -> Unit = {},
+    /** Chaya's places, from the bar: Home and the Library. The browser's own start page is a new tab's, never Home. */
+    onPlace: (Place) -> Unit,
     onNavigateToHistory: () -> Unit = {},
     onNavigateToBookmarks: () -> Unit = {},
     viewModel: BrowserViewModel = viewModel()
@@ -321,7 +325,6 @@ fun BrowserScreen(
         onAddressChanged = viewModel::onPageAddressChanged,
         onOpenInNewTab = { pendingNewTabUrl = it },
         onPressed = { pressedOn = it },
-        onSearchSelected = { pendingNewTabUrl = it },
         onPulled = { pulled = it },
         onPullToRefresh = { pullRefreshRequested = true },
     )
@@ -640,9 +643,8 @@ fun BrowserScreen(
     }
 
     val downloads by viewModel.downloads.collectAsState()
-    val activeDownloads = remember(downloads) {
-        downloads.count { it.state.isActive }
-    }
+    // How the downloads still going are getting on, as the bar's Library slot shows it on every screen
+    val saving = remember(downloads) { HomeShelf.progressOf(downloads) }
     val recentDownloads = remember(downloads) {
         downloads.filter { it.state == DownloadState.COMPLETED }.sortedByDescending { it.updatedAt }.take(3)
     }
@@ -779,9 +781,9 @@ fun BrowserScreen(
     // A page picked on the History or Bookmarks screen opens in the tab shown.
     val pageToOpen by PagesToOpen.pending.collectAsState()
     LaunchedEffect(pageToOpen) {
-        val url = pageToOpen ?: return@LaunchedEffect
-        PagesToOpen.consume(url)
-        navigateToUrl(url)
+        val page = pageToOpen ?: return@LaunchedEffect
+        PagesToOpen.consume(page)
+        if (page.newTab) openNewTab(page.text) else navigateToUrl(page.text)
     }
 
     LaunchedEffect(pendingNewTabUrl) {
@@ -856,6 +858,56 @@ fun BrowserScreen(
         }
     }
 
+    // What the page has to save, one value, for the bar's ink circle
+    val pageFind = PageFind.of(uiState.homeVisible, linkState, uiState.profile, sheetModel)
+
+    /** The bar under the page, and over the tab grid with Tabs lit; [newTab] is what its + does there. */
+    @Composable
+    fun PageBar(tabsShown: Boolean, newTab: () -> Unit = { openNewTab(null) }) {
+        ChayaBar(
+            place = Place.BROWSE,
+            middle = BarMiddle.Page(uiState.canGoBack, uiState.canGoForward, tabs.size, tabsShown),
+            action = if (tabsShown) BarAction.NewTab else pageFind.action,
+            progress = saving,
+            onPlace = onPlace,
+            onAction = {
+                if (tabsShown) {
+                    showTabGrid = false
+                    newTab()
+                } else {
+                    when (val find = pageFind) {
+                        PageFind.Nothing -> newTab()
+                        is PageFind.Looking -> viewModel.toggleLinkSheet()
+                        is PageFind.Found -> when (find.sheet) {
+                            FoundSheet.LINK -> viewModel.toggleLinkSheet()
+                            FoundSheet.PROFILE -> viewModel.toggleProfileSheet()
+                            FoundSheet.MEDIA -> viewModel.toggleMediaSheet()
+                        }
+                    }
+                }
+            },
+            onBack = {
+                invalidateDetectionSession()
+                activeWebView()?.goBack()
+            },
+            onForward = {
+                invalidateDetectionSession()
+                activeWebView()?.goForward()
+            },
+            onTabs = {
+                if (tabsShown) {
+                    showTabGrid = false
+                } else {
+                    // The shown tab's card pictures the page as it is now.
+                    tabs.active?.let { rememberTab(it, uiState.homeVisible) }
+                    showTabGrid = true
+                }
+            },
+            // Swipe sideways along the bar for the tab beside this one.
+            pillModifier = if (tabsShown) Modifier else Modifier.swipeBetweenTabs { step -> tabs.beside(step)?.let { showTab(it) } },
+        )
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
             topBar = {
@@ -915,73 +967,9 @@ fun BrowserScreen(
                     }
                 }
             },
-            bottomBar = {
-                Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) {
-                    Column {
-                        HorizontalDivider(
-                            thickness = 0.5.dp,
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
-                        )
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .navigationBarsPadding()
-                                // Swipe sideways along the bar for the tab beside this one.
-                                .swipeBetweenTabs { step -> tabs.beside(step)?.let { showTab(it) } }
-                                .padding(horizontal = 12.dp, vertical = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceEvenly,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            // Home first, on the left, as Home and the Library have it on their places bar
-                            NavAction(
-                                icon = Icons.Default.Home,
-                                label = "Home",
-                                enabled = true,
-                                onClick = onNavigateHome,
-                            )
-
-                            NavAction(
-                                icon = Icons.AutoMirrored.Filled.ArrowBack,
-                                label = "Back",
-                                enabled = uiState.canGoBack
-                            ) {
-                                invalidateDetectionSession()
-                                activeWebView()?.goBack()
-                            }
-
-                            NavAction(
-                                icon = Icons.AutoMirrored.Filled.ArrowForward,
-                                label = "Forward",
-                                enabled = uiState.canGoForward
-                            ) {
-                                invalidateDetectionSession()
-                                activeWebView()?.goForward()
-                            }
-
-                            // Chaya's Home and Library, as the places bar on either goes to them, so the browser is
-                            // never a place with no way out but Back. It stays as it is, its tabs kept, for Browse.
-                            NavAction(
-                                icon = Icons.Default.Tab,
-                                label = "Tabs (${tabs.size})",
-                                enabled = true,
-                                count = tabs.size,
-                            ) {
-                                // The shown tab's card pictures the page as it is now.
-                                tabs.active?.let { rememberTab(it, uiState.homeVisible) }
-                                showTabGrid = true
-                            }
-
-                            NavAction(
-                                icon = Icons.Default.VideoLibrary,
-                                label = "Library",
-                                enabled = true,
-                                badge = activeDownloads,
-                                onClick = onNavigateToDownloads
-                            )
-                        }
-                    }
-                }
-            },
+            // Chaya's one bar: Home and the Library at its ends, the page's Back, Forward and Tabs between, and the
+            // ink circle for what the page has to save, else a new tab. The page ends above it.
+            bottomBar = { PageBar(tabsShown = false) },
             snackbarHost = { SnackbarHost(snackbarHostState) },
             containerColor = MaterialTheme.colorScheme.background
         ) { padding ->
@@ -1022,7 +1010,7 @@ fun BrowserScreen(
                     onDismissOnboardingHint = { dismissOnboardingHint() },
                     recent = recentDownloads,
                     onSelectUrl = { target -> navigateToUrl(target) },
-                    onOpenDownloads = onNavigateToDownloads,
+                    onOpenDownloads = { onPlace(Place.LIBRARY) },
                     bookmarks = bookmarkTiles,
                     onOpenBookmarks = onNavigateToBookmarks,
                     onOpenHistory = onNavigateToHistory,
@@ -1054,31 +1042,6 @@ fun BrowserScreen(
                         contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
                         modifier = Modifier.pressScale(0.96f),
                     )
-                }
-
-                // Floating download pill: the page's main video, one tap from its download options. On a page
-                // that is one video on YouTube, Instagram, TikTok, X or Pinterest it shows what the engine found instead.
-                val linkPillShown = !uiState.homeVisible &&
-                    (linkState is LinkState.Looking || linkState is LinkState.Answer)
-                // An Instagram or X account page offers its posts as one ZIP.
-                val profileShown = uiState.profile.takeIf { !uiState.homeVisible && !linkPillShown }
-                AnimatedVisibility(
-                    visible = linkPillShown || profileShown != null || (!uiState.homeVisible && !sheetModel.isEmpty),
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(horizontal = 12.dp, vertical = 12.dp),
-                    enter = slideInVertically(ChayaMotion.tweenStandard()) { it } +
-                            fadeIn(ChayaMotion.tweenShort()),
-                    exit = slideOutVertically(ChayaMotion.tweenShort()) { it } +
-                            fadeOut(ChayaMotion.tweenShort())
-                ) {
-                    if (linkPillShown) {
-                        PlatformPill(state = linkState, onClick = { viewModel.toggleLinkSheet() })
-                    } else if (profileShown != null) {
-                        ProfilePill(profile = profileShown, onClick = { viewModel.toggleProfileSheet() })
-                    } else {
-                        MediaPill(model = sheetModel, onClick = { viewModel.toggleMediaSheet() })
-                    }
                 }
 
                 // The video behind a link on a supported site: found, with the qualities it can be saved at.
@@ -1209,7 +1172,6 @@ fun BrowserScreen(
                     )
                 },
                 activeId = tabs.activeId,
-                canOpenMore = tabs.canOpenMore,
                 picturesVersion = tabsVersion,
                 onSelect = { id ->
                     showTabGrid = false
@@ -1225,6 +1187,7 @@ fun BrowserScreen(
                     closeAllTabs()
                 },
                 onDismiss = { showTabGrid = false },
+                bottomBar = { newTab -> PageBar(tabsShown = true, newTab = newTab) },
             )
         }
 
@@ -1238,52 +1201,6 @@ fun BrowserScreen(
                     factory = { view },
                     modifier = Modifier.fillMaxSize()
                 )
-            }
-        }
-    }
-}
-
-/** Bottom-bar action with consistent disabled styling, press feedback and an optional count badge. */
-@Composable
-private fun NavAction(
-    icon: ImageVector,
-    label: String,
-    enabled: Boolean,
-    badge: Int = 0,
-    /** A number drawn on the icon itself, as the tab count is; 0 for none. */
-    count: Int = 0,
-    onClick: () -> Unit
-) {
-    IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.pressScale(0.88f)) {
-        BadgedBox(
-            badge = {
-                if (badge > 0) {
-                    Badge(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary
-                    ) { Text("$badge") }
-                }
-            }
-        ) {
-            val tint = if (enabled) MaterialTheme.colorScheme.onSurfaceVariant
-            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
-            if (count > 0) {
-                // The tab count in a rounded square, as browsers show it.
-                Box(
-                    modifier = Modifier
-                        .size(22.dp)
-                        .border(1.75.dp, tint, RoundedCornerShape(6.dp))
-                        .semantics { contentDescription = label },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = "$count",
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        color = tint,
-                    )
-                }
-            } else {
-                Icon(imageVector = icon, contentDescription = label, tint = tint)
             }
         }
     }

@@ -109,7 +109,7 @@ is close to its copyrighted-content policy, and the diagnostics assume no Play S
 ## Manual check on a phone
 
 1. **Browse:** enter an address; back, forward and refresh work, and the keyboard closes after Go.
-2. **A page with a video file:** the floating pill appears; tap it. The page's main video is first,
+2. **A page with a video file:** the bar's round button turns into Save, with an amber dot; tap it. The page's main video is first,
    with the page title, and likely ads are folded away. Tap *Download*.
 3. **A stream (`.m3u8`/`.mpd`):** the sheet shows *Stream* and a stream-pieces-hidden note.
    *Download* starts at the best quality; *Quality* lists one entry per rendition.

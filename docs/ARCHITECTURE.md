@@ -347,12 +347,13 @@ Share. Reached from the Downloads screen's menu.
 - `ui/components/TabGrid` is the full-screen tab switcher: a new-tab square, the tab count, ⋮ (*Close
   all tabs*), search by title and address, and two columns of cards; swiping or × closes with Undo.
 - `ChayaWebView` is every tab's WebView: a long press on a link or picture reads its hit test into `PressedOn` (one
-  value) for `PageMenu`, *Search in new tab* is added to WebView's own bar for chosen words, and pulling the page down
-  at its top reloads it (`PullGesture`, fed only once WebView over-scrolls at the top, so a list scrolled inside the
+  value) for `PageMenu`, *Web search* is added to WebView's bar for chosen words when WebView leaves it out (no app on
+  the phone takes web searches; `MainActivity` turns either search into a new tab), and pulling the page down at its top reloads it (`PullGesture`, fed only once WebView over-scrolls at the top, so a list scrolled inside the
   page scrolls first). All of it goes through `RetainedWebViewCallbacks` to the screen shown.
 - `BrowserChrome` is the address bar, which collapses to the site name on a
-  page, with the ad blocker's shield and count. The floating pill and the sheets (`ui/components/`)
-  sit on top.
+  page, with the ad blocker's shield and count. Under the page is Chaya's bar (`home/ChayaBar`), whose ink circle
+  `PageFind` sets: Save for what the page has (a site's video, an account's posts, what it plays), else a new
+  tab. The sheets (`ui/components/`) sit on top.
 - `downloads/`: the list (cards per state, All/Active/Done filters, swipe to delete with Undo, Share
   in a finished file's ⋮) or the grid, switched from the top bar and remembered. `DownloadsContent`
   is the screen without its view model, so tests drive it directly.

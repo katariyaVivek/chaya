@@ -1,6 +1,7 @@
 package com.chaya.app.ui.components
 
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -11,6 +12,10 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.hasSetTextAction
 import com.chaya.app.browser.TabSummary
+import com.chaya.app.home.BarAction
+import com.chaya.app.home.BarMiddle
+import com.chaya.app.home.ChayaBar
+import com.chaya.app.home.Place
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -34,17 +39,27 @@ class TabGridTest {
 
     private val events = mutableListOf<String>()
 
-    private fun show(activeId: Long = 2, canOpenMore: Boolean = true) {
+    private fun show(activeId: Long = 2) {
         composeRule.setContent {
             TabGrid(
                 tabs = tabs,
                 activeId = activeId,
-                canOpenMore = canOpenMore,
                 onSelect = { events += "select $it" },
                 onClose = { events += "close $it" },
                 onNewTab = { events += "new" },
                 onCloseAll = { events += "close all" },
                 onDismiss = { events += "dismiss" },
+                bottomBar = { newTab ->
+                    ChayaBar(
+                        place = Place.BROWSE,
+                        middle = BarMiddle.Page(canGoBack = true, canGoForward = false, tabCount = 3, tabsShown = true),
+                        action = BarAction.NewTab,
+                        progress = null,
+                        onPlace = { events += "place $it" },
+                        onAction = newTab,
+                        onTabs = { events += "tabs" },
+                    )
+                },
             )
         }
     }
@@ -54,7 +69,7 @@ class TabGridTest {
         show()
 
         composeRule.onNodeWithText("Launch Event 2026").assertExists()
-        composeRule.onNodeWithText("Start page").assertExists()
+        composeRule.onAllNodesWithText("New tab").assertCountEquals(1)
         composeRule.onNodeWithText("Launch Event 2026").performClick()
 
         assertEquals(listOf("select 1"), events)
@@ -76,7 +91,7 @@ class TabGridTest {
 
         composeRule.onNodeWithText("Launch Event 2026").assertExists()
         composeRule.onAllNodesWithText("Weather today").assertCountEquals(0)
-        composeRule.onAllNodesWithText("Start page").assertCountEquals(0)
+        composeRule.onAllNodesWithText("New tab").assertCountEquals(0)
     }
 
     @Test
@@ -107,16 +122,27 @@ class TabGridTest {
     }
 
     @Test
-    fun `the plus opens a new tab, unless there are already as many as can be open`() {
+    fun `the bar's ink circle opens a new tab, closing first a tab waiting out its Undo`() {
         show()
+        composeRule.onNodeWithContentDescription("Close Weather today").performClick()
         composeRule.onNodeWithContentDescription("New tab").performClick()
-        assertEquals(listOf("new"), events)
+        assertEquals(listOf("close 2", "new"), events)
     }
 
     @Test
-    fun `the count shows how many tabs are open`() {
+    fun `the bar's Tabs closes the grid, its Back and Forward wait for the page`() {
         show()
-        composeRule.onNodeWithContentDescription("3 tabs").assertExists()
+        composeRule.onNodeWithContentDescription("Close tabs").performClick()
+        assertEquals(listOf("tabs"), events)
+        composeRule.onNodeWithContentDescription("Back").assertIsNotEnabled()
+    }
+
+    @Test
+    fun `the header says how many tabs are open, and counts one closed at once`() {
+        show()
+        composeRule.onNodeWithText("3 tabs").assertExists()
+        composeRule.onNodeWithContentDescription("Close Weather today").performClick()
+        composeRule.onNodeWithText("2 tabs").assertExists()
     }
 
     @Test

@@ -124,7 +124,7 @@ class PageMenusTest {
     }
 }
 
-/** A tab opened for a page (the link menu's Open in new tab, a page's new window, Search in new tab). */
+/** A tab opened for a page (the link menu's Open in new tab, a page's new window, Web search on chosen words). */
 class NewTabTest {
     @org.junit.Test
     fun `a tab opened for a page shows the page loading, never its start screen`() {
