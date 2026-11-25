@@ -1412,7 +1412,8 @@ mod tests {
     }
 
     /// With CI's ffmpeg (`CHAYA_FFMPEG`, Chaya's own cut-down build: its subtitles filter, palette filters and GIF
-    /// encoder), Highlight drawn by libass over a dark field (an ASS drawing over the whole picture, drawn first): no
+    /// encoder), Highlight drawn by libass over a dark field (an ASS drawing over the whole picture, drawn first), in
+    /// DejaVu Sans, as Linux has no Segoe UI and Chaya's libass looks no further than the fonts folder it is given: no
     /// accent colour among the frame's colours before the first word is said, the accent while one is.
     #[tokio::test]
     async fn libass_lights_the_word_being_said() {
@@ -1434,7 +1435,14 @@ mod tests {
         let header = "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n";
         let field = "Dialogue: 0,0:00:00.00,0:01:00.00,First,,0,0,0,,\
                      {\\an7\\pos(0,0)\\1c&H202020&\\bord0\\shad0\\p1}m 0 0 l 320 0 320 180 0 180{\\p0}\n";
-        std::fs::write(&file, ass(&burn, 0, 3_000, 320, 180).replace(header, &format!("{header}{field}"))).unwrap();
+        std::fs::write(
+            &file,
+            ass(&burn, 0, 3_000, 320, 180)
+                .replace(header, &format!("{header}{field}"))
+                // Chaya's ffmpeg finds fonts by Windows' own list there; here, only those in `fonts`, by name.
+                .replace("Segoe UI", "DejaVu Sans"),
+        )
+        .unwrap();
         let mut filter = format!("subtitles=filename={}", filter_path(&file));
         if fonts.exists() {
             filter += &format!(":fontsdir={}", filter_path(fonts));
