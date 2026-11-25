@@ -256,13 +256,13 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
   Over a page, the page is made shorter so the notices sit below it.
 - **Editor project** (`core::fcpxml`, step 11 of `docs/PLAN.md`). *Export* › *Editor project* saves the clips chosen
   as one FCPXML 1.10 file next to the video, "Video title - Clips.fcpxml" (or the clip's name, for one), for Final Cut
-  Pro and DaVinci Resolve (Premiere reads another format, Final Cut 7's XML, which Chaya does not write). Nothing is
-  encoded: the video is one asset, named by its `file:///` address (Windows' `C:\`, `\\?\` and network-share paths
-  alike), and each clip is a cut of it on the spine, one after the other. Times are on the picture's own frames, read
-  by ffmpeg (29.97 is 30000/1001; a measured 23.98 or 59.94 is taken as the standard rate it means, anything else as
-  the whole number nearest, 30 when unknown), each edge on its nearest frame, a clip at least a frame long and inside
-  the video. The subtitles chosen go over each clip as Final Cut's Basic Title, in Helvetica, the language's colour
-  and size, two languages in one title as they are burned in. The idea is OpenFilm's (MIT); the writer is Chaya's own.
+  Pro and DaVinci Resolve (Premiere Pro has its own, below). Nothing is encoded: the video is one asset, named by its
+  `file:///` address (Windows' `C:\`, `\\?\` and network-share paths alike), and each clip is a cut of it on the
+  spine, one after the other. Times are on the picture's own frames, read by ffmpeg (29.97 is 30000/1001; a measured
+  23.98 or 59.94 is taken as the standard rate it means, anything else as the whole number nearest, 30 when unknown),
+  each edge on its nearest frame, a clip at least a frame long and inside the video. The subtitles chosen go over each
+  clip as Final Cut's Basic Title, in Helvetica, the language's colour and size, two languages in one title as they
+  are burned in. The idea is OpenFilm's (MIT); the writer is Chaya's own.
 - **Caption styles** (`core::export::Look`, step 12 of `docs/PLAN.md`). Besides Outline, Box and Large, burned-in
   subtitles Chaya made can follow their words: *Highlight* (the word being said in the accent colour), *Karaoke*
   (words fill as they are said, libass's `\kf`), *Pop* (the word lit, a little larger, settling) and *One at a time*
@@ -271,6 +271,12 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
   from a site have no word times, so the dialog offers these looks only for the language Chaya made, and says so. The
   accent is yellow for white words and white for any other colour. The idea is from OpenFilm's word-by-word captions;
   the ASS is Chaya's own.
+- **Premiere Pro project** (`core::xmeml`, step 13 of `docs/PLAN.md`). *Editor project* › *For* › *Premiere Pro* saves
+  the same cuts as Final Cut 7's XML (xmeml 5), "Video title - Clips.xml": one file element named by its
+  `file://localhost/C:/…` address, a linked video and audio clipitem for each clip, on the same frames as the FCPXML
+  (`fcpxml::plan`), the rate as a timebase and an NTSC flag. The subtitles chosen go beside it as "Video title -
+  Clips.srt", each clip's lines moved to where the clip sits in the sequence, for Premiere to import as captions;
+  xmeml's text generators look different in every editor, so they are not used.
 - **Your own videos** (`core::own`, `app/src-tauri/src/own.rs`, `app/ui/own.js`). A video or sound already on the PC
   (a meeting, an interview) dragged from Explorer onto any part of the window, or picked with *Add from this PC*
   beside the Downloads heading (Windows' own file picker, through `tauri-plugin-dialog`, opened by the app so the

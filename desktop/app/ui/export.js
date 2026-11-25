@@ -2,9 +2,9 @@
 // what was chosen last time), the choices kept consistent as they change, the `options` the app is asked with, and
 // the words for how an export went. The app does the work (`export_clips`, and an `export` event for each change).
 //
-// Clips are saved as videos, GIFs or SRT files, one a clip, or as an editor project ('fcpxml'): one file for Final
-// Cut Pro or DaVinci Resolve holding all the clips chosen, cut from the video as it is, with the subtitles chosen as
-// titles.
+// Clips are saved as videos, GIFs or SRT files, one a clip, or as an editor project: one file holding all the clips
+// chosen, cut from the video as it is. For Final Cut Pro or DaVinci Resolve ('fcpxml') the subtitles chosen come as
+// titles; for Premiere Pro ('xmeml') as an SRT beside it, timed to the sequence, to import as captions.
 //
 // A language is named here by its key: the track's language code, or '' for a track without one, as the app takes
 // it. `styleOf(key)` gives that language's player style: { color, size, font }, the font capitalised ('Sans').
@@ -25,6 +25,10 @@ export const LOOK_NAMES = {
 export const QUALITY_NAMES = { p720: '720p', p1080: '1080p', original: 'Original' };
 /** Sizes a video may be made to fit, in megabytes: Discord's 10, e-mail's 25, and 50. */
 export const FITS = [10, 25, 50];
+/** The editor projects: for Final Cut Pro or Resolve, and for Premiere Pro. */
+export const PROJECTS = ['fcpxml', 'xmeml'];
+/** Whether `choice` saves an editor project. */
+export const isProject = (choice) => PROJECTS.includes(choice.saveAs);
 /** The longest clip made into a GIF, in milliseconds, as the app allows. */
 export const LONGEST_GIF = 60_000;
 
@@ -61,7 +65,9 @@ export function firstChoice({ clips = [], cut = null, tracks = [], shown = null,
   return fixed(
     {
       which: cut !== null && clips.some((c) => c.id === cut) ? 'chosen' : 'all',
-      saveAs: kept.saveAs === 'srt' && tracks.length ? 'srt' : ['gif', 'fcpxml'].includes(kept.saveAs) ? kept.saveAs : 'video',
+      saveAs: kept.saveAs === 'srt' && tracks.length ? 'srt' : ['gif', ...PROJECTS].includes(kept.saveAs) ? kept.saveAs : 'video',
+      // The editor a project is for, kept while something else is chosen.
+      editor: PROJECTS.includes(kept.editor) ? kept.editor : PROJECTS.includes(kept.saveAs) ? kept.saveAs : 'fcpxml',
       subtitles,
       first,
       second: other,
@@ -174,6 +180,7 @@ export function optionsOf(choice, styleOf) {
 export function keptOf(choice) {
   return {
     saveAs: choice.saveAs,
+    editor: choice.editor,
     subtitles: choice.subtitles === 'none' ? 'none' : 'some',
     look: choice.look,
     quality: choice.quality,
@@ -185,7 +192,7 @@ export function keptOf(choice) {
 
 /** How many files an export makes: one a clip, or one a clip and language for SRT; one project for them all. */
 export function fileCount(choice, clips) {
-  if (choice.saveAs === 'fcpxml') return 1;
+  if (isProject(choice)) return 1;
   if (together(choice)) return clips;
   return choice.saveAs === 'srt' ? clips * choice.srt.length : clips;
 }
@@ -197,15 +204,19 @@ export function exportLabel(choice, clips) {
     return `Export ${files} subtitle file${files === 1 ? '' : 's'}`;
   }
   if (choice.saveAs === 'gif') return clips === 1 ? 'Export GIF' : `Export ${clips} GIFs`;
-  if (choice.saveAs === 'fcpxml') return clips === 1 ? 'Export project' : `Export project of ${clips} clips`;
+  if (isProject(choice)) return clips === 1 ? 'Export project' : `Export project of ${clips} clips`;
   return clips === 1 ? 'Export clip' : `Export ${clips} clips`;
 }
 
 /** Where the files go, with the first one's name as an example (`clips` of them chosen). */
 export function whereNote(choice, title, clipName, clips = 1) {
+  const project = `${title} - ${clips === 1 ? clipName : 'Clips'}`;
   if (choice.saveAs === 'fcpxml') {
-    const name = `${title} - ${clips === 1 ? clipName : 'Clips'}.fcpxml`;
-    return `Saved next to the video for Final Cut Pro or DaVinci Resolve (not Premiere): “${name}”. It uses the video where it is, so keep the two together.`;
+    return `Saved next to the video for Final Cut Pro or DaVinci Resolve: “${project}.fcpxml”. It uses the video where it is, so keep the two together.`;
+  }
+  if (choice.saveAs === 'xmeml') {
+    const captions = choice.subtitles === 'none' ? '' : `, with the subtitles as “${project}.srt” to import as captions`;
+    return `Saved next to the video for Premiere Pro: “${project}.xml”${captions}. It uses the video where it is, so keep them together.`;
   }
   const base = `${title} - ${clipName}`;
   if (together(choice)) {
@@ -261,7 +272,7 @@ export function baseName(path) {
  *  has not ended, or was stopped by the person. */
 export function noticeOf(job) {
   if (job.state === 'done') {
-    const detail = job.saveAs === 'srt' || job.saveAs === 'fcpxml' ? baseName(job.path) : encoderWords(job.encoder);
+    const detail = job.saveAs === 'srt' || PROJECTS.includes(job.saveAs) ? baseName(job.path) : encoderWords(job.encoder);
     return { text: `Saved “${job.name}”`, detail: detail ?? '', action: 'Show in folder', failed: false };
   }
   if (job.state === 'failed') {

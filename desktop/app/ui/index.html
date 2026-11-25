@@ -645,7 +645,12 @@
         <button type="button" data-save-as="video">Video</button>
         <button type="button" data-save-as="gif" title="An animated GIF, without sound, for a clip up to a minute">GIF</button>
         <button type="button" data-save-as="srt">Subtitle files (SRT)</button>
-        <button type="button" data-save-as="fcpxml" title="One file for Final Cut Pro or DaVinci Resolve: the clips cut from this video as it is, nothing re-encoded">Editor project</button>
+        <button type="button" data-save-as="fcpxml" title="One file for Final Cut Pro, DaVinci Resolve or Premiere Pro: the clips cut from this video as it is, nothing re-encoded">Editor project</button>
+      </div>
+      <p class="settings__label" id="export-editor-label">For</p>
+      <div class="seg seg--wrap" role="group" aria-labelledby="export-editor-label" id="export-editor">
+        <button type="button" data-editor="fcpxml">Final Cut Pro or Resolve</button>
+        <button type="button" data-editor="xmeml">Premiere Pro</button>
       </div>
       <p class="settings__label" id="export-subtitles-label" data-for="video">Subtitles</p>
       <div class="export__field" id="export-subtitles" data-for="video"></div>

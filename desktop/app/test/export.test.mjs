@@ -30,6 +30,7 @@ import {
   LOOKS,
   WORD_LOOKS,
   LOOK_NAMES,
+  isProject,
 } from '../ui/export.js';
 
 const clips = [
@@ -78,6 +79,7 @@ test('the save, look and quality chosen last time come back; anything else is th
   assert.equal(firstChoice({ clips, tracks: [], kept }).saveAs, 'video', 'no subtitles to save as SRT');
   assert.deepEqual(keptOf({ ...choice, subtitles: 'two' }), {
     saveAs: 'srt',
+    editor: 'fcpxml',
     subtitles: 'some',
     look: 'large',
     quality: 'p720',
@@ -263,7 +265,7 @@ test('an editor project is one file for all the clips chosen, with the subtitles
   // The note names the file, the programs it is for and the one it is not, and that the video must stay with it.
   assert.equal(
     whereNote(base, 'A walk', 'Counting the walk', 3),
-    'Saved next to the video for Final Cut Pro or DaVinci Resolve (not Premiere): “A walk - Clips.fcpxml”. It uses the video where it is, so keep the two together.',
+    'Saved next to the video for Final Cut Pro or DaVinci Resolve: “A walk - Clips.fcpxml”. It uses the video where it is, so keep the two together.',
   );
   assert.match(whereNote(base, 'A walk', 'Counting the walk', 1), /“A walk - Counting the walk\.fcpxml”/);
   assert.equal(keptOf(base).saveAs, 'fcpxml');
@@ -315,4 +317,36 @@ test('a word look’s small picture lights the word being said, in the accent th
   // The same pairs as core::export::Color::accent.
   assert.equal(accentOf('white'), 'yellow');
   for (const color of ['yellow', 'cyan', 'green', 'pink']) assert.equal(accentOf(color), 'white');
+});
+
+test('an editor project for Premiere Pro is the same cuts, with the subtitles as captions beside it', () => {
+  const tracks = ['en', 'fr'];
+  const premiere = firstChoice({ clips, tracks, shown: 'en', kept: { saveAs: 'xmeml' } });
+  assert.equal(premiere.saveAs, 'xmeml');
+  assert.equal(premiere.editor, 'xmeml', 'the editor is remembered with it');
+  assert.ok(isProject(premiere));
+  assert.equal(fileCount(premiere, 3), 1);
+  assert.equal(exportLabel(premiere, 3), 'Export project of 3 clips');
+  const options = optionsOf(premiere, styleOf);
+  assert.equal(options.saveAs, 'xmeml');
+  assert.deepEqual(
+    options.subtitles.map((s) => s.language),
+    ['en'],
+  );
+  assert.equal(
+    whereNote(premiere, 'A walk', 'One', 3),
+    'Saved next to the video for Premiere Pro: “A walk - Clips.xml”, with the subtitles as “A walk - Clips.srt” to import as captions. It uses the video where it is, so keep them together.',
+  );
+  assert.equal(
+    whereNote(changed(premiere, { subtitles: 'none' }, tracks), 'A walk', 'One', 1),
+    'Saved next to the video for Premiere Pro: “A walk - One.xml”. It uses the video where it is, so keep them together.',
+  );
+  // A video chosen after keeps Premiere as the editor for next time.
+  const video = changed(premiere, { saveAs: 'video' }, tracks);
+  assert.deepEqual([keptOf(video).saveAs, keptOf(video).editor], ['video', 'xmeml']);
+  assert.equal(firstChoice({ clips, tracks, kept: keptOf(video) }).editor, 'xmeml');
+  // With nothing kept, a project is for Final Cut Pro or Resolve.
+  assert.equal(firstChoice({ clips, tracks }).editor, 'fcpxml');
+  const done = { job: 5, state: 'done', saveAs: 'xmeml', name: '3 clips', path: '/v/A walk - Clips.xml', encoder: null };
+  assert.equal(noticeOf(done).detail, 'A walk - Clips.xml');
 });
