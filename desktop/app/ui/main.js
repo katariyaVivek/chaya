@@ -4,7 +4,6 @@ import { DownloadButton, setTheme, setMotion, stagger, leave } from './design/ch
 import { selection, snap, moveEdge, stepEdge, rows, clipOf, nameFrom, view as clipView, exact } from './clips.js';
 import { chapterAt, stepChapter, snapEdges, dividers } from './chapters.js';
 import {
-  LOOKS,
   LOOK_NAMES,
   firstChoice,
   changed,
@@ -20,6 +19,11 @@ import {
   noticeOf,
   keyOf,
   gifTooLong,
+  looksFor,
+  wordLooksNote,
+  lookWords,
+  accentOf,
+  WORD_LOOKS,
 } from './export.js';
 import { lineSearch } from './search.js';
 import { ownVideos } from './own.js';
@@ -4819,6 +4823,8 @@ function openExport() {
       second: playing.second ? keyOf(playing.second) : null,
       top: remembered('chaya.player.top', 'second'),
       captions: captionsOn,
+      // The subtitles Chaya made, whose words it has with their times, for the looks that follow them.
+      words: playing.made?.language ?? null,
       kept,
     }),
   };
@@ -4964,7 +4970,13 @@ function showExport() {
           exportButton('top', 'second', keyName(choice.second), choice.secondOnTop, () => chooseExport({ secondOnTop: true })),
         ],
   );
-  document.getElementById('export-look').replaceChildren(...LOOKS.map((look) => lookTile(look, choice)));
+  const lookNote = wordLooksNote(choice);
+  document
+    .getElementById('export-look')
+    .replaceChildren(
+      ...looksFor(choice).map((look) => lookTile(look, choice)),
+      ...(lookNote ? [span('export__meta looks__note', lookNote)] : []),
+    );
   for (const button of document.querySelectorAll('#export-quality [data-quality]')) {
     button.setAttribute('aria-pressed', String(button.dataset.quality === choice.quality));
   }
@@ -5016,7 +5028,20 @@ function lookTile(look, choice) {
   if (keys.length === 2 && choice.secondOnTop) keys.reverse();
   const words = span(`look__words look__words--${look}`, '');
   for (const key of keys) {
-    const line = span('look__line', sampleWords(trackOf(key)?.lines[0]?.text));
+    const sample = sampleWords(trackOf(key)?.lines[0]?.text);
+    const line = span('look__line', '');
+    if (WORD_LOOKS.includes(look) && key === choice.first) {
+      // The main language's words, the one being said lit in its accent colour, as the app draws it.
+      const accent = accentOf(keyStyle(key).color);
+      lookWords(look, sample).forEach(({ word, lit }, i) => {
+        if (i > 0) line.append(' ');
+        const piece = span(lit ? 'look__now' : '', word);
+        if (lit) piece.style.setProperty('--now-color', `var(${SWATCHES[accent] ?? SWATCHES.yellow})`);
+        line.append(piece);
+      });
+    } else {
+      line.textContent = sample;
+    }
     styleLine(line, key === '' ? null : key);
     words.append(line);
   }

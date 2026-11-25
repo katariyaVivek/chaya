@@ -197,7 +197,7 @@ of each kind, markup in names and lines, titles inside their clip in two languag
 ffmpeg (`CHAYA_FFMPEG`); the dialog's rules with Node; the Windows tour exports all its clips as a project. Not yet
 opened in Final Cut Pro or Resolve themselves: neither runs where this was built.
 
-### 12. Caption styles (Windows) ☐
+### 12. Caption styles (Windows) ☑
 
 **The person gets:** more ways for burned-in subtitles to look than Outline, Box and Large, for the short clips
 people make from a talk: words that light up as they are said, a few words at a time in big letters, a pop on the
@@ -221,3 +221,17 @@ with a browser, and Chaya draws them with libass, so nothing is copied, only wha
 - **Tests:** the ASS Chaya writes for each look (the words' times, the `\kf` lengths adding up to the line's, lines
   cut at the clip's edges with a word half inside), a look refused for lines without word times, and the dialog's
   rules in `ui/export.js`.
+
+**Done.** `core::export::Look` has the four word looks, each a `Shape` (size, boxed, raised, what the word being said
+does), so `ass` asks the look rather than listing them. `Language` carries the words heard; `words_of` takes a line's
+words only when the run said within a second of it is the line's words in order, so a line put right since is drawn
+whole. Highlight and Pop are a run of events, one for each word (lit from its start until the next starts); Karaoke is
+one event of `\k` pauses and `\kf` fills counted in hundredths from rounded moments, so they add up to the line's
+time exactly; One at a time shows groups of up to three words and sixteen letters, ending at a phrase, raised to the
+lower third, the word being said lit. The accent is white's yellow and every other colour's white
+(`Color::accent`). The app gives the words to the main language only when it is the language Chaya made
+(`Heard::of`). The dialog offers the word looks then, says why when it does not, and draws each tile with the word
+lit. Tests: the ASS for each look, a clip starting mid-line, two languages, groups, lines without words falling back,
+and libass itself drawing Highlight on a frame (no yellow before the first word, yellow while one is said,
+`CHAYA_FFMPEG`); the dialog's rules with Node. The Windows tour has no word-look step yet: its clip's subtitles come
+from a file, not made by Chaya.

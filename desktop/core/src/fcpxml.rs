@@ -572,7 +572,7 @@ mod tests {
         let lines = [line(10_000, 14_000, "5 < 6 & \"x\" > 'y'"), line(15_000, 18_000, "tab\there\u{1}")];
         let burn = Burn {
             look: Look::Outline,
-            first: Language { lines: &lines, style: Style::default() },
+            first: Language { lines: &lines, style: Style::default(), words: &[] },
             second: None,
             second_on_top: false,
         };
@@ -604,10 +604,11 @@ mod tests {
         let spanish = [line(14_000, 16_000, "Del todo")];
         let burn = Burn {
             look: Look::Boxed,
-            first: Language { lines: &english, style: Style::default() },
+            first: Language { lines: &english, style: Style::default(), words: &[] },
             second: Some(Language {
                 lines: &spanish,
                 style: Style { color: Color::Yellow, font: Font::Serif, size: Size::Xl },
+                words: &[],
             }),
             second_on_top: true,
         };
@@ -671,7 +672,7 @@ mod tests {
         let lines = [line(0, 3_000, "One"), line(3_000, 6_000, "Two")];
         let burn = Burn {
             look: Look::Large,
-            first: Language { lines: &lines, style: Style::default() },
+            first: Language { lines: &lines, style: Style::default(), words: &[] },
             second: None,
             second_on_top: false,
         };
@@ -717,7 +718,7 @@ mod tests {
             crate::subtitles::parse(&std::fs::read_to_string(fixtures.join("A walk in the park.en.srt")).unwrap());
         let burn = Burn {
             look: Look::Outline,
-            first: Language { lines: &lines, style: Style::default() },
+            first: Language { lines: &lines, style: Style::default(), words: &[] },
             second: None,
             second_on_top: false,
         };

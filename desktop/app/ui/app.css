@@ -1762,6 +1762,18 @@ body.showing-downloads .found { display: none !important; }
     -1px 1px 0 var(--subtitle-outline), 1px 1px 0 var(--subtitle-outline);
 }
 .look__words--large { font-size: 14px; font-weight: 700; }
+/* The word looks: outlined as Outline is, the word being said lit in the accent colour the app draws it in */
+.look__words--highlight .look__line, .look__words--karaoke .look__line,
+.look__words--pop .look__line, .look__words--oneAtATime .look__line {
+  text-shadow:
+    -1px -1px 0 var(--subtitle-outline), 1px -1px 0 var(--subtitle-outline),
+    -1px 1px 0 var(--subtitle-outline), 1px 1px 0 var(--subtitle-outline);
+}
+.look__now { color: var(--now-color, var(--subtitle-yellow)); }
+.look__words--pop .look__now { display: inline-block; transform: scale(1.12); }
+.look__words--oneAtATime { margin-bottom: 8px; font-size: 15px; font-weight: 800; }
+/* Why the word looks aren't offered: a line of its own under the looks */
+.looks__note { flex-basis: 100%; }
 .look__words--boxed .look__line { padding: 1px var(--space-half); border-radius: 3px; background: var(--subtitle); }
 
 /* The jobs going, under the clips: each with how far, a thin line of light, and Stop; waiting ones are not lit */

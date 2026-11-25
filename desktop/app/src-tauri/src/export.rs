@@ -12,6 +12,7 @@ use chaya_core::clips::Clip;
 use chaya_core::download::manager::State as TaskState;
 use chaya_core::export::{self, Burn, Encoder, ExportError, Job, Language, Look, Quality, Style};
 use chaya_core::fcpxml;
+use chaya_core::speech::whisper::Word;
 use chaya_core::subtitles::{self, Track};
 use chaya_core::video::Videos;
 use serde::{Deserialize, Serialize};
@@ -193,9 +194,15 @@ impl Exporting {
         let failed = |message: &str| ExportError::Failed(message.to_string());
         let task = app.state::<Downloads>().manager.get(id).filter(|t| t.state == TaskState::Completed);
         let task = task.ok_or_else(|| failed("This video isn't saved any more."))?;
+        let data = app.state::<Videos>().load(id);
+        // What whisper.cpp heard, word by word, and in which language's file, when Chaya made the subtitles: the word
+        // looks follow those words.
+        let heard_in = data.transcript.as_ref().and_then(|t| subtitles::file_language(&t.language));
+        let heard: Vec<Word> =
+            data.transcript.iter().flat_map(|t| &t.segments).flat_map(|s| s.words.iter().cloned()).collect();
+        let heard = Heard { words: &heard, language: heard_in.as_deref() };
         // The clips still there, in the video's order.
-        let clips: Vec<Clip> =
-            app.state::<Videos>().load(id).clips.into_iter().filter(|c| wanted.contains(&c.id)).collect();
+        let clips: Vec<Clip> = data.clips.into_iter().filter(|c| wanted.contains(&c.id)).collect();
         let clip = clips.first().cloned().ok_or_else(|| failed("This clip isn't there any more."))?;
         let folder = task.path.parent().map(PathBuf::from).ok_or(ExportError::CantWrite)?;
         let tracks = subtitles::tracks_for(&task.path);
@@ -213,7 +220,7 @@ impl Exporting {
             let probe = export::probe(&ffmpeg, &task.path).await?;
             let first = options.subtitles.first().map(track).transpose()?;
             let second = options.subtitles.get(1).map(track).transpose()?;
-            let titles = burn(&options, first, second);
+            let titles = burn(&options, first, second, heard);
             let name = if clips.len() == 1 { clip.name.as_str() } else { "Clips" };
             let path = export::file_for(&folder, &task.title, name, "fcpxml");
             let source = fcpxml::Source { title: &task.title, path: &task.path, probe };
@@ -256,7 +263,7 @@ impl Exporting {
         };
         let first = options.subtitles.first().map(track).transpose()?;
         let second = options.subtitles.get(1).map(track).transpose()?;
-        let burn = burn(&options, first, second);
+        let burn = burn(&options, first, second, heard);
         let gif = options.save_as == SaveAs::Gif;
         let out = export::file_for(&folder, &task.title, &clip.name, if gif { "gif" } else { "mp4" });
         let work = app.path().app_cache_dir().map_err(|_| ExportError::CantWrite)?.join("export").join(job.to_string());
@@ -288,13 +295,37 @@ impl Exporting {
     }
 }
 
-/// The subtitles drawn on a clip (or put over it as titles): `first`'s, and `second`'s with them, in the styles chosen.
-fn burn<'a>(options: &Options, first: Option<&'a Track>, second: Option<&'a Track>) -> Option<Burn<'a>> {
+/// The words whisper.cpp heard in a video, and the language of the subtitle file Chaya made from them ("en").
+#[derive(Clone, Copy)]
+struct Heard<'a> {
+    words: &'a [Word],
+    language: Option<&'a str>,
+}
+
+impl<'a> Heard<'a> {
+    /// The words heard for `track`: all of them when it is the language Chaya made, none for any other.
+    fn of(self, track: &Track) -> &'a [Word] {
+        if self.language.is_some() && track.language.as_deref() == self.language {
+            self.words
+        } else {
+            &[]
+        }
+    }
+}
+
+/// The subtitles drawn on a clip (or put over it as titles): `first`'s, and `second`'s with them, in the styles chosen;
+/// the main language with the words heard in it, when Chaya made it, for the looks that follow them.
+fn burn<'a>(
+    options: &Options,
+    first: Option<&'a Track>,
+    second: Option<&'a Track>,
+    heard: Heard<'a>,
+) -> Option<Burn<'a>> {
     let style = |i: usize| options.subtitles.get(i).map(|c| c.style).unwrap_or_default();
     first.map(|first| Burn {
         look: options.look,
-        first: Language { lines: &first.lines, style: style(0) },
-        second: second.map(|second| Language { lines: &second.lines, style: style(1) }),
+        first: Language { lines: &first.lines, style: style(0), words: heard.of(first) },
+        second: second.map(|second| Language { lines: &second.lines, style: style(1), words: &[] }),
         second_on_top: options.second_on_top,
     })
 }
@@ -441,6 +472,30 @@ mod tests {
         )
         .unwrap();
         assert_eq!((project.save_as, project.subtitles.len()), (SaveAs::Fcpxml, 1));
+        for (look, read) in [
+            ("highlight", Look::Highlight),
+            ("karaoke", Look::Karaoke),
+            ("pop", Look::Pop),
+            ("oneAtATime", Look::OneAtATime),
+        ] {
+            let options: Options =
+                serde_json::from_str(&format!(r#"{{"saveAs": "video", "quality": "p720", "look": "{look}"}}"#))
+                    .unwrap();
+            assert_eq!(options.look, read);
+        }
+    }
+
+    #[test]
+    fn only_the_language_chaya_made_gets_the_words_it_heard() {
+        let words = [Word { text: " Hello".into(), start: 0, end: 400, p: 0.9 }];
+        let heard = Heard { words: &words, language: Some("en") };
+        let track =
+            |language: Option<&str>| Track { language: language.map(String::from), lines: vec![], spans: vec![] };
+        assert_eq!(heard.of(&track(Some("en"))).len(), 1);
+        assert!(heard.of(&track(Some("fr"))).is_empty());
+        assert!(heard.of(&track(None)).is_empty());
+        // Subtitles Chaya didn't make: no words for any language, not even one without a name.
+        assert!(Heard { words: &words, language: None }.of(&track(None)).is_empty());
     }
 
     #[test]

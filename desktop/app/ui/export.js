@@ -10,8 +10,18 @@
 // it. `styleOf(key)` gives that language's player style: { color, size, font }, the font capitalised ('Sans').
 
 export const LOOKS = ['outline', 'boxed', 'large'];
+/** The looks that follow each word as it is said, offered for subtitles Chaya made (it has each word's time). */
+export const WORD_LOOKS = ['highlight', 'karaoke', 'pop', 'oneAtATime'];
 export const QUALITIES = ['p720', 'p1080', 'original'];
-export const LOOK_NAMES = { outline: 'Outline', boxed: 'Box', large: 'Large' };
+export const LOOK_NAMES = {
+  outline: 'Outline',
+  boxed: 'Box',
+  large: 'Large',
+  highlight: 'Highlight',
+  karaoke: 'Karaoke',
+  pop: 'Pop',
+  oneAtATime: 'One at a time',
+};
 export const QUALITY_NAMES = { p720: '720p', p1080: '1080p', original: 'Original' };
 /** Sizes a video may be made to fit, in megabytes: Discord's 10, e-mail's 25, and 50. */
 export const FITS = [10, 25, 50];
@@ -38,9 +48,10 @@ export function contractStyle(style = {}) {
 /**
  * What the dialog offers first. `clips` are the video's, `cut` the clip chosen on the timeline (or null), `tracks`
  * the keys of its subtitles, `shown` and `second` the keys the player shows (or null), `top` the player's 'first' or
- * 'second' on top, `captions` whether the line is drawn at all, and `kept` what was chosen last time.
+ * 'second' on top, `captions` whether the line is drawn at all, `words` the key of the subtitles Chaya made (it has
+ * their words' times; null when it made none), and `kept` what was chosen last time.
  */
-export function firstChoice({ clips = [], cut = null, tracks = [], shown = null, second = null, top = 'second', captions = true, kept = {} }) {
+export function firstChoice({ clips = [], cut = null, tracks = [], shown = null, second = null, top = 'second', captions = true, words = null, kept = {} }) {
   const has = (key) => key !== null && key !== undefined && tracks.includes(key);
   const first = has(shown) ? shown : tracks[0] ?? null;
   const other = has(second) && second !== first ? second : null;
@@ -55,7 +66,8 @@ export function firstChoice({ clips = [], cut = null, tracks = [], shown = null,
       first,
       second: other,
       secondOnTop: top === 'second',
-      look: LOOKS.includes(kept.look) ? kept.look : 'outline',
+      look: [...LOOKS, ...WORD_LOOKS].includes(kept.look) ? kept.look : 'outline',
+      words,
       quality: QUALITIES.includes(kept.quality) ? kept.quality : 'p1080',
       srt,
       fit: FITS.includes(kept.fit) ? kept.fit : null,
@@ -86,7 +98,40 @@ function fixed(choice, tracks) {
     next.subtitles = 'one';
   }
   if (next.srt.length === 0 && next.first !== null) next.srt = [next.first];
+  // A look that follows the words, for subtitles without them, is drawn as Outline.
+  if (WORD_LOOKS.includes(next.look) && !hasWords(next)) next.look = 'outline';
   return next;
+}
+
+/** Whether the main language's subtitles are the ones Chaya made, whose words it has with their times. */
+const hasWords = (choice) => choice.words !== null && choice.words !== undefined && choice.first === choice.words;
+
+/** The looks offered: the word looks too when the main language's words have their times. */
+export function looksFor(choice) {
+  return hasWords(choice) ? [...LOOKS, ...WORD_LOOKS] : LOOKS;
+}
+
+/** Why the word looks aren't offered, for a video with subtitles drawn on; null when they are, or don't apply. */
+export function wordLooksNote(choice) {
+  if (hasWords(choice) || choice.subtitles === 'none' || choice.first === null) return null;
+  return choice.words === null || choice.words === undefined
+    ? 'Words light up only for subtitles Chaya made: Make subtitles first.'
+    : 'Words light up only for the subtitles Chaya made: choose them as the main language.';
+}
+
+/** The colour the word being said takes in the word looks, as the app draws it: white lights up yellow, any other
+ *  colour white. */
+export function accentOf(color) {
+  return color === 'white' || !color ? 'yellow' : 'white';
+}
+
+/** A word look's small picture: the sample's words, and which are lit (the word being said; for Karaoke, those
+ *  filled so far). One at a time shows only the first two. */
+export function lookWords(look, text) {
+  const words = String(text ?? '').split(' ').filter(Boolean);
+  if (look === 'oneAtATime') return words.slice(0, 2).map((word, i) => ({ word, lit: i === 0 }));
+  const lit = { highlight: 1, pop: 1, karaoke: 0 }[look];
+  return words.map((word, i) => ({ word, lit: lit !== undefined && i === lit }));
 }
 
 /** An SRT language turned on or off; the last one stays on. */
