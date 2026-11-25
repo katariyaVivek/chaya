@@ -98,6 +98,10 @@ as the transcript in the player (#127).
 search across every line said from the Library (step 2, #131), the person's own videos (step 3, #132), subtitles put right in the player (step 4), then their own AI model, translation,
 highlights, clips, export with subtitles drawn on, and last, subtitles made on the phone.
 
+**Clips for an editor, then caption styles (Windows).** Steps 11 and 12 of [`PLAN.md`](PLAN.md), ideas from OpenFilm:
+the clips chosen as one FCPXML project for Final Cut Pro and DaVinci Resolve, cut from the video without re-encoding,
+the subtitles as titles; then word-by-word looks for burned-in subtitles made by Chaya.
+
 The six-part plan after v0.4.0 has shipped (#34 to #39); it is in
 [`history/plan-after-v0.4.md`](history/plan-after-v0.4.md). What is left:
 

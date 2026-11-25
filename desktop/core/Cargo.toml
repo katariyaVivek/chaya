@@ -27,6 +27,8 @@ zip = { version = "9", default-features = false }
 
 
 [dev-dependencies]
+# The editor project (`fcpxml`) is read back as XML in its tests.
+roxmltree = "0.20"
 tempfile = "3"
 
 # Which graphics card whisper.cpp listens on (`speech::card`): Vulkan's own list of them, read from Windows'

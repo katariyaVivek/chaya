@@ -22,6 +22,7 @@ import {
   keyOf,
   isRunning,
   gifTooLong,
+  fileCount,
 } from '../ui/export.js';
 
 const clips = [
@@ -222,4 +223,45 @@ test('how a job is going, and the notice it gives when it ends', () => {
   assert.match(noticeOf({ ...failed, message: null }).text, /: something went wrong\.$/);
   assert.equal(encoderWords(null), null);
   assert.equal(baseName('C:\\a\\b.mp4'), 'b.mp4');
+});
+
+test('an editor project is one file for all the clips chosen, with the subtitles as titles and nothing to encode', () => {
+  const tracks = ['en', 'fr'];
+  const base = firstChoice({ clips, cut: null, tracks, shown: 'en', second: 'fr', kept: { saveAs: 'fcpxml', fit: 25, even: true } });
+  assert.equal(base.saveAs, 'fcpxml', 'remembered from last time');
+  assert.equal(base.subtitles, 'two');
+  assert.equal(fileCount(base, 3), 1);
+  assert.equal(exportLabel(base, 3), 'Export project of 3 clips');
+  assert.equal(exportLabel(base, 1), 'Export project');
+
+  // The subtitles shown go as the titles, both languages with their styles; a size or loudness chosen for a video
+  // means nothing to a project, and is not sent.
+  const options = optionsOf(base, styleOf);
+  assert.equal(options.saveAs, 'fcpxml');
+  assert.deepEqual(
+    options.subtitles.map((s) => s.language),
+    ['en', 'fr'],
+  );
+  assert.deepEqual(options.subtitles[0].style, { color: 'yellow', font: 'serif', size: 'L' });
+  assert.equal(options.fit, null);
+  assert.equal(options.evenLoudness, false);
+  assert.equal(options.together, false);
+  assert.deepEqual(optionsOf(changed(base, { subtitles: 'none' }, tracks), styleOf).subtitles, []);
+
+  // Without subtitles a project is still offered.
+  const bare = firstChoice({ clips, tracks: [], kept: { saveAs: 'fcpxml' } });
+  assert.equal(bare.saveAs, 'fcpxml');
+  assert.deepEqual(optionsOf(bare, styleOf).subtitles, []);
+
+  // The note names the file, the programs it is for and the one it is not, and that the video must stay with it.
+  assert.equal(
+    whereNote(base, 'A walk', 'Counting the walk', 3),
+    'Saved next to the video for Final Cut Pro or DaVinci Resolve (not Premiere): “A walk - Clips.fcpxml”. It uses the video where it is, so keep the two together.',
+  );
+  assert.match(whereNote(base, 'A walk', 'Counting the walk', 1), /“A walk - Counting the walk\.fcpxml”/);
+  assert.equal(keptOf(base).saveAs, 'fcpxml');
+
+  // When it is saved, the notice names the file, as for subtitle files.
+  const done = { job: 4, state: 'done', saveAs: 'fcpxml', name: '3 clips', path: 'C:\\Videos\\A walk - Clips.fcpxml', encoder: null };
+  assert.deepEqual(noticeOf(done), { text: 'Saved “3 clips”', detail: 'A walk - Clips.fcpxml', action: 'Show in folder', failed: false });
 });

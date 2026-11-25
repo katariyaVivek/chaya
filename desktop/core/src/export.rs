@@ -63,15 +63,21 @@ pub enum Color {
 }
 
 impl Color {
-    /// As ASS writes a colour: &HAABBGGRR, opaque. The same as the player's (`--subtitle-*` in the design tokens).
-    fn ass(self) -> &'static str {
+    /// Red, green and blue: the same as the player's (`--subtitle-*` in the design tokens).
+    pub(crate) fn rgb(self) -> [u8; 3] {
         match self {
-            Color::White => "&H00FFFFFF",
-            Color::Yellow => "&H005CE4FF",
-            Color::Cyan => "&H00FFE37F",
-            Color::Green => "&H008AF0A6",
-            Color::Pink => "&H00D1A3FF",
+            Color::White => [0xFF, 0xFF, 0xFF],
+            Color::Yellow => [0xFF, 0xE4, 0x5C],
+            Color::Cyan => [0x7F, 0xE3, 0xFF],
+            Color::Green => [0xA6, 0xF0, 0x8A],
+            Color::Pink => [0xFF, 0xA3, 0xD1],
         }
+    }
+
+    /// As ASS writes a colour: &HAABBGGRR, opaque.
+    fn ass(self) -> String {
+        let [r, g, b] = self.rgb();
+        format!("&H00{b:02X}{g:02X}{r:02X}")
     }
 }
 
@@ -108,7 +114,7 @@ pub enum Size {
 
 impl Size {
     /// The same steps as the player's.
-    fn scale(self) -> f64 {
+    pub(crate) fn scale(self) -> f64 {
         match self {
             Size::S => 0.8,
             Size::M => 1.0,
@@ -139,7 +145,12 @@ pub struct Probe {
     pub height: u32,
     /// Milliseconds, when it says.
     pub duration: Option<u64>,
+    /// Frames a second, when it says (an average, for a video whose frames come at uneven times).
+    pub frame_rate: Option<f64>,
     pub sound: bool,
+    /// The sound's samples a second and channels, when there is sound and it says.
+    pub sample_rate: Option<u32>,
+    pub channels: Option<u32>,
 }
 
 /// What encoded the picture.
@@ -275,16 +286,16 @@ pub fn ass(burn: &Burn<'_>, start: u64, end: u64, width: u32, height: u32) -> St
 
 /// A stretch of a clip (milliseconds from its start) and what shows in it, in each of two languages.
 #[derive(Debug, PartialEq, Eq)]
-struct Slice {
-    start: u64,
-    end: u64,
-    first: Option<String>,
-    second: Option<String>,
+pub(crate) struct Slice {
+    pub(crate) start: u64,
+    pub(crate) end: u64,
+    pub(crate) first: Option<String>,
+    pub(crate) second: Option<String>,
 }
 
 /// What shows when in a clip from `start` to `end`, in `first` and `second` (which may hold no lines): a slice for
 /// every stretch in which neither changes, timed from the clip's start, the same words straight on one slice.
-fn slices(first: &[Line], second: &[Line], start: u64, end: u64) -> Vec<Slice> {
+pub(crate) fn slices(first: &[Line], second: &[Line], start: u64, end: u64) -> Vec<Slice> {
     let (one, two) = (subtitles::timeline(first), subtitles::timeline(second));
     let mut moments = vec![start, end];
     for span in one.iter().chain(&two) {
@@ -395,8 +406,39 @@ pub fn read_probe(said: &str) -> Option<Probe> {
         );
         Some(((h * 3600.0 + m * 60.0 + s) * 1000.0).round() as u64)
     });
-    let sound = said.lines().any(|l| l.trim_start().starts_with("Stream #") && l.contains(": Audio:"));
-    Some(Probe { width, height, duration, sound })
+    // "..., 29.97 fps, 29.97 tbr, 30k tbn": the frames a second it says first, else the base rate it guesses.
+    let pieces: Vec<&str> = video.split(',').map(str::trim).collect();
+    let frame_rate = pieces
+        .iter()
+        .find_map(|p| p.strip_suffix(" fps"))
+        .or_else(|| pieces.iter().find_map(|p| p.strip_suffix(" tbr")))
+        .and_then(|n| n.trim().parse::<f64>().ok())
+        .filter(|r| r.is_finite() && *r > 0.0);
+    // "Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 128 kb/s".
+    let audio = said.lines().find(|l| l.trim_start().starts_with("Stream #") && l.contains(": Audio:"));
+    let heard: Vec<&str> = audio.map(|l| l.split(',').map(str::trim).collect()).unwrap_or_default();
+    let at = heard.iter().position(|p| p.ends_with(" Hz"));
+    let sample_rate = at.and_then(|i| heard[i].strip_suffix(" Hz")?.trim().parse::<u32>().ok()).filter(|r| *r > 0);
+    let channels = at.and_then(|i| heard.get(i + 1)).and_then(|layout| channel_count(layout));
+    Some(Probe { width, height, duration, frame_rate, sound: audio.is_some(), sample_rate, channels })
+}
+
+/// How many channels a layout ffmpeg names has: "mono", "stereo", "5.1(side)", "7.1", "2 channels".
+fn channel_count(layout: &str) -> Option<u32> {
+    let layout = layout.trim();
+    match layout {
+        "mono" => return Some(1),
+        "stereo" => return Some(2),
+        "quad" => return Some(4),
+        _ => {}
+    }
+    if let Some(n) = layout.strip_suffix(" channels").or_else(|| layout.strip_suffix(" channel")) {
+        return n.trim().parse().ok().filter(|n| *n > 0);
+    }
+    // "5.1" is five channels and a low-frequency one; a layout's own detail ("(side)") doesn't count.
+    let bare = layout.split('(').next()?;
+    let (main, low) = bare.split_once('.')?;
+    Some(main.parse::<u32>().ok()? + low.parse::<u32>().ok()?).filter(|n| *n > 0)
 }
 
 /// The encoders `ffmpeg` has, to try in turn: Windows' H.264 encoder on the graphics card, then on the processor, then
@@ -894,8 +936,82 @@ mod tests {
         let said = "Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'a.mp4':\n  Duration: 00:01:02.50, start: 0.000000, bitrate: 120 kb/s\n  \
                     Stream #0:0[0x1](und): Video: h264 (Constrained Baseline) (avc1 / 0x31637661), yuv420p(progressive), 320x180 [SAR 1:1 DAR 16:9], 14 kb/s, 10 fps\n  \
                     Stream #0:1[0x2](und): Audio: aac (LC) (mp4a / 0x6134706D), 22050 Hz, mono, fltp, 16 kb/s (default)\n";
-        assert_eq!(read_probe(said), Some(Probe { width: 320, height: 180, duration: Some(62_500), sound: true }));
+        assert_eq!(
+            read_probe(said),
+            Some(Probe {
+                width: 320,
+                height: 180,
+                duration: Some(62_500),
+                frame_rate: Some(10.0),
+                sound: true,
+                sample_rate: Some(22_050),
+                channels: Some(1),
+            })
+        );
         assert_eq!(read_probe("Stream #0:0: Audio: aac"), None, "no picture");
+    }
+
+    #[test]
+    fn the_frame_rate_and_the_sound_ffmpeg_names_are_read() {
+        let said = |video: &str, audio: &str| {
+            format!(
+                "  Duration: 00:00:10.00, start: 0.000000, bitrate: 2000 kb/s\n  \
+                 Stream #0:0[0x1](und): Video: h264 (High), yuv420p(tv, bt709), 1920x1080 [SAR 1:1 DAR 16:9], {video}\n  \
+                 Stream #0:1[0x2](eng): Audio: {audio}\n"
+            )
+        };
+        let read = |video: &str, audio: &str| read_probe(&said(video, audio)).unwrap();
+        let a = read(
+            "5000 kb/s, 29.97 fps, 29.97 tbr, 30k tbn (default)",
+            "aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 128 kb/s",
+        );
+        assert_eq!((a.frame_rate, a.sample_rate, a.channels), (Some(29.97), Some(48_000), Some(2)));
+        // No "fps" (a stream with its frames at uneven times says only its base rate), and the layouts named in words.
+        let b = read("25 tbr, 12800 tbn", "ac3 (ac-3 / 0x332D6361), 44100 Hz, 5.1(side), fltp, 384 kb/s");
+        assert_eq!((b.frame_rate, b.sample_rate, b.channels), (Some(25.0), Some(44_100), Some(6)));
+        let c = read("23.98 fps, 23.98 tbr", "pcm_s16le ([1][0][0][0] / 0x0001), 96000 Hz, 2 channels, s16, 3072 kb/s");
+        assert_eq!((c.frame_rate, c.sample_rate, c.channels), (Some(23.98), Some(96_000), Some(2)));
+        // A rate written as "1k tbr", or none at all, is not guessed at.
+        assert_eq!(read("1k tbr, 1k tbn", "opus, 48000 Hz, 7.1, fltp").frame_rate, None);
+        assert_eq!(read("1k tbr, 1k tbn", "opus, 48000 Hz, 7.1, fltp").channels, Some(8));
+        // Sound it says nothing of is still sound.
+        let d = read_probe("Stream #0:0: Video: h264, 640x360, 30 fps\n  Stream #0:1: Audio: aac\n").unwrap();
+        assert_eq!((d.sound, d.sample_rate, d.channels), (true, None, None));
+        let mute = read_probe("Stream #0:0: Video: h264, 640x360, 30 fps\n").unwrap();
+        assert_eq!((mute.sound, mute.sample_rate, mute.channels, mute.frame_rate), (false, None, None, Some(30.0)));
+    }
+
+    #[test]
+    fn channel_layouts_are_counted() {
+        for (layout, count) in [
+            ("mono", 1),
+            ("stereo", 2),
+            ("quad", 4),
+            ("2.1", 3),
+            ("5.0", 5),
+            ("5.1", 6),
+            ("5.1(side)", 6),
+            ("7.1", 8),
+            ("6 channels", 6),
+        ] {
+            assert_eq!(channel_count(layout), Some(count), "{layout}");
+        }
+        assert_eq!(channel_count("fltp"), None);
+        assert_eq!(channel_count("0 channels"), None);
+    }
+
+    #[test]
+    fn a_colour_is_written_for_ass_as_its_red_green_and_blue_say() {
+        // The values the player's tokens have (--subtitle-*), as ASS spells them: blue, green, red.
+        for (color, ass) in [
+            (Color::White, "&H00FFFFFF"),
+            (Color::Yellow, "&H005CE4FF"),
+            (Color::Cyan, "&H00FFE37F"),
+            (Color::Green, "&H008AF0A6"),
+            (Color::Pink, "&H00D1A3FF"),
+        ] {
+            assert_eq!(color.ass(), ass);
+        }
     }
 
     /// With CI's ffmpeg (`CHAYA_FFMPEG`), the tour's clip cut from 5 s for 11 s at 720p (it is 320 by 180, so it stays

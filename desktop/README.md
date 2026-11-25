@@ -254,6 +254,15 @@ Off Windows, `python desktop/engine/prepare.py --host` makes an engine for the c
   there says *Saved "Clip name"* with *Show in folder* and how it was encoded, or *Couldn't export "Clip name"*
   with why and *Retry*; saved ones go after 8 s (not while the pointer or the focus is on them), failed ones stay.
   Over a page, the page is made shorter so the notices sit below it.
+- **Editor project** (`core::fcpxml`, step 11 of `docs/PLAN.md`). *Export* › *Editor project* saves the clips chosen
+  as one FCPXML 1.10 file next to the video, "Video title - Clips.fcpxml" (or the clip's name, for one), for Final Cut
+  Pro and DaVinci Resolve (Premiere reads another format, Final Cut 7's XML, which Chaya does not write). Nothing is
+  encoded: the video is one asset, named by its `file:///` address (Windows' `C:\`, `\\?\` and network-share paths
+  alike), and each clip is a cut of it on the spine, one after the other. Times are on the picture's own frames, read
+  by ffmpeg (29.97 is 30000/1001; a measured 23.98 or 59.94 is taken as the standard rate it means, anything else as
+  the whole number nearest, 30 when unknown), each edge on its nearest frame, a clip at least a frame long and inside
+  the video. The subtitles chosen go over each clip as Final Cut's Basic Title, in Helvetica, the language's colour
+  and size, two languages in one title as they are burned in. The idea is OpenFilm's (MIT); the writer is Chaya's own.
 - **Your own videos** (`core::own`, `app/src-tauri/src/own.rs`, `app/ui/own.js`). A video or sound already on the PC
   (a meeting, an interview) dragged from Explorer onto any part of the window, or picked with *Add from this PC*
   beside the Downloads heading (Windows' own file picker, through `tauri-plugin-dialog`, opened by the app so the

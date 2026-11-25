@@ -629,7 +629,8 @@
     </aside>
   </div>
 </div>
-<!-- Export: the clips chosen saved as videos with their subtitles burned in, or as SRT files, next to the video -->
+<!-- Export: the clips chosen saved as videos with their subtitles burned in, as SRT files, or as one editor project,
+     next to the video -->
 <div class="export" id="export" hidden>
   <section class="export__sheet" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="export-title" aria-describedby="export-where">
     <div class="export__head">
@@ -640,10 +641,11 @@
       <p class="settings__label" id="export-clips-label">Clips</p>
       <div class="export__field" id="export-clips"></div>
       <p class="settings__label" id="export-as-label">Save as</p>
-      <div class="seg" role="group" aria-labelledby="export-as-label" id="export-as">
+      <div class="seg seg--wrap" role="group" aria-labelledby="export-as-label" id="export-as">
         <button type="button" data-save-as="video">Video</button>
         <button type="button" data-save-as="gif" title="An animated GIF, without sound, for a clip up to a minute">GIF</button>
         <button type="button" data-save-as="srt">Subtitle files (SRT)</button>
+        <button type="button" data-save-as="fcpxml" title="One file for Final Cut Pro or DaVinci Resolve: the clips cut from this video as it is, nothing re-encoded">Editor project</button>
       </div>
       <p class="settings__label" id="export-subtitles-label" data-for="video">Subtitles</p>
       <div class="export__field" id="export-subtitles" data-for="video"></div>

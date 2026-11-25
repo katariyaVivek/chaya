@@ -9,6 +9,7 @@ pub mod copied;
 pub mod download;
 pub mod engine;
 pub mod export;
+pub mod fcpxml;
 pub mod fix;
 pub mod formats;
 pub mod found;

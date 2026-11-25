@@ -148,3 +148,76 @@ search, translation, highlights and clips all have them.
   (Windows' `speech::whisper::parse` and `speech::lines`) are ported with Windows' tests and its recorded output. The
   models are pinned by SHA-256 (Base's from Hugging Face's LFS pointer) and fetched resumably. The sound is decoded
   by the phone to 16 kHz (`Sound16k`), five minutes at a time. `WhisperOnDeviceTest` hears the JFK sample on a device.
+
+## Then, on Windows: ideas from OpenFilm
+
+Two steps for Chaya for Windows, from [OpenFilm](https://github.com/openfilm/openfilm), an open-source video editor
+(MIT): its export of a timeline to an editor, and its word-by-word captions. They follow the Windows plan's own rules
+([`history/plan-watch-understand-clip.md`](history/plan-watch-understand-clip.md)): nothing uploaded, ffmpeg with
+libass, one PR each, labelled `ui-check`.
+
+### 11. Clips for an editor (Windows) ☑
+
+**The person gets:** *Editor project* in the Export dialog: the clips they chose, cut and in order, as one FCPXML
+file for Final Cut Pro and DaVinci Resolve, to finish there (music, colour, titles) without Chaya re-encoding
+anything. The subtitles chosen come as titles over each clip, one block for two languages.
+
+Idea from [OpenFilm](https://github.com/openfilm/openfilm), which exports its timeline the same way (MIT; only the
+idea and the shape of the file are taken, Chaya's writer is its own, since OpenFilm's is tied to its own timeline).
+
+- **One file for all the clips**, next to the video as "Video title - Clips.fcpxml" (the clip's name when there is
+  one). The video itself is not copied: each clip is a cut of the saved file, named by its `file:///` address, so the
+  editor reads the original picture and sound at full quality. Moving the video breaks the link, as it does for any
+  editor project; the dialog says so.
+- **Frames, not milliseconds.** FCPXML times are fractions of a second on the video's own frame grid, so the
+  picture's frame rate is read (`core::export::Probe` gains it, and the sound's rate and channels) and each edge is
+  put on the nearest frame (29.97 is 30000/1001, never 29.97 written as a decimal). A clip is at least one frame.
+- **Subtitles as titles** (Basic Title, which every Final Cut has), each timed inside its clip. Resolve reads
+  titles too. Native captions are left out: Resolve reads them badly. SRT export stays for those who want that.
+- **Premiere Pro does not read FCPXML**; it reads Final Cut 7 XML (xmeml). That is a second writer, left for after
+  this step if it is asked for. The dialog says which programs the file is for.
+- **Privacy:** nothing new is contacted or kept; the file holds the video's path and its clips.
+- **Tests:** the file for one clip, several clips and two languages (read back with an XML parser, every `ref`
+  resolving, every time on the frame grid, the spine's length the clips' sum); 23.976, 25, 29.97, 30 and 59.94;
+  paths with spaces, accents and a drive letter or a network share becoming `file:///` addresses; names and
+  subtitles with `&`, `<` and quotes; the app takes `fcpxml` as a way to save and makes one job for all the clips.
+
+**Done.** `core::fcpxml` writes the file: one `format` and one `asset` (the video by its `file:///` address, its sound's
+channels and a rate FCPXML names), and a project in an event named for the video whose spine holds an `asset-clip`
+for each clip, back to back. `fcpxml::Rate` puts every time on the picture's frames, in lowest terms
+(`1001/100s`), from the rate `core::export::Probe` now reads (with the sound's rate and channels). Titles are
+connected to their clip on lane 1, offset in the clip's own time, made from the same stretches the burned-in
+subtitles use (`export::slices`), so two languages are one title; a stretch shorter than a frame is left out. The app
+makes one job for all the clips chosen (`SaveAs::Fcpxml`, the job keeping its clips for Retry), reads the frame rate
+with ffmpeg, and saves next to the video. The dialog offers *Editor project*, with *Subtitles as titles* and no look,
+quality, size or sound; its note names the file, the programs it is for, not Premiere, and that the video must stay
+where it is. Tests: the file read back with an XML parser (every reference defined, every time on the grid, the
+spine as long as its clips) at nine rates, clips past the end or shorter than a frame, no sound or no length, paths
+of each kind, markup in names and lines, titles inside their clip in two languages, and the tour's own video read by
+ffmpeg (`CHAYA_FFMPEG`); the dialog's rules with Node; the Windows tour exports all its clips as a project. Not yet
+opened in Final Cut Pro or Resolve themselves: neither runs where this was built.
+
+### 12. Caption styles (Windows) ☐
+
+**The person gets:** more ways for burned-in subtitles to look than Outline, Box and Large, for the short clips
+people make from a talk: words that light up as they are said, a few words at a time in big letters, a pop on the
+word being said. Each is drawn in the language's own colour, font and size, as the three looks are.
+
+Idea from OpenFilm's caption presets and word-by-word captions (MIT; its library is CC0, but it draws its captions
+with a browser, and Chaya draws them with libass, so nothing is copied, only what a good short-form caption does).
+
+- **New looks** (each a small picture in the dialog, as the three are): *Highlight* (the line stays up, the word
+  being said is in an accent colour), *Karaoke* (words fill left to right as they are said, libass's `\kf`), *Pop*
+  (the word being said grows a little and settles), *One at a time* (a word or two, large, in the middle lower
+  third). All are plain ASS, so ffmpeg's libass draws them and `core::export::ass` stays the one place.
+- **They need each word's time.** Chaya has them when it made the subtitles (kept in the video's file); a subtitle
+  file downloaded with the video has only lines. For those, the word looks are not offered, and the dialog says why
+  ("Words light up only for subtitles Chaya made"), rather than guessing a word's time from its length. Two
+  languages: the word looks apply to the main language; the second stays a plain line below it.
+- **The accent colour** is the language's colour's brighter pair (white lights up yellow, yellow white...), fixed per
+  colour so the picture is the same on every PC.
+- **Looks are data**, not branches: a look is a small value (how a line is cut, what the current word does) in
+  `core::export`, so a new one is a table row and a test.
+- **Tests:** the ASS Chaya writes for each look (the words' times, the `\kf` lengths adding up to the line's, lines
+  cut at the clip's edges with a word half inside), a look refused for lines without word times, and the dialog's
+  rules in `ui/export.js`.

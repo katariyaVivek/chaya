@@ -2,6 +2,10 @@
 // what was chosen last time), the choices kept consistent as they change, the `options` the app is asked with, and
 // the words for how an export went. The app does the work (`export_clips`, and an `export` event for each change).
 //
+// Clips are saved as videos, GIFs or SRT files, one a clip, or as an editor project ('fcpxml'): one file for Final
+// Cut Pro or DaVinci Resolve holding all the clips chosen, cut from the video as it is, with the subtitles chosen as
+// titles.
+//
 // A language is named here by its key: the track's language code, or '' for a track without one, as the app takes
 // it. `styleOf(key)` gives that language's player style: { color, size, font }, the font capitalised ('Sans').
 
@@ -46,7 +50,7 @@ export function firstChoice({ clips = [], cut = null, tracks = [], shown = null,
   return fixed(
     {
       which: cut !== null && clips.some((c) => c.id === cut) ? 'chosen' : 'all',
-      saveAs: kept.saveAs === 'srt' && tracks.length ? 'srt' : kept.saveAs === 'gif' ? 'gif' : 'video',
+      saveAs: kept.saveAs === 'srt' && tracks.length ? 'srt' : ['gif', 'fcpxml'].includes(kept.saveAs) ? kept.saveAs : 'video',
       subtitles,
       first,
       second: other,
@@ -134,8 +138,9 @@ export function keptOf(choice) {
   };
 }
 
-/** How many files an export makes: one a clip, or one a clip and language for SRT. */
+/** How many files an export makes: one a clip, or one a clip and language for SRT; one project for them all. */
 export function fileCount(choice, clips) {
+  if (choice.saveAs === 'fcpxml') return 1;
   if (together(choice)) return clips;
   return choice.saveAs === 'srt' ? clips * choice.srt.length : clips;
 }
@@ -147,11 +152,16 @@ export function exportLabel(choice, clips) {
     return `Export ${files} subtitle file${files === 1 ? '' : 's'}`;
   }
   if (choice.saveAs === 'gif') return clips === 1 ? 'Export GIF' : `Export ${clips} GIFs`;
+  if (choice.saveAs === 'fcpxml') return clips === 1 ? 'Export project' : `Export project of ${clips} clips`;
   return clips === 1 ? 'Export clip' : `Export ${clips} clips`;
 }
 
-/** Where the files go, with the first one's name as an example. */
-export function whereNote(choice, title, clipName) {
+/** Where the files go, with the first one's name as an example (`clips` of them chosen). */
+export function whereNote(choice, title, clipName, clips = 1) {
+  if (choice.saveAs === 'fcpxml') {
+    const name = `${title} - ${clips === 1 ? clipName : 'Clips'}.fcpxml`;
+    return `Saved next to the video for Final Cut Pro or DaVinci Resolve (not Premiere): “${name}”. It uses the video where it is, so keep the two together.`;
+  }
   const base = `${title} - ${clipName}`;
   if (together(choice)) {
     const [a, b] = choice.srt.map((key) => key || 'subtitles');
@@ -206,7 +216,7 @@ export function baseName(path) {
  *  has not ended, or was stopped by the person. */
 export function noticeOf(job) {
   if (job.state === 'done') {
-    const detail = job.saveAs === 'srt' ? baseName(job.path) : encoderWords(job.encoder);
+    const detail = job.saveAs === 'srt' || job.saveAs === 'fcpxml' ? baseName(job.path) : encoderWords(job.encoder);
     return { text: `Saved “${job.name}”`, detail: detail ?? '', action: 'Show in folder', failed: false };
   }
   if (job.state === 'failed') {
