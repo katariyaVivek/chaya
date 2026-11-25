@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExpandMore
@@ -25,8 +26,9 @@ import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Stream
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -149,8 +151,9 @@ private fun SheetHeader(count: Int) {
             .padding(horizontal = 24.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // Stage's name for it, as Chaya for Windows has it
         Text(
-            text = "On this page",
+            text = "Found on this page",
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurface,
         )
@@ -180,7 +183,7 @@ private fun PrimaryMediaCard(
     val showStage = item.thumbnailUrl != null && !thumbnailFailed
 
     Surface(
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surface,
         modifier = Modifier
             .padding(horizontal = 16.dp, vertical = 8.dp)
@@ -227,13 +230,18 @@ private fun PrimaryMediaCard(
                     }
                 }
                 Spacer(Modifier.height(16.dp))
+                // Stage: one Save in ink, the strong control; for a stream, Quality beside it to pick another
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
                         onClick = { onDownload(item) },
-                        shape = RoundedCornerShape(14.dp),
+                        shape = CircleShape,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary,
+                        ),
                         modifier = Modifier
                             .weight(1f)
-                            .height(48.dp)
+                            .height(54.dp)
                             .pressScale(0.98f),
                     ) {
                         Icon(
@@ -242,18 +250,18 @@ private fun PrimaryMediaCard(
                             modifier = Modifier.size(20.dp),
                         )
                         Spacer(Modifier.width(8.dp))
-                        Text("Download", style = MaterialTheme.typography.labelLarge)
+                        Text("Save", style = MaterialTheme.typography.titleMedium)
                     }
-                    // A stream's Download starts at the best quality; this is how to pick another.
+                    // A stream's Save starts at the best quality; this is how to pick another.
                     if (item.kind == MediaKind.STREAM) {
-                        FilledTonalButton(
+                        OutlinedButton(
                             onClick = { onChooseQuality(item) },
-                            shape = RoundedCornerShape(14.dp),
+                            shape = CircleShape,
                             modifier = Modifier
-                                .height(48.dp)
+                                .height(54.dp)
                                 .pressScale(0.98f),
                         ) {
-                            Text("Quality", style = MaterialTheme.typography.labelLarge)
+                            Text("Quality", style = MaterialTheme.typography.titleMedium)
                         }
                     }
                 }
@@ -271,7 +279,6 @@ private fun MediaRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .pressScale()
             .clickable { onDownload(item) }
             .padding(horizontal = 20.dp, vertical = 10.dp)
             .alpha(if (dimmed) 0.72f else 1f),
@@ -304,7 +311,7 @@ private fun MediaRow(
         Spacer(Modifier.width(8.dp))
         Icon(
             imageVector = Icons.Default.FileDownload,
-            contentDescription = "Download",
+            contentDescription = "Save",
             tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.size(22.dp),
         )

@@ -143,3 +143,30 @@ test("a clip's length and place read as Stage writes them", () => {
   assert.equal(clipSpan({ start: 242_000, end: 280_000 }), '0:38 clip · 4:02 to 4:40');
   assert.equal(clipSpan({ start: 3_599_400, end: 3_725_000 }), '2:06 clip · 59:59 to 1:02:05');
 });
+
+test('a gliding page stands where the eased step puts it, in whole pixels, and never past either end', async () => {
+  const { glideAt, samePlace } = await import('../ui/shell.js');
+  const from = { x: 64, y: 80, width: 1000, height: 600 };
+  const to = { x: 64, y: 80, width: 652, height: 600 };
+  assert.deepEqual(glideAt(from, to, 0), from);
+  assert.deepEqual(glideAt(from, to, 1), to);
+  assert.deepEqual(glideAt(from, to, 0.5), { x: 64, y: 80, width: 826, height: 600 });
+  assert.deepEqual(glideAt(from, to, 0.333), { x: 64, y: 80, width: 884, height: 600 });
+  assert.deepEqual(glideAt(from, to, -1), from);
+  assert.deepEqual(glideAt(from, to, 2), to);
+  assert.ok(samePlace(from, { ...from, width: 1000.2 }));
+  assert.ok(!samePlace(from, to));
+  assert.ok(!samePlace(null, to));
+});
+
+test('the Library is a tab: opened, left in the strip for another place, come back to, and closed', async () => {
+  const { libraryTabAfter } = await import('../ui/shell.js');
+  assert.equal(libraryTabAfter('closed', 'show'), 'shown');
+  assert.equal(libraryTabAfter('shown', 'leave'), 'open');
+  assert.equal(libraryTabAfter('open', 'show'), 'shown');
+  assert.equal(libraryTabAfter('open', 'close'), 'closed');
+  assert.equal(libraryTabAfter('shown', 'close'), 'closed');
+  // Leaving a place that isn't the Library opens nothing.
+  assert.equal(libraryTabAfter('closed', 'leave'), 'closed');
+  assert.equal(libraryTabAfter('open', 'leave'), 'open');
+});

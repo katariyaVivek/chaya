@@ -41,9 +41,12 @@ import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.runtime.remember
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -52,6 +55,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.chaya.app.download.DownloadTask
+import com.chaya.app.downloads.libraryDays
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -74,28 +78,40 @@ fun LibraryGrid(
     modifier: Modifier = Modifier,
 ) {
     val choosing = selected.isNotEmpty()
+    val days = remember(items) { libraryDays(items) }
+    // Stage's cards, two or more to a row, under the day each was saved; room at the foot for Chaya's bar
     LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = 112.dp),
+        columns = GridCells.Adaptive(minSize = 150.dp),
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 24.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 120.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         if (unfinished > 0) {
             item(key = "unfinished", span = { GridItemSpan(maxLineSpan) }) {
                 UnfinishedPill(unfinished, onShowList)
             }
         }
-        items(items, key = { it.key }) { item ->
-            Tile(
-                item = item,
-                selected = item.key in selected,
-                files = files,
-                modifier = Modifier.combinedClickable(
-                    onClick = { if (choosing) onToggle(item) else onOpen(item) },
-                    onLongClick = { onToggle(item) },
-                ),
-            )
+        days.forEach { day ->
+            item(key = "day:${day.title}", span = { GridItemSpan(maxLineSpan) }) {
+                Text(
+                    text = day.title,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+            }
+            items(day.items, key = { it.key }) { item ->
+                SavedCard(
+                    item = item,
+                    selected = item.key in selected,
+                    files = files,
+                    modifier = Modifier.combinedClickable(
+                        onClick = { if (choosing) onToggle(item) else onOpen(item) },
+                        onLongClick = { onToggle(item) },
+                    ),
+                )
+            }
         }
     }
 }
@@ -132,25 +148,61 @@ internal fun tileLabel(item: LibraryItem): String = when (item) {
     is LibraryItem.Single -> item.title
 }
 
+/**
+ * A saved thing as Chaya shows it everywhere (DESIGN.md, Saved card): its picture at 16:10 with its badges, its name,
+ * and what it is. The Library's grid and Home's *Recently saved* both draw this one card; [modifier] gives its width
+ * and what a tap does.
+ */
 @Composable
-private fun Tile(item: LibraryItem, selected: Boolean, files: LibraryFiles?, modifier: Modifier) {
-    val cover = item.cover
-    val kind = kindOf(cover)
-    val picture = rememberCover(cover, files)
-    Box(
+internal fun SavedCard(item: LibraryItem, files: LibraryFiles?, modifier: Modifier = Modifier, selected: Boolean = false) {
+    Column(
         modifier = Modifier
-            .aspectRatio(1f)
-            .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-            .then(
-                if (selected) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(16.dp))
-                else Modifier
-            )
+            .clip(RoundedCornerShape(14.dp))
             .then(modifier)
             .semantics(mergeDescendants = true) {
                 contentDescription = tileLabel(item)
                 this.selected = selected
             },
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Picture(item, selected, files)
+        // What the caption says is the card's name, already its description: read once, not again as text
+        Column(modifier = Modifier.padding(horizontal = 2.dp).clearAndSetSemantics {}) {
+            Text(
+                text = item.title,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onBackground,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = cardDetails(item),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+/** A card's picture at 16:10, Stage's frame: the picture itself, a frame of a video, or its kind and name. */
+@Composable
+private fun Picture(item: LibraryItem, selected: Boolean, files: LibraryFiles?) {
+    val cover = item.cover
+    val kind = kindOf(cover)
+    val picture = rememberCover(cover, files)
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(16f / 10f)
+            .shadow(2.dp, RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .then(
+                if (selected) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(14.dp))
+                else Modifier
+            ),
     ) {
         if (picture != null) {
             AsyncImage(
@@ -242,12 +294,12 @@ internal fun tintFor(kind: FileKind?): Color =
  * Worked out off the main thread.
  */
 @Composable
-internal fun rememberCover(task: DownloadTask, files: LibraryFiles?): Any? {
-    val cover by produceState<Any?>(initialValue = null, task.id, task.filePath, task.thumbnailUrl) {
+internal fun rememberCover(task: DownloadTask, files: LibraryFiles?, large: Boolean = false): Any? {
+    val cover by produceState<Any?>(initialValue = null, task.id, task.filePath, task.thumbnailUrl, large) {
         value = when (kindOf(task)) {
             FileKind.PICTURE -> withContext(Dispatchers.IO) { task.filePath?.let(::File)?.takeIf { it.isFile } }
                 ?: task.thumbnailUrl
-            FileKind.VIDEO -> files?.frameFor(task) ?: task.thumbnailUrl
+            FileKind.VIDEO -> (if (large) files?.largeFrameFor(task) else files?.frameFor(task)) ?: task.thumbnailUrl
             else -> null
         }
     }

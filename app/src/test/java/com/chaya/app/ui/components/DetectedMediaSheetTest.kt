@@ -66,7 +66,7 @@ class DetectedMediaSheetTest {
         }
 
         composeRule.onNodeWithText("Big Buck Bunny").assertIsDisplayed()
-        composeRule.onNodeWithText("Download").performClick()
+        composeRule.onNodeWithText("Save").performClick()
         scrollTo("Theme song")
         composeRule.onNodeWithText("Theme song").performClick()
 
@@ -79,7 +79,7 @@ class DetectedMediaSheetTest {
     }
 
     @Test
-    fun `a stream offers a Quality button next to Download and a file does not`() {
+    fun `a stream offers a Quality button next to Save and a file does not`() {
         val picked = mutableListOf<RankedMedia>()
         val downloaded = mutableListOf<RankedMedia>()
         composeRule.setContent {
@@ -92,7 +92,7 @@ class DetectedMediaSheetTest {
         }
 
         composeRule.onNodeWithText("Quality").performClick()
-        composeRule.onNodeWithText("Download").performClick()
+        composeRule.onNodeWithText("Save").performClick()
 
         assertEquals(listOf(main), picked)
         assertEquals(listOf(main), downloaded)
@@ -110,7 +110,7 @@ class DetectedMediaSheetTest {
             )
         }
 
-        composeRule.onNodeWithText("Download").assertIsDisplayed()
+        composeRule.onNodeWithText("Save").assertIsDisplayed()
         composeRule.onNodeWithText("Quality").assertDoesNotExist()
     }
 

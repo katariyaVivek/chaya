@@ -55,7 +55,7 @@
   <ul class="side__places">
     <li><button class="side__place pressable" type="button" id="place-home" data-place="home" title="Home"><svg><use href="#i-home"/></svg><span>Home</span></button></li>
     <li><button class="side__place pressable" type="button" id="place-browse" data-place="browse" title="Browse: the pages you have open" hidden><svg><use href="#i-page"/></svg><span>Browse</span></button></li>
-    <li><button class="side__place pressable" type="button" id="place-library" data-place="library" title="Library: everything you have saved"><svg><use href="#i-library"/></svg><span>Library</span></button></li>
+    <li><button class="side__place pressable" type="button" id="place-library" data-place="library" title="Library: everything you have saved"><svg><use href="#i-library"/></svg><span>Library</span><span class="side__badge num" hidden></span></button></li>
   </ul>
   <!-- In the Library: where its downloads came from, each one choosing only those (the Library's one site filter) -->
   <div class="side__sources" id="side-sources" hidden>
@@ -200,7 +200,6 @@
           <p class="settings__credit" id="shield-lists"></p>
         </div>
       </div>
-      <button class="icon-btn pressable page-downloads" type="button" id="page-downloads" aria-label="Downloads" title="Downloads" aria-pressed="false"><svg><use href="#i-download"/></svg><span class="page-count num" hidden></span></button>
     </div>
   </form>
 

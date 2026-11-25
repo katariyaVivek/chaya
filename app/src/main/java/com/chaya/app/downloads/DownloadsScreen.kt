@@ -1,5 +1,10 @@
 package com.chaya.app.downloads
 
+import androidx.compose.material.icons.filled.LibraryAdd
+import com.chaya.app.ui.components.HeaderButton
+import com.chaya.app.ui.components.ScreenHeader
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
@@ -27,7 +32,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 // OpenInNew is directional — the plain Filled variant is deprecated in favor
 // of the AutoMirrored one so LTR/RTL layouts mirror the glyph correctly.
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
@@ -63,6 +67,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -85,12 +90,18 @@ import coil3.compose.AsyncImage
 import com.chaya.app.download.DownloadNotification.formatFileSize
 import com.chaya.app.download.DownloadState
 import com.chaya.app.download.DownloadTask
+import com.chaya.app.history.PagesToOpen
+import com.chaya.app.home.BarAction
+import com.chaya.app.home.BarMiddle
+import com.chaya.app.home.ChayaBar
+import com.chaya.app.home.ChayaBarClearance
+import com.chaya.app.home.HomeShelf
+import com.chaya.app.home.Place
 import com.chaya.app.ui.theme.ChayaMotion
 import com.chaya.app.ui.theme.LocalChayaColors
-import com.chaya.app.ui.components.AppearanceDialog
 import com.chaya.app.ui.theme.StaggeredAppear
-import com.chaya.app.ui.theme.ThemeMode
 import com.chaya.app.ui.theme.pressScale
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.horizontalScroll
@@ -102,6 +113,7 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.produceState
 import com.chaya.app.history.SearchField
+import com.chaya.app.subtitles.LineSearch
 import com.chaya.app.library.FileKind
 import com.chaya.app.library.LibraryFiles
 import com.chaya.app.library.LibraryFilter
@@ -115,24 +127,23 @@ import com.chaya.app.library.ZipItem
 import com.chaya.app.library.ZipView
 import com.chaya.app.library.kindOf
 import com.chaya.app.library.libraryItems
+import com.chaya.app.library.playsInChaya
 import com.chaya.app.library.unfinishedCount
 import java.io.File
 
 @Composable
 fun DownloadsScreen(
-    onNavigateBack: () -> Unit,
-    onPlayStream: (Long) -> Unit,
-    onNavigateToDiagnostics: () -> Unit = {},
-    onNavigateToHistory: () -> Unit = {},
-    onNavigateToBookmarks: () -> Unit = {},
-    themeMode: ThemeMode = ThemeMode.SYSTEM,
-    onThemeModeChange: (ThemeMode) -> Unit = {},
+    /** A saved video, or a stream, plays in Chaya's player. */
+    onPlay: (Long) -> Unit,
+    /** A saved video plays in Chaya's player from a time (milliseconds). */
+    onPlayAt: (Long, Long) -> Unit = { id, _ -> onPlay(id) },
+    /** Chaya's places, at the Library's foot (Stage); none where the Library is shown on its own (tests). */
+    onPlace: ((Place) -> Unit)? = null,
     viewModel: DownloadsViewModel = viewModel()
 ) {
     val tasks by viewModel.downloads.collectAsState()
     val hidden by viewModel.pendingDeletes.collectAsState()
     val grid by viewModel.grid.collectAsState()
-    var appearanceOpen by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
@@ -159,27 +170,27 @@ fun DownloadsScreen(
         }
     }
 
-    if (appearanceOpen) {
-        AppearanceDialog(
-            current = themeMode,
-            onSelect = onThemeModeChange,
-            onDismiss = { appearanceOpen = false },
-        )
+    // The phone's picker, for a video or sound of the person's own; Chaya keeps the right to read what is picked
+    val pickVideo = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) viewModel.addOwnVideo(uri, ::message)
     }
 
     DownloadsContent(
+        onPlace = onPlace,
         tasks = shown,
         grid = grid,
         onGridChange = viewModel::setGrid,
         files = viewModel.files,
         snackbarHostState = snackbarHostState,
+        searchLines = viewModel::searchLines,
         actions = DownloadActions(
             pause = viewModel::pause,
             resume = viewModel::resume,
             cancel = viewModel::cancel,
             delete = ::requestDelete,
             open = { task -> viewModel.open(task, ::message) },
-            play = onPlayStream,
+            play = onPlay,
+            playAt = onPlayAt,
             saveAsFile = viewModel::saveAsFile,
             share = { chosen -> viewModel.share(chosen, ::message) },
             openFile = { file, mime -> viewModel.openFile(file, mime, ::message) },
@@ -187,11 +198,7 @@ fun DownloadsScreen(
             saveFile = { file, name, mime -> viewModel.saveFile(file, name, mime, ::message) },
         ),
         menu = DownloadsMenu(
-            onNavigateBack = onNavigateBack,
-            onBookmarks = onNavigateToBookmarks,
-            onHistory = onNavigateToHistory,
-            onAppearance = { appearanceOpen = true },
-            onDiagnostics = onNavigateToDiagnostics,
+            onAddVideo = { runCatching { pickVideo.launch(arrayOf("video/*", "audio/*")) }.onFailure { message("No app on this phone can pick a file") } },
         ),
     )
 }
@@ -207,6 +214,8 @@ internal class DownloadActions(
     val open: (DownloadTask) -> Unit = {},
     /** Plays a stream that lives in the cache, in the app. */
     val play: (Long) -> Unit = {},
+    /** Plays a saved video from a time (milliseconds): a line found by the search. */
+    val playAt: (Long, Long) -> Unit = { _, _ -> },
     val saveAsFile: (Long) -> Unit = {},
     val share: (List<DownloadTask>) -> Unit = {},
     /** A file taken out of a ZIP: opened, shared or saved to the phone's folders. */
@@ -215,13 +224,16 @@ internal class DownloadActions(
     val saveFile: (File, String, String) -> Unit = { _, _, _ -> },
 )
 
-/** Where the top bar leads. */
+/** How long typing must pause before what is said in the saved videos is searched. */
+private const val SEARCH_PAUSE_MS = 150L
+
+/**
+ * What the header's own actions lead to beyond the Library itself. Settings (how Chaya looks, the AI and speech
+ * models, Diagnostics) are Home's; Bookmarks and History are the browser's.
+ */
 internal class DownloadsMenu(
-    val onNavigateBack: () -> Unit = {},
-    val onBookmarks: () -> Unit = {},
-    val onHistory: () -> Unit = {},
-    val onAppearance: () -> Unit = {},
-    val onDiagnostics: () -> Unit = {},
+    /** Opens the phone's picker to add a video of the person's own. */
+    val onAddVideo: () -> Unit = {},
 )
 
 /** Pictures being looked at in the viewer, and which one first. */
@@ -236,12 +248,18 @@ private class Viewing(val pages: List<ViewerPage>, val start: Int, val tasks: Li
 @Composable
 internal fun DownloadsContent(
     tasks: List<DownloadTask>,
+    onPlace: ((Place) -> Unit)? = null,
     grid: Boolean,
     onGridChange: (Boolean) -> Unit,
     files: LibraryFiles?,
     actions: DownloadActions,
     menu: DownloadsMenu = DownloadsMenu(),
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
+    /**
+     * Finds the lines said in these finished downloads that hold every word searched for, among the ids given; none
+     * where the Library is shown on its own (tests).
+     */
+    searchLines: (suspend (String, List<DownloadTask>, Set<Long>) -> LineSearch.Results)? = null,
 ) {
     var filterIndex by rememberSaveable { mutableIntStateOf(0) }
     val filter = DownloadFilter.entries[filterIndex]
@@ -249,7 +267,6 @@ internal fun DownloadsContent(
     var site by rememberSaveable { mutableStateOf<SourceSite?>(null) }
     var query by rememberSaveable { mutableStateOf("") }
     var searching by rememberSaveable { mutableStateOf(false) }
-    var menuOpen by remember { mutableStateOf(false) }
     var chosen by remember { mutableStateOf(emptySet<String>()) }
     var viewing by remember { mutableStateOf<Viewing?>(null) }
     var zipTaskId by rememberSaveable { mutableStateOf<Long?>(null) }
@@ -257,6 +274,21 @@ internal fun DownloadsContent(
     val scope = rememberCoroutineScope()
 
     val narrowed = LibraryFilter(kind, site, query)
+    // What is said in the saved videos, searched as the words are typed: the videos the kind and site leave in view
+    var said by remember { mutableStateOf(LineSearch.Results()) }
+    var saidOpen by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(searchLines, searching, query, kind, site, tasks) {
+        val find = searchLines
+        if (find == null || !searching || query.isBlank()) {
+            said = LineSearch.Results()
+            return@LaunchedEffect
+        }
+        // Waits for a pause in the typing
+        delay(SEARCH_PAUSE_MS)
+        val finished = tasks.filter { it.state == DownloadState.COMPLETED }
+        val among = finished.filter(LibraryFilter(kind, site)::matches).map { it.id }.toSet()
+        said = find(query, finished, among)
+    }
     val listed = remember(tasks, narrowed) { tasks.filter(narrowed::matches) }
     val sections = remember(listed, filter) { groupDownloads(listed, filter) }
     val items = remember(tasks, narrowed) { libraryItems(tasks, narrowed) }
@@ -290,13 +322,13 @@ internal fun DownloadsContent(
                 viewing = Viewing(pagesOf(pictures), pictures.indexOf(task).coerceAtLeast(0), pictures)
             }
             kindOf(task) == FileKind.ZIP && task.filePath != null -> zipTaskId = task.id
-            task.filePath != null || task.exportedUri != null -> actions.open(task)
-            else -> actions.play(task.id)
+            playsInChaya(task) -> actions.play(task.id)
+            else -> actions.open(task)
         }
     }
 
     fun openTask(task: DownloadTask) {
-        if (task.filePath != null || task.exportedUri != null) actions.open(task) else actions.play(task.id)
+        if (playsInChaya(task)) actions.play(task.id) else actions.open(task)
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -325,53 +357,42 @@ internal fun DownloadsContent(
                         colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
                     )
                 } else {
-                    TopAppBar(
-                        title = { Text("Downloads", style = MaterialTheme.typography.titleLarge) },
-                        navigationIcon = {
-                            IconButton(onClick = menu.onNavigateBack) {
-                                Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                            }
-                        },
-                        actions = {
-                            IconButton(onClick = {
-                                searching = !searching
-                                if (!searching) query = ""
-                            }) {
-                                Icon(Icons.Default.Search, contentDescription = if (searching) "Close search" else "Search downloads")
-                            }
-                            IconButton(onClick = { onGridChange(!grid) }) {
-                                Icon(
-                                    imageVector = if (grid) Icons.AutoMirrored.Filled.ViewList else Icons.Default.GridView,
-                                    contentDescription = if (grid) "Show as list" else "Show as grid"
-                                )
-                            }
-                            Box {
-                                IconButton(onClick = { menuOpen = true }) {
-                                    Icon(imageVector = Icons.Default.MoreVert, contentDescription = "More")
-                                }
-                                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                                    listOf(
-                                        "Bookmarks" to menu.onBookmarks,
-                                        "History" to menu.onHistory,
-                                        "Appearance" to menu.onAppearance,
-                                        "Diagnostics" to menu.onDiagnostics,
-                                    ).forEach { (label, action) ->
-                                        DropdownMenuItem(
-                                            text = { Text(label) },
-                                            onClick = {
-                                                menuOpen = false
-                                                action()
-                                            }
-                                        )
-                                    }
-                                }
-                            }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
-                    )
+                    // The header every screen has. The Library is a place, so no Back: the bar leads elsewhere.
+                    Column {
+                        ScreenHeader("Library") {
+                            HeaderButton(
+                                Icons.Default.Search,
+                                if (searching) "Close search" else "Search downloads",
+                                onClick = {
+                                    searching = !searching
+                                    if (!searching) query = ""
+                                },
+                            )
+                            HeaderButton(
+                                if (grid) Icons.AutoMirrored.Filled.ViewList else Icons.Default.GridView,
+                                if (grid) "Show as list" else "Show as grid",
+                                onClick = { onGridChange(!grid) },
+                            )
+                            HeaderButton(Icons.Default.LibraryAdd, "Add a video", onClick = menu.onAddVideo)
+                        }
+                        Text(
+                            "${librarySummary(tasks)} · everything stays on this phone",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 4.dp),
+                        )
+                    }
                 }
             },
-            snackbarHost = { SnackbarHost(snackbarHostState) },
+            // Above Chaya's bar floating at the foot, which would cover it ("Deleted …" could not be read)
+            snackbarHost = {
+                SnackbarHost(
+                    snackbarHostState,
+                    modifier = if (onPlace != null && !choosing) Modifier.padding(bottom = ChayaBarClearance) else Modifier,
+                )
+            },
             containerColor = MaterialTheme.colorScheme.background
         ) { padding ->
             Column(
@@ -379,7 +400,8 @@ internal fun DownloadsContent(
                     .fillMaxSize()
                     .padding(padding)
             ) {
-                if (searching) SearchField(query, onChange = { query = it }, placeholder = "Search by title")
+                if (searching) SearchField(query, onChange = { query = it }, placeholder = "Search titles and what's said")
+                if (searching && said.total > 0) SaidRow(said, onClick = { saidOpen = true })
                 if (!grid) FilterRow(selected = filter, onSelect = { filterIndex = it.ordinal })
                 NarrowRow(kind = kind, site = site, onKind = { kind = it }, onSite = { site = it })
 
@@ -411,7 +433,8 @@ internal fun DownloadsContent(
                     )
                     else -> LazyColumn(
                         modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(top = 4.dp, bottom = 24.dp)
+                        // Room at the foot for Chaya's bar, when it is there
+                        contentPadding = PaddingValues(top = 4.dp, bottom = if (onPlace != null) 120.dp else 24.dp)
                     ) {
                         sections.forEach { section ->
                             item(key = "section:${section.title}") { SectionLabel(section.title) }
@@ -433,6 +456,17 @@ internal fun DownloadsContent(
                     }
                 }
             }
+        }
+
+        if (saidOpen && said.total > 0) {
+            SaidSheet(
+                results = said,
+                onPlay = { hit ->
+                    saidOpen = false
+                    actions.playAt(hit.id, hit.start)
+                },
+                onDismiss = { saidOpen = false },
+            )
         }
 
         val zipTask = zipTaskId?.let { id -> tasks.firstOrNull { it.id == id } }
@@ -485,6 +519,18 @@ internal fun DownloadsContent(
                     },
                 )
             }
+        }
+
+        if (onPlace != null && !choosing) {
+            ChayaBar(
+                place = Place.LIBRARY,
+                middle = BarMiddle.Browse,
+                action = BarAction.Go,
+                progress = remember(tasks) { HomeShelf.progressOf(tasks) },
+                onPlace = onPlace,
+                onAction = PagesToOpen::openBlankTab,
+                modifier = Modifier.align(Alignment.BottomCenter),
+            )
         }
 
         viewing?.let { shown ->
@@ -578,11 +624,11 @@ private fun EmptyDownloads(
     narrowed: Boolean = false,
 ) {
     val (title, body) = when {
-        !hasAnyDownloads -> "Nothing saved yet" to "Open a page with a video and tap the download pill."
+        !hasAnyDownloads -> "Nothing saved yet" to "Open a page with a video and tap Save at the foot of the screen."
         narrowed -> "Nothing matches" to "Try another kind, site or title."
         filter == DownloadFilter.ACTIVE -> "All caught up" to "Nothing is running, waiting or needs attention."
         filter == DownloadFilter.DONE -> "Nothing finished yet" to "Finished downloads show up here."
-        else -> "Nothing saved yet" to "Open a page with a video and tap the download pill."
+        else -> "Nothing saved yet" to "Open a page with a video and tap Save at the foot of the screen."
     }
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         StaggeredAppear(index = 0) {
@@ -689,8 +735,8 @@ private fun DownloadCard(
     onSaveAsFile: () -> Unit,
     onShare: () -> Unit
 ) {
-    // Streams live in Media3's cache (no single file), so they play in-app instead of opening.
-    val openAction = if (task.filePath != null || task.exportedUri != null) onOpen else onPlay
+    // Videos, and streams that live only in Media3's cache, play in Chaya; anything else opens in another app.
+    val openAction = if (playsInChaya(task)) onPlay else onOpen
 
     Surface(
         shape = RoundedCornerShape(16.dp),
@@ -791,7 +837,7 @@ private fun ProgressBlock(task: DownloadTask) {
     val barModifier = Modifier
         .fillMaxWidth()
         .height(5.dp)
-        .clip(RoundedCornerShape(3.dp))
+        .clip(CircleShape)
 
     Column {
         // Streams never report a total size, so they get a moving bar instead of a stuck 0%.
@@ -799,14 +845,14 @@ private fun ProgressBlock(task: DownloadTask) {
             LinearProgressIndicator(
                 progress = { fraction },
                 modifier = barModifier,
-                color = MaterialTheme.colorScheme.primary,
+                color = LocalChayaColors.current.signal,
                 trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                 strokeCap = StrokeCap.Round
             )
         } else {
             LinearProgressIndicator(
                 modifier = barModifier,
-                color = MaterialTheme.colorScheme.primary,
+                color = LocalChayaColors.current.signal,
                 trackColor = MaterialTheme.colorScheme.surfaceContainerHighest,
                 strokeCap = StrokeCap.Round
             )
@@ -909,14 +955,14 @@ internal fun ActionsRow(
                 // Retry only when the classified error says it could help
                 // (pointless for 404s, denied links, full disks).
                 if (task.error?.retryable != false) {
-                    PrimaryAction(Icons.Default.Refresh, "Retry", onResume, highlighted = true)
+                    PrimaryAction(Icons.Default.Refresh, "Try again", onResume, highlighted = true)
                 }
             }
             DownloadState.COMPLETED -> {
-                if (task.filePath != null || task.exportedUri != null) {
-                    PrimaryAction(Icons.AutoMirrored.Filled.OpenInNew, "Open", onOpen, highlighted = true)
-                } else {
+                if (playsInChaya(task)) {
                     PrimaryAction(Icons.Default.PlayArrow, "Play", onPlay, highlighted = true)
+                } else {
+                    PrimaryAction(Icons.AutoMirrored.Filled.OpenInNew, "Open", onOpen, highlighted = true)
                 }
             }
         }

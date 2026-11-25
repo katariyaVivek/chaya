@@ -1,8 +1,12 @@
 package com.chaya.app.platform
 
+import com.chaya.app.subtitles.Chapter
+import com.chaya.app.subtitles.SubtitleSource
+import com.chaya.app.subtitles.SubtitleTrack
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertThrows
 import org.junit.Test
 
@@ -133,6 +137,38 @@ class DownloadRequestsTest {
         assertThrows(IllegalArgumentException::class.java) {
             choice("720p", 720, manifest).toDownloadRequest(media(title = "T"))
         }
+    }
+
+    @Test
+    fun `a video keeps the site's subtitles in the language spoken, with its headers but no cookie for another host`() {
+        val talk = media(title = "Talk").copy(
+            language = "en",
+            subtitles = listOf(
+                SubtitleTrack("de", "https://subs.example/de.vtt", automatic = true),
+                SubtitleTrack("en-orig", "https://subs.example/en.vtt", automatic = true),
+            ),
+        )
+
+        val request = choice("240p", quality = 240, file = video, sound = sound).toDownloadRequest(talk)
+
+        assertEquals(
+            SubtitleSource("en", "https://subs.example/en.vtt", mapOf("User-Agent" to "UA/video")),
+            request.subtitles,
+        )
+        // Sound alone has no picture to show them on; a video whose site has none gets none
+        val audio = PlatformChoice("Audio", "", null, sound, null, isAudioOnly = true).toDownloadRequest(talk)
+        assertNull(audio.subtitles)
+        assertNull(choice("240p", quality = 240, file = video).toDownloadRequest(media(title = "Clip")).subtitles)
+    }
+
+    @Test
+    fun `a video's chapters go with it, sound alone included`() {
+        val chapters = listOf(Chapter(0, 30_000, "Intro"), Chapter(30_000, 90_000, "The answer"))
+        val talk = media(title = "Talk").copy(chapters = chapters)
+
+        assertEquals(chapters, choice("240p", quality = 240, file = video, sound = sound).toDownloadRequest(talk).chapters)
+        assertEquals(chapters, PlatformChoice("Audio", "", null, sound, null, isAudioOnly = true).toDownloadRequest(talk).chapters)
+        assertTrue(choice("240p", quality = 240, file = video).toDownloadRequest(media(title = "Clip")).chapters.isEmpty())
     }
 
     private fun choice(label: String, quality: Int?, file: PlatformFormat, sound: PlatformFormat? = null) =

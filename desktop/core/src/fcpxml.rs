@@ -1,7 +1,7 @@
-//! Clips for an editor (step 10): the clips a person chose, cut from the saved video and put in order, as one FCPXML
-//! file that Final Cut Pro and DaVinci Resolve open. Nothing is encoded and the video is not copied: each clip is a
-//! cut of the original file, named by its `file:///` address, so the editor works from the picture and sound as
-//! they were saved. The subtitles chosen come as titles over each cut (two languages in one title, as they are
+//! Clips for an editor (step 11 of the plan): the clips a person chose, cut from the saved video and put in order, as
+//! one FCPXML file that Final Cut Pro and DaVinci Resolve open. Nothing is encoded and the video is not copied: each
+//! clip is a cut of the original file, named by its `file:///` address, so the editor works from the picture and sound
+//! as they were saved. The subtitles chosen come as titles over each cut (two languages in one title, as they are
 //! burned in), timed inside it.
 //!
 //! The idea, and the shape of the file (resources, then a project whose spine holds the cuts, titles connected to the

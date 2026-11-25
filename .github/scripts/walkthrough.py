@@ -20,6 +20,7 @@ state is printed to the job log, so results can be read without screenshots.
 """
 import os
 import re
+import signal
 import shlex
 import subprocess
 import sys
@@ -41,8 +42,8 @@ PIN = "https://www.pinterest.com/pin/664281013778109217/"  # a public video pin;
 # Positions as fractions of the screen, used only when a node cannot be found by text.
 FALLBACK = {
     "url_bar": (0.44, 0.065),
-    "downloads_button": (0.875, 0.945),  # fourth tab of the bottom bar
-    "fab": (0.5, 0.868),                 # the floating download pill, centred above the bar
+    "downloads_button": (0.70, 0.92),    # the bar's Library slot, at the right end of its pill
+    "fab": (0.89, 0.92),                 # the bar's ink circle, Save when the page has something
 }
 
 PAGE = """<!doctype html>
@@ -275,7 +276,13 @@ def launch_fresh():
     sh(f"pm grant {PKG} android.permission.POST_NOTIFICATIONS")
     adb("logcat", "-c")
     adb("shell", "am", "start", "-W", "-n", f"{PKG}/.MainActivity", timeout=180)
-    _, field = wait_for("home screen shows the address field", 90, cls="android.widget.EditText")
+    # Chaya opens on Home (Stage); the browser is Browse, from Chaya's bar at its foot
+    _, browse = wait_for("Home shows its places", 90, text="Browse")
+    if browse is None:
+        return False
+    snapshot("home")
+    tap_node(browse)
+    _, field = wait_for("Browse shows the address field", 60, cls="android.widget.EditText")
     return field is not None
 
 
@@ -373,11 +380,11 @@ def scenario_hls():
         return
     snapshot("hls-home")
     open_url(HLS_DEMO)
-    wait_for("hls: media button appears", 120, desc_contains="Detected media")
+    wait_for("hls: the bar offers Save", 120, desc_contains="Save ")
     time.sleep(20)  # let the stream play so the page reports its player and the stream pieces
     snapshot("hls-page")
-    tap_when("hls: open the media sheet", 20, FALLBACK["fab"], desc_contains="Detected media")
-    wait_for("hls: media sheet shows", 30, text="On this page")
+    tap_when("hls: open the media sheet", 20, FALLBACK["fab"], desc_contains="Save ")
+    wait_for("hls: media sheet shows", 30, text="Found on this page")
     snapshot("hls-sheet")
     # Download on a stream starts the best quality straight away; Quality opens the picker.
     if not tap_when("hls: tap Quality", 20, text="Quality"):
@@ -387,13 +394,13 @@ def scenario_hls():
     tap_when("hls: pick 184p", 20, text_prefix="184p")
     time.sleep(1)
     snapshot("hls-picker-184p")
-    tap_when("hls: start the download", 20, text_prefix="Download 184p")
+    tap_when("hls: start the download", 20, text_prefix="Save 184p")
     time.sleep(3)
-    # The download does not need the page. Leaving it stops the 720p video the page keeps decoding,
-    # which otherwise starves the emulator for the minutes the download takes.
-    tap_when("hls: go Home, which unloads the page", 20, desc_contains="Home")
+    # The download does not need the page. Leaving the browser pauses it, which stops the 720p video the page
+    # keeps decoding, which otherwise starves the emulator for the minutes the download takes.
+    tap_when("hls: go Home, which pauses the page", 20, desc_contains="Home")
     time.sleep(2)
-    tap_when("hls: open Downloads", 20, FALLBACK["downloads_button"], desc_contains="Downloads")
+    tap_when("hls: open the Library", 20, text="Library")
     monitor_download("hls", 300)
     # 184p of this stream is about 20 MB and 720p about 170 MB. A wrong stream key once pulled in the
     # 720p variant as well (190 MB in all), and the download still "finished", so check the size too. A
@@ -415,14 +422,13 @@ def scenario_engine():
         "-t", "text/plain", "--es", "android.intent.extra.TEXT", PIN, timeout=60)
     time.sleep(3)
     snapshot("engine-finding")
-    # The found sheet's button reads "Download 720p", "Download audio" or "Download"; the bottom bar's "Downloads"
-    # must not count.
     deadline = time.time() + 150
     while True:
         require_app()
         nodes, _ = ui_dump()
         dismiss_not_responding(nodes)
-        button = find(nodes, text="Download") or find(nodes, text_prefix="Download ")
+        # Stage's sheet: the qualities as tiles and one "Save 1080p" (or "Save audio", or "Save") for the one picked
+        button = find(nodes, text="Save") or find(nodes, text_prefix="Save ")
         if button or time.time() > deadline:
             break
         time.sleep(2)
@@ -447,9 +453,8 @@ def make_fixture():
         subprocess.run(cmd, check=True, timeout=300)
 
     video(media / "launch-event.mp4", "testsrc", 90, "640x360")
-    # The ad and the looping background play by themselves, in every tab that shows the page, and the
-    # emulator decodes them on the host: kept tiny so they cannot starve it (it died mid-run on #37, #39 and
-    # #40). The main video waits for a tap for the same reason; its size and length come from its metadata.
+    # The ad and the looping background play by themselves, as on a real page; kept tiny, as the emulator decodes
+    # in software. The main video waits for a tap; its size and length come from its metadata.
     video(media / "vast" / "preroll-15s.mp4", "testsrc2", 15, "160x90", rate=2)
     video(media / "hero-loop.mp4", "smptebars", 8, "160x90", audio=False, rate=2)
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=size=640x360:rate=1",
@@ -457,13 +462,34 @@ def make_fixture():
     (FIXTURE / "index.html").write_text(PAGE.replace("{BASE}", HOST_URL), encoding="utf-8")
 
 
+def stop_fixture_server(proc):
+    """Stops the server and what it started: npx runs http-server as a child, which outlives npx alone and keeps the
+    port, so a second walk-through (after the emulator went away) found it taken and its own server could not start."""
+    try:
+        os.killpg(proc.pid, signal.SIGTERM)
+    except (ProcessLookupError, PermissionError):
+        pass
+    try:
+        proc.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            pass
+
+
 def start_fixture_server():
+    # Anything still on the port (a server from an earlier walk-through on this runner) would answer from a folder
+    # since rebuilt; it goes first.
+    run(["fuser", "-k", f"{PORT}/tcp"])
+    time.sleep(1)
     servers = (
         ["npx", "--yes", "http-server", str(FIXTURE), "-p", str(PORT), "-c-1", "--silent"],  # supports Range
         [sys.executable, "-m", "http.server", str(PORT), "--directory", str(FIXTURE)],
     )
     for cmd in servers:
-        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        # Its own process group, so stopping it stops what it started too
+        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
         for _ in range(40):
             time.sleep(1)
             if proc.poll() is not None:
@@ -471,7 +497,7 @@ def start_fixture_server():
             if run(["curl", "-sfI", f"http://127.0.0.1:{PORT}/index.html"]).returncode == 0:
                 log(f"fixture server up ({cmd[0]} {cmd[1]})")
                 return proc
-        proc.terminate()
+        stop_fixture_server(proc)
     raise RuntimeError("could not start the fixture server")
 
 
@@ -482,19 +508,19 @@ def scenario_local():
     if not launch_fresh():
         return
     open_url(f"{HOST_URL}/index.html")
-    wait_for("local: media button appears", 90, desc_contains="Detected media")
+    wait_for("local: the bar offers Save", 90, desc_contains="Save ")
     time.sleep(15)
     snapshot("local-page")
-    tap_when("local: open the media sheet", 20, FALLBACK["fab"], desc_contains="Detected media")
-    wait_for("local: media sheet shows", 30, text="On this page")
+    tap_when("local: open the media sheet", 20, FALLBACK["fab"], desc_contains="Save ")
+    wait_for("local: media sheet shows", 30, text="Found on this page")
     snapshot("local-sheet")
     if tap_when("local: show likely ads", 10, desc_contains="likely ads"):
         time.sleep(1)
         snapshot("local-sheet-ads")
-    if not tap_when("local: tap Download", 20, text="Download"):
+    if not tap_when("local: tap Save", 20, text="Save"):
         return
     time.sleep(5)
-    tap_when("local: open Downloads", 20, FALLBACK["downloads_button"], desc_contains="Downloads")
+    tap_when("local: open the Library", 20, FALLBACK["downloads_button"], desc_contains="Library")
     monitor_download("local", 90)
     if READS_FILES:
         log("saved files: " + sh(f"run-as {PKG} ls -la files/downloads 2>&1").strip())
@@ -503,6 +529,25 @@ def scenario_local():
         time.sleep(3)
         snapshot("downloads-grid")
         tap_when("local: back to the list", 20, desc_contains="Show as list")
+    # Home, opened again: the video just saved across the top with Play and Share (Stage)
+    sh(f"am force-stop {PKG}")
+    adb("shell", "am", "start", "-W", "-n", f"{PKG}/.MainActivity", timeout=180)
+    _, play = wait_for("local: Home leads with the video just saved", 60, text="Play")
+    if play is None:
+        return
+    time.sleep(2)
+    snapshot("home-saved")
+    # Play plays it in Chaya's player; left part-way, Home offers to continue it
+    tap_node(play)
+    if wait_for("local: the video plays in Chaya's player", 30, desc_contains="Close player")[1] is None:
+        return
+    # The clock past ten seconds: the video really plays, and far enough in for Home to offer to continue it
+    # (the length reads 1:30, so it cannot match)
+    wait_for("local: the player is playing", 60, text_prefix="0:1")
+    snapshot("player")
+    tap_when("local: close the player", 20, desc_contains="Close player")
+    wait_for("local: Home offers to continue the video", 30, text_contains="CONTINUE")
+    snapshot("home-continue")
 
 
 def scenario_tabs():
@@ -528,6 +573,8 @@ def scenario_tabs():
     sh(f"am force-stop {PKG}")
     time.sleep(2)
     adb("shell", "am", "start", "-W", "-n", f"{PKG}/.MainActivity", timeout=180)
+    # Chaya opens on Home again; the tabs are in Browse
+    tap_when("tabs: back to Browse", 60, text="Browse")
     wait_for("tabs: both tabs came back", 60, desc_contains="Tabs (2)")
     tap_when("tabs: open the tab grid again", 20, desc_contains="Tabs (2)")
     wait_for("tabs: the first tab's card", 20, text_contains="Launch Event")
@@ -551,7 +598,9 @@ def scenario_history():
     tap_when("history: star the page", 20, desc_contains="Add bookmark")
     wait_for("history: the star is filled", 20, desc_contains="Remove bookmark")
     snapshot("history-starred")
-    tap_when("history: go to the start screen", 20, desc_contains="Home")
+    # The start screen is a new tab's: the bar's Home is Chaya's Home
+    tap_when("history: open the tab grid", 20, desc_contains="Tabs (1)")
+    tap_when("history: a new tab, on the start screen", 20, desc_contains="New tab")
     wait_for("history: the bookmark leads the quick sites", 30, text_contains="Launch Event")
     snapshot("history-start-screen")
     tap_when("history: open History", 20, text="History")
@@ -628,7 +677,7 @@ def main():
         (EVIDENCE / EMULATOR_GONE).write_text(f"{name}: {why}\n", encoding="utf-8")
 
     if server:
-        server.terminate()
+        stop_fixture_server(server)
 
     lines = ["# Emulator walkthrough", "", "| Step | Result | Detail |", "|---|---|---|"]
     for step, ok, detail in results:

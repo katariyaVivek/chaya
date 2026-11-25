@@ -1,6 +1,9 @@
 package com.chaya.app.platform
 
 import com.chaya.app.download.DownloadRequest
+import com.chaya.app.subtitles.SubtitleSource
+import com.chaya.app.subtitles.SubtitleStore
+import com.chaya.app.subtitles.Subtitles
 
 /**
  * What the download manager needs to save this choice. A streaming manifest (HLS, DASH) is not a request:
@@ -28,8 +31,18 @@ fun PlatformChoice.toDownloadRequest(media: PlatformMedia, pageUrl: String? = nu
         thumbnailUrl = media.thumbnailUrl,
         qualityHeight = quality,
         expectedBytes = sizeBytes,
+        subtitles = if (isAudioOnly) null else media.subtitlesToSave(file.url, file.headers),
+        // A talk or an album saved as sound alone still plays in Chaya, chapter by chapter
+        chapters = media.chapters,
     )
 }
+
+/**
+ * The site's subtitles to keep with a video saved from this lookup, in the language spoken (`Subtitles.pick`), fetched
+ * with the headers of the video's file at [fileUrl]: a cookie among them only to the same site.
+ */
+fun PlatformMedia.subtitlesToSave(fileUrl: String, headers: Map<String, String>): SubtitleSource? =
+    Subtitles.toSave(subtitles, language, headers)?.let { it.copy(headers = SubtitleStore.headersFor(it.url, fileUrl, it.headers)) }
 
 /** Joined tracks always become MP4; a ready-made file keeps the container it came in. */
 internal fun PlatformChoice.savedExtension(): String {

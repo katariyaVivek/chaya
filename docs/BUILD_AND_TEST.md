@@ -8,6 +8,11 @@
   directly (what CI does), run `gradle wrapper --gradle-version 8.14.3` once to get `./gradlew`, or
   open the project in Android Studio, which generates it.
 - Python 3.13 on the `PATH`. Chaquopy uses it at build time to install yt-dlp into the app.
+- The Android NDK and CMake 3.22.1 (`sdkmanager "ndk;27.0.12077973" "cmake;3.22.1"`; GitHub's runners have them, and
+  the Android Gradle plugin fetches what is missing), and `git`: the build fetches whisper.cpp at the commit
+  `app/src/main/cpp/CMakeLists.txt` pins, for *Make subtitles*. The first build compiles it (a few minutes).
+- Access to huggingface.co at build time: `fetchSherpaOnnx` fetches sherpa-onnx's prebuilt Android libraries (36 MB,
+  pinned by SHA-256) once into Gradle's home, for Parakeet.
 
 Library versions are in `gradle/libs.versions.toml`.
 
@@ -44,6 +49,7 @@ curl -o app/src/main/assets/adblock/easyprivacy.txt https://easylist.to/easylist
 |---|---|---|
 | `build.yml` | every PR and push to `main` | unit tests, then the debug APK and Android Lint (`lintDebug`). Kotlin warnings fail the build, and so does any Lint finding, warnings included, not listed in `app/lint-baseline.xml` (the report is uploaded as `lint-report`). Lint's checks for newer library and SDK versions are off: they would fail on the day of a release, not because of the change. Test-only changes skip the APK and Lint; a PR that changes only `desktop/`, its workflows, `docs/` or the root's Markdown skips the job altogether (skipped, so it never holds up a merge). A failing test prints its message, and the reports are uploaded. |
 | `build.yml` (manual) | *Run workflow* | also runs the instrumented tests on an emulator |
+| `build.yml` (push to `main`) | a merge that changes the phone's app, or *Run workflow* on `main` | once the build passes, the release APK signed with the release key, published on the `android-preview` pre-release as `Chaya-Android-preview.apk` (`releases/download/android-preview/Chaya-Android-preview.apk`), replaced each time. It installs as an update over a release; a pre-release is never the repository's latest |
 | `build.yml` (tag `v*`) | pushing a version tag | tests, signed release APK, GitHub Release |
 | `engine.yml` | PRs touching the Python engine | pytest with the versions pinned in `app/build.gradle.kts` (`enginePackages`) |
 | `device-tests.yml` | `ui-check` label on a PR, or manual | `connectedDebugAndroidTest` in a cloud emulator |
@@ -103,7 +109,7 @@ is close to its copyrighted-content policy, and the diagnostics assume no Play S
 ## Manual check on a phone
 
 1. **Browse:** enter an address; back, forward and refresh work, and the keyboard closes after Go.
-2. **A page with a video file:** the floating pill appears; tap it. The page's main video is first,
+2. **A page with a video file:** the bar's round button turns into Save, with an amber dot; tap it. The page's main video is first,
    with the page title, and likely ads are folded away. Tap *Download*.
 3. **A stream (`.m3u8`/`.mpd`):** the sheet shows *Stream* and a stream-pieces-hidden note.
    *Download* starts at the best quality; *Quality* lists one entry per rendition.
@@ -124,7 +130,7 @@ is close to its copyrighted-content policy, and the diagnostics assume no Play S
    long press chooses tiles to share or delete together. An account's ZIP opens to its files, and
    a long press on one shares it or saves it to the phone. The walkthrough takes a screenshot of
    the grid.
-8. **Appearance:** Downloads › ⋮ › Appearance switches between Same as phone, Light and Dark at
+8. **Appearance:** Home › Settings › Appearance switches between Same as phone, Light and Dark at
    once, status bar included, and the choice survives a restart.
 9. **Ad blocker:** open a news site. The shield in the address bar fills in and counts what it
    blocked; ad boxes are gone. Tap it: turning blocking off for the site, or everywhere, reloads the
@@ -144,7 +150,7 @@ is close to its copyrighted-content policy, and the diagnostics assume no Play S
 12. **Persistence:** finish a download, force-stop the app, reopen: it is still listed. A download
    that was running comes back paused.
 
-13. **Engine updates:** Downloads › ⋮ › Diagnostics shows the yt-dlp, yt-dlp-ejs and gallery-dl in
+13. **Engine updates:** Home › Settings › Diagnostics shows the yt-dlp, yt-dlp-ejs and gallery-dl in
    use and when PyPI was last asked. When a newer yt-dlp is out, it is fetched within a day of opening
    the app and shows as waiting; force-stop and reopen, look a video up, and Diagnostics shows it in
    use. Turning *Keep it up to date* off goes back to the app's copy from the next start.

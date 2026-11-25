@@ -30,9 +30,9 @@ import { ownVideos } from './own.js';
 import { enhanceSelects } from './design/chaya-picker.js';
 import { secondsLeft, listeningWords } from './pace.js';
 import { onePanel } from './panels.js';
-import { markMarkup, mountMark } from './design/chaya-mark.js';
+import { markMarkup, mountMark, easeOut } from './design/chaya-mark.js';
 import { markState, nextRun, shareOf } from './mark-state.js';
-import { placeOf, railed, tabToBrowse, libraryTotals, sourcesOf, underWay, heroOf, clockOf, shelfColumns, backLabel, playerFacts, linesIn, clipSpan } from './shell.js';
+import { placeOf, railed, tabToBrowse, libraryTotals, sourcesOf, underWay, heroOf, clockOf, shelfColumns, backLabel, playerFacts, linesIn, clipSpan, glideAt, samePlace, libraryTabAfter } from './shell.js';
 import { firstPick, offerFound } from './found.js';
 
 // Every drop-down drawn as Chaya's own, not Windows' list (unreadable in Night, in Windows' font). The <select>s stay
@@ -163,13 +163,13 @@ function showSettings(open) {
   panels.set('settings', open);
 }
 function drawSettings(open) {
-  settingsPanel.hidden = !open;
+  drawPanel(settingsPanel, open);
   settingsButton.setAttribute('aria-expanded', String(open));
   fitSettings();
   // Whether Ollama or LM Studio has started since.
   if (open) loadAi();
   // The page's webview is drawn over the window's content, so it makes way for the panel.
-  showPageView();
+  showPageView({ glide: true });
 }
 /** The panel ends inside the window wherever its button is (lower while browsing, beside the address bar), and
  * scrolls the rest. */
@@ -595,10 +595,10 @@ function taskRemoved(id) {
   }
 }
 
-/** While a page is open, the Downloads button says how many downloads are under way. */
+/** The sidebar's Library says how many downloads are under way. */
 function countRunning() {
   const running = [...tasks.values()].filter((t) => t.state === 'downloading' || t.state === 'queued').length;
-  const badge = document.querySelector('.page-downloads .page-count');
+  const badge = document.querySelector('#place-library .side__badge');
   badge.textContent = String(running);
   badge.hidden = running === 0;
   showMark();
@@ -2693,7 +2693,6 @@ tauri?.core.invoke('list_downloads').then((list) => {
 const pageEl = document.getElementById('page');
 const pageLoad = document.getElementById('page-load');
 const pageReload = document.getElementById('page-reload');
-const pageDownloads = document.getElementById('page-downloads');
 const notice = document.getElementById('page-notice');
 
 let browsing = false;
@@ -2706,6 +2705,9 @@ function boundsOf(el) {
 }
 
 function setBrowsing(on) {
+  // What was looked up belongs where it was looked up: a page's video stays with the page (looked up again when it is
+  // shown again), and isn't left on Home with its qualities, as if still to be saved, after it was.
+  if (on !== browsing) forget();
   browsing = on;
   document.body.classList.toggle('browsing', on);
   showPlace();
@@ -2785,26 +2787,7 @@ function tabName(tab) {
 
 function showTabs(view) {
   tabsNow = view;
-  tabstrip.hidden = view.tabs.length === 0;
-  placeBrowse.hidden = view.tabs.length === 0;
-  tabList.replaceChildren(
-    ...view.tabs.map((tab) => {
-      const el = tabTemplate.content.firstElementChild.cloneNode(true);
-      el.dataset.id = tab.id;
-      el.setAttribute('aria-selected', String(tab.id === view.active));
-      el.classList.toggle('tab--loading', tab.loading);
-      const title = el.querySelector('.tab__title');
-      title.textContent = tabName(tab);
-      title.title = tab.url ? `${tabName(tab)}\n${tab.url}` : tabName(tab);
-      title.addEventListener('click', () => switchTab(tab.id));
-      // A middle click closes a tab, as in any browser.
-      el.addEventListener('auxclick', (e) => {
-        if (e.button === 1) closeTab(tab.id);
-      });
-      el.querySelector('.tab__close').addEventListener('click', () => closeTab(tab.id));
-      return el;
-    }),
-  );
+  drawTabs();
   if (view.active === null && browsing) {
     // The last tab shown was closed: the home again.
     setBrowsing(false);
@@ -2813,6 +2796,66 @@ function showTabs(view) {
   } else if (view.active !== null && view.active !== activeTab) {
     tabShown(view.tabs.find((t) => t.id === view.active));
   }
+}
+
+/** The strip: the pages' tabs as the app last said them, then the Library's while it is open, as a browser's
+ *  downloads page is a tab of its own. */
+function drawTabs() {
+  const view = tabsNow;
+  const library = libraryTab !== 'closed';
+  tabstrip.hidden = view.tabs.length === 0 && !library;
+  placeBrowse.hidden = view.tabs.length === 0;
+  const tabs = view.tabs.map((tab) => {
+    const el = tabTemplate.content.firstElementChild.cloneNode(true);
+    el.dataset.id = tab.id;
+    el.setAttribute('aria-selected', String(tab.id === view.active && libraryTab !== 'shown'));
+    el.classList.toggle('tab--loading', tab.loading);
+    const title = el.querySelector('.tab__title');
+    title.textContent = tabName(tab);
+    title.title = tab.url ? `${tabName(tab)}\n${tab.url}` : tabName(tab);
+    title.addEventListener('click', () => switchTab(tab.id));
+    // A middle click closes a tab, as in any browser.
+    el.addEventListener('auxclick', (e) => {
+      if (e.button === 1) closeTab(tab.id);
+    });
+    el.querySelector('.tab__close').addEventListener('click', () => closeTab(tab.id));
+    return el;
+  });
+  if (library) tabs.push(libraryTabEl());
+  tabList.replaceChildren(...tabs);
+}
+
+/** The Library's tab: named, with the Library's own mark, and closed as any tab is. */
+function libraryTabEl() {
+  const el = tabTemplate.content.firstElementChild.cloneNode(true);
+  el.classList.add('tab--library');
+  el.setAttribute('aria-selected', String(libraryTab === 'shown'));
+  const title = el.querySelector('.tab__title');
+  const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  icon.classList.add('tab__icon');
+  icon.setAttribute('aria-hidden', 'true');
+  const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+  use.setAttribute('href', '#i-library');
+  icon.append(use);
+  title.append(icon, 'Library');
+  title.title = 'Library: everything you have saved';
+  title.addEventListener('click', openLibrary);
+  el.addEventListener('auxclick', (e) => {
+    if (e.button === 1) closeLibrary();
+  });
+  el.querySelector('.tab__close').addEventListener('click', closeLibrary);
+  return el;
+}
+
+function openLibrary() {
+  if (playing) closePlayer();
+  showDownloads(true);
+}
+
+/** Closes the Library's tab, back to what it lay over: the page, or Home. */
+function closeLibrary() {
+  libraryTab = libraryTabAfter(libraryTab, 'close');
+  showDownloads(false);
 }
 
 /** Another tab is shown: the bar, the shield and what the page holds are that tab's now. */
@@ -2832,7 +2875,11 @@ function tabShown(tab) {
 async function switchTab(id) {
   // A tab is a place of its own: the player gives way to it.
   if (playing) closePlayer();
-  if (id === activeTab && browsing) return;
+  if (id === activeTab && browsing) {
+    // The tab under the Library: back to it.
+    showDownloads(false);
+    return;
+  }
   if (!browsing) setBrowsing(true);
   showDownloads(false);
   await new Promise(requestAnimationFrame);
@@ -2851,14 +2898,29 @@ function closeTab(id) {
 const placeHome = document.getElementById('place-home');
 const placeBrowse = document.getElementById('place-browse');
 
+/** The place shown last, so a new one comes in as the window's own things do. */
+let placeShown = null;
+
 function showPlace() {
   const views = { browsing, library: document.body.classList.contains('showing-downloads') };
   document.body.classList.toggle('railed', railed(views));
   const place = placeOf(views);
+  // Home and the Library rise in as the sidebar moves; a page is drawn over the window and comes in as it loads.
+  if (placeShown && place !== placeShown && place !== 'browse') enterPlace();
+  placeShown = place;
   for (const el of document.querySelectorAll('.side__place')) {
     if (el.dataset.place === place) el.setAttribute('aria-current', 'page');
     else el.removeAttribute('aria-current');
   }
+}
+
+/** The window's place rising in (`--anim-enter`, `--dur-enter`: a fade alone under reduced motion). */
+function enterPlace() {
+  const main = document.querySelector('.main');
+  main.style.animation = 'none';
+  void main.offsetWidth;
+  main.style.animation = 'var(--anim-enter) var(--dur-enter) var(--ease-out) both';
+  main.addEventListener('animationend', () => (main.style.animation = ''), { once: true });
 }
 
 placeHome.addEventListener('click', () => {
@@ -2866,10 +2928,7 @@ placeHome.addEventListener('click', () => {
   if (browsing) goHome();
   else showDownloads(false);
 });
-document.getElementById('place-library').addEventListener('click', () => {
-  if (playing) closePlayer();
-  showDownloads(true);
-});
+document.getElementById('place-library').addEventListener('click', openLibrary);
 placeBrowse.addEventListener('click', () => {
   const id = tabToBrowse(tabsNow, activeTab);
   if (id !== null) switchTab(id);
@@ -2900,7 +2959,8 @@ function tabKey(name) {
     goHome();
   } else if (name === 'close-tab') {
     // The tab shown, never Chaya's own window.
-    if (browsing && activeTab !== null) closeTab(activeTab);
+    if (inLibrary()) closeLibrary();
+    else if (browsing && activeTab !== null) closeTab(activeTab);
   } else if (name === 'next-tab' || name === 'previous-tab') {
     cycleTabs(name === 'next-tab' ? 1 : -1);
   } else if (name === 'address') {
@@ -2959,14 +3019,22 @@ function aboveToasts(bounds) {
  * over it: while one is open the page steps aside for it and keeps playing; where the window is too narrow for both,
  * the page is hidden and a still picture of it stands in its place.
  */
-async function showPageView() {
+async function showPageView({ glide = false } = {}) {
   if (!browsing) return;
   const view = ++pageViews;
   const panel = openPanel();
-  // The window's own views over the page's place: the Downloads list, the player and the viewer.
+  // The window's own views over the page's place: the Library, the player and the viewer.
   const covered = document.body.classList.contains('showing-downloads') || !player.hidden || !viewer.hidden;
+  if (covered) {
+    // It keeps its place and size underneath. Its place is laid out at nothing while covered, so it used to be put
+    // there, and a page such as YouTube's then had to build itself again, in grey, as it came back.
+    stopGlide();
+    pageShown = false;
+    tauri.core.invoke('show_page', { visible: false });
+    return;
+  }
   const bounds = pageBounds();
-  if (panel && !bounds && !covered && pageStill.hidden) {
+  if (panel && !bounds && pageStill.hidden) {
     const picture = await tauri.core.invoke('page_picture').catch(() => null);
     if (view !== pageViews) return;
     if (picture) {
@@ -2976,9 +3044,58 @@ async function showPageView() {
   }
   if (bounds) {
     hidePageStill();
-    tauri.core.invoke('place_page', { bounds });
+    putPage(bounds, glide && pageShown);
   }
-  tauri.core.invoke('show_page', { visible: !covered && !!bounds });
+  pageShown = !!bounds;
+  tauri.core.invoke('show_page', { visible: !!bounds });
+}
+
+/** Where the page was last put, and whether it is shown: only a page in view glides. */
+let pagePlaced = null;
+let pageShown = false;
+let gliding = 0;
+
+/** How long the window's own things take to move into place (`--dur-morph`): none under reduced motion. */
+function motionMs() {
+  return parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--dur-morph')) || 0;
+}
+
+/** Puts the page at `to`: gliding there from where it is, eased out as a panel comes in, or at once. */
+function putPage(to, glide) {
+  stopGlide();
+  const from = pagePlaced;
+  const ms = glide && from && !samePlace(from, to) ? motionMs() : 0;
+  if (!ms) {
+    pagePlaced = to;
+    tauri.core.invoke('place_page', { bounds: to });
+    return;
+  }
+  const start = performance.now();
+  const step = (now) => {
+    const k = (now - start) / ms;
+    pagePlaced = glideAt(from, to, easeOut(k));
+    tauri.core.invoke('place_page', { bounds: pagePlaced });
+    if (k < 1) gliding = requestAnimationFrame(step);
+  };
+  gliding = requestAnimationFrame(step);
+}
+
+function stopGlide() {
+  cancelAnimationFrame(gliding);
+}
+
+/**
+ * Shows a panel the page steps aside for, or closes it. Closed over a page, it stays until the page has glided back
+ * over it, so the page covers it as it uncovered it, instead of it vanishing and leaving a gap for the page to fill.
+ */
+function drawPanel(el, open) {
+  clearTimeout(el.leaving);
+  if (open) el.hidden = false;
+  else if (!el.hidden) {
+    const ms = browsing && pageShown ? motionMs() : 0;
+    if (!ms) el.hidden = true;
+    else el.leaving = setTimeout(() => (el.hidden = openPanel() !== el), ms);
+  }
 }
 
 function hidePageStill() {
@@ -2986,11 +3103,16 @@ function hidePageStill() {
   pageStill.removeAttribute('src');
 }
 
-/** The Library, over Home or over a page. Its narrowing applies only while it is shown, so rows are narrowed again. */
+/** The Library's tab (shell.js, libraryTabAfter): closed, open in the strip, or shown. */
+let libraryTab = 'closed';
+
+/** The Library, over Home or over a page, in a tab of its own. Its narrowing applies only while it is shown, so rows
+ *  are narrowed again. */
 function showDownloads(on) {
   if (on) openMedia(false);
-  document.body.classList.toggle('showing-downloads', on);
-  pageDownloads.setAttribute('aria-pressed', String(on));
+  libraryTab = libraryTabAfter(libraryTab, on ? 'show' : 'leave');
+  document.body.classList.toggle('showing-downloads', libraryTab === 'shown');
+  drawTabs();
   showPlace();
   narrow({});
   showPageView();
@@ -3042,9 +3164,6 @@ document.getElementById('page-back').addEventListener('click', goBack);
 document.getElementById('page-forward').addEventListener('click', () => tauri.core.invoke('page_action', { action: 'forward' }));
 pageReload.addEventListener('click', () =>
   tauri.core.invoke('page_action', { action: pageLoad.hasAttribute('data-loading') ? 'stop' : 'reload' }),
-);
-pageDownloads.addEventListener('click', () =>
-  showDownloads(!document.body.classList.contains('showing-downloads')),
 );
 document.getElementById('page-home').addEventListener('click', goHome);
 
@@ -3213,10 +3332,10 @@ function openMedia(open) {
   panels.set('media', open);
 }
 function drawMedia(open) {
-  mediaPanel.hidden = !open;
+  drawPanel(mediaPanel, open);
   mediaButton.setAttribute('aria-expanded', String(open));
   if (open) mediaButton.classList.remove('page-media--new');
-  showPageView();
+  showPageView({ glide: true });
 }
 
 function capitalised(word) {
@@ -3281,7 +3400,7 @@ function openShield(open) {
   panels.set('shield', open);
 }
 function drawShield(open) {
-  shieldPanel.hidden = !open;
+  drawPanel(shieldPanel, open);
   shieldButton.setAttribute('aria-expanded', String(open));
   if (open) {
     tauri.core
@@ -3292,7 +3411,7 @@ function drawShield(open) {
       })
       .catch(() => {});
   }
-  showPageView();
+  showPageView({ glide: true });
 }
 
 function adStatus({ site, enabled, blocking, blocked }) {

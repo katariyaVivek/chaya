@@ -56,7 +56,7 @@ sealed class DownloadError(
 
     /** Anything the classifier cannot place; retry stays available. */
     data class Unknown(val cause: Throwable) : DownloadError(
-        "Something went wrong",
+        "Couldn't finish the download — try again",
         retryable = true,
     )
 

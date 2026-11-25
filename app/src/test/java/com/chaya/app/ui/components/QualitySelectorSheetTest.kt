@@ -55,9 +55,9 @@ class QualitySelectorSheetTest {
             QualitySelectorSheet(state = readyState(), onDismiss = {}, onDownload = {})
         }
 
-        composeRule.onNodeWithText("Download 1080p").assertIsDisplayed()
+        composeRule.onNodeWithText("Save 1080p").assertIsDisplayed()
         composeRule.onNodeWithText("720p").performClick()
-        composeRule.onNodeWithText("Download 720p").assertIsDisplayed()
+        composeRule.onNodeWithText("Save 720p").assertIsDisplayed()
     }
 
     @Test
@@ -68,7 +68,7 @@ class QualitySelectorSheetTest {
         }
 
         composeRule.onNodeWithText("720p").performClick()
-        composeRule.onNodeWithText("Download 720p").performClick()
+        composeRule.onNodeWithText("Save 720p").performClick()
 
         assertEquals(listOf(listOf("720p", "English")), chosen.map { picked -> picked.map { it.label } })
     }
@@ -80,7 +80,7 @@ class QualitySelectorSheetTest {
         }
 
         composeRule.onNodeWithText("1080p").performClick()
-        composeRule.onNodeWithText("Download audio only").assertIsDisplayed()
+        composeRule.onNodeWithText("Save audio").assertIsDisplayed()
         // Robolectric's small window clips the list above the pinned button; scroll as a user would.
         composeRule.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("English"))
         composeRule.onNodeWithText("English").performClick()
@@ -116,7 +116,7 @@ class QualitySelectorSheetTest {
         }
 
         composeRule.onNodeWithText("Could not read tracks").assertIsDisplayed()
-        composeRule.onNodeWithText("Download anyway").performClick()
+        composeRule.onNodeWithText("Save anyway").performClick()
         assertEquals(listOf(emptyList<StreamTrack>()), chosen)
     }
 

@@ -58,7 +58,7 @@ the phone's downloader on the PC, #50 to #78, described under *Next* below.
 
 **Chaya for Windows 0.2.0** (November 2026, notes in [`releases/windows-0.2.0.md`](releases/windows-0.2.0.md); the
 `windows-v0.2.0` tag is made on `main` once the PR that adds those notes is merged): watch, understand and clip, the
-plan in [`PLAN.md`](PLAN.md) and the ideas after it:
+plan in [`history/plan-watch-understand-clip.md`](history/plan-watch-understand-clip.md) and the ideas after it:
 
 | PR | What it adds |
 |---|---|
@@ -86,9 +86,19 @@ Also in that time: [#80](https://github.com/katariyaVivek/chaya/pull/80) the pla
 the light, the two-suns mark, and Stage's amber as the one signal colour. Built as a stack of PRs, each on the one
 before: the mark (#114); the shell (#115: the sidebar, its places, Stage's amber); the Library (#116); Home with *Continue
 watching* and *Recently saved* (#117); the browser with its *Found on this page* panel beside the page (#118); the player (#119); and the clip editor, the player while a clip is chosen. Each new place joins the
-sidebar in its own PR. The phone follows in its own stack.
+sidebar in its own PR. All merged (#114 to #120), in the `windows-preview` build.
 
-**Clips for an editor, then caption styles (Windows).** Steps 10 and 11 of [`PLAN.md`](PLAN.md), ideas from OpenFilm:
+The phone follows in its own stack, the look first: the two-suns icon and Stage's palette (ink as the strong control,
+amber a signal) (#121); then Home (#122), the Library (#123), *Found on this page* (#124) and the player screen
+from the approved phone designs: saved videos play in Chaya, start where they were left, and Home offers *Continue*.
+Then the first of the Windows features the phone lacks: a link's subtitles saved with its video, on the picture and
+as the transcript in the player (#127).
+
+**The phone catches up with Windows**, step by step in [`PLAN.md`](PLAN.md): chapters on the seek bar (step 1, #130),
+search across every line said from the Library (step 2, #131), the person's own videos (step 3, #132), subtitles put right in the player (step 4), then their own AI model, translation,
+highlights, clips, export with subtitles drawn on, and last, subtitles made on the phone.
+
+**Clips for an editor, then caption styles (Windows).** Steps 11 and 12 of [`PLAN.md`](PLAN.md), ideas from OpenFilm:
 the clips chosen as one FCPXML project for Final Cut Pro and DaVinci Resolve, cut from the video without re-encoding,
 the subtitles as titles; then word-by-word looks for burned-in subtitles made by Chaya.
 
@@ -130,9 +140,9 @@ The six-part plan after v0.4.0 has shipped (#34 to #39); it is in
   checked once a day and signed. The installer is not signed with a certificate yet, so SmartScreen asks before
   it runs; a certificate can be added later without other changes (docs/BUILD_AND_TEST.md). The first release,
   `windows-v0.1.0`, went out on 28 October 2026, started from GitHub's website (#78). Watch, understand and clip
-  followed, step by step in [`PLAN.md`](PLAN.md), and is Chaya for Windows 0.2.0 (#80 to #106, under *Released*).
+  followed, step by step in [`history/plan-watch-understand-clip.md`](history/plan-watch-understand-clip.md), and is Chaya for Windows 0.2.0 (#80 to #106, under *Released*).
   Next for Windows: signing the installer (SignPath's free certificate for open-source projects, once the owner's
-  application is approved), then perhaps *Later, perhaps* in `PLAN.md`. The phone's last library pieces (choosing
+  application is approved), then perhaps *Later, perhaps* in that plan. The phone's last library pieces (choosing
   several in the grid, looking inside a saved ZIP) can come in between.
 
 0. **First: check #48 on the phone.** #47's name search kept its first look for 3 seconds, so a page
@@ -163,7 +173,7 @@ The six-part plan after v0.4.0 has shipped (#34 to #39); it is in
 
 Chaya for Windows learns what [Vimpo](https://vimpo.app/) does on a Mac: a player for what was saved,
 subtitles made on the PC, translation beside the original with the person's own model, highlights, and clips
-with the subtitles burned in. The steps are in [`PLAN.md`](PLAN.md), and what Vimpo does in
+with the subtitles burned in. The steps are in [`history/plan-watch-understand-clip.md`](history/plan-watch-understand-clip.md), and what Vimpo does in
 [`vimpo-reference.md`](vimpo-reference.md).
 
 Step 1 is merged: a saved video or sound plays in Chaya, with the site's subtitles (saved beside it as

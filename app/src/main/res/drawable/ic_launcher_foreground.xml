@@ -1,38 +1,39 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Chaya launcher mark: an original (a media tile with a play mark) and its shadow-copy behind it.
-  Chaya (छाया) means shadow; in the story, Chhaya is the copy made from Saranyu's shadow. A download
-  is a copy of the original, so the copy falls where a shadow would: below and to the right.
+  The launcher icon: the mark at rest.
+  Written by docs/brand/android-icon.mjs from Chaya's mark (desktop/design/chaya-mark.js): do not edit by hand.
+  The two suns: an amber sun and its shadow-twin, one line of light through both. Chaya (छाया) means shadow; a
+  download is a copy of what was on the page.
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- The copy: deep shade with a lavender rim, so it reads on its own and not as a smudge. -->
-    <path
-        android:pathData="M52.5,40 H65.5 A9.5,9.5 0 0 1 75,49.5 V66.5 A9.5,9.5 0 0 1 65.5,76 H52.5 A9.5,9.5 0 0 1 43,66.5 V49.5 A9.5,9.5 0 0 1 52.5,40 Z"
-        android:fillColor="#2A1D57"
-        android:strokeColor="#BDAEF8"
-        android:strokeWidth="1.6" />
-    <!-- The original, lit from above. -->
-    <path android:pathData="M42.5,30 H55.5 A9.5,9.5 0 0 1 65,39.5 V56.5 A9.5,9.5 0 0 1 55.5,66 H42.5 A9.5,9.5 0 0 1 33,56.5 V39.5 A9.5,9.5 0 0 1 42.5,30 Z">
-        <aapt:attr name="android:fillColor">
-            <gradient
-                android:type="linear"
-                android:startX="0" android:startY="30"
-                android:endX="0" android:endY="66">
-                <item android:offset="0" android:color="#FFFFFF" />
-                <item android:offset="1" android:color="#E9E3FF" />
-            </gradient>
-        </aapt:attr>
-    </path>
-    <!-- Play mark, its corners softened by a round-joined stroke of the same colour. -->
-    <path
-        android:pathData="M45,41 L57.5,48 L45,55 Z"
-        android:fillColor="#5E48A6"
-        android:strokeColor="#5E48A6"
-        android:strokeWidth="3"
-        android:strokeLineJoin="round" />
+    <group android:translateX="17.2" android:translateY="17.2" android:scaleX="1.15" android:scaleY="1.15">
+        <!-- The twin, the copy: the darker, tucked behind the sun, the line of light through it -->
+        <group>
+            <clip-path android:pathData="M0,0 L64,0 L64,31.2 L62,31.2 L58.25,31.22 L54.5,31.5 L50.75,31.84 L47,32 L43.25,31.79 L39.5,31.24 L35.75,30.57 L32,30.1 L28.25,30.04 L24.5,30.42 L20.75,31.02 L17,31.55 L13.25,31.77 L9.5,31.66 L5.75,31.39 L2,31.2 L0,31.2 Z" />
+            <group>
+                <clip-path android:pathData="M0,0 L64,0 L64,64 L0,64 Z M5.8,27 A18.2,18.2 0 1 0 42.2,27 A18.2,18.2 0 1 0 5.8,27 Z" />
+                <path android:pathData="M26,38 A15,15 0 1 1 56,38 A15,15 0 1 1 26,38 Z" android:fillColor="#B9792F" />
+            </group>
+        </group>
+        <group>
+            <clip-path android:pathData="M0,64 L0,34.8 L2,34.8 L5.75,34.99 L9.5,35.26 L13.25,35.37 L17,35.15 L20.75,34.62 L24.5,34.02 L28.25,33.64 L32,33.7 L35.75,34.17 L39.5,34.84 L43.25,35.39 L47,35.6 L50.75,35.44 L54.5,35.1 L58.25,34.82 L62,34.8 L64,34.8 L64,64 Z" />
+            <group>
+                <clip-path android:pathData="M0,0 L64,0 L64,64 L0,64 Z M5.8,27 A18.2,18.2 0 1 0 42.2,27 A18.2,18.2 0 1 0 5.8,27 Z" />
+                <path android:pathData="M26,38 A15,15 0 1 1 56,38 A15,15 0 1 1 26,38 Z" android:fillColor="#B9792F" />
+            </group>
+        </group>
+        <!-- The sun, the line of light through it -->
+        <group>
+            <clip-path android:pathData="M0,0 L64,0 L64,31.2 L62,31.2 L58.25,31.22 L54.5,31.5 L50.75,31.84 L47,32 L43.25,31.79 L39.5,31.24 L35.75,30.57 L32,30.1 L28.25,30.04 L24.5,30.42 L20.75,31.02 L17,31.55 L13.25,31.77 L9.5,31.66 L5.75,31.39 L2,31.2 L0,31.2 Z" />
+            <path android:pathData="M8,27 A16,16 0 1 1 40,27 A16,16 0 1 1 8,27 Z" android:fillColor="#F2B25A" />
+        </group>
+        <group>
+            <clip-path android:pathData="M0,64 L0,34.8 L2,34.8 L5.75,34.99 L9.5,35.26 L13.25,35.37 L17,35.15 L20.75,34.62 L24.5,34.02 L28.25,33.64 L32,33.7 L35.75,34.17 L39.5,34.84 L43.25,35.39 L47,35.6 L50.75,35.44 L54.5,35.1 L58.25,34.82 L62,34.8 L64,34.8 L64,64 Z" />
+            <path android:pathData="M8,27 A16,16 0 1 1 40,27 A16,16 0 1 1 8,27 Z" android:fillColor="#F2B25A" />
+        </group>
+    </group>
 </vector>

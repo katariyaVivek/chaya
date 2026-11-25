@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 11 and older. The AI model's settings and its sealed keys stay on this phone: the Keystore key that opens
+     them never leaves it, and a key is not something to copy around. -->
+<full-backup-content>
+    <exclude domain="sharedpref" path="chaya_ai.xml" />
+</full-backup-content>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12 and newer: the AI model's settings and its sealed keys are left out of cloud backups and of moving to
+     a new phone (backup_rules.xml says why). -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="chaya_ai.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="chaya_ai.xml" />
+    </device-transfer>
+</data-extraction-rules>

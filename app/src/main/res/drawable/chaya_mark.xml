@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Chaya's mark at rest, as the app shows it beside its name.
+  Written by docs/brand/android-icon.mjs from Chaya's mark (desktop/design/chaya-mark.js): do not edit by hand.
+  The two suns: an amber sun and its shadow-twin, one line of light through both. Chaya (छाया) means shadow; a
+  download is a copy of what was on the page.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="64dp"
+    android:height="64dp"
+    android:viewportWidth="64"
+    android:viewportHeight="64">
+    <group android:translateX="0" android:translateY="0" android:scaleX="1" android:scaleY="1">
+        <!-- The twin, the copy: the darker, tucked behind the sun, the line of light through it -->
+        <group>
+            <clip-path android:pathData="M0,0 L64,0 L64,31.2 L62,31.2 L58.25,31.22 L54.5,31.5 L50.75,31.84 L47,32 L43.25,31.79 L39.5,31.24 L35.75,30.57 L32,30.1 L28.25,30.04 L24.5,30.42 L20.75,31.02 L17,31.55 L13.25,31.77 L9.5,31.66 L5.75,31.39 L2,31.2 L0,31.2 Z" />
+            <group>
+                <clip-path android:pathData="M0,0 L64,0 L64,64 L0,64 Z M5.8,27 A18.2,18.2 0 1 0 42.2,27 A18.2,18.2 0 1 0 5.8,27 Z" />
+                <path android:pathData="M26,38 A15,15 0 1 1 56,38 A15,15 0 1 1 26,38 Z" android:fillColor="#B9792F" />
+            </group>
+        </group>
+        <group>
+            <clip-path android:pathData="M0,64 L0,34.8 L2,34.8 L5.75,34.99 L9.5,35.26 L13.25,35.37 L17,35.15 L20.75,34.62 L24.5,34.02 L28.25,33.64 L32,33.7 L35.75,34.17 L39.5,34.84 L43.25,35.39 L47,35.6 L50.75,35.44 L54.5,35.1 L58.25,34.82 L62,34.8 L64,34.8 L64,64 Z" />
+            <group>
+                <clip-path android:pathData="M0,0 L64,0 L64,64 L0,64 Z M5.8,27 A18.2,18.2 0 1 0 42.2,27 A18.2,18.2 0 1 0 5.8,27 Z" />
+                <path android:pathData="M26,38 A15,15 0 1 1 56,38 A15,15 0 1 1 26,38 Z" android:fillColor="#B9792F" />
+            </group>
+        </group>
+        <!-- The sun, the line of light through it -->
+        <group>
+            <clip-path android:pathData="M0,0 L64,0 L64,31.2 L62,31.2 L58.25,31.22 L54.5,31.5 L50.75,31.84 L47,32 L43.25,31.79 L39.5,31.24 L35.75,30.57 L32,30.1 L28.25,30.04 L24.5,30.42 L20.75,31.02 L17,31.55 L13.25,31.77 L9.5,31.66 L5.75,31.39 L2,31.2 L0,31.2 Z" />
+            <path android:pathData="M8,27 A16,16 0 1 1 40,27 A16,16 0 1 1 8,27 Z" android:fillColor="#F2B25A" />
+        </group>
+        <group>
+            <clip-path android:pathData="M0,64 L0,34.8 L2,34.8 L5.75,34.99 L9.5,35.26 L13.25,35.37 L17,35.15 L20.75,34.62 L24.5,34.02 L28.25,33.64 L32,33.7 L35.75,34.17 L39.5,34.84 L43.25,35.39 L47,35.6 L50.75,35.44 L54.5,35.1 L58.25,34.82 L62,34.8 L64,34.8 L64,64 Z" />
+            <path android:pathData="M8,27 A16,16 0 1 1 40,27 A16,16 0 1 1 8,27 Z" android:fillColor="#F2B25A" />
+        </group>
+    </group>
+</vector>

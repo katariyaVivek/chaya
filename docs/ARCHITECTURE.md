@@ -208,6 +208,98 @@ faster than APKs ship, so the app fetches newer releases itself.
   reason on its card and *Save as MP4* in its menu; streams downloaded before this have the same.
   The saving phase is kept in memory, like an archive's counts: an app killed mid-export brings the
   task back paused, and resuming finds every piece cached and saves it again.
+- **Saved videos play in Chaya** (`ui/player/PlayerScreen.kt`, Stage's phone player): a file from the
+  file (read for what it is, since a stream saved as MP4 keeps the stream's type), a stream still only in
+  the cache through the cache, as above. Pictures, sound and ZIPs open as before (`playsInChaya`). Where
+  playback stopped is kept per download (`PlaybackPositions`, `Watched`): the player starts there unless it
+  was in the first 5 seconds or the last 10, Home leads with the video left part-way (*Continue · 4:12 of
+  12:40*), and deleting a download forgets it.
+- **Subtitles and the transcript** (`subtitles/`, a port of `chaya-core`'s `subtitles` with its tests): the engine
+  lists a link's subtitles (`subtitles=True`), `Subtitles.pick` takes the language spoken as Windows does, and
+  `DownloadManager` fetches them as the download starts, beside it and never in its way (`SubtitleStore`, by
+  download id, as SRT in app-private files; a cookie goes only to the video's own site). The player reads them off
+  the main thread and draws them itself (`SubtitleOverlay`), and lists them as the transcript (`Transcript`), the
+  line being said in ink and kept in view; a line tapped plays from it. Deleting the download deletes them.
+- **Chapters** (`subtitles/Chapters.kt`, a port of `chaya-core`'s `chapters`): the engine lists a video's chapters with
+  every answer; `Chapters.read` puts them right (in order, none overlapping or past the end, fewer than two are none),
+  and `SubtitleStore` keeps them beside the subtitles as "12.chapters". The player draws the seek bar in pieces, one a
+  chapter (`ChapterTrack`), names the chapter playing, and lists them in a sheet (`ChapterSheet`).
+- **Search across every line said** (`subtitles/LineSearch.kt`, a port of `chaya-core`'s `search`): every finished
+  video's subtitle lines in memory (`ChayaApplication.lineSearch`), folded for case and accents, a file read again only
+  when its size or time changed. The Library's search box asks it as the typing pauses (`DownloadsViewModel.searchLines`)
+  for the videos the kind and site chips leave in view; `SaidRow` says how often the words are said and `SaidSheet`
+  lists the lines, a tap playing from that time (`Screen.playerRoute(id, atMs)`).
+- **The person's own videos** (`download/OwnVideo.kt`): The Library header's *Add a video* opens the phone's picker
+  (`OpenDocument`); `DownloadsViewModel.addOwnVideo` keeps the read permission and `DownloadManager.addOwnVideo` lists
+  the file as a finished download whose address is `chaya-own:` plus the document's (`isOwn`, `ownUri`), playing
+  through `exportedUri`. `deleteTask` only takes it out of Chaya and releases the permission; `CachedLibraryFiles`
+  takes its tile's frame from the document.
+- **Subtitles put right** (`subtitles/SubtitleFixes.kt`, a port of `chaya-core`'s `fix`; `SubtitleEdits.kt`): a line's
+  words corrected or taken out, the track shifted, or stretched between two lines put right (`Retime.of`). `SubtitleEdits`
+  writes the SRT through `SubtitleStore.write` and keeps each file as it was for Undo (the last 20 per video, in memory).
+  The player opens `FixSheet` from the transcript (a long press, or its pencil) and shows `FixedBar` with Undo.
+
+- **Translation** (`subtitles/Translate.kt`, a port of `chaya-core`'s `translate`; `Translations.kt`,
+  `TranslationJobs.kt`): `Translator` asks the person's model in batches, each with the title and the transcript, and
+  keeps every line in step by its number. `TranslationJobs` runs one per video in the app's scope and reports
+  `Translating` (one value: `Idle`, `Running`, `Failed`); `TranslationStore` keeps a version for each language and
+  model in `12.translations.json`, written after every batch, and which is shown. The player's `TranslateSheet` starts,
+  stops and chooses; `SubtitleOverlay` and `Transcript` draw the version shown under the original.
+
+- **Highlights** (`subtitles/Highlights.kt`, a port of `chaya-core`'s `highlights`; `HighlightJobs.kt`): ranges of
+  lines the model picks, checked and timed by their lines, kept in `12.highlights.json`. The player's `HighlightsSheet`
+  lists and finds them; `HighlightMarks` draws them in amber under the seek bar.
+
+- **Clips** (`subtitles/Clips.kt`, a port of `chaya-core`'s `clips` and the snapping in Windows' `clips.js`):
+  clips put right and kept in `12.clips.json`. The transcript chooses lines (`chosen`, `onChoose`); the player's
+  `ChosenBar`, `ClipsSheet` and `ClipEditor` make, list and trim them on `ClipTimeline`, drawn from frames and the
+  sound's loudness (`ui/player/ClipMedia.kt`: `MediaCodec` into `PeakMeter`, `MediaMetadataRetriever`).
+
+- **Export** (`subtitles/ClipExport.kt`, a port of `chaya-core`'s `export` without ffmpeg; `ui/player/ClipExporter.kt`):
+  Media3 Transformer cuts the clip (`ClippingConfiguration`), draws its lines with `SubtitleBurn` (a `BitmapOverlay`,
+  one bitmap per line), and with a size to fit scales it (`Presentation`) and sets the encoders' bit rates. The file
+  is made in the cache (`clips/`, shared through the FileProvider) and saved to Movies on request. `ExportPanel` sits
+  under the clip's timeline (`Exporting`: `Idle`, `Running`, `Done`, `Failed`).
+
+## Subtitles made on the phone (`speech/`, `src/main/cpp`)
+
+whisper.cpp, built by CMake from the commit Windows uses, with `chaya_whisper.c` as its bridge, twice for arm64: a
+baseline (`chaya_whisper`) and one for ARMv8.2 cores with half precision and dot products (`chaya_whisper_fp16`,
+several times faster), chosen by `/proc/cpuinfo` and run on the fast cores (`CpuChoice`): `Whisper.transcribe`
+hands it 16 kHz samples and a model and gets back whisper-cli's `-ojf` JSON (DTW word times on), read by
+`Transcript.parse` and cut into lines by `SpeechLines`, both Windows' `speech` ported with its tests and fixtures
+(read from `desktop/core/tests/fixtures`). `SpeechModels` fetches Tiny or Base once, resumably, kept only when its
+SHA-256 is the pinned one. Every piece is evened out first (`Leveler`: soft speech lifted up to +20 dB, silence left alone, nothing clipped), so
+a quiet voice is heard. On the phone, `SpeechModel.PARAKEET` runs NVIDIA's Parakeet TDT 0.6B v3 through sherpa-onnx (`speech/Parakeet.kt`;
+its prebuilt Android library fetched by `fetchSherpaOnnx` in `app/build.gradle.kts`, pinned by SHA-256, and its Kotlin
+API vendored in `com/k2fsa/sherpa/onnx`, kept whole from R8): each piece is cut into windows of about 25 s at their
+quietest moment, each window's timed tokens become words, and the language is guessed from them (`LanguageGuess`).
+`SubtitleStore.forgetSubtitles` deletes a video's subtitles with what was made from their lines (translations,
+highlights), keeping chapters and clips, so new ones can be made; `TranslationStore.remove` deletes one version;
+`SpeechModels.delete` frees a model. Translation asks for a sentence over several lines as a whole (`Translator.sentences`)
+and ends a full batch where a sentence does. An `Engine` is chosen per video: `OnPhone` (whisper.cpp or Parakeet) or `Cloud` (`CloudSpeech`: Groq's
+`whisper-large-v3` or OpenAI's `whisper-1` with the key saved under AI model, through `CloudListener`, which sends each
+piece as WAV to `/audio/transcriptions` and reads back `verbose_json` with word times into a `Transcript`, so the same
+`SpeechLines` cut it). `SpeechJobs` runs in the app's scope in two lanes (`Lane`): one video on the phone and one sent
+to a service at the same time, others waiting their turn (`Making`: `Idle`, `Waiting`, `Fetching`, `Listening`,
+`Failed`; `isWorking`). While any works, `SpeechService` (a data-sync foreground service with a partial wake lock) keeps
+the app running with a notification (`SpeechNotice`) and *Stop*. After each piece what was heard is kept as a `Partial`
+(`SpeechProgress`, `<id>.partial.json` beside the subtitles), so making that was stopped, refused, or ended with the
+app carries on from the next piece with the same engine. *Stop* says `Idle` at once and ends the engine under way:
+`Whisper.stop`, Parakeet between windows, `CloudListener.cancel`. The sound decoded by `ClipMedia.decodePcm` into `Sound16k`'s five-minute pieces, each heard
+and shifted to its place, and the lines written as the video's SRT through `SubtitleStore.write`.
+
+## The person's own AI model (`ai/`)
+
+A port of `chaya-core`'s `ai`, for translation and highlights. `AiModel.kt` lists the services (`AiService.ALL`), what
+the person chose (`AiSettings`), why a request failed (`AiError`, one sealed type, each with a sentence) and where a
+service is reached (`Endpoint.of`: plain `http://` only on the home network, so a key never crosses the internet
+unencrypted). `AiClient` speaks the two protocols over OkHttp (OpenAI's chat completions, Anthropic's Messages), lists
+models and runs *Test*; it is tested against MockWebServer. `AiKeys` keeps the choice and each service's key in the
+`chaya_ai` preferences, the key sealed with AES-GCM by a key made in the Android Keystore (`KeystoreLock`, checked on a
+device by `KeystoreLockTest`); `backup_rules.xml` and `data_extraction_rules.xml` leave that file out of backups and
+transfers. On the phone a model on a PC (Ollama, LM Studio) has no address of its own: the person gives the PC's.
+Settings › AI model is `AiModelScreen`, from the Library's ⋮.
 
 ## Storage (`database/`)
 
@@ -252,13 +344,21 @@ Share. Reached from the Downloads screen's menu.
   new WebView and its page again, unless it stopped within the last ten seconds
   (`RendererLoss`); then it waits for Reload. Other live tabs become discarded and load again when
   shown.
-- `ui/components/TabGrid` is the full-screen tab switcher: a new-tab square, the tab count, ⋮ (*Close
-  all tabs*), search by title and address, and two columns of cards; swiping or × closes with Undo.
+- `ui/components/TabGrid` is the full-screen tab switcher: the header (*3 tabs*, ⋮ for *Close all tabs*),
+  search by title and address, two columns of cards (swiping or × closes with Undo), and Chaya's bar with Tabs
+  lit, whose + is New tab.
+- `ui/components/ScreenHeader` is the header every screen has, its actions `HeaderButton` circles; `settings/` is
+  the Settings screen it leads to from Home (Appearance, AI model, Speech models, Diagnostics).
+- `ChayaWebView` is every tab's WebView: a long press on a link or picture reads its hit test into `PressedOn` (one
+  value) for `PageMenu`, *Web search* is added to WebView's bar for chosen words when WebView leaves it out (no app on
+  the phone takes web searches; `MainActivity` turns either search into a new tab), and pulling the page down at its top reloads it (`PullGesture`, fed only once WebView over-scrolls at the top, so a list scrolled inside the
+  page scrolls first). All of it goes through `RetainedWebViewCallbacks` to the screen shown.
 - `BrowserChrome` is the address bar, which collapses to the site name on a
-  page, with the ad blocker's shield and count. The floating pill and the sheets (`ui/components/`)
-  sit on top.
+  page, with the ad blocker's shield and count. Under the page is Chaya's bar (`home/ChayaBar`), whose ink circle
+  `PageFind` sets: Save for what the page has (a site's video, an account's posts, what it plays), else a new
+  tab. The sheets (`ui/components/`) sit on top.
 - `downloads/`: the list (cards per state, All/Active/Done filters, swipe to delete with Undo, Share
-  in a finished file's ⋮) or the grid, switched from the top bar and remembered. `DownloadsContent`
+  in a finished file's ⋮) or the grid, switched from the header and remembered. `DownloadsContent`
   is the screen without its view model, so tests drive it directly.
 - `library/`: the grid of finished downloads. `libraryItems` puts a post's files (same `groupKey`)
   on one tile, and `LibraryFilter` narrows by kind, site and title in both the list and the grid.
@@ -297,12 +397,20 @@ not another flag beside it.
 | A stream's qualities | `Loading`, `Ready`, `Error` | `ui/components/QualityPickerState`, inside `BrowserSheet.Quality` | Sealed type; an answer fills only the picker still waiting for it |
 | A tab | shown, live in the background, discarded; renderer lost | `BrowserTab`: `saved == null` is shown, `webView == null` is discarded; `RendererLoss` | Nullable fields, used from the main thread only |
 | An engine set | `NEW → TRUSTED \| BAD`, `checking` while its first start runs | `platform/EngineSets` (`state.json`) | Enum, stored; a check the app died during counts as failed |
+| *Test* or the model list in Settings › AI model | `Idle`, `Asking`, `Said` (its words, worked or not) | `ai/AiModelScreen.kt` (`Checking`) | Sealed type |
+| A video's translation | `Idle`, `Running` (lines done of all), `Failed` (its words) | `subtitles/TranslationJobs.kt` (`Translating`) | Sealed type, one per video in a `StateFlow`; what is translated is on disk, so a stop loses nothing |
+| Finding a video's highlights | `Idle`, `Running`, `Failed` (its words) | `subtitles/HighlightJobs.kt` (`Finding`) | Sealed type, one per video in a `StateFlow` |
+| Saving a clip | `Idle`, `Running` (how far), `Done` (the file), `Failed` (its words) | `ui/player/ExportViews.kt` (`Exporting`) | Sealed type, in the player only |
+| Making a video's subtitles | `Idle`, `Waiting`, `Fetching` (the model, bytes of all), `Listening` (percent), `Failed` (its words) | `speech/SpeechJobs.kt` (`Making`) | Sealed type, one per video in a `StateFlow`; one video at a time on the phone and one at a service; how far each got kept on disk as a `Partial` |
 | An engine update check | `NOT_DUE`, `UP_TO_DATE`, `DOWNLOADED`, `REFUSED`, `FAILED` | `EngineUpdater.Outcome` | Enum |
 | Windows: a download | `Queued → Downloading ⇄ Paused → Completed \| Failed`, steps `Picture`, `Sound`, `Joining`, `Saving` | `desktop/core/src/download/manager.rs` | Rust enums, stored |
 | Windows: the panel open | none, Settings, the ad blocker's shield, what the page holds | `desktop/app/ui/panels.js` (`onePanel`), used by `main.js` | One value: opening a panel closes the one open; Escape closes it |
 | Windows: "Found on this page" offered | the one address it last opened itself for, or was kept closed at (`''` with none) | `desktop/app/ui/found.js` (`offerFound`), kept in `main.js` as `foundOfferedFor` | It opens itself once per address with something to save on it, only with no other panel open and room for the page beside it (else the pill lights); closed, it stays closed there; leaving the page forgets it. Beside the page, which steps aside for it (`pageBounds`), never over it |
 | Windows: the player editing a clip | the clip chosen (`playing.cut`), or none | `desktop/app/ui/main.js` (`showEditing`, from `cutClip()`) | Not a state of its own: the player is the clip's editor while a clip is chosen (`player--editing`), and back or Esc lets the clip go first, then the player |
+| Phone: the place shown | `Home` (first), `Browse` (the browser), `Library` (Downloads), each over Home | `ui/navigation/ChayaNavHost.kt` (`go`), `home/HomeScreen.kt` (`Place`, `PlacesBar`) | The back stack's top, never a flag; Back from Browse or the Library is Home. A shared link, a page from History or Bookmarks, or Home's "+" brings Browse forward (`PlaceStep`: kept if shown, so the browser handling a link is not swapped for a new one; gone back to if behind; opened if not there); its pages live in `WebViewHolder`, so they are as they were left. The browser's bar has Home (Chaya's, not its start page, which is a new tab's) and the Library, which opens over the page; out of sight its pages are paused (`WebView.onPause`) |
+| Phone: the player's layout | `UPRIGHT` (picture, name, lines, controls under), `ACROSS` (picture filling the screen, a slim row of controls over it that steps aside while playing) | `ui/player/PlayerLayout.kt`, used by `PlayerScreen` | From the screen's orientation, never stored; its full-screen button turns the phone (`turnTo`), and leaving the player lets it turn freely again. The activity handles rotation itself (`configChanges`), so turning does not restart the video |
 | Windows: the sidebar's place | `home`, `browse` (offered while any tab is open), `library` | `desktop/app/ui/shell.js` (`placeOf`, from `browsing` and `showing-downloads`; `railed` only for `browse`) | Worked out from the views, never stored; the Library comes first, over Home or a page; the player and viewer are layers over a place, not places |
+| Windows: the Library's tab | `closed`, `open` (in the title bar's strip while another place is shown), `shown` | `desktop/app/ui/shell.js` (`libraryTabAfter`), kept in `main.js` as `libraryTab` | One value; `showing-downloads` is `shown`. The sidebar's Library opens it, as a browser's downloads page is a tab; leaving it for a page or Home keeps it in the strip; its × or Ctrl+W closes it, back to what it lay over |
 | Windows: Chaya's mark | `idle`, `saving` (with progress), `unknown` (a stream), `paused`, `offline`; a rise in `saved` settles it | `desktop/app/ui/mark-state.js` (`markState`, from all the downloads), drawn by `desktop/design/chaya-mark.js` | One value, worked out from the downloads each time they change; the drawing eases between states as a pure function of time |
 
 Kept apart on purpose, because they are layers rather than one state:
@@ -311,7 +419,7 @@ Kept apart on purpose, because they are layers rather than one state:
   through the tab switches and new documents that close a sheet. It hides when a sheet opens.
 - On Windows, the Library (`showing-downloads`, the sidebar's Library place), the player and the viewer each
   cover the page's place and stack: the player opens from the Library and closes back to it. `showPageView` asks
-  whether any of them is shown. Without a page, the Library takes Home's place. Home shows the video to carry on
+  whether any of them is shown, and while one is, the page keeps its place and size underneath. Without a page, the Library takes Home's place. Home shows the video to carry on
   with (`continue_watching` in `desktop/core/src/video.rs`: the one stopped part way most recently, else the newest
   saved video, as `heroOf` picks), what is under way, and one row of the newest saved (`shelfColumns`).
   `browsing` is whether a page is open at all, and `playing` is the video in the player, not a mode.
@@ -435,7 +543,7 @@ a built-in browser. [`../desktop/README.md`](../desktop/README.md) has the layou
   units. Tested in the core (folding, words, marks, order, the cap, the refresh) and with Node (marks into pieces,
   grouping, the heading).
 - **Chapters** (`chaya-core`'s `chapters`, `desktop/app/ui/chapters.js`): the engine lists a video's chapters with its
-  subtitles (`--subtitles`, so the phone never gets them); `chapters::read` puts them in order and inside the video,
+  subtitles (`--subtitles`; the phone asks for the subtitles but does not use the chapters yet); `chapters::read` puts them in order and inside the video,
   `Videos::keep_chapters` keeps them in `videos/ID.json` when a link's video is saved, and the window draws them on the
   seek bar and the timeline, where clip edges snap to them (`snapEdges`). Tested in the core, the engine and with Node.
 - **Copied links** (`chaya-core`'s `copied`, `desktop/app/src-tauri/src/copied.rs`): an opt-in Ctrl+Alt+D, Windows'

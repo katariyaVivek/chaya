@@ -1,5 +1,7 @@
 package com.chaya.app.diagnostics
 
+import com.chaya.app.ui.components.HeaderButton
+import com.chaya.app.ui.components.ScreenHeader
 import android.content.Intent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -13,7 +15,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -24,7 +25,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -73,36 +73,23 @@ fun DiagnosticsScreen(onNavigateBack: () -> Unit) {
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Diagnostics", style = MaterialTheme.typography.titleLarge) },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(onClick = {
-                        scope.launch {
-                            val text = eventLog.exportText().ifBlank { "No events recorded yet." }
-                            val intent = Intent(Intent.ACTION_SEND).apply {
-                                type = "text/plain"
-                                putExtra(Intent.EXTRA_SUBJECT, "Chaya diagnostics log")
-                                putExtra(Intent.EXTRA_TEXT, text)
-                            }
-                            runCatching {
-                                context.startActivity(Intent.createChooser(intent, "Share diagnostics"))
-                            }.onFailure {
-                                snackbarHostState.showSnackbar("No app can share this log")
-                            }
+            ScreenHeader("Diagnostics", onBack = onNavigateBack) {
+                HeaderButton(Icons.Default.Share, "Share log", onClick = {
+                    scope.launch {
+                        val text = eventLog.exportText().ifBlank { "No events recorded yet." }
+                        val intent = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_SUBJECT, "Chaya diagnostics log")
+                            putExtra(Intent.EXTRA_TEXT, text)
                         }
-                    }) {
-                        Icon(imageVector = Icons.Default.Share, contentDescription = "Share log")
+                        runCatching {
+                            context.startActivity(Intent.createChooser(intent, "Share diagnostics"))
+                        }.onFailure {
+                            snackbarHostState.showSnackbar("No app can share this log")
+                        }
                     }
-                },
-            )
+                })
+            }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = MaterialTheme.colorScheme.background,

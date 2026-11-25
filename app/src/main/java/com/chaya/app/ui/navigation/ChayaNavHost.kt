@@ -22,6 +22,10 @@ import com.chaya.app.downloads.DownloadsScreen
 import com.chaya.app.history.BookmarksScreen
 import com.chaya.app.history.HistoryScreen
 import com.chaya.app.history.PagesToOpen
+import com.chaya.app.home.HomeScreen
+import com.chaya.app.home.Place
+import com.chaya.app.home.PlaceStep
+import com.chaya.app.settings.SettingsScreen
 import com.chaya.app.ui.player.PlayerScreen
 import com.chaya.app.ui.theme.ChayaMotion
 
@@ -31,20 +35,42 @@ private fun exitTween() = tween<Float>(ChayaMotion.DurationShort, easing = Chaya
 
 @Composable
 fun ChayaNavHost(navController: NavHostController) {
-    // A link shared to Chaya is opened by the browser; bring it forward if another screen is showing.
+    // Chaya's places (Stage): Home first; Browse and the Library over it, one at a time, so Back from either is Home.
+    // Which is shown is the back stack's top, never a flag kept beside it.
+    fun go(place: Place) {
+        val route = when (place) {
+            Place.HOME -> Screen.Home.route
+            Place.BROWSE -> Screen.Browser.route
+            Place.LIBRARY -> Screen.Downloads.route
+        }
+        val shown = navController.currentDestination?.route == route
+        val onStack = runCatching { navController.getBackStackEntry(route) }.isSuccess
+        when (PlaceStep.of(shown, onStack)) {
+            PlaceStep.STAY -> Unit
+            PlaceStep.GO_BACK -> navController.popBackStack(route, inclusive = false)
+            PlaceStep.OPEN -> navController.navigate(route) {
+                popUpTo(Screen.Home.route)
+                launchSingleTop = true
+            }
+        }
+    }
+
+    // A link shared to Chaya is opened by the browser; brought forward, or opened, whatever is showing. The browser's
+    // pages live in WebViewHolder, not on its screen, so they are as they were left.
     val sharedLink by SharedLinks.pending.collectAsState()
     LaunchedEffect(sharedLink) {
-        if (sharedLink != null) navController.popBackStack(Screen.Browser.route, inclusive = false)
+        if (sharedLink != null) go(Place.BROWSE)
     }
-    // A page picked on the History or Bookmarks screen is opened by the browser too.
+    // A page picked on the History or Bookmarks screen, or a blank tab from the bar's + on Home or in the Library, is
+    // opened by the browser too.
     val pageToOpen by PagesToOpen.pending.collectAsState()
     LaunchedEffect(pageToOpen) {
-        if (pageToOpen != null) navController.popBackStack(Screen.Browser.route, inclusive = false)
+        if (pageToOpen != null) go(Place.BROWSE)
     }
 
     NavHost(
         navController = navController,
-        startDestination = Screen.Browser.route,
+        startDestination = Screen.Home.route,
         enterTransition = {
             fadeIn(enterTween()) + scaleIn(initialScale = 0.965f, animationSpec = enterTween())
         },
@@ -54,26 +80,37 @@ fun ChayaNavHost(navController: NavHostController) {
         },
         popExitTransition = { fadeOut(exitTween()) }
     ) {
+        composable(Screen.Home.route) {
+            HomeScreen(
+                onPlace = ::go,
+                onPlay = { taskId -> navController.navigate(Screen.playerRoute(taskId)) },
+                onOpenSettings = { navController.navigate(Screen.Settings.route) { launchSingleTop = true } },
+            )
+        }
         composable(Screen.Browser.route) {
             BrowserScreen(
-                onNavigateToDownloads = { navController.navigate(Screen.Downloads.route) },
+                // The bar's Home and Library are places, as on Home and in the Library; the tabs stay as they were
+                onPlace = ::go,
                 onNavigateToHistory = { navController.navigate(Screen.History.route) },
                 onNavigateToBookmarks = { navController.navigate(Screen.Bookmarks.route) },
             )
         }
         composable(Screen.Downloads.route) {
-            val themeSettings = (LocalContext.current.applicationContext as ChayaApplication).themeSettings
-            val themeMode by themeSettings.mode.collectAsState()
             DownloadsScreen(
-                onNavigateBack = { navController.popBackStack() },
-                onPlayStream = { taskId ->
+                onPlay = { taskId ->
                     navController.navigate(Screen.playerRoute(taskId))
                 },
-                onNavigateToDiagnostics = {
-                    navController.navigate(Screen.Diagnostics.route)
-                },
-                onNavigateToHistory = { navController.navigate(Screen.History.route) },
-                onNavigateToBookmarks = { navController.navigate(Screen.Bookmarks.route) },
+                onPlayAt = { taskId, atMs -> navController.navigate(Screen.playerRoute(taskId, atMs)) },
+                onPlace = ::go,
+            )
+        }
+        composable(Screen.Settings.route) {
+            val themeSettings = (LocalContext.current.applicationContext as ChayaApplication).themeSettings
+            val themeMode by themeSettings.mode.collectAsState()
+            SettingsScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onOpenAiModel = { navController.navigate(Screen.AiModel.route) },
+                onOpenDiagnostics = { navController.navigate(Screen.Diagnostics.route) },
                 themeMode = themeMode,
                 onThemeModeChange = themeSettings::set,
             )
@@ -81,17 +118,30 @@ fun ChayaNavHost(navController: NavHostController) {
         composable(
             route = Screen.Player.route,
             arguments = listOf(
-                navArgument(Screen.PLAYER_ARGS) { type = NavType.LongType }
+                navArgument(Screen.PLAYER_ARGS) { type = NavType.LongType },
+                navArgument(Screen.PLAYER_AT) {
+                    type = NavType.LongType
+                    defaultValue = -1L
+                },
             )
         ) { backStackEntry ->
             val taskId = backStackEntry.arguments?.getLong(Screen.PLAYER_ARGS) ?: -1L
-            PlayerScreen(taskId = taskId, onNavigateBack = { navController.popBackStack() })
+            val at = backStackEntry.arguments?.getLong(Screen.PLAYER_AT)?.takeIf { it >= 0 }
+            PlayerScreen(
+                taskId = taskId,
+                startAtMs = at,
+                onNavigateBack = { navController.popBackStack() },
+                onOpenAiModel = { navController.navigate(Screen.AiModel.route) },
+            )
         }
         composable(Screen.Diagnostics.route) {
             DiagnosticsScreen(onNavigateBack = { navController.popBackStack() })
         }
         composable(Screen.History.route) {
             HistoryScreen(onNavigateBack = { navController.popBackStack() }, onOpen = PagesToOpen::open)
+        }
+        composable(Screen.AiModel.route) {
+            com.chaya.app.ai.AiModelScreen(onNavigateBack = { navController.popBackStack() })
         }
         composable(Screen.Bookmarks.route) {
             BookmarksScreen(onNavigateBack = { navController.popBackStack() }, onOpen = PagesToOpen::open)

@@ -1,6 +1,7 @@
 package com.chaya.app.library
 
 import com.chaya.app.download.DownloadState
+import com.chaya.app.download.DownloadNotification.formatFileSize
 import com.chaya.app.download.DownloadTask
 import com.chaya.app.downloads.displayTitle
 import com.chaya.app.downloads.sourceHost
@@ -49,6 +50,13 @@ fun kindOf(task: DownloadTask): FileKind? = when {
     task.isStream && task.mimeType?.startsWith("audio/") != true -> FileKind.VIDEO
     else -> kindOf(task.mimeType, task.fileName)
 }
+
+/**
+ * Whether a saved thing plays in Chaya's own player: a video, file or stream, and anything only Media3's cache holds
+ * (no other app can read that). Pictures, sound files and ZIPs open as before.
+ */
+fun playsInChaya(task: DownloadTask): Boolean =
+    kindOf(task) == FileKind.VIDEO || (task.filePath == null && task.exportedUri == null)
 
 /** pinterest.com and its country sites: pinterest.co.uk, de.pinterest.com... */
 private val PINTEREST_HOST = Regex("""(?:[a-z0-9-]+\.)*pinterest\.(?:com|[a-z]{2}|co\.[a-z]{2}|com\.[a-z]{2})""")
@@ -139,3 +147,15 @@ fun libraryItems(tasks: List<DownloadTask>, filter: LibraryFilter = LibraryFilte
 /** How many downloads are still running, waiting or paused: the grid only shows what is done. */
 fun unfinishedCount(tasks: List<DownloadTask>): Int =
     tasks.count { it.state.isUnfinished }
+
+/** The line under a Library card (Stage): where it came from, then its size, or for a post how many files it holds. */
+fun cardDetails(item: LibraryItem): String {
+    val site = siteOf(item.cover).label
+    val rest = when (item) {
+        is LibraryItem.Post -> "${item.tasks.size} files"
+        is LibraryItem.Single -> (item.task.totalBytes?.takeIf { it > 0 } ?: item.task.downloadedBytes)
+            .takeIf { it > 0 }
+            ?.let(::formatFileSize)
+    }
+    return listOfNotNull(site, rest).joinToString(" · ")
+}

@@ -156,3 +156,20 @@ object FormatSelector {
             choice.sizeBytes?.takeIf { it > 0 }?.let { "≈ ${formatFileSize(it)}" },
         ).joinToString(" · ")
 }
+
+/** The tallest picture picked first: past this, a size is rarely worth its file (as Chaya for Windows picks). */
+private const val FIRST_PICK_AT_MOST = 1080
+
+/**
+ * The choice picked when a video is found (Stage): the best at most 1080p, in the order offered (best first); else the
+ * first that is a picture at all; else the first. -1 with none.
+ */
+fun firstPick(choices: List<PlatformChoice>): Int {
+    if (choices.isEmpty()) return -1
+    val best = choices.withIndex()
+        .filter { (_, choice) -> !choice.isAudioOnly && (choice.quality ?: Int.MAX_VALUE) <= FIRST_PICK_AT_MOST }
+        .maxByOrNull { (_, choice) -> choice.quality ?: 0 }
+    if (best != null) return best.index
+    val picture = choices.indexOfFirst { !it.isAudioOnly }
+    return if (picture >= 0) picture else 0
+}

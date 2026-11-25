@@ -3,21 +3,21 @@ package com.chaya.app.browser
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.os.Build
+import android.os.SystemClock
 import android.view.View
 import android.view.ViewGroup
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import androidx.webkit.WebViewCompat
-import androidx.webkit.WebViewFeature
-import android.webkit.RenderProcessGoneDetail
-import android.os.SystemClock
 import android.widget.FrameLayout
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -27,36 +27,22 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tab
-import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -71,6 +57,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -78,21 +65,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.view.doOnAttach
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
 import com.chaya.app.ChayaApplication
 import com.chaya.app.SharedLinks
 import com.chaya.app.adblock.AdBlockSession
@@ -102,8 +89,16 @@ import com.chaya.app.detection.MediaInterceptor
 import com.chaya.app.detection.MediaNamer
 import com.chaya.app.detection.MediaRanker
 import com.chaya.app.detection.RankedMedia
-import com.chaya.app.download.DownloadState
+import com.chaya.app.history.BrowsingRecord
+import com.chaya.app.history.PagesToOpen
+import com.chaya.app.home.BarAction
+import com.chaya.app.home.BarMiddle
+import com.chaya.app.home.ChayaBar
+import com.chaya.app.home.HomeShelf
+import com.chaya.app.home.Place
+import com.chaya.app.history.Suggestion
 import com.chaya.app.model.DetectedMedia
+import com.chaya.app.model.DetectionSource
 import com.chaya.app.model.MediaKind
 import com.chaya.app.platform.LinkState
 import com.chaya.app.platform.Platform
@@ -116,15 +111,13 @@ import com.chaya.app.ui.components.ProfileSheet
 import com.chaya.app.ui.components.QualitySelectorSheet
 import com.chaya.app.ui.components.TabGrid
 import com.chaya.app.ui.theme.ChayaMotion
+import com.chaya.app.ui.theme.LocalChayaColors
 import com.chaya.app.ui.theme.pressScale
 import java.net.URLEncoder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
-import com.chaya.app.history.BrowsingRecord
-import com.chaya.app.history.PagesToOpen
-import com.chaya.app.history.Suggestion
 import kotlinx.coroutines.launch
 
 /**
@@ -154,7 +147,8 @@ private const val START_SCREEN_BOOKMARKS = 8
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun BrowserScreen(
-    onNavigateToDownloads: () -> Unit,
+    /** Chaya's places, from the bar: Home and the Library. The browser's own start page is a new tab's, never Home. */
+    onPlace: (Place) -> Unit,
     onNavigateToHistory: () -> Unit = {},
     onNavigateToBookmarks: () -> Unit = {},
     viewModel: BrowserViewModel = viewModel()
@@ -295,6 +289,11 @@ fun BrowserScreen(
     val tabsVersion = tabs.version.collectAsState().value
     // A link the page wanted in a new window; opened by the effect below, outside the WebView's callback.
     var pendingNewTabUrl by remember { mutableStateOf<String?>(null) }
+    // What a long press on the page landed on, for its menu; null when no menu is open.
+    var pressedOn by remember { mutableStateOf<PressedOn?>(null) }
+    // How far the page is pulled down at its top (0 to 1), and whether it was let go far enough to load again.
+    var pulled by remember { mutableFloatStateOf(0f) }
+    var pullRefreshRequested by remember { mutableStateOf(false) }
 
     // Packages all destination-specific WebView callbacks so one atomic router update owns their lifetime together.
     val callbackState = RetainedWebViewCallbackState(
@@ -307,6 +306,9 @@ fun BrowserScreen(
         onExitFullscreen = ::exitFullscreen,
         onAddressChanged = viewModel::onPageAddressChanged,
         onOpenInNewTab = { pendingNewTabUrl = it },
+        onPressed = { pressedOn = it },
+        onPulled = { pulled = it },
+        onPullToRefresh = { pullRefreshRequested = true },
     )
 
     /** Routes the tab shown to the browser's state, and every other tab to the state it keeps for itself. */
@@ -528,6 +530,8 @@ fun BrowserScreen(
     val adAllowedSites by adBlocker.settings.allowedSites.collectAsState()
     val adEngine by adBlocker.engine.collectAsState()
     var showTabGrid by remember { mutableStateOf(false) }
+    // A fresh tab's address field asks for focus once; the field says when it has it
+    var focusAddress by remember { mutableStateOf(false) }
     // A sheet opening (a link shared from another app, say) shows over the tab grid's place: what was just asked for.
     LaunchedEffect(uiState.sheet) {
         if (uiState.sheet != null) showTabGrid = false
@@ -554,11 +558,7 @@ fun BrowserScreen(
         val query = rawInput.trim()
         if (query.isEmpty()) return
 
-        val targetUrl = when {
-            query.startsWith("http://") || query.startsWith("https://") -> query
-            query.contains(".") && !query.contains(" ") -> "https://$query"
-            else -> "https://www.google.com/search?q=${URLEncoder.encode(query, "UTF-8")}"
-        }
+        val targetUrl = addressFor(query)
         urlInput = targetUrl
         invalidateDetectionSession()
         activeWebView()?.loadUrl(targetUrl)
@@ -627,12 +627,8 @@ fun BrowserScreen(
     }
 
     val downloads by viewModel.downloads.collectAsState()
-    val activeDownloads = remember(downloads) {
-        downloads.count { it.state.isActive }
-    }
-    val recentDownloads = remember(downloads) {
-        downloads.filter { it.state == DownloadState.COMPLETED }.sortedByDescending { it.updatedAt }.take(3)
-    }
+    // How the downloads still going are getting on, as the bar's Library slot shows it on every screen
+    val saving = remember(downloads) { HomeShelf.progressOf(downloads) }
 
     /** Fills the address bar from the clipboard; a link opens straight away. The clipboard is read only when Paste is tapped. */
     fun pasteFromClipboard() {
@@ -683,9 +679,20 @@ fun BrowserScreen(
             return
         }
         val tab = newTab()
+        val target = url?.trim()?.takeIf { it.isNotEmpty() }?.let(::addressFor)
+        // A blank tab is for typing in: its field is ready, keyboard up, as a browser's new tab is.
+        if (target == null) focusAddress = true
+        // A tab opened for a page shows that page from the start, as a tab restored from disk does, rather than its
+        // start screen until the page says it began: a link opened from the long-press menu was left on the start
+        // screen with its address in the field.
+        if (target != null) tab.saved = openingState(target, viewModel.nextNavigationGeneration())
         tabs.add(tab)
         showTab(tab)
-        if (url != null) navigateToUrl(url)
+        if (target != null) {
+            urlInput = target
+            // Loaded once its WebView is on screen (at once if it already is).
+            tab.webView?.let { web -> web.doOnAttach { web.loadUrl(target) } }
+        }
     }
 
     /** Closes [target]; closing the tab shown shows its neighbour, and closing the last opens a fresh one. */
@@ -738,7 +745,11 @@ fun BrowserScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
+            // Out of sight (Home, the Library, another app), the pages stop: a video on one no longer plays on
+            // behind them. Back on screen, they carry on.
+            if (event == Lifecycle.Event.ON_START) tabs.all.forEach { tab -> tab.webView?.onResume() }
             if (event == Lifecycle.Event.ON_STOP) {
+                tabs.all.forEach { tab -> tab.webView?.onPause() }
                 tabs.all.forEach { tab ->
                     if (tab.id == tabs.activeId) rememberTab(tab, viewModel.uiState.value.homeVisible)
                     else tab.webView?.let { web -> WebViewStates.save(web) }?.let { bytes -> onTabDisk { tabStore.writeState(tab.id, bytes) } }
@@ -753,15 +764,71 @@ fun BrowserScreen(
     // A page picked on the History or Bookmarks screen opens in the tab shown.
     val pageToOpen by PagesToOpen.pending.collectAsState()
     LaunchedEffect(pageToOpen) {
-        val url = pageToOpen ?: return@LaunchedEffect
-        PagesToOpen.consume(url)
-        navigateToUrl(url)
+        val page = pageToOpen ?: return@LaunchedEffect
+        PagesToOpen.consume(page)
+        if (page.newTab) openNewTab(page.text.ifBlank { null }) else navigateToUrl(page.text)
     }
 
     LaunchedEffect(pendingNewTabUrl) {
         val url = pendingNewTabUrl ?: return@LaunchedEffect
         pendingNewTabUrl = null
         openNewTab(url)
+    }
+
+    // The page let go after being pulled down far enough at its top: it loads again.
+    LaunchedEffect(pullRefreshRequested) {
+        if (!pullRefreshRequested) return@LaunchedEffect
+        pullRefreshRequested = false
+        pulled = 0f
+        if (!viewModel.uiState.value.homeVisible) reloadPage()
+    }
+
+    /** Puts [text] on the clipboard; Android 13 and newer say so themselves. */
+    fun copy(label: String, text: String, said: String) {
+        context.getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText(label, text))
+        if (Build.VERSION.SDK_INT < 33) showMessage(said)
+    }
+
+    /** Hands [url] to the app the person picks. */
+    fun shareAddress(url: String) {
+        val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, url)
+        runCatching { context.startActivity(Intent.createChooser(send, null)) }
+            .onFailure { showMessage("No app on this phone can share a link") }
+    }
+
+    /** Saves [url]: a video site's link opens its sheet, as a pasted one does; anything else downloads as a file. */
+    fun downloadAddress(url: String) {
+        if (viewModel.openLink(url)) return
+        val page = viewModel.uiState.value.url.takeIf { it.isNotEmpty() }
+        requestPermissionAndDownload(DetectedMedia(url = url, pageUrl = page, mimeType = null, source = DetectionSource.DOM))
+    }
+
+    /** One row of a long press's menu, done. */
+    fun act(pressed: PressedOn, action: PageAction) {
+        val link = (pressed as? PressedOn.Link)?.url ?: (pressed as? PressedOn.Image)?.link
+        val picture = (pressed as? PressedOn.Image)?.src
+        when (action) {
+            PageAction.OPEN_IN_NEW_TAB -> link?.let(::openNewTab)
+            PageAction.COPY_LINK -> link?.let { copy("Link", it, "Link copied") }
+            PageAction.COPY_LINK_TEXT -> (pressed as? PressedOn.Link)?.let { copy("Link text", it.text, "Link text copied") }
+            PageAction.DOWNLOAD_LINK -> link?.let(::downloadAddress)
+            PageAction.SHARE_LINK -> link?.let(::shareAddress)
+            PageAction.OPEN_IMAGE_IN_NEW_TAB -> picture?.let(::openNewTab)
+            PageAction.DOWNLOAD_IMAGE -> picture?.let(::downloadAddress)
+            PageAction.COPY_IMAGE_ADDRESS -> picture?.let { copy("Image address", it, "Image address copied") }
+            PageAction.SHARE_IMAGE -> picture?.let(::shareAddress)
+        }
+    }
+
+    pressedOn?.let { pressed ->
+        PageMenu(
+            pressed = pressed,
+            onAction = { action ->
+                pressedOn = null
+                act(pressed, action)
+            },
+            onDismiss = { pressedOn = null },
+        )
     }
 
     // A link shared to Chaya from another app opens its sheet once the browser is on screen.
@@ -772,6 +839,56 @@ fun BrowserScreen(
         if (!viewModel.openLink(text)) {
             showMessage("Chaya can save videos from YouTube, Instagram, TikTok, X and Pinterest links.")
         }
+    }
+
+    // What the page has to save, one value, for the bar's ink circle
+    val pageFind = PageFind.of(uiState.homeVisible, linkState, uiState.profile, sheetModel)
+
+    /** The bar under the page, and over the tab grid with Tabs lit; [newTab] is what its + does there. */
+    @Composable
+    fun PageBar(tabsShown: Boolean, newTab: () -> Unit = { openNewTab(null) }) {
+        ChayaBar(
+            place = Place.BROWSE,
+            middle = BarMiddle.Page(uiState.canGoBack, uiState.canGoForward, tabs.size, tabsShown),
+            action = if (tabsShown) BarAction.NewTab else pageFind.action,
+            progress = saving,
+            onPlace = onPlace,
+            onAction = {
+                if (tabsShown) {
+                    showTabGrid = false
+                    newTab()
+                } else {
+                    when (val find = pageFind) {
+                        PageFind.Nothing -> newTab()
+                        is PageFind.Looking -> viewModel.toggleLinkSheet()
+                        is PageFind.Found -> when (find.sheet) {
+                            FoundSheet.LINK -> viewModel.toggleLinkSheet()
+                            FoundSheet.PROFILE -> viewModel.toggleProfileSheet()
+                            FoundSheet.MEDIA -> viewModel.toggleMediaSheet()
+                        }
+                    }
+                }
+            },
+            onBack = {
+                invalidateDetectionSession()
+                activeWebView()?.goBack()
+            },
+            onForward = {
+                invalidateDetectionSession()
+                activeWebView()?.goForward()
+            },
+            onTabs = {
+                if (tabsShown) {
+                    showTabGrid = false
+                } else {
+                    // The shown tab's card pictures the page as it is now.
+                    tabs.active?.let { rememberTab(it, uiState.homeVisible) }
+                    showTabGrid = true
+                }
+            },
+            // Swipe sideways along the bar for the tab beside this one.
+            pillModifier = if (tabsShown) Modifier else Modifier.swipeBetweenTabs { step -> tabs.beside(step)?.let { showTab(it) } },
+        )
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -789,7 +906,11 @@ fun BrowserScreen(
                                 homeVisible = uiState.homeVisible,
                                 input = urlInput,
                                 onInputChange = { urlInput = it },
-                                onGo = { navigateToUrl(urlInput) },
+                                // On a new tab the field is where a link is pasted to save it, as Home's + had it: a link
+                                // to a video, post or account opens its sheet; anything else, an address or words, loads.
+                                onGo = {
+                                    if (!(uiState.homeVisible && viewModel.openLink(urlInput))) navigateToUrl(urlInput)
+                                },
                                 onPaste = { pasteFromClipboard() },
                                 onReload = {
                                     invalidateDetectionSession()
@@ -815,6 +936,8 @@ fun BrowserScreen(
                                 },
                                 suggestions = suggestions,
                                 onSuggestion = { url -> navigateToUrl(url) },
+                                focusNow = focusAddress,
+                                onFocused = { focusAddress = false },
                             )
                         }
 
@@ -826,80 +949,16 @@ fun BrowserScreen(
                             LinearProgressIndicator(
                                 progress = { uiState.progress / 100f },
                                 modifier = Modifier.fillMaxWidth().height(2.dp),
-                                color = MaterialTheme.colorScheme.primary,
+                                color = LocalChayaColors.current.signal,
                                 trackColor = Color.Transparent
                             )
                         }
                     }
                 }
             },
-            bottomBar = {
-                Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) {
-                    Column {
-                        HorizontalDivider(
-                            thickness = 0.5.dp,
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
-                        )
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .navigationBarsPadding()
-                                // Swipe sideways along the bar for the tab beside this one.
-                                .swipeBetweenTabs { step -> tabs.beside(step)?.let { showTab(it) } }
-                                .padding(horizontal = 12.dp, vertical = 4.dp),
-                            horizontalArrangement = Arrangement.SpaceEvenly,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            NavAction(
-                                icon = Icons.AutoMirrored.Filled.ArrowBack,
-                                label = "Back",
-                                enabled = uiState.canGoBack
-                            ) {
-                                invalidateDetectionSession()
-                                activeWebView()?.goBack()
-                            }
-
-                            NavAction(
-                                icon = Icons.AutoMirrored.Filled.ArrowForward,
-                                label = "Forward",
-                                enabled = uiState.canGoForward
-                            ) {
-                                invalidateDetectionSession()
-                                activeWebView()?.goForward()
-                            }
-
-                            NavAction(
-                                icon = Icons.Default.Home,
-                                label = "Home",
-                                enabled = true
-                            ) {
-                                invalidateDetectionSession()
-                                activeWebView()?.loadUrl("about:blank")
-                                viewModel.goHome()
-                            }
-
-                            NavAction(
-                                icon = Icons.Default.Tab,
-                                label = "Tabs (${tabs.size})",
-                                enabled = true,
-                                count = tabs.size,
-                            ) {
-                                // The shown tab's card pictures the page as it is now.
-                                tabs.active?.let { rememberTab(it, uiState.homeVisible) }
-                                showTabGrid = true
-                            }
-
-                            NavAction(
-                                icon = Icons.Default.CloudDownload,
-                                label = "Downloads",
-                                enabled = true,
-                                badge = activeDownloads,
-                                onClick = onNavigateToDownloads
-                            )
-                        }
-                    }
-                }
-            },
+            // Chaya's one bar: Home and the Library at its ends, the page's Back, Forward and Tabs between, and the
+            // ink circle for what the page has to save, else a new tab. The page ends above it.
+            bottomBar = { PageBar(tabsShown = false) },
             snackbarHost = { SnackbarHost(snackbarHostState) },
             containerColor = MaterialTheme.colorScheme.background
         ) { padding ->
@@ -928,13 +987,17 @@ fun BrowserScreen(
                     onRelease = { host -> host.removeAllViews() }
                 )
 
-                HomeContent(
+                // Pulled down at its top, the page shows how far; let go past the end, it loads again.
+                PullIndicator(
+                    pulled = if (uiState.homeVisible) 0f else pulled,
+                    modifier = Modifier.align(Alignment.TopCenter),
+                )
+
+                NewTabPage(
                     visible = uiState.homeVisible,
                     showOnboardingHint = showOnboardingHint,
                     onDismissOnboardingHint = { dismissOnboardingHint() },
-                    recent = recentDownloads,
                     onSelectUrl = { target -> navigateToUrl(target) },
-                    onOpenDownloads = onNavigateToDownloads,
                     bookmarks = bookmarkTiles,
                     onOpenBookmarks = onNavigateToBookmarks,
                     onOpenHistory = onNavigateToHistory,
@@ -966,31 +1029,6 @@ fun BrowserScreen(
                         contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
                         modifier = Modifier.pressScale(0.96f),
                     )
-                }
-
-                // Floating download pill: the page's main video, one tap from its download options. On a page
-                // that is one video on YouTube, Instagram, TikTok, X or Pinterest it shows what the engine found instead.
-                val linkPillShown = !uiState.homeVisible &&
-                    (linkState is LinkState.Looking || linkState is LinkState.Answer)
-                // An Instagram or X account page offers its posts as one ZIP.
-                val profileShown = uiState.profile.takeIf { !uiState.homeVisible && !linkPillShown }
-                AnimatedVisibility(
-                    visible = linkPillShown || profileShown != null || (!uiState.homeVisible && !sheetModel.isEmpty),
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(horizontal = 12.dp, vertical = 12.dp),
-                    enter = slideInVertically(ChayaMotion.tweenStandard()) { it } +
-                            fadeIn(ChayaMotion.tweenShort()),
-                    exit = slideOutVertically(ChayaMotion.tweenShort()) { it } +
-                            fadeOut(ChayaMotion.tweenShort())
-                ) {
-                    if (linkPillShown) {
-                        PlatformPill(state = linkState, onClick = { viewModel.toggleLinkSheet() })
-                    } else if (profileShown != null) {
-                        ProfilePill(profile = profileShown, onClick = { viewModel.toggleProfileSheet() })
-                    } else {
-                        MediaPill(model = sheetModel, onClick = { viewModel.toggleMediaSheet() })
-                    }
                 }
 
                 // The video behind a link on a supported site: found, with the qualities it can be saved at.
@@ -1121,7 +1159,6 @@ fun BrowserScreen(
                     )
                 },
                 activeId = tabs.activeId,
-                canOpenMore = tabs.canOpenMore,
                 picturesVersion = tabsVersion,
                 onSelect = { id ->
                     showTabGrid = false
@@ -1137,6 +1174,7 @@ fun BrowserScreen(
                     closeAllTabs()
                 },
                 onDismiss = { showTabGrid = false },
+                bottomBar = { newTab -> PageBar(tabsShown = true, newTab = newTab) },
             )
         }
 
@@ -1155,52 +1193,6 @@ fun BrowserScreen(
     }
 }
 
-/** Bottom-bar action with consistent disabled styling, press feedback and an optional count badge. */
-@Composable
-private fun NavAction(
-    icon: ImageVector,
-    label: String,
-    enabled: Boolean,
-    badge: Int = 0,
-    /** A number drawn on the icon itself, as the tab count is; 0 for none. */
-    count: Int = 0,
-    onClick: () -> Unit
-) {
-    IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.pressScale(0.88f)) {
-        BadgedBox(
-            badge = {
-                if (badge > 0) {
-                    Badge(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary
-                    ) { Text("$badge") }
-                }
-            }
-        ) {
-            val tint = if (enabled) MaterialTheme.colorScheme.onSurfaceVariant
-            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
-            if (count > 0) {
-                // The tab count in a rounded square, as browsers show it.
-                Box(
-                    modifier = Modifier
-                        .size(22.dp)
-                        .border(1.75.dp, tint, RoundedCornerShape(6.dp))
-                        .semantics { contentDescription = label },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = "$count",
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        color = tint,
-                    )
-                }
-            } else {
-                Icon(imageVector = icon, contentDescription = label, tint = tint)
-            }
-        }
-    }
-}
-
 // --------------------------------------------------------------------- //
 // WebView construction
 // --------------------------------------------------------------------- //
@@ -1211,6 +1203,20 @@ private data class DetectorNavigationSession(
     val navigationGeneration: Long,
     val capability: String,
 )
+
+/** What the address bar's [input] opens: an address as it is, a bare site with https://, anything else searched. */
+internal fun addressFor(input: String): String {
+    val query = input.trim()
+    return when {
+        query.startsWith("http://") || query.startsWith("https://") -> query
+        query.contains(".") && !query.contains(" ") -> "https://$query"
+        else -> "https://www.google.com/search?q=${URLEncoder.encode(query, "UTF-8")}"
+    }
+}
+
+/** A new tab's state when it opens for [url]: that page, loading, never the start screen. */
+internal fun openingState(url: String, navigationGeneration: Long): BrowserUiState =
+    BrowserUiState().startedPage(url, navigationGeneration)
 
 /** Creates a WebView whose clients always dispatch through the mutable retained callback router. */
 @SuppressLint("SetJavaScriptEnabled")
@@ -1230,7 +1236,7 @@ internal fun createChayaWebView(
     /** The page's renderer stopped; this WebView can no longer be used and must be replaced. */
     onRendererGone: () -> Unit = {},
 ): WebView {
-    return WebView(ctx).apply {
+    return ChayaWebView(ctx, callbacks).apply {
         // Tracks injection eligibility so a superseded redirect cannot reintroduce an old capability on finish.
         var activeDetectorSession: DetectorNavigationSession? = null
 

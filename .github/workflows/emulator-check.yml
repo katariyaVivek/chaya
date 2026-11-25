@@ -72,10 +72,12 @@ jobs:
           gradle --stop
           pkill -f KotlinCompileDaemon || true
           free -m
+          # A process killed by a signal is then named in the kernel's log, so a vanished emulator says what ended it
+          sudo sysctl -w kernel.print-fatal-signals=1
 
-      # The emulator has vanished mid-run more than once whatever its memory and graphics (see below), which says
-      # nothing about the app. The walkthrough tells that apart from the app dying: it leaves evidence/emulator-gone
-      # and the job walks through again, once, on a fresh emulator. Any other failure fails the job at once.
+      # If the emulator itself vanishes, which says nothing about the app (it did, with the renderer below), the
+      # walkthrough tells that apart from the app dying: it leaves evidence/emulator-gone and the job walks through
+      # again, once, on a fresh emulator. Any other failure fails the job at once.
       - name: Walk through the app in an emulator
         id: walk
         continue-on-error: true
@@ -93,11 +95,14 @@ jobs:
           ram-size: 6144M
           cores: 3
           disable-animations: true
-          # Emulator 37.2 vanished (adb's port refused, no app crash, no out-of-memory kill) as the local test page
-          # started its three videos, on both builds of #79, after host-side GL errors ("context was preempted") and
-          # its host H.264 decoder's "no frame". Android decodes video in software and draws the screen itself, so
-          # none of it goes through the host's renderer.
-          emulator-options: -no-window -gpu guest -no-snapshot -noaudio -no-boot-anim -feature -HardwareDecoder
+          # The renderer is what kept taking the emulator down (#37 to #41, #79, #121 to #125). This system image cannot
+          # render inside Android, so -gpu guest fell back to the emulator's legacy SwiftShader GL translator on the
+          # host (as -gpu swiftshader_indirect uses), and that segfaults on a RenderThread while Android draws video: a
+          # SIGSEGV in its JIT code, named in the kernel's log. A loop opening the test page with its videos killed it
+          # in 6 of 7 jobs; pages without video never. lavapipe draws with ANGLE over Mesa's lavapipe, which the
+          # emulator ships: the same loop, 25 rounds twice, no death, beside a control that died. -HardwareDecoder
+          # keeps video decoding inside Android, away from the host's H.264 decoder ("no frame" on #79).
+          emulator-options: -no-window -gpu lavapipe -no-snapshot -noaudio -no-boot-anim -feature -HardwareDecoder
           script: BUILD=${{ matrix.build }} python3 .github/scripts/walkthrough.py
 
       - name: Keep the first walk's evidence
@@ -118,7 +123,7 @@ jobs:
           ram-size: 6144M
           cores: 3
           disable-animations: true
-          emulator-options: -no-window -gpu guest -no-snapshot -noaudio -no-boot-anim -feature -HardwareDecoder
+          emulator-options: -no-window -gpu lavapipe -no-snapshot -noaudio -no-boot-anim -feature -HardwareDecoder
           script: BUILD=${{ matrix.build }} python3 .github/scripts/walkthrough.py
 
       # The job's verdict: the first walk passed, or its emulator vanished and the second walk passed.
@@ -128,11 +133,12 @@ jobs:
           echo "The walkthrough failed; its evidence is uploaded below."
           exit 1
 
-      - name: Look for the out-of-memory killer
+      - name: What ended the emulator
         if: failure() || steps.walk.outcome == 'failure'
         run: |
           free -m
           sudo dmesg | grep -iE 'out of memory|oom-kill|killed process' || echo "no out-of-memory kill recorded"
+          sudo dmesg | grep -iE -A12 'fatal signal' || echo "no process killed by a signal"
 
       - name: Upload evidence
         if: always()
