@@ -80,28 +80,47 @@ plan in [`history/plan-watch-understand-clip.md`](history/plan-watch-understand-
 Also in that time: [#80](https://github.com/katariyaVivek/chaya/pull/80) the plan, [#88](https://github.com/katariyaVivek/chaya/pull/88) a core test fix, and
 [#94](https://github.com/katariyaVivek/chaya/pull/94) a test installer from every pull request.
 
+**Chaya 0.5.0 for Android** (November 2026, notes in [`releases/android-0.5.0.md`](releases/android-0.5.0.md); the `v0.5.0`
+tag is made on `main` once the PR that adds those notes is merged): the Stage look, and the phone catching up with
+Windows, step by step in [`PLAN.md`](PLAN.md) (steps 1 to 10):
+
+| PR | What it adds |
+|---|---|
+| [#110](https://github.com/katariyaVivek/chaya/pull/110), [#112](https://github.com/katariyaVivek/chaya/pull/112), [#113](https://github.com/katariyaVivek/chaya/pull/113) | Each state kept as one value; a pause during a join kept; warnings fail the build, Android Lint in CI, and a crash on Android 8 to 13 fixed |
+| [#121](https://github.com/katariyaVivek/chaya/pull/121) to [#125](https://github.com/katariyaVivek/chaya/pull/125) | Stage: the two-suns icon and its colours, Home, the Library, *Found on this page*, and a player of Chaya's own that resumes |
+| [#127](https://github.com/katariyaVivek/chaya/pull/127), [#129](https://github.com/katariyaVivek/chaya/pull/129) | A link's subtitles saved with its video, on the picture and as a transcript; the player full screen held sideways; no crash on saving a link |
+| [#130](https://github.com/katariyaVivek/chaya/pull/130) to [#133](https://github.com/katariyaVivek/chaya/pull/133) | Chapters on the seek bar; the Library's search through every line said; the person's own videos; subtitles put right |
+| [#134](https://github.com/katariyaVivek/chaya/pull/134) to [#139](https://github.com/katariyaVivek/chaya/pull/139) | The person's own AI model; translation; highlights; clips; export with subtitles drawn on, or SRT; the browser's menus for links and pictures |
+| [#140](https://github.com/katariyaVivek/chaya/pull/140) to [#146](https://github.com/katariyaVivek/chaya/pull/146) | Subtitles made on the phone: whisper.cpp, faster and hearing soft voices, then Parakeet, or Groq or OpenAI with the person's key |
+| [#147](https://github.com/katariyaVivek/chaya/pull/147) to [#153](https://github.com/katariyaVivek/chaya/pull/153) | Deleting subtitles, translations and models; making them in the background with Stop; one header, one bar and one card on every screen; a Settings screen |
+
+Also in that time: [#128](https://github.com/katariyaVivek/chaya/pull/128), the newest build of `main` at one fixed link (`android-preview`).
+
+**Chaya for Windows 0.3.0** (November 2026, notes in [`releases/windows-0.3.0.md`](releases/windows-0.3.0.md); the
+`windows-v0.3.0` tag is made on `main` once the PR that adds those notes is merged): Stage, and clips that go on to an
+editor (steps 11 to 13 of [`PLAN.md`](PLAN.md)):
+
+| PR | What it adds |
+|---|---|
+| [#108](https://github.com/katariyaVivek/chaya/pull/108) | Drop-downs and scrollbars of Chaya's own; subtitles made on a laptop's own graphics card, faster, with honest progress |
+| [#111](https://github.com/katariyaVivek/chaya/pull/111) | One panel open at a time |
+| [#114](https://github.com/katariyaVivek/chaya/pull/114) | The two-suns mark, which shows how the downloads are going |
+| [#115](https://github.com/katariyaVivek/chaya/pull/115) to [#120](https://github.com/katariyaVivek/chaya/pull/120) | Stage: the sidebar and its places, the Library, Home with *Continue watching*, *Found on this page* beside the page, the player, and the clip editor |
+| [#126](https://github.com/katariyaVivek/chaya/pull/126) | The Library as a tab of its own, smoother movement, no console windows flashing up |
+| [#154](https://github.com/katariyaVivek/chaya/pull/154), [#156](https://github.com/katariyaVivek/chaya/pull/156) | *Editor project*: the clips chosen as one file for Final Cut Pro or DaVinci Resolve (FCPXML), or for Premiere Pro (xmeml, with its captions as an SRT), nothing re-encoded |
+| [#155](https://github.com/katariyaVivek/chaya/pull/155) | Burned-in subtitles that follow the words: Highlight, Karaoke, Pop and One at a time |
+
 ## Next
 
-**Stage, the new look (Windows first, then the phone).** Approved designs: a dark-and-light "Stage" where saved media is
-the light, the two-suns mark, and Stage's amber as the one signal colour. Built as a stack of PRs, each on the one
-before: the mark (#114); the shell (#115: the sidebar, its places, Stage's amber); the Library (#116); Home with *Continue
-watching* and *Recently saved* (#117); the browser with its *Found on this page* panel beside the page (#118); the player (#119); and the clip editor, the player while a clip is chosen. Each new place joins the
-sidebar in its own PR. All merged (#114 to #120), in the `windows-preview` build.
+Both apps are level again (Android 0.5.0, Windows 0.3.0). What could come next:
 
-The phone follows in its own stack, the look first: the two-suns icon and Stage's palette (ink as the strong control,
-amber a signal) (#121); then Home (#122), the Library (#123), *Found on this page* (#124) and the player screen
-from the approved phone designs: saved videos play in Chaya, start where they were left, and Home offers *Continue*.
-Then the first of the Windows features the phone lacks: a link's subtitles saved with its video, on the picture and
-as the transcript in the player (#127).
-
-**The phone catches up with Windows**, step by step in [`PLAN.md`](PLAN.md): chapters on the seek bar (step 1, #130),
-search across every line said from the Library (step 2, #131), the person's own videos (step 3, #132), subtitles put right in the player (step 4), then their own AI model, translation,
-highlights, clips, export with subtitles drawn on, and last, subtitles made on the phone.
-
-**Clips for an editor, then caption styles (Windows).** Steps 11 to 13 of [`PLAN.md`](PLAN.md), ideas from OpenFilm:
-the clips chosen as one FCPXML project for Final Cut Pro and DaVinci Resolve, cut from the video without re-encoding,
-the subtitles as titles (#154); word-by-word looks for burned-in subtitles made by Chaya (#155); and the same project
-for Premiere Pro, as Final Cut 7's XML with the subtitles as captions beside it.
+- **Caption styles on the phone.** The phone makes subtitles with each word's time, as Windows does, and exports clips
+  with subtitles drawn on, so Highlight, Karaoke, Pop and One at a time can follow (#155).
+- **Opening an editor project in the editors themselves.** The files are checked as XML and by the Windows tour, but
+  not yet imported into Final Cut Pro, Resolve or Premiere Pro.
+- **Signing the Windows installer**, once SignPath can be reached: setting `WINDOWS_SIGN_COMMAND` signs every build
+  from then on, with nothing else to change.
+- From the Windows plan's *Later, perhaps*: who is speaking, and listening without downloading.
 
 The six-part plan after v0.4.0 has shipped (#34 to #39); it is in
 [`history/plan-after-v0.4.md`](history/plan-after-v0.4.md). What is left:
@@ -141,8 +160,8 @@ The six-part plan after v0.4.0 has shipped (#34 to #39); it is in
   checked once a day and signed. The installer is not signed with a certificate yet, so SmartScreen asks before
   it runs; a certificate can be added later without other changes (docs/BUILD_AND_TEST.md). The first release,
   `windows-v0.1.0`, went out on 28 October 2026, started from GitHub's website (#78). Watch, understand and clip
-  followed, step by step in [`history/plan-watch-understand-clip.md`](history/plan-watch-understand-clip.md), and is Chaya for Windows 0.2.0 (#80 to #106, under *Released*).
-  Next for Windows: signing the installer (SignPath's free certificate for open-source projects, once the owner's
+  followed, step by step in [`history/plan-watch-understand-clip.md`](history/plan-watch-understand-clip.md), and is Chaya for Windows 0.2.0 (#80 to #106, under *Released*);
+  Stage and the editor projects are 0.3.0. Next for Windows: signing the installer (SignPath's free certificate for open-source projects, once the owner's
   application is approved), then perhaps *Later, perhaps* in that plan. The phone's last library pieces (choosing
   several in the grid, looking inside a saved ZIP) can come in between.
 
