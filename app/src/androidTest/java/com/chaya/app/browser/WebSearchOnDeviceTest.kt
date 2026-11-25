@@ -27,8 +27,9 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 /**
- * WebView's own *Web search*, on a word chosen with a long press, opens a new tab in Chaya. WebView starts the
- * search through its context, Chaya's activity; before the fix Android handed it to Google's app.
+ * *Web search* on a word chosen with a long press opens a new tab in Chaya, on any phone. Where an app takes web
+ * searches it is WebView's own item, which Android handed to Google's app before the fix; where none does (this
+ * emulator) WebView leaves it out and Chaya's own takes its place. Both start the search through Chaya's activity.
  */
 @RunWith(AndroidJUnit4::class)
 class WebSearchOnDeviceTest {
@@ -49,6 +50,7 @@ class WebSearchOnDeviceTest {
             scenario.onActivity {
                 activity = it
                 web = Watching(it).apply {
+                    settings.javaScriptEnabled = true // Chaya's own item reads the chosen words with a script
                     webViewClient = object : WebViewClient() {
                         override fun onPageFinished(view: WebView?, url: String?) {
                             loaded.countDown()
@@ -83,10 +85,11 @@ class WebSearchOnDeviceTest {
                 instrumentation.runOnMainSync { titles = web.titles() }
                 throw AssertionError("WebView's menu for the chosen word had no web search, only $titles")
             }
+            // Through the menu, as a finger's tap goes, so the item reaches whichever menu put it there
             instrumentation.runOnMainSync {
                 val item = web.webSearch()
                 assertNotNull(item)
-                web.click(item!!)
+                web.tap(item!!)
             }
 
             assertTrue("the search never reached Chaya", waitFor { PagesToOpen.pending.value != null })
@@ -94,11 +97,9 @@ class WebSearchOnDeviceTest {
         }
     }
 
-    /** A WebView that keeps hold of its menu for chosen words, so the test can tap *Web search* in it. */
-    private class Watching(context: Context) : WebView(context) {
-        private var mode: ActionMode? = null
+    /** Chaya's WebView, keeping hold of its menu for chosen words so the test can tap *Web search* in it. */
+    private class Watching(context: Context) : ChayaWebView(context, quietCallbacks()) {
         private var menu: Menu? = null
-        private var callback: ActionMode.Callback? = null
 
         fun menuOpened(): Boolean = menu != null
 
@@ -106,24 +107,18 @@ class WebSearchOnDeviceTest {
 
         fun titles(): List<String> = items().map { it.title?.toString().orEmpty() }
 
-        /** WebView's own *Web search* ("Web search" in English), while its menu for chosen words is showing. */
+        /** *Web search*, WebView's own or Chaya's, while the menu for chosen words is showing. */
         fun webSearch(): MenuItem? = items().firstOrNull { it.title?.toString()?.contains("search", ignoreCase = true) == true }
 
-        fun click(item: MenuItem) {
-            callback?.onActionItemClicked(mode ?: return, item)
+        fun tap(item: MenuItem) {
+            menu?.performIdentifierAction(item.itemId, 0)
         }
 
         override fun startActionMode(callback: ActionMode.Callback, type: Int): ActionMode? {
             val inner = callback
             return super.startActionMode(object : ActionMode.Callback2() {
                 override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean =
-                    inner.onCreateActionMode(mode, menu).also { shown ->
-                        if (shown) {
-                            this@Watching.mode = mode
-                            this@Watching.menu = menu
-                            this@Watching.callback = inner
-                        }
-                    }
+                    inner.onCreateActionMode(mode, menu).also { shown -> if (shown) this@Watching.menu = menu }
 
                 override fun onPrepareActionMode(mode: ActionMode, menu: Menu) = inner.onPrepareActionMode(mode, menu)
                 override fun onActionItemClicked(mode: ActionMode, item: MenuItem) = inner.onActionItemClicked(mode, item)
@@ -133,6 +128,20 @@ class WebSearchOnDeviceTest {
                     else super.onGetContentRect(mode, view, outRect)
                 }
             }, type)
+        }
+
+        private companion object {
+            fun quietCallbacks() = RetainedWebViewCallbacks(
+                RetainedWebViewCallbackState(
+                    onNavigationInvalidated = {},
+                    onPageStarted = { 0L },
+                    onPageFinished = { _, _, _ -> },
+                    onProgressChanged = { _, _ -> },
+                    onNavigationStateChanged = { _, _ -> },
+                    onEnterFullscreen = { _, _ -> },
+                    onExitFullscreen = {},
+                ),
+            )
         }
     }
 

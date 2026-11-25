@@ -60,6 +60,15 @@ class PageMenusTest {
     }
 
     @Test
+    fun `the words chosen are read from WebView's answer, tidied and kept short`() {
+        assertEquals("Connect once", ChayaWebView.selectedText("\"Connect\\n  once\""))
+        assertNull(ChayaWebView.selectedText("\"   \""))
+        assertNull(ChayaWebView.selectedText("null"))
+        assertNull(ChayaWebView.selectedText(null))
+        assertEquals(300, ChayaWebView.selectedText("\"" + "a".repeat(500) + "\"")!!.length)
+    }
+
+    @Test
     fun `pulling counts only from when the page is at its top, and letting go past the end reloads`() {
         val pull = PullGesture(threshold = 100f)
         pull.down(0f)
@@ -115,7 +124,7 @@ class PageMenusTest {
     }
 }
 
-/** A tab opened for a page (the link menu's Open in new tab, a page's new window, a page's Web search). */
+/** A tab opened for a page (the link menu's Open in new tab, a page's new window, Web search on chosen words). */
 class NewTabTest {
     @org.junit.Test
     fun `a tab opened for a page shows the page loading, never its start screen`() {
