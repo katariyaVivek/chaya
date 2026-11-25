@@ -321,7 +321,6 @@ fun BrowserScreen(
         onAddressChanged = viewModel::onPageAddressChanged,
         onOpenInNewTab = { pendingNewTabUrl = it },
         onPressed = { pressedOn = it },
-        onSearchSelected = { pendingNewTabUrl = it },
         onPulled = { pulled = it },
         onPullToRefresh = { pullRefreshRequested = true },
     )

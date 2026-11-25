@@ -2,22 +2,15 @@ package com.chaya.app.browser
 
 import android.annotation.SuppressLint
 import android.content.Context
-import android.graphics.Rect
 import android.os.Handler
 import android.os.Looper
-import android.view.ActionMode
-import android.view.Menu
-import android.view.MenuItem
 import android.view.MotionEvent
-import android.view.View
 import android.webkit.WebView
-import org.json.JSONException
-import org.json.JSONTokener
 
 /**
  * The browser's WebView, with what a browser adds to a page: a menu for a long press on a link or a picture
- * ([PressedOn]), *Search in new tab* beside Copy and Share when words are chosen, and pulling the page down at its
- * top to load it again ([PullGesture]). Everything goes through [callbacks], so it reaches the screen shown now.
+ * ([PressedOn]), and pulling the page down at its top to load it again ([PullGesture]). Its own *Web search* on
+ * chosen words opens a new tab in Chaya ([webSearchOf]). Everything goes through [callbacks], so it reaches the screen shown now.
  */
 @SuppressLint("ViewConstructor")
 internal class ChayaWebView(context: Context, private val callbacks: RetainedWebViewCallbacks) : WebView(context) {
@@ -74,54 +67,8 @@ internal class ChayaWebView(context: Context, private val callbacks: RetainedWeb
         if (clampedY && scrollY <= 0) overScrolledAtTop = true
     }
 
-    override fun startActionMode(callback: ActionMode.Callback, type: Int): ActionMode? =
-        super.startActionMode(Selection(callback), type)
-
-    /** WebView's own menu for chosen words, with *Search in new tab* added. */
-    private inner class Selection(private val inner: ActionMode.Callback) : ActionMode.Callback2() {
-        override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
-            val shown = inner.onCreateActionMode(mode, menu)
-            if (shown && menu.findItem(SEARCH_ID) == null) menu.add(Menu.NONE, SEARCH_ID, SEARCH_ORDER, "Search in new tab")
-            return shown
-        }
-
-        override fun onPrepareActionMode(mode: ActionMode, menu: Menu): Boolean = inner.onPrepareActionMode(mode, menu)
-
-        override fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean {
-            if (item.itemId != SEARCH_ID) return inner.onActionItemClicked(mode, item)
-            evaluateJavascript(SELECTED_TEXT_JS) { result ->
-                selectedText(result)?.let(callbacks::onSearchSelected)
-            }
-            mode.finish()
-            return true
-        }
-
-        override fun onDestroyActionMode(mode: ActionMode) = inner.onDestroyActionMode(mode)
-
-        override fun onGetContentRect(mode: ActionMode, view: View, outRect: Rect) {
-            if (inner is ActionMode.Callback2) inner.onGetContentRect(mode, view, outRect)
-            else super.onGetContentRect(mode, view, outRect)
-        }
-    }
-
     companion object {
         /** How far the page is pulled, in dp, before letting go loads it again. */
         const val PULL_DP = 96f
-        private const val SEARCH_ID = 0x43_68_61 // "Cha"
-        /** Early in WebView's menu, so it shows with Copy and Share rather than under ⋮. */
-        private const val SEARCH_ORDER = 1
-        private const val SELECTED_TEXT_JS = "(function(){return String(window.getSelection());})()"
-
-        /** The words `evaluateJavascript` hands back (a JSON string), trimmed and kept short; null for none. */
-        fun selectedText(result: String?): String? {
-            val text = try {
-                JSONTokener(result ?: return null).nextValue() as? String
-            } catch (_: JSONException) {
-                null
-            }
-            return text?.replace(Regex("\\s+"), " ")?.trim()?.take(MAX_SEARCH)?.takeIf { it.isNotEmpty() }
-        }
-
-        private const val MAX_SEARCH = 300
     }
 }

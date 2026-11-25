@@ -19,8 +19,6 @@ internal data class RetainedWebViewCallbackState(
     val onOpenInNewTab: (String) -> Unit = {},
     /** A long press on a link or a picture: its menu. */
     val onPressed: (PressedOn) -> Unit = {},
-    /** Words chosen on the page, to search for in a new tab. */
-    val onSearchSelected: (String) -> Unit = {},
     /** How far the page is pulled down at its top, 0 to 1. */
     val onPulled: (Float) -> Unit = {},
     /** The page was pulled down far enough and let go: load it again. */
@@ -71,8 +69,6 @@ internal class RetainedWebViewCallbacks(initialState: RetainedWebViewCallbackSta
     }
 
     fun onPressed(pressed: PressedOn) = state.get().onPressed(pressed)
-
-    fun onSearchSelected(text: String) = state.get().onSearchSelected(text)
 
     fun onPulled(fraction: Float) = state.get().onPulled(fraction)
 
