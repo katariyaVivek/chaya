@@ -728,7 +728,8 @@ def export_from_dialog(tour, choose, seconds=120):
 def export_clips(tour, clip):
     """The clips exported from the Clips tab (Ctrl+E): all of them as videos with one language burned in, Outline, at
     720p, each saved next to the video in Downloads and told of by a notice, with the encoder used; then one clip's
-    subtitles as an SRT file timed from 0:00; then all of them as one editor project (FCPXML)."""
+    subtitles as an SRT file timed from 0:00; then all of them as one editor project, for Final Cut Pro (FCPXML) and
+    for Premiere Pro (xmeml, with its captions)."""
     downloads = Path.home() / 'Downloads'
     tour.js(f"document.querySelector('#download-list .row[data-id=\"{clip}\"] .row__title').click(); return 1", gesture=True)
     tour.wait(lambda: tour.js("return !document.getElementById('player').hidden"), 10)
@@ -766,10 +767,23 @@ def export_clips(tour, clip):
     # All the clips as one editor project for Final Cut Pro or DaVinci Resolve, the subtitles shown as titles: one
     # FCPXML file next to the video, which it names by its file:/// address.
     dialog, error, jobs = export_from_dialog(tour, [
-        '[data-pick="clips:all"]', '#export-as [data-save-as="fcpxml"]', '[data-pick="subtitles:one"]'], 60)
+        '[data-pick="clips:all"]', '#export-as [data-save-as="fcpxml"]', '#export-editor [data-editor="fcpxml"]',
+        '[data-pick="subtitles:one"]'], 60)
     tour.shot('exported-project', dialog=dialog, error=error, notices=tour.js(toasts),
               jobs=[{k: job.get(k) for k in ('job', 'name', 'state', 'message')} for job in jobs],
               files=files([job for job in jobs if job['state'] == 'done'], read=600))
+
+    # The same for Premiere Pro: Final Cut 7's XML, and the subtitles beside it as an SRT timed to the sequence.
+    dialog, error, jobs = export_from_dialog(tour, [
+        '[data-pick="clips:all"]', '#export-as [data-save-as="fcpxml"]', '#export-editor [data-editor="xmeml"]',
+        '[data-pick="subtitles:one"]'], 60)
+    done = [job for job in jobs if job['state'] == 'done']
+    captions = [Path(job['path']).with_suffix('.srt') for job in done if job.get('path')]
+    tour.shot('exported-premiere', dialog=dialog, error=error, notices=tour.js(toasts),
+              jobs=[{k: job.get(k) for k in ('job', 'name', 'state', 'message')} for job in jobs],
+              files=files(done, read=600),
+              captions=[{'name': c.name, 'exists': c.exists(),
+                         'start': c.read_text(encoding='utf-8-sig')[:160] if c.exists() else ''} for c in captions])
     tour.press_in_player('Escape')
     tour.press_in_player('Escape')
     tour.wait(lambda: tour.js("return document.getElementById('player').hidden"), 5)

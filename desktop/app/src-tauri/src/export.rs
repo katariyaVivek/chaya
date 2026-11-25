@@ -11,10 +11,10 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 use chaya_core::clips::Clip;
 use chaya_core::download::manager::State as TaskState;
 use chaya_core::export::{self, Burn, Encoder, ExportError, Job, Language, Look, Quality, Style};
-use chaya_core::fcpxml;
 use chaya_core::speech::whisper::Word;
 use chaya_core::subtitles::{self, Track};
 use chaya_core::video::Videos;
+use chaya_core::{fcpxml, xmeml};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_opener::OpenerExt;
@@ -55,6 +55,15 @@ pub enum SaveAs {
     Srt,
     /// One FCPXML file for Final Cut Pro and DaVinci Resolve, the clips cut from the video as it is.
     Fcpxml,
+    /// One Final Cut 7 XML file for Premiere Pro, the same cuts, and the subtitles as an SRT beside it.
+    Xmeml,
+}
+
+impl SaveAs {
+    /// Whether it is an editor project: one file for all the clips chosen, made in one job.
+    fn is_project(self) -> bool {
+        matches!(self, SaveAs::Fcpxml | SaveAs::Xmeml)
+    }
 }
 
 /// A language's subtitles, named by its code ("" for a file that names none), and its style.
@@ -214,6 +223,31 @@ impl Exporting {
                 .ok_or_else(|| failed("Those subtitles aren't next to the video any more."))
         };
 
+        if options.save_as == SaveAs::Xmeml {
+            // Premiere's project names frames as FCPXML's does; its subtitles go beside it as captions to import.
+            let ffmpeg = app.state::<Ffmpeg>().0.clone().ok_or(ExportError::NoProgram)?;
+            let probe = export::probe(&ffmpeg, &task.path).await?;
+            let name = if clips.len() == 1 { clip.name.as_str() } else { "Clips" };
+            let path = export::file_for(&folder, &task.title, name, "xml");
+            let source = fcpxml::Source { title: &task.title, path: &task.path, probe };
+            std::fs::write(&path, xmeml::document(&source, &clips)).map_err(|_| ExportError::CantWrite)?;
+            if let Some(first) = options.subtitles.first().map(track).transpose()? {
+                let second = options.subtitles.get(1).map(track).transpose()?;
+                let srt = xmeml::captions(
+                    &source,
+                    &clips,
+                    &first.lines,
+                    second.map_or(&[][..], |s| &s.lines),
+                    options.second_on_top,
+                );
+                // Named as the project is, so the two are found together; never over a file already there.
+                let captions = Some(path.with_extension("srt"))
+                    .filter(|p| !p.exists())
+                    .unwrap_or_else(|| export::file_for(&folder, &task.title, name, "srt"));
+                std::fs::write(&captions, srt).map_err(|_| ExportError::CantWrite)?;
+            }
+            return Ok((path, None));
+        }
         if options.save_as == SaveAs::Fcpxml {
             // The project names frames, so it needs the picture's rate, which ffmpeg reads.
             let ffmpeg = app.state::<Ffmpeg>().0.clone().ok_or(ExportError::NoProgram)?;
@@ -369,7 +403,7 @@ pub fn export_clips(
     }
     let kept = videos.load(id).clips;
     let mut jobs = Vec::new();
-    if options.save_as == SaveAs::Fcpxml {
+    if options.save_as.is_project() {
         // One project holds every clip chosen, in the video's order.
         let found: Vec<&Clip> = kept.iter().filter(|c| clips.contains(&c.id)).collect();
         if let Some(first) = found.first() {
@@ -394,7 +428,7 @@ pub fn export_clips(
                 }
             }
             // Queued above, as one job.
-            SaveAs::Fcpxml => {}
+            SaveAs::Fcpxml | SaveAs::Xmeml => {}
         }
     }
     if jobs.is_empty() {
@@ -472,6 +506,10 @@ mod tests {
         )
         .unwrap();
         assert_eq!((project.save_as, project.subtitles.len()), (SaveAs::Fcpxml, 1));
+        let premiere: Options =
+            serde_json::from_str(r#"{"saveAs": "xmeml", "quality": "p1080", "look": "outline"}"#).unwrap();
+        assert!(premiere.save_as.is_project() && project.save_as.is_project());
+        assert!(!SaveAs::Video.is_project() && !SaveAs::Srt.is_project());
         for (look, read) in [
             ("highlight", Look::Highlight),
             ("karaoke", Look::Karaoke),

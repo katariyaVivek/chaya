@@ -24,6 +24,7 @@ import {
   lookWords,
   accentOf,
   WORD_LOOKS,
+  isProject,
 } from './export.js';
 import { lineSearch } from './search.js';
 import { ownVideos } from './own.js';
@@ -4891,7 +4892,7 @@ function showExport() {
   // A GIF has a picture, and so subtitles drawn on it and a look, but no sound, size or quality to choose. An editor
   // project has the subtitles as titles, which are the editor's own to style, so no look either.
   const picture = choice.saveAs !== 'srt';
-  const project = choice.saveAs === 'fcpxml';
+  const project = isProject(choice);
   const length = (list) => clock(Math.round(list.reduce((sum, c) => sum + (c.end - c.start), 0) / 1000));
 
   // Clips: the one chosen on the timeline, or all of them.
@@ -4909,7 +4910,9 @@ function showExport() {
 
   // Save as: a video, or subtitle files, which need subtitles.
   for (const button of document.querySelectorAll('#export-as [data-save-as]')) {
-    button.setAttribute('aria-pressed', String(button.dataset.saveAs === choice.saveAs));
+    // Editor project stands for both editors' files.
+    const pressed = button.dataset.saveAs === choice.saveAs || (button.dataset.saveAs === 'fcpxml' && project);
+    button.setAttribute('aria-pressed', String(pressed));
     const offered = button.dataset.saveAs !== 'srt' || tracks.length > 0;
     button.disabled = !offered;
     button.title = offered ? '' : 'This video has no subtitles yet';
@@ -4935,7 +4938,15 @@ function showExport() {
   exportRow('export-second', picture && choice.subtitles === 'two' && tracks.length > 2);
   exportRow('export-top', picture && choice.subtitles === 'two');
   exportRow('export-look', burned && !project);
-  document.getElementById('export-subtitles-label').textContent = project ? 'Subtitles as titles' : 'Subtitles';
+  document.getElementById('export-subtitles-label').textContent = !project
+    ? 'Subtitles'
+    : choice.saveAs === 'xmeml'
+      ? 'Subtitles as captions'
+      : 'Subtitles as titles';
+  exportRow('export-editor', project);
+  for (const button of document.querySelectorAll('#export-editor [data-editor]')) {
+    button.setAttribute('aria-pressed', String(button.dataset.editor === choice.saveAs));
+  }
   exportRow('export-quality', video);
   exportRow('export-fit', video);
   exportRow('export-sound', video);
@@ -5110,7 +5121,14 @@ exportBox.addEventListener('click', (e) => {
 });
 document.getElementById('export-as').addEventListener('click', (e) => {
   const button = e.target.closest('[data-save-as]');
-  if (button && !button.disabled) chooseExport({ saveAs: button.dataset.saveAs });
+  if (!button || button.disabled) return;
+  // Editor project opens on the editor chosen last.
+  const saveAs = button.dataset.saveAs === 'fcpxml' ? exporting?.choice.editor ?? 'fcpxml' : button.dataset.saveAs;
+  chooseExport({ saveAs });
+});
+document.getElementById('export-editor').addEventListener('click', (e) => {
+  const button = e.target.closest('[data-editor]');
+  if (button) chooseExport({ saveAs: button.dataset.editor, editor: button.dataset.editor });
 });
 document.getElementById('export-quality').addEventListener('click', (e) => {
   const button = e.target.closest('[data-quality]');

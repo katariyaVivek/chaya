@@ -188,8 +188,9 @@ Chaya for Windows keeps the same promises, with these differences:
   timeline, Chaya reads it once on your PC and keeps how loud it is, moment by moment, in a small file beside it;
   that file is deleted with the others when the download leaves the list. Exporting a clip makes a new video or
   subtitle file next to the original, on your PC, with Windows' own video encoder; nothing is sent anywhere. An
-  editor project (for Final Cut Pro or DaVinci Resolve) is a small file next to the video that names where the video
-  is on your PC, the clips' times and, if you choose, their subtitles; it too stays on your PC. The file is deleted when the download leaves
+  editor project (for Final Cut Pro, DaVinci Resolve or Premiere Pro) is a small file next to the video that names
+  where the video is on your PC, the clips' times and, if you choose, their subtitles (for Premiere, in a subtitle file
+  beside it); it too stays on your PC. The file is deleted when the download leaves
   Chaya's list. Nothing about what you watch leaves your PC.
 - **Your own videos.** A video or sound you drop on Chaya, or add with *Add from this PC*, is read where it is on your
   PC. Chaya never copies, moves, changes or uploads it, and removing it from Chaya's list leaves it where it is.

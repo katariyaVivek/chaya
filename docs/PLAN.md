@@ -235,3 +235,32 @@ lit. Tests: the ASS for each look, a clip starting mid-line, two languages, grou
 and libass itself drawing Highlight on a frame (no yellow before the first word, yellow while one is said,
 `CHAYA_FFMPEG`); the dialog's rules with Node. The Windows tour has no word-look step yet: its clip's subtitles come
 from a file, not made by Chaya.
+
+### 13. Clips for Premiere Pro (Windows) ☑
+
+**The person gets:** *Editor project* asks which editor it is for: *Final Cut Pro or Resolve* (FCPXML, step 11) or
+*Premiere Pro*, which reads Final Cut 7's XML ("xmeml"), not FCPXML. For Premiere, the clips come as one sequence of
+cuts of the saved video, picture and sound linked, nothing re-encoded, and the subtitles chosen as an SRT file timed to
+that sequence, which Premiere imports as captions.
+
+- **xmeml 5**, the version Premiere Pro imports and exports. Its times are whole frames on a timebase with an `ntsc`
+  flag (29.97 is timebase 30, NTSC), so the frames are the same ones FCPXML's `Rate` puts the edges on.
+- **The video** is one `file` (its `pathurl` as Premiere writes it, `file://localhost/C:/…`), named once in full and
+  then by its id; each clip is a video `clipitem` and an audio `clipitem` with its sound, linked, so they move together.
+- **Subtitles as captions, not titles.** xmeml's text generators look different in every editor, but Premiere imports
+  an SRT as a caption track that can be restyled. Next to the project: "Video title - Clips.srt" (both languages in one
+  file when two are chosen), each clip's lines moved to where the clip sits in the sequence.
+- **Tests:** the file read back as XML at the standard rates (timebase and NTSC right, `in`/`out` and `start`/`end` on
+  the same frames FCPXML uses, the sequence as long as its clips, every `file` reference defined once in full, video
+  and audio linked); paths of each kind; a video without sound has no audio track; the SRT's lines at their place in
+  the sequence; the dialog's rules.
+
+**Done.** `core::xmeml` writes the sequence from `fcpxml::plan`, now shared, so both files cut on the same frames;
+`captions` writes the SRT from the same stretches the burned-in subtitles use (`export::slices`), each clip's lines
+moved by where it sits and cut at its end, two languages in one file. A file's name is read with either slash, as its
+address is, so a Windows path names the same file wherever the tests run. The app saves "Video title - Clips.xml"
+and, with subtitles, the SRT beside it (never over a file already there); `SaveAs::Xmeml` is a project as FCPXML is
+(`is_project`), one job for all the clips. The dialog's *Editor project* has a *For* row (*Final Cut Pro or Resolve*,
+*Premiere Pro*), remembered for next time; the subtitles row says *as captions* for Premiere. The Windows tour exports
+both projects and reads the captions back. Not yet opened in Premiere Pro itself, which does not run where this was
+built.

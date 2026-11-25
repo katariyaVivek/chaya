@@ -29,6 +29,7 @@ pub mod speech;
 pub mod subtitles;
 pub mod translate;
 pub mod video;
+pub mod xmeml;
 
 /// The HTTP client downloads use, so the app builds it with the same version.
 pub use reqwest;

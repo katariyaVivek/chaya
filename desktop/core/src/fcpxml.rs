@@ -69,15 +69,21 @@ impl Rate {
     }
 
     /// The whole frame nearest `ms` milliseconds in.
-    fn frame_at(self, ms: u64) -> u64 {
+    pub(crate) fn frame_at(self, ms: u64) -> u64 {
         let (num, den) = (u128::from(self.num), u128::from(self.den));
         ((u128::from(ms) * num + den * 500) / (den * 1_000)) as u64
     }
 
     /// The first whole frame at or after `ms` milliseconds in: enough frames to hold that long.
-    fn frames_to_hold(self, ms: u64) -> u64 {
+    pub(crate) fn frames_to_hold(self, ms: u64) -> u64 {
         let (num, den) = (u128::from(self.num), u128::from(self.den));
         ((u128::from(ms) * num).div_ceil(den * 1_000)) as u64
+    }
+
+    /// Where frame `frame` begins, in milliseconds (rounded).
+    pub(crate) fn ms_at(self, frame: u64) -> u64 {
+        let (num, den) = (u128::from(self.num), u128::from(self.den));
+        ((u128::from(frame) * den * 1_000 + num / 2) / num) as u64
     }
 
     /// `frames` frames long, as FCPXML writes a time: "0s", "2s", "1001/30000s", in lowest terms.
@@ -110,6 +116,55 @@ pub struct Source<'a> {
     pub title: &'a str,
     pub path: &'a Path,
     pub probe: Probe,
+}
+
+impl Source<'_> {
+    /// Its file's name ("A walk.mp4"), read with either slash, as `file_url` reads the path.
+    pub(crate) fn file_name(&self) -> String {
+        let path = self.path.to_string_lossy();
+        path.rsplit(['/', '\\']).next().unwrap_or_default().to_string()
+    }
+
+    /// Its file's name without the extension, which names it in the editor.
+    pub(crate) fn name(&self) -> String {
+        let file = self.file_name();
+        match file.rsplit_once('.') {
+            Some((stem, _)) if !stem.is_empty() => stem.to_string(),
+            _ => file,
+        }
+    }
+}
+
+/// A clip on the frame grid: where it starts in the video, how many frames, and where it sits in the sequence, in
+/// frames.
+pub(crate) struct Cut<'c> {
+    pub(crate) clip: &'c Clip,
+    pub(crate) start: u64,
+    pub(crate) frames: u64,
+    pub(crate) offset: u64,
+}
+
+/// A project's frames: the rate, the video's length in frames, and each clip put on the grid, inside the video, a frame
+/// long at least, one after the other. FCPXML and Premiere's XML share it, so both cut on the same frames.
+pub(crate) struct Plan<'c> {
+    pub(crate) rate: Rate,
+    pub(crate) asset_frames: u64,
+    pub(crate) cuts: Vec<Cut<'c>>,
+}
+
+pub(crate) fn plan<'c>(source: &Source<'_>, clips: &'c [Clip]) -> Plan<'c> {
+    let rate = Rate::nearest(source.probe.frame_rate);
+    let longest = clips.iter().map(|c| c.end).max().unwrap_or(0);
+    let asset_frames = rate.frames_to_hold(source.probe.duration.unwrap_or(longest)).max(1);
+    let mut cuts = Vec::new();
+    let mut offset = 0;
+    for clip in clips {
+        let start = rate.frame_at(clip.start).min(asset_frames - 1);
+        let end = rate.frame_at(clip.end).clamp(start + 1, asset_frames);
+        cuts.push(Cut { clip, start, frames: end - start, offset });
+        offset += end - start;
+    }
+    Plan { rate, asset_frames, cuts }
 }
 
 /// The address an editor opens `path` by: `file:///C:/Users/me/Videos/a%20video.mp4`, or `file://server/share/…` for a
@@ -146,7 +201,7 @@ pub fn file_url(path: &Path) -> String {
 }
 
 /// Text for an attribute: no characters XML forbids, one line, and `&`, `<`, `>` and both quotes written out.
-fn attribute(text: &str) -> String {
+pub(crate) fn attribute(text: &str) -> String {
     let mut out = String::new();
     for c in text.split_whitespace().collect::<Vec<_>>().join(" ").chars() {
         match c {
@@ -163,7 +218,7 @@ fn attribute(text: &str) -> String {
 }
 
 /// Text for an element's content: as `attribute`, but a line break stays one.
-fn content(text: &str) -> String {
+pub(crate) fn content(text: &str) -> String {
     text.chars()
         .filter(|c| *c == '\n' || is_xml_char(*c))
         .map(|c| match c {
@@ -182,7 +237,7 @@ fn is_xml_char(c: char) -> bool {
 }
 
 /// The sample rate an asset may name, nearest `measured`: 48000 when nothing is known.
-fn audio_rate(measured: Option<u32>) -> u32 {
+pub(crate) fn audio_rate(measured: Option<u32>) -> u32 {
     let Some(rate) = measured else { return 48_000 };
     AUDIO_RATES.iter().copied().min_by_key(|r| r.abs_diff(rate)).unwrap_or(48_000)
 }
@@ -200,26 +255,8 @@ fn layout(channels: Option<u32>) -> &'static str {
 /// (its look is not used: a title is Final Cut's own, in the language's colour and size) over each.
 pub fn document(source: &Source<'_>, clips: &[Clip], titles: Option<&Burn<'_>>) -> String {
     let probe = &source.probe;
-    let rate = Rate::nearest(probe.frame_rate);
-    let longest = clips.iter().map(|c| c.end).max().unwrap_or(0);
-    let asset_frames = rate.frames_to_hold(probe.duration.unwrap_or(longest)).max(1);
-    let name = source.path.file_stem().map_or_else(String::new, |s| s.to_string_lossy().into_owned());
-
-    // Each clip put on the frame grid, inside the video, a frame long at least.
-    struct Cut<'c> {
-        clip: &'c Clip,
-        start: u64,
-        frames: u64,
-        offset: u64,
-    }
-    let mut cuts = Vec::new();
-    let mut offset = 0;
-    for clip in clips {
-        let start = rate.frame_at(clip.start).min(asset_frames - 1);
-        let end = rate.frame_at(clip.end).clamp(start + 1, asset_frames);
-        cuts.push(Cut { clip, start, frames: end - start, offset });
-        offset += end - start;
-    }
+    let Plan { rate, asset_frames, cuts } = plan(source, clips);
+    let name = source.name();
 
     let mut out = String::new();
     let _ =
