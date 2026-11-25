@@ -89,8 +89,7 @@ import com.chaya.app.download.DownloadNotification.formatFileSize
 import com.chaya.app.download.DownloadState
 import com.chaya.app.download.DownloadTask
 import androidx.compose.ui.text.font.FontWeight
-import com.chaya.app.home.goTyped
-import com.chaya.app.home.TypeSheet
+import com.chaya.app.history.PagesToOpen
 import com.chaya.app.home.BarAction
 import com.chaya.app.home.BarMiddle
 import com.chaya.app.home.ChayaBar
@@ -323,7 +322,6 @@ internal fun DownloadsContent(
     var viewing by remember { mutableStateOf<Viewing?>(null) }
     var zipTaskId by rememberSaveable { mutableStateOf<Long?>(null) }
     var zipViewing by remember { mutableStateOf<Viewing?>(null) }
-    var typing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     val narrowed = LibraryFilter(kind, site, query)
@@ -616,17 +614,8 @@ internal fun DownloadsContent(
                 action = BarAction.Go,
                 progress = remember(tasks) { HomeShelf.progressOf(tasks) },
                 onPlace = onPlace,
-                onAction = { typing = true },
+                onAction = PagesToOpen::openBlankTab,
                 modifier = Modifier.align(Alignment.BottomCenter),
-            )
-        }
-        if (typing && onPlace != null) {
-            TypeSheet(
-                onDismiss = { typing = false },
-                onGo = { typed ->
-                    typing = false
-                    goTyped(typed, onPlace)
-                },
             )
         }
 

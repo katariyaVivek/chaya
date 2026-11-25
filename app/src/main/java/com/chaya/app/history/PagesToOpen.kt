@@ -4,7 +4,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-/** What the browser is asked to open: an address or words to search for, in the tab shown or a tab of its own. */
+/**
+ * What the browser is asked to open: an address or words to search for, in the tab shown or a tab of its own. A new
+ * tab with no [text] is a blank one, its address field ready to type in (Home's and the Library's +).
+ */
 data class PageToOpen(val text: String, val newTab: Boolean = false)
 
 /**
@@ -20,6 +23,11 @@ object PagesToOpen {
 
     /** Opens [text], an address or words to search for, in a new tab. */
     fun openInNewTab(text: String) = offer(PageToOpen(text, newTab = true))
+
+    /** Opens a blank new tab, its address field ready for a link to paste or words to search for. */
+    fun openBlankTab() {
+        _pending.value = PageToOpen("", newTab = true)
+    }
 
     private fun offer(page: PageToOpen) {
         if (page.text.isNotBlank()) _pending.value = page
