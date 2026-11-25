@@ -224,7 +224,7 @@ language or two), at 720p, 1080p or the original size; or as SRT files timed fro
 - ffmpeg gains libass (with FreeType, FriBidi and HarfBuzz), the scaler, `h264_mf` and the AAC encoder.
   Each clip is cut exactly, from the line's time, not the nearest keyframe.
 - Notifies when an export ends or fails, with Retry.
-- FCPXML (for Final Cut, Premiere and DaVinci Resolve) only if it is asked for.
+- FCPXML only if it is asked for. (It was: step 10.)
 - **Tests:** an exported clip's length, size and subtitle stream; the ASS file Chaya writes for each style.
 
 **First part (8a), the engine:** `build_ffmpeg.sh` builds FreeType, FriBidi, HarfBuzz and libass from pinned
@@ -257,6 +257,57 @@ case and accents, re-reading only files whose size or time changed; the Download
 with every word under the names it matches, and a line opens the player there (`openPlayer(id, { at, language })`).
 The Windows tour drops a video from `~/Videos/Chaya tour/`, plays it and removes it (the file stays as it was), and
 finds "walk" in the clip's lines and opens it at 0:25.
+
+### 10. Clips for an editor ☐
+
+**The person gets:** *Editor project* in the Export dialog: the clips they chose, cut and in order, as one FCPXML
+file for Final Cut Pro and DaVinci Resolve, to finish there (music, colour, titles) without Chaya re-encoding
+anything. The subtitles chosen come as titles over each clip, one block for two languages.
+
+Idea from [OpenFilm](https://github.com/openfilm/openfilm), which exports its timeline the same way (MIT; only the
+idea and the shape of the file are taken, Chaya's writer is its own, since OpenFilm's is tied to its own timeline).
+
+- **One file for all the clips**, next to the video as "Video title - Clips.fcpxml" (the clip's name when there is
+  one). The video itself is not copied: each clip is a cut of the saved file, named by its `file:///` address, so the
+  editor reads the original picture and sound at full quality. Moving the video breaks the link, as it does for any
+  editor project; the dialog says so.
+- **Frames, not milliseconds.** FCPXML times are fractions of a second on the video's own frame grid, so the
+  picture's frame rate is read (`core::export::Probe` gains it, and the sound's rate and channels) and each edge is
+  put on the nearest frame (29.97 is 30000/1001, never 29.97 written as a decimal). A clip is at least one frame.
+- **Subtitles as titles** (Basic Title, which every Final Cut has), each timed inside its clip. Resolve reads
+  titles too. Native captions are left out: Resolve reads them badly. SRT export stays for those who want that.
+- **Premiere Pro does not read FCPXML**; it reads Final Cut 7 XML (xmeml). That is a second writer, left for after
+  this step if it is asked for. The dialog says which programs the file is for.
+- **Privacy:** nothing new is contacted or kept; the file holds the video's path and its clips.
+- **Tests:** the file for one clip, several clips and two languages (read back with an XML parser, every `ref`
+  resolving, every time on the frame grid, the spine's length the clips' sum); 23.976, 25, 29.97, 30 and 59.94;
+  paths with spaces, accents and a drive letter or a network share becoming `file:///` addresses; names and
+  subtitles with `&`, `<` and quotes; the app takes `fcpxml` as a way to save and makes one job for all the clips.
+
+### 11. Caption styles ☐
+
+**The person gets:** more ways for burned-in subtitles to look than Outline, Box and Large, for the short clips
+people make from a talk: words that light up as they are said, a few words at a time in big letters, a pop on the
+word being said. Each is drawn in the language's own colour, font and size, as the three looks are.
+
+Idea from OpenFilm's caption presets and word-by-word captions (MIT; its library is CC0, but it draws its captions
+with a browser, and Chaya draws them with libass, so nothing is copied, only what a good short-form caption does).
+
+- **New looks** (each a small picture in the dialog, as the three are): *Highlight* (the line stays up, the word
+  being said is in an accent colour), *Karaoke* (words fill left to right as they are said, libass's `\kf`), *Pop*
+  (the word being said grows a little and settles), *One at a time* (a word or two, large, in the middle lower
+  third). All are plain ASS, so ffmpeg's libass draws them and `core::export::ass` stays the one place.
+- **They need each word's time.** Chaya has them when it made the subtitles (kept in the video's file); a subtitle
+  file downloaded with the video has only lines. For those, the word looks are not offered, and the dialog says why
+  ("Words light up only for subtitles Chaya made"), rather than guessing a word's time from its length. Two
+  languages: the word looks apply to the main language; the second stays a plain line below it.
+- **The accent colour** is the language's colour's brighter pair (white lights up yellow, yellow white...), fixed per
+  colour so the picture is the same on every PC.
+- **Looks are data**, not branches: a look is a small value (how a line is cut, what the current word does) in
+  `core::export`, so a new one is a table row and a test.
+- **Tests:** the ASS Chaya writes for each look (the words' times, the `\kf` lengths adding up to the line's, lines
+  cut at the clip's edges with a word half inside), a look refused for lines without word times, and the dialog's
+  rules in `ui/export.js`.
 
 ## After the plan
 
