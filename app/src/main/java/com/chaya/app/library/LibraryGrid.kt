@@ -42,7 +42,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.runtime.remember
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -97,13 +96,13 @@ fun LibraryGrid(
             item(key = "day:${day.title}", span = { GridItemSpan(maxLineSpan) }) {
                 Text(
                     text = day.title,
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                    style = MaterialTheme.typography.titleLarge,
                     color = MaterialTheme.colorScheme.onBackground,
                     modifier = Modifier.padding(top = 6.dp),
                 )
             }
             items(day.items, key = { it.key }) { item ->
-                Card(
+                SavedCard(
                     item = item,
                     selected = item.key in selected,
                     files = files,
@@ -149,8 +148,13 @@ internal fun tileLabel(item: LibraryItem): String = when (item) {
     is LibraryItem.Single -> item.title
 }
 
+/**
+ * A saved thing as Chaya shows it everywhere (DESIGN.md, Saved card): its picture at 16:10 with its badges, its name,
+ * and what it is. The Library's grid and Home's *Recently saved* both draw this one card; [modifier] gives its width
+ * and what a tap does.
+ */
 @Composable
-private fun Card(item: LibraryItem, selected: Boolean, files: LibraryFiles?, modifier: Modifier) {
+internal fun SavedCard(item: LibraryItem, files: LibraryFiles?, modifier: Modifier = Modifier, selected: Boolean = false) {
     Column(
         modifier = Modifier
             .clip(RoundedCornerShape(14.dp))

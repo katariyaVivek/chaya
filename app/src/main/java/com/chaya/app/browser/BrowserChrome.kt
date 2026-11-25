@@ -504,11 +504,11 @@ private fun HomeChip(icon: androidx.compose.ui.graphics.vector.ImageVector, labe
 }
 
 @Composable
-/** A section's name, as Home's "Recently saved" has it. */
+/** A section's name, as Home's "Recently saved" and the Library's days have it. */
 private fun SectionTitle(text: String) {
     Text(
         text = text,
-        style = MaterialTheme.typography.titleMedium,
+        style = MaterialTheme.typography.titleLarge,
         color = MaterialTheme.colorScheme.onBackground,
         modifier = Modifier.padding(bottom = 12.dp)
     )

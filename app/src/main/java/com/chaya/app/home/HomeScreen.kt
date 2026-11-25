@@ -1,5 +1,6 @@
 package com.chaya.app.home
 
+import com.chaya.app.library.SavedCard
 import androidx.compose.material.icons.filled.Tune
 import com.chaya.app.ui.components.HeaderButton
 import com.chaya.app.ui.components.ScreenHeader
@@ -24,7 +25,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
@@ -47,13 +47,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -66,16 +64,10 @@ import com.chaya.app.download.DownloadTask
 import com.chaya.app.downloads.DownloadsViewModel
 import com.chaya.app.downloads.displayTitle
 import com.chaya.app.history.PagesToOpen
-import com.chaya.app.library.FileKind
 import com.chaya.app.library.LibraryFiles
 import com.chaya.app.library.LibraryItem
-import com.chaya.app.library.NamedIcon
-import com.chaya.app.library.iconFor
-import com.chaya.app.library.kindOf
 import com.chaya.app.library.playsInChaya
 import com.chaya.app.library.rememberCover
-import com.chaya.app.library.tileLabel
-import com.chaya.app.library.tintFor
 import com.chaya.app.ui.player.Watched
 import com.chaya.app.ui.player.clockOf
 import kotlinx.coroutines.launch
@@ -300,7 +292,7 @@ private fun Recent(items: List<LibraryItem>, files: LibraryFiles, onSeeAll: () -
         ) {
             Text(
                 text = "Recently saved",
-                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                style = MaterialTheme.typography.titleLarge,
                 color = MaterialTheme.colorScheme.onBackground,
             )
             TextButton(onClick = onSeeAll) {
@@ -311,63 +303,10 @@ private fun Recent(items: List<LibraryItem>, files: LibraryFiles, onSeeAll: () -
             contentPadding = PaddingValues(horizontal = 20.dp),
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            items(items, key = { it.key }) { item -> RecentCard(item, files, onClick = { onItem(item) }) }
-        }
-    }
-}
-
-@Composable
-private fun RecentCard(item: LibraryItem, files: LibraryFiles, onClick: () -> Unit) {
-    val cover = item.cover
-    val kind = kindOf(cover)
-    val picture = rememberCover(cover, files)
-    Column(
-        modifier = Modifier
-            .width(168.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .clickable(onClick = onClick)
-            .semantics(mergeDescendants = true) { contentDescription = tileLabel(item) },
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(104.dp)
-                .shadow(2.dp, RoundedCornerShape(14.dp))
-                .clip(RoundedCornerShape(14.dp))
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh),
-        ) {
-            if (picture != null) {
-                AsyncImage(
-                    model = picture,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            } else {
-                NamedIcon(iconFor(kind), item.title, tint = tintFor(kind))
-            }
-            if (kind == FileKind.VIDEO && picture != null) {
-                Icon(
-                    Icons.Default.PlayArrow,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(8.dp)
-                        .size(22.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.6f))
-                        .padding(3.dp),
-                )
+            // The Library's own card, so a saved thing looks the same on Home as where it is kept
+            items(items, key = { it.key }) { item ->
+                SavedCard(item, files, modifier = Modifier.width(168.dp).clickable { onItem(item) })
             }
         }
-        Text(
-            text = item.title,
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.onBackground,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
     }
 }
