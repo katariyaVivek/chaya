@@ -347,7 +347,8 @@ Share. Reached from the Downloads screen's menu.
 - `ui/components/TabGrid` is the full-screen tab switcher: a new-tab square, the tab count, ⋮ (*Close
   all tabs*), search by title and address, and two columns of cards; swiping or × closes with Undo.
 - `ChayaWebView` is every tab's WebView: a long press on a link or picture reads its hit test into `PressedOn` (one
-  value) for `PageMenu`, and pulling the page down at its top reloads it (`PullGesture`, fed only once WebView over-scrolls at the top, so a list scrolled inside the
+  value) for `PageMenu`, *Web search* is added to WebView's bar for chosen words when WebView leaves it out (no app on
+  the phone takes web searches; `MainActivity` turns either search into a new tab), and pulling the page down at its top reloads it (`PullGesture`, fed only once WebView over-scrolls at the top, so a list scrolled inside the
   page scrolls first). All of it goes through `RetainedWebViewCallbacks` to the screen shown.
 - `BrowserChrome` is the address bar, which collapses to the site name on a
   page, with the ad blocker's shield and count. Under the page is Chaya's bar (`home/ChayaBar`), whose ink circle
