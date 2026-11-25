@@ -4,9 +4,15 @@
 //! processor) or, where Windows has none, as MPEG-4; the sound as AAC. Or its subtitles alone, as an SRT file timed
 //! from 0:00.
 //!
-//! The subtitles are written as an ASS file for libass, in one of three looks (Outline, Box, Large), with one
-//! language or two; each language keeps the colour, font and size the person gave it in the player. Two languages are
-//! drawn as one block, line by line, so neither ever covers the other.
+//! The subtitles are written as an ASS file for libass, in one of the looks (Outline, Box, Large, and the word looks:
+//! Highlight, Karaoke, Pop, One at a time), with one language or two; each language keeps the colour, font and size
+//! the person gave it in the player. Two languages are drawn as one block, line by line, so neither ever covers the
+//! other.
+//!
+//! The word looks follow each word as it is said, so they need each word's time: Chaya has them for subtitles it made
+//! (what whisper.cpp heard, kept in the video's file). A line is drawn word by word only when its words are the ones
+//! heard, in order and at their times; a line put right since, or subtitles from a site, are drawn whole, never with a
+//! word's time guessed. Only the main language follows its words; a second stays a plain line with it.
 
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -16,6 +22,7 @@ use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::watch;
 
+use crate::speech::whisper::Word;
 use crate::subtitles::{self, Line, Span};
 
 /// How big the video is made: as tall as 720 or 1080 pixels (never taller than it was), or as it is.
@@ -27,13 +34,64 @@ pub enum Quality {
     Original,
 }
 
-/// How the subtitles look: white words outlined in black (as the player draws them), on a dark box, or large.
+/// How the subtitles look: white words outlined in black (as the player draws them), on a dark box, or large; or
+/// following the words as they are said.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Look {
     Outline,
     Boxed,
     Large,
+    /// The line stays; the word being said is in the accent colour.
+    Highlight,
+    /// The words fill with the accent colour, left to right, as they are said.
+    Karaoke,
+    /// The word being said is in the accent colour, a little bigger, and settles.
+    Pop,
+    /// A few words at a time, large, higher up: only those being said, the one being said in the accent colour.
+    OneAtATime,
+}
+
+/// What the word being said does in a look.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Now {
+    /// Nothing: the line is drawn whole.
+    Nothing,
+    Coloured,
+    Filled,
+    Grown,
+    /// Only it and its neighbours are shown, it in the accent colour.
+    Alone,
+}
+
+/// A look, as what it draws: how big (of the picture's narrow side), on a box or outlined, raised above the usual
+/// place, and what the word being said does.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Shape {
+    size: f64,
+    boxed: bool,
+    raised: bool,
+    now: Now,
+}
+
+impl Look {
+    fn shape(self) -> Shape {
+        let shape = |size, boxed, raised, now| Shape { size, boxed, raised, now };
+        match self {
+            Look::Outline => shape(0.052, false, false, Now::Nothing),
+            Look::Boxed => shape(0.052, true, false, Now::Nothing),
+            Look::Large => shape(0.075, false, false, Now::Nothing),
+            Look::Highlight => shape(0.058, false, false, Now::Coloured),
+            Look::Karaoke => shape(0.058, false, false, Now::Filled),
+            Look::Pop => shape(0.062, false, false, Now::Grown),
+            Look::OneAtATime => shape(0.095, false, true, Now::Alone),
+        }
+    }
+
+    /// Whether it follows each word's time; without them, its lines are drawn whole.
+    pub fn by_word(self) -> bool {
+        self.shape().now != Now::Nothing
+    }
 }
 
 /// A language's own style, as the player's Subtitles tab keeps it.
@@ -77,6 +135,16 @@ impl Color {
     fn ass(self) -> String {
         let [r, g, b] = self.rgb();
         format!("&H00{b:02X}{g:02X}{r:02X}")
+    }
+
+    /// The colour the word being said takes in the word looks: white lights up yellow, every other colour white, so
+    /// it always stands out and is the same on every PC.
+    pub fn accent(self) -> Color {
+        if self == Color::White {
+            Color::Yellow
+        } else {
+            Color::White
+        }
     }
 }
 
@@ -123,10 +191,12 @@ impl Size {
     }
 }
 
-/// A language drawn on: its lines and its style.
+/// A language drawn on: its lines and its style, and the words heard in it with their times, when Chaya made these
+/// subtitles (empty when it did not).
 pub struct Language<'a> {
     pub lines: &'a [Line],
     pub style: Style,
+    pub words: &'a [Word],
 }
 
 /// The subtitles drawn on a clip: one language, or two (the second above the first when `second_on_top`).
@@ -236,15 +306,17 @@ fn ass_text(text: &str) -> String {
 /// The ASS file that draws `burn` on a clip from `start` to `end` (milliseconds in the video), `width` by `height`
 /// pixels: its times from 0:00, and only what shows in the clip.
 pub fn ass(burn: &Burn<'_>, start: u64, end: u64, width: u32, height: u32) -> String {
-    let base = height.min(width) as f64 * if burn.look == Look::Large { 0.075 } else { 0.052 };
+    let shape = burn.look.shape();
+    let base = height.min(width) as f64 * shape.size;
     let style = |name: &str, language: &Language<'_>| {
         let (font, bold) = language.style.font.ass();
         let size = (base * language.style.size.scale()).round();
-        let (border, outline_colour, outline, shadow) = match burn.look {
-            // Black around each letter, and a soft shadow, as the player draws them.
-            Look::Outline | Look::Large => (1, "&H00000000", (size * 0.07).max(1.0), (size * 0.02).round()),
+        let (border, outline_colour, outline, shadow) = if shape.boxed {
             // A box behind the words, three quarters dark, padded.
-            Look::Boxed => (3, "&H40000000", (size * 0.22).max(2.0), 0.0),
+            (3, "&H40000000", (size * 0.22).max(2.0), 0.0)
+        } else {
+            // Black around each letter, and a soft shadow, as the player draws them.
+            (1, "&H00000000", (size * 0.07).max(1.0), (size * 0.02).round())
         };
         format!(
             "Style: {name},{font},{size},{colour},{colour},{outline_colour},&H80000000,{bold},0,0,0,100,100,0,0,{border},\
@@ -252,7 +324,8 @@ pub fn ass(burn: &Burn<'_>, start: u64, end: u64, width: u32, height: u32) -> St
             colour = language.style.color.ass(),
             bold = if bold { -1 } else { 0 },
             margin_x = (width as f64 * 0.06).round(),
-            margin_y = (height as f64 * 0.055).round(),
+            // A raised look sits in the lower third, clear of the usual place.
+            margin_y = (height as f64 * if shape.raised { 0.16 } else { 0.055 }).round(),
         )
     };
     let mut out = format!(
@@ -269,16 +342,161 @@ pub fn ass(burn: &Burn<'_>, start: u64, end: u64, width: u32, height: u32) -> St
     }
     out += "\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n";
     let second = burn.second.as_ref().map(|s| s.lines).unwrap_or(&[]);
+    // Each main line's words with their times, for a look that follows them.
+    let heard: Vec<Option<Vec<&Word>>> = if shape.now == Now::Nothing {
+        Vec::new()
+    } else {
+        burn.first.lines.iter().map(|line| words_of(line, burn.first.words)).collect()
+    };
+    let colours = (burn.first.style.color.ass(), burn.first.style.color.accent().ass());
     for slice in slices(burn.first.lines, second, start, end) {
-        let (one, two) = (slice.first.as_deref().map(ass_text), slice.second.as_deref().map(ass_text));
-        let text = match (one, two) {
-            (None, None) => continue,
-            (Some(one), None) => format!("{{\\rFirst}}{one}"),
-            (None, Some(two)) => format!("{{\\rSecond}}{two}"),
-            (Some(one), Some(two)) if burn.second_on_top => format!("{{\\rSecond}}{two}\\N{{\\rFirst}}{one}"),
-            (Some(one), Some(two)) => format!("{{\\rFirst}}{one}\\N{{\\rSecond}}{two}"),
-        };
+        let two = slice.second.as_deref().map(ass_text);
+        let words = slice.first_line.and_then(|i| heard.get(i)).and_then(|w| w.as_deref());
+        if let (Some(words), Some(_)) = (words, &slice.first) {
+            let at = Moments { clip: start, from: start + slice.start, to: start + slice.end };
+            for (from, to, one) in by_word(shape.now, words, at, &colours) {
+                let text = together(Some(one), two.clone(), burn.second_on_top);
+                out += &format!("Dialogue: 0,{},{},First,,0,0,0,,{text}\n", ass_time(from), ass_time(to));
+            }
+            continue;
+        }
+        let one = slice.first.as_deref().map(ass_text);
+        if one.is_none() && two.is_none() {
+            continue;
+        }
+        let text = together(one.map(|one| format!("{{\\rFirst}}{one}")), two, burn.second_on_top);
         out += &format!("Dialogue: 0,{},{},First,,0,0,0,,{text}\n", ass_time(slice.start), ass_time(slice.end));
+    }
+    out
+}
+
+/// One block of the main language's text (already marked `\rFirst`) and the second's line, either on top.
+fn together(one: Option<String>, two: Option<String>, second_on_top: bool) -> String {
+    let two = two.map(|two| format!("{{\\rSecond}}{two}"));
+    match (one, two) {
+        (Some(one), Some(two)) if second_on_top => format!("{two}\\N{one}"),
+        (Some(one), Some(two)) => format!("{one}\\N{two}"),
+        (one, two) => one.or(two).unwrap_or_default(),
+    }
+}
+
+/// How far from a line's first and last word Chaya's lines may start and end (it shows them a little early and keeps
+/// them a little late).
+const WORDS_SLACK: u64 = 1_000;
+
+/// `line`'s words with their times: the run of `words` said within it whose words are the line's, in order. None for a
+/// line whose words are not those heard (put right since, or from a site), or with no words.
+fn words_of<'w>(line: &Line, words: &'w [Word]) -> Option<Vec<&'w Word>> {
+    let wanted: Vec<&str> = line.text.split_whitespace().collect();
+    if wanted.is_empty() {
+        return None;
+    }
+    let near: Vec<&Word> = words
+        .iter()
+        .filter(|w| !w.text.trim().is_empty())
+        .filter(|w| w.start + WORDS_SLACK >= line.start && w.end <= line.end + WORDS_SLACK)
+        .collect();
+    near.windows(wanted.len())
+        .find(|run| run.iter().zip(&wanted).all(|(w, t)| w.text.trim() == *t))
+        .map(<[&Word]>::to_vec)
+}
+
+/// Where a stretch of a clip is: the clip's start, and the stretch's start and end, all in the video's milliseconds.
+#[derive(Clone, Copy)]
+struct Moments {
+    clip: u64,
+    from: u64,
+    to: u64,
+}
+
+/// The most words shown at once by One at a time, and the most letters.
+const AT_A_TIME: usize = 3;
+const AT_A_TIME_CHARS: usize = 16;
+
+/// The events that draw a main line said as `words`, over the stretch `at`, for `now`: each its start and end in the
+/// clip's time and its text (marked `\rFirst`). `colours` are the language's colour and its accent, as ASS writes them.
+fn by_word(now: Now, words: &[&Word], at: Moments, colours: &(String, String)) -> Vec<(u64, u64, String)> {
+    let (colour, accent) = colours;
+    let clip = |t: u64| t.clamp(at.from, at.to) - at.clip;
+    let text = |w: &Word| ass_text(&w.text);
+    if now == Now::Filled {
+        // One event: each word fills over its own time (\kf), the pauses between them (\k) ride on the space before
+        // the next. Times are counted in hundredths from the event's start, each from the rounded moment before it, so
+        // they never drift. A word said before the stretch begins is already filled.
+        let cs = |t: u64| (t.clamp(at.from, at.to) - at.from).div_ceil(10);
+        let mut line = format!("{{\\rFirst\\1c{accent}&\\2c{colour}&}}");
+        let mut cursor = 0;
+        for (i, word) in words.iter().enumerate() {
+            let space = if i > 0 { " " } else { "" };
+            let (said, done) = (cs(word.start).max(cursor), cs(word.end).max(cursor));
+            if said > cursor {
+                line += &format!("{{\\k{}}}{space}", said - cursor);
+            } else {
+                line += space;
+            }
+            line += &format!("{{\\kf{}}}{}", done - said, text(word));
+            cursor = done;
+        }
+        return vec![(clip(at.from), clip(at.to), line)];
+    }
+
+    // The others are a run of events, one for each stretch in which the word being said stays the same: a word is
+    // being said from its start until the next one starts (the pause after it included), and none before the first.
+    let mut moments: Vec<u64> = words.iter().map(|w| w.start.clamp(at.from, at.to)).collect();
+    moments.push(at.from);
+    moments.push(at.to);
+    moments.sort_unstable();
+    moments.dedup();
+    let groups = if now == Now::Alone { groups(words) } else { (0..words.len()).map(|i| (i, i + 1)).collect() };
+    let mut out: Vec<(u64, u64, String)> = Vec::new();
+    for pair in moments.windows(2) {
+        let (from, to) = (pair[0], pair[1]);
+        let saying = words.iter().rposition(|w| w.start <= from);
+        // The words shown: the whole line, or for One at a time the group being said (the first before anything is).
+        let (a, b) = match now {
+            Now::Alone => {
+                saying.and_then(|i| groups.iter().copied().find(|(a, b)| (*a..*b).contains(&i))).unwrap_or(groups[0])
+            }
+            _ => (0, words.len()),
+        };
+        let mark = match now {
+            Now::Grown => format!("{{\\1c{accent}&\\fscx125\\fscy125\\t(0,160,\\fscx108\\fscy108)}}"),
+            _ => format!("{{\\1c{accent}&}}"),
+        };
+        let shown: Vec<String> = (a..b)
+            .map(|i| if Some(i) == saying { format!("{mark}{}{{\\rFirst}}", text(words[i])) } else { text(words[i]) })
+            .collect();
+        let line = format!("{{\\rFirst}}{}", shown.join(" "));
+        match out.last_mut() {
+            Some(last) if last.2 == line && last.1 == clip(from) => last.1 = clip(to),
+            _ => out.push((clip(from), clip(to), line)),
+        }
+    }
+    out
+}
+
+/// One at a time's groups of words, as ranges of `words`: up to three words and sixteen letters, a group ending after
+/// a word that ends a phrase.
+fn groups(words: &[&Word]) -> Vec<(usize, usize)> {
+    let mut out = Vec::new();
+    let mut from = 0;
+    let mut chars = 0;
+    for (i, word) in words.iter().enumerate() {
+        let len = word.text.trim().chars().count();
+        if i > from && (i - from >= AT_A_TIME || chars + 1 + len > AT_A_TIME_CHARS) {
+            out.push((from, i));
+            from = i;
+            chars = 0;
+        }
+        chars += if i > from { 1 + len } else { len };
+        if word.text.trim().ends_with(['.', ',', '!', '?', ';', ':']) {
+            out.push((from, i + 1));
+            from = i + 1;
+            chars = 0;
+        }
+    }
+    if from < words.len() {
+        out.push((from, words.len()));
     }
     out
 }
@@ -290,6 +508,8 @@ pub(crate) struct Slice {
     pub(crate) end: u64,
     pub(crate) first: Option<String>,
     pub(crate) second: Option<String>,
+    /// Which of the main language's lines shows, when one does.
+    pub(crate) first_line: Option<usize>,
 }
 
 /// What shows when in a clip from `start` to `end`, in `first` and `second` (which may hold no lines): a slice for
@@ -302,19 +522,22 @@ pub(crate) fn slices(first: &[Line], second: &[Line], start: u64, end: u64) -> V
     }
     moments.sort_unstable();
     moments.dedup();
-    let text_at = |spans: &[Span], lines: &[Line], at: u64| {
-        subtitles::line_at(spans, at).map(|i| lines[i].text.trim().to_string()).filter(|t| !t.is_empty())
+    let line_at = |spans: &[Span], lines: &[Line], at: u64| {
+        subtitles::line_at(spans, at).filter(|i| !lines[*i].text.trim().is_empty())
     };
     let mut out: Vec<Slice> = Vec::new();
     for pair in moments.windows(2) {
         let (from, to) = (pair[0], pair[1]);
-        let (a, b) = (text_at(&one, first, from), text_at(&two, second, from));
-        if a.is_none() && b.is_none() {
+        let (i, j) = (line_at(&one, first, from), line_at(&two, second, from));
+        if i.is_none() && j.is_none() {
             continue;
         }
+        let (a, b) = (i.map(|i| first[i].text.trim().to_string()), j.map(|j| second[j].text.trim().to_string()));
         match out.last_mut() {
-            Some(last) if last.end == from - start && last.first == a && last.second == b => last.end = to - start,
-            _ => out.push(Slice { start: from - start, end: to - start, first: a, second: b }),
+            Some(last) if last.end == from - start && last.first_line == i && last.first == a && last.second == b => {
+                last.end = to - start
+            }
+            _ => out.push(Slice { start: from - start, end: to - start, first: a, second: b, first_line: i }),
         }
     }
     out
@@ -793,7 +1016,7 @@ mod tests {
         let lines = walk();
         let burn = Burn {
             look: Look::Outline,
-            first: Language { lines: &lines, style: Style::default() },
+            first: Language { lines: &lines, style: Style::default(), words: &[] },
             second: None,
             second_on_top: false,
         };
@@ -816,7 +1039,7 @@ mod tests {
         let lines = walk();
         let burn = Burn {
             look: Look::Outline,
-            first: Language { lines: &lines, style: Style::default() },
+            first: Language { lines: &lines, style: Style::default(), words: &[] },
             second: None,
             second_on_top: false,
         };
@@ -839,8 +1062,8 @@ mod tests {
         let style = Style { color: Color::Yellow, font: Font::Serif, size: Size::L };
         let mut burn = Burn {
             look: Look::Boxed,
-            first: Language { lines: &english, style: Style::default() },
-            second: Some(Language { lines: &french, style }),
+            first: Language { lines: &english, style: Style::default(), words: &[] },
+            second: Some(Language { lines: &french, style, words: &[] }),
             second_on_top: true,
         };
         let ass = ass(&burn, 1_000, 4_000, 1920, 1080);
@@ -862,7 +1085,7 @@ mod tests {
         let lines = vec![line(0, 2_000, "Not {\\b1}bold\\N, braces kept as words")];
         let large = Burn {
             look: Look::Large,
-            first: Language { lines: &lines, style: Style::default() },
+            first: Language { lines: &lines, style: Style::default(), words: &[] },
             second: None,
             second_on_top: false,
         };
@@ -950,6 +1173,264 @@ mod tests {
         assert_eq!(read_probe("Stream #0:0: Audio: aac"), None, "no picture");
     }
 
+    fn word(text: &str, start: u64, end: u64) -> Word {
+        Word { text: format!(" {text}"), start, end, p: 0.9 }
+    }
+
+    /// "We walked to the park", as whisper.cpp heard it, and the line Chaya wrote for it (shown a little early and kept
+    /// a little late); then a line put right since, whose words are not those heard.
+    fn heard() -> (Vec<Line>, Vec<Word>) {
+        let lines = vec![line(800, 2_900, "We walked to the park"), line(4_000, 5_000, "Something else")];
+        let words = vec![
+            word("We", 1_000, 1_200),
+            word("walked", 1_250, 1_600),
+            word("to", 1_700, 1_800),
+            word("the", 1_850, 1_950),
+            word("park", 2_000, 2_600),
+            word("Some", 4_100, 4_400),
+            word("thing", 4_400, 4_800),
+        ];
+        (lines, words)
+    }
+
+    fn by_word_ass(look: Look, words: &[Word], lines: &[Line], start: u64, end: u64) -> String {
+        let burn = Burn {
+            look,
+            first: Language { lines, style: Style::default(), words },
+            second: None,
+            second_on_top: false,
+        };
+        ass(&burn, start, end, 1280, 720)
+    }
+
+    fn dialogue(ass: &str) -> Vec<&str> {
+        ass.lines().filter(|l| l.starts_with("Dialogue:")).collect()
+    }
+
+    #[test]
+    fn a_line_follows_its_words_only_when_they_are_the_words_heard() {
+        let (lines, words) = heard();
+        let found = words_of(&lines[0], &words).unwrap();
+        assert_eq!(found.iter().map(|w| w.text.trim()).collect::<Vec<_>>(), ["We", "walked", "to", "the", "park"]);
+        // Put right since: "Something else" was heard as "Some thing".
+        assert_eq!(words_of(&lines[1], &words), None);
+        // A site's subtitles: no words at all.
+        assert_eq!(words_of(&lines[0], &[]), None);
+        // The same words said a minute later are not this line's.
+        let later: Vec<Word> =
+            words.iter().map(|w| Word { start: w.start + 60_000, end: w.end + 60_000, ..w.clone() }).collect();
+        assert_eq!(words_of(&lines[0], &later), None);
+    }
+
+    #[test]
+    fn highlight_colours_the_word_being_said_and_draws_a_line_put_right_whole() {
+        let (lines, words) = heard();
+        let ass = by_word_ass(Look::Highlight, &words, &lines, 0, 6_000);
+        let events = dialogue(&ass);
+        let yellow = "\\1c&H005CE4FF&";
+        // Before the first word, the line with nothing lit; then one event for each word, lit until the next starts.
+        assert_eq!(events[0], "Dialogue: 0,0:00:00.80,0:00:01.00,First,,0,0,0,,{\\rFirst}We walked to the park");
+        assert_eq!(
+            events[1],
+            format!("Dialogue: 0,0:00:01.00,0:00:01.25,First,,0,0,0,,{{\\rFirst}}{{{yellow}}}We{{\\rFirst}} walked to the park")
+        );
+        assert_eq!(
+            events[5],
+            format!("Dialogue: 0,0:00:02.00,0:00:02.90,First,,0,0,0,,{{\\rFirst}}We walked to the {{{yellow}}}park{{\\rFirst}}")
+        );
+        assert_eq!(events.iter().filter(|e| e.contains(yellow)).count(), 5);
+        assert_eq!(events[6], "Dialogue: 0,0:00:04.00,0:00:05.00,First,,0,0,0,,{\\rFirst}Something else");
+        assert_eq!(events.len(), 7);
+    }
+
+    #[test]
+    fn karaoke_fills_each_word_over_its_own_time_and_the_times_add_up() {
+        let (lines, words) = heard();
+        let ass = by_word_ass(Look::Karaoke, &words, &lines, 0, 6_000);
+        let events = dialogue(&ass);
+        assert_eq!(
+            events[0],
+            "Dialogue: 0,0:00:00.80,0:00:02.90,First,,0,0,0,,{\\rFirst\\1c&H005CE4FF&\\2c&H00FFFFFF&}\
+             {\\k20}{\\kf20}We{\\k5} {\\kf35}walked{\\k10} {\\kf10}to{\\k5} {\\kf10}the{\\k5} {\\kf60}park"
+        );
+        // Every hundredth from the line's start to its last word's end is counted once.
+        let total: u64 = events[0]
+            .split("{\\k")
+            .skip(1)
+            .map(|part| part.trim_start_matches('f').split('}').next().unwrap().parse::<u64>().unwrap())
+            .sum();
+        assert_eq!(total, (2_600 - 800) / 10);
+        // A clip that starts as "walked" is being said: "We" is already filled, "walked" fills over what is left.
+        let ass = by_word_ass(Look::Karaoke, &words, &lines, 1_500, 6_000);
+        assert!(dialogue(&ass)[0].contains("{\\kf0}We {\\kf10}walked{\\k10} {\\kf10}to"), "{ass}");
+    }
+
+    #[test]
+    fn pop_grows_the_word_being_said_and_it_settles() {
+        let (lines, words) = heard();
+        let ass = by_word_ass(Look::Pop, &words, &lines, 0, 6_000);
+        let events = dialogue(&ass);
+        assert!(events[2].ends_with("{\\rFirst}We {\\1c&H005CE4FF&\\fscx125\\fscy125\\t(0,160,\\fscx108\\fscy108)}walked{\\rFirst} to the park"), "{}", events[2]);
+        // Its letters are a little larger than Highlight's.
+        let size = |ass: &str| {
+            ass.lines()
+                .find(|l| l.starts_with("Style: First"))
+                .unwrap()
+                .split(',')
+                .nth(2)
+                .unwrap()
+                .parse::<u32>()
+                .unwrap()
+        };
+        assert!(size(&ass) > size(&by_word_ass(Look::Highlight, &words, &lines, 0, 6_000)));
+    }
+
+    #[test]
+    fn one_at_a_time_shows_a_few_words_large_and_raised() {
+        let (lines, words) = heard();
+        let ass = by_word_ass(Look::OneAtATime, &words, &lines, 0, 6_000);
+        // Each event's start and the words it shows, tags taken off: "We walked to" until "the" is said, then "the park";
+        // the word being said lit.
+        let shown: Vec<(String, String)> = dialogue(&ass)
+            .iter()
+            .take(6)
+            .map(|e| {
+                let fields: Vec<&str> = e.splitn(10, ',').collect();
+                let mut plain = String::new();
+                let mut inside = false;
+                for c in fields[9].chars() {
+                    match c {
+                        '{' => inside = true,
+                        '}' => inside = false,
+                        c if !inside => plain.push(c),
+                        _ => {}
+                    }
+                }
+                (fields[1].to_string(), plain)
+            })
+            .collect();
+        let at = |t: &str, w: &str| (t.to_string(), w.to_string());
+        assert_eq!(
+            shown,
+            [
+                at("0:00:00.80", "We walked to"),
+                at("0:00:01.00", "We walked to"),
+                at("0:00:01.25", "We walked to"),
+                at("0:00:01.70", "We walked to"),
+                at("0:00:01.85", "the park"),
+                at("0:00:02.00", "the park"),
+            ]
+        );
+        assert!(dialogue(&ass)[2].contains("We {\\1c&H005CE4FF&}walked{\\rFirst} to"));
+        let style = ass.lines().find(|l| l.starts_with("Style: First")).unwrap();
+        let fields: Vec<&str> = style.split(',').collect();
+        // Larger than Large, and in the lower third: MarginV 16 % of 720.
+        assert!(fields[2].parse::<u32>().unwrap() > 54, "{style}");
+        assert_eq!(fields[21], "115");
+    }
+
+    #[test]
+    fn one_at_a_time_groups_end_at_a_phrase_and_stay_short() {
+        let words: Vec<Word> = ["Well,", "this", "is", "extraordinarily", "good", "news", "today."]
+            .iter()
+            .enumerate()
+            .map(|(i, t)| word(t, i as u64 * 300, i as u64 * 300 + 250))
+            .collect();
+        let refs: Vec<&Word> = words.iter().collect();
+        // "Well," ends a phrase; "extraordinarily" won't fit with what's before it; three words at most.
+        assert_eq!(groups(&refs), [(0, 1), (1, 3), (3, 4), (4, 7)]);
+    }
+
+    #[test]
+    fn with_two_languages_the_second_stays_a_plain_line_with_the_words() {
+        let (lines, words) = heard();
+        let french = [line(800, 2_900, "Nous sommes allés au parc")];
+        let burn = Burn {
+            look: Look::Highlight,
+            first: Language { lines: &lines, style: Style::default(), words: &words },
+            second: Some(Language { lines: &french, style: Style::default(), words: &[] }),
+            second_on_top: true,
+        };
+        let ass = ass(&burn, 0, 3_000, 1280, 720);
+        let events = dialogue(&ass);
+        assert!(events.iter().all(|e| e.contains(",,{\\rSecond}Nous sommes allés au parc\\N{\\rFirst}")), "{ass}");
+        assert!(events[1].contains("{\\1c&H005CE4FF&}We{\\rFirst}"));
+    }
+
+    #[test]
+    fn a_word_look_without_words_draws_lines_whole_and_the_old_looks_never_follow_words() {
+        let (lines, words) = heard();
+        for look in [Look::Highlight, Look::Karaoke, Look::Pop, Look::OneAtATime] {
+            assert!(look.by_word());
+            let ass = by_word_ass(look, &[], &lines, 0, 6_000);
+            assert_eq!(
+                dialogue(&ass)[0],
+                "Dialogue: 0,0:00:00.80,0:00:02.90,First,,0,0,0,,{\\rFirst}We walked to the park",
+                "{look:?}"
+            );
+        }
+        for look in [Look::Outline, Look::Boxed, Look::Large] {
+            assert!(!look.by_word());
+            assert_eq!(dialogue(&by_word_ass(look, &words, &lines, 0, 6_000)).len(), 2, "{look:?}");
+        }
+    }
+
+    #[test]
+    fn the_accent_stands_out_from_every_colour() {
+        assert_eq!(Color::White.accent(), Color::Yellow);
+        for color in [Color::Yellow, Color::Cyan, Color::Green, Color::Pink] {
+            assert_eq!(color.accent(), Color::White);
+        }
+    }
+
+    /// With CI's ffmpeg (`CHAYA_FFMPEG`), Highlight drawn by libass on a dark picture: no yellow before the first word
+    /// is said, yellow while one is.
+    #[tokio::test]
+    async fn libass_lights_the_word_being_said() {
+        let Some(ffmpeg) = std::env::var_os("CHAYA_FFMPEG").map(PathBuf::from) else {
+            eprintln!("skipped: no CHAYA_FFMPEG");
+            return;
+        };
+        let (lines, words) = heard();
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("words.ass");
+        let burn = Burn {
+            look: Look::Highlight,
+            first: Language { lines: &lines, style: Style::default(), words: &words },
+            second: None,
+            second_on_top: false,
+        };
+        std::fs::write(&file, ass(&burn, 0, 3_000, 640, 360)).unwrap();
+        let yellow_at = |ms: u64| {
+            let ffmpeg = ffmpeg.clone();
+            let file = file.clone();
+            async move {
+                let filter = format!("ass={}", file.display());
+                let out = Command::new(&ffmpeg)
+                    .args([
+                        "-hide_banner",
+                        "-loglevel",
+                        "error",
+                        "-f",
+                        "lavfi",
+                        "-i",
+                        "color=c=0x202020:s=640x360:d=3:r=25",
+                    ])
+                    .args(["-vf", &filter, "-ss", &format!("{:.3}", ms as f64 / 1000.0), "-frames:v", "1"])
+                    .args(["-f", "rawvideo", "-pix_fmt", "rgb24", "-"])
+                    .output()
+                    .await
+                    .unwrap();
+                assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+                // Yellow (255, 228, 92), give or take the letters' soft edges.
+                out.stdout.chunks(3).filter(|p| p[0] > 200 && p[1] > 180 && p[2] < 140).count()
+            }
+        };
+        let (before, during) = (yellow_at(900).await, yellow_at(2_200).await);
+        assert_eq!(before, 0, "nothing lit before the first word");
+        assert!(during > 50, "the word being said is lit: {during} yellow pixels");
+    }
+
     #[test]
     fn the_frame_rate_and_the_sound_ffmpeg_names_are_read() {
         let said = |video: &str, audio: &str| {
@@ -1033,7 +1514,7 @@ mod tests {
             quality: Quality::P720,
             burn: Some(Burn {
                 look: Look::Boxed,
-                first: Language { lines: &lines, style: Style::default() },
+                first: Language { lines: &lines, style: Style::default(), words: &[] },
                 second: None,
                 second_on_top: false,
             }),
@@ -1101,7 +1582,7 @@ mod tests {
             gif: true,
             burn: Some(Burn {
                 look: Look::Outline,
-                first: Language { lines: &lines, style: Style::default() },
+                first: Language { lines: &lines, style: Style::default(), words: &[] },
                 second: None,
                 second_on_top: false,
             }),

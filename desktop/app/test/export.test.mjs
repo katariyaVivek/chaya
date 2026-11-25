@@ -23,6 +23,13 @@ import {
   isRunning,
   gifTooLong,
   fileCount,
+  looksFor,
+  wordLooksNote,
+  lookWords,
+  accentOf,
+  LOOKS,
+  WORD_LOOKS,
+  LOOK_NAMES,
 } from '../ui/export.js';
 
 const clips = [
@@ -264,4 +271,48 @@ test('an editor project is one file for all the clips chosen, with the subtitles
   // When it is saved, the notice names the file, as for subtitle files.
   const done = { job: 4, state: 'done', saveAs: 'fcpxml', name: '3 clips', path: 'C:\\Videos\\A walk - Clips.fcpxml', encoder: null };
   assert.deepEqual(noticeOf(done), { text: 'Saved “3 clips”', detail: 'A walk - Clips.fcpxml', action: 'Show in folder', failed: false });
+});
+
+test('the word looks are offered for the subtitles Chaya made, and say why when they are not', () => {
+  const tracks = ['en', 'fr'];
+  // Chaya made the English: all seven looks, a word look remembered from last time comes back.
+  const made = firstChoice({ clips, tracks, shown: 'en', words: 'en', kept: { look: 'karaoke' } });
+  assert.deepEqual(looksFor(made), [...LOOKS, ...WORD_LOOKS]);
+  assert.equal(made.look, 'karaoke');
+  assert.equal(wordLooksNote(made), null);
+  assert.equal(optionsOf(made, styleOf).look, 'karaoke');
+  // French as the main language: not the one with words. The look falls back to Outline, and the note says why.
+  const french = changed(made, { first: 'fr' }, tracks);
+  assert.deepEqual(looksFor(french), LOOKS);
+  assert.equal(french.look, 'outline');
+  assert.equal(wordLooksNote(french), 'Words light up only for the subtitles Chaya made: choose them as the main language.');
+  // A site's subtitles only.
+  const site = firstChoice({ clips, tracks, shown: 'en', kept: { look: 'pop' } });
+  assert.equal(site.look, 'outline');
+  assert.equal(wordLooksNote(site), 'Words light up only for subtitles Chaya made: Make subtitles first.');
+  // No subtitles drawn: nothing to say.
+  assert.equal(wordLooksNote(changed(site, { subtitles: 'none' }, tracks)), null);
+  for (const look of WORD_LOOKS) assert.ok(LOOK_NAMES[look], look);
+});
+
+test('a word look’s small picture lights the word being said, in the accent the app draws', () => {
+  assert.deepEqual(
+    lookWords('highlight', 'We walked to').map((w) => w.lit),
+    [false, true, false],
+  );
+  assert.deepEqual(
+    lookWords('karaoke', 'We walked to').map((w) => w.lit),
+    [true, false, false],
+  );
+  assert.deepEqual(lookWords('oneAtATime', 'We walked to'), [
+    { word: 'We', lit: true },
+    { word: 'walked', lit: false },
+  ]);
+  assert.deepEqual(
+    lookWords('outline', 'We walked').map((w) => w.lit),
+    [false, false],
+  );
+  // The same pairs as core::export::Color::accent.
+  assert.equal(accentOf('white'), 'yellow');
+  for (const color of ['yellow', 'cyan', 'green', 'pink']) assert.equal(accentOf(color), 'white');
 });
