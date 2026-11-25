@@ -130,7 +130,7 @@ is close to its copyrighted-content policy, and the diagnostics assume no Play S
    long press chooses tiles to share or delete together. An account's ZIP opens to its files, and
    a long press on one shares it or saves it to the phone. The walkthrough takes a screenshot of
    the grid.
-8. **Appearance:** Downloads › ⋮ › Appearance switches between Same as phone, Light and Dark at
+8. **Appearance:** Home › Settings › Appearance switches between Same as phone, Light and Dark at
    once, status bar included, and the choice survives a restart.
 9. **Ad blocker:** open a news site. The shield in the address bar fills in and counts what it
    blocked; ad boxes are gone. Tap it: turning blocking off for the site, or everywhere, reloads the
@@ -150,7 +150,7 @@ is close to its copyrighted-content policy, and the diagnostics assume no Play S
 12. **Persistence:** finish a download, force-stop the app, reopen: it is still listed. A download
    that was running comes back paused.
 
-13. **Engine updates:** Downloads › ⋮ › Diagnostics shows the yt-dlp, yt-dlp-ejs and gallery-dl in
+13. **Engine updates:** Home › Settings › Diagnostics shows the yt-dlp, yt-dlp-ejs and gallery-dl in
    use and when PyPI was last asked. When a newer yt-dlp is out, it is fetched within a day of opening
    the app and shows as waiting; force-stop and reopen, look a video up, and Diagnostics shows it in
    use. Turning *Keep it up to date* off goes back to the app's copy from the next start.

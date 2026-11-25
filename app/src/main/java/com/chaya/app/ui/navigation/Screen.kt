@@ -7,6 +7,7 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -24,6 +25,7 @@ sealed class Screen(
     data object History : Screen("history", "History", Icons.Default.History)
     data object Bookmarks : Screen("bookmarks", "Bookmarks", Icons.Default.Star)
     data object AiModel : Screen("ai-model", "AI model", Icons.Default.AutoAwesome)
+    data object Settings : Screen("settings", "Settings", Icons.Default.Tune)
 
     companion object {
         const val PLAYER_ARGS = "taskId"

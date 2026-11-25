@@ -1,5 +1,8 @@
 package com.chaya.app.home
 
+import androidx.compose.material.icons.filled.Tune
+import com.chaya.app.ui.components.HeaderButton
+import com.chaya.app.ui.components.ScreenHeader
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -16,7 +19,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -88,6 +90,8 @@ import kotlinx.coroutines.launch
 fun HomeScreen(
     onPlace: (Place) -> Unit,
     onPlay: (Long) -> Unit,
+    /** Chaya's settings, from the header's circle: Home is where they are. */
+    onOpenSettings: () -> Unit = {},
     viewModel: DownloadsViewModel = viewModel(),
 ) {
     val tasks by viewModel.downloads.collectAsState()
@@ -116,9 +120,10 @@ fun HomeScreen(
                     files = viewModel.files,
                     onPlay = { open(hero) },
                     onShare = { viewModel.share(listOf(hero)) { message(it) } },
+                    onOpenSettings = onOpenSettings,
                 )
             } else {
-                Welcome()
+                Welcome(onOpenSettings)
             }
             if (shelf.recent.isNotEmpty()) {
                 Recent(
@@ -159,6 +164,7 @@ private fun Hero(
     files: LibraryFiles,
     onPlay: () -> Unit,
     onShare: () -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     val ground = MaterialTheme.colorScheme.background
     // A frame as wide as the screen: a tile's small one, stretched across 500dp, was a blur
@@ -188,7 +194,7 @@ private fun Hero(
                 ),
             ),
         )
-        TopRow()
+        TopRow(onOpenSettings)
         Column(
             modifier = Modifier.align(Alignment.BottomStart).padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -244,9 +250,9 @@ private fun Hero(
 
 /** With nothing saved yet: what Chaya is for, and the way to start, which is the bar's + (one way, not two). */
 @Composable
-private fun Welcome() {
+private fun Welcome(onOpenSettings: () -> Unit) {
     Box(modifier = Modifier.fillMaxWidth().height(420.dp)) {
-        TopRow()
+        TopRow(onOpenSettings)
         Column(
             modifier = Modifier.align(Alignment.BottomStart).padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -266,21 +272,20 @@ private fun Welcome() {
     }
 }
 
-/** Chaya's mark and name. How far the downloads are is the bar's Library slot's, on every screen. */
+/**
+ * The header every screen has, Home's with Chaya's mark before the name and Settings as its one action. How far the
+ * downloads are is the bar's Library slot's, on every screen.
+ */
 @Composable
-private fun TopRow() {
-    Row(
-        modifier = Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 20.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+private fun TopRow(onOpenSettings: () -> Unit) {
+    ScreenHeader(
+        title = "Chaya",
+        leading = {
+            // The two suns at rest (res/drawable/chaya_mark.xml, written from the mark's constants); the name says it
+            Image(painter = painterResource(R.drawable.chaya_mark), contentDescription = null, modifier = Modifier.size(32.dp))
+        },
     ) {
-        // The two suns at rest (res/drawable/chaya_mark.xml, written from the mark's constants); the name says it
-        Image(painter = painterResource(R.drawable.chaya_mark), contentDescription = null, modifier = Modifier.size(32.dp))
-        Text(
-            text = "Chaya",
-            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-            color = MaterialTheme.colorScheme.onBackground,
-        )
+        HeaderButton(Icons.Default.Tune, "Settings", onClick = onOpenSettings)
     }
 }
 

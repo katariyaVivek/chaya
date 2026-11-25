@@ -160,11 +160,13 @@ class DownloadsLibraryTest {
     }
 
     @Test
-    fun `the menu offers to add a video of the person's own`() {
+    fun `the header offers to add a video of the person's own, and has no Back, the Library being a place`() {
         show(menu = DownloadsMenu(onAddVideo = { events += "add a video" }))
 
-        composeRule.onNodeWithContentDescription("More").performClick()
-        composeRule.onNodeWithText("Add a video").performClick()
+        composeRule.onNodeWithText("Library").assertExists()
+        composeRule.onNodeWithContentDescription("Back").assertDoesNotExist()
+        composeRule.onNodeWithContentDescription("More").assertDoesNotExist()
+        composeRule.onNodeWithContentDescription("Add a video").performClick()
 
         assertEquals(listOf("add a video"), events)
     }
