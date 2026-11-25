@@ -350,8 +350,9 @@ Share. Reached from the Downloads screen's menu.
   value) for `PageMenu`, and pulling the page down at its top reloads it (`PullGesture`, fed only once WebView over-scrolls at the top, so a list scrolled inside the
   page scrolls first). All of it goes through `RetainedWebViewCallbacks` to the screen shown.
 - `BrowserChrome` is the address bar, which collapses to the site name on a
-  page, with the ad blocker's shield and count. The floating pill and the sheets (`ui/components/`)
-  sit on top.
+  page, with the ad blocker's shield and count. Under the page is Chaya's bar (`home/ChayaBar`), whose ink circle
+  `PageFind` sets: Save for what the page has (a site's video, an account's posts, what it plays), else a new
+  tab. The sheets (`ui/components/`) sit on top.
 - `downloads/`: the list (cards per state, All/Active/Done filters, swipe to delete with Undo, Share
   in a finished file's ⋮) or the grid, switched from the top bar and remembered. `DownloadsContent`
   is the screen without its view model, so tests drive it directly.

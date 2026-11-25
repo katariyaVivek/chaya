@@ -91,8 +91,11 @@ import com.chaya.app.download.DownloadTask
 import androidx.compose.ui.text.font.FontWeight
 import com.chaya.app.home.goTyped
 import com.chaya.app.home.TypeSheet
-import com.chaya.app.home.PlacesBar
-import com.chaya.app.home.PlacesBarClearance
+import com.chaya.app.home.BarAction
+import com.chaya.app.home.BarMiddle
+import com.chaya.app.home.ChayaBar
+import com.chaya.app.home.ChayaBarClearance
+import com.chaya.app.home.HomeShelf
 import com.chaya.app.home.Place
 import com.chaya.app.ui.theme.ChayaMotion
 import com.chaya.app.ui.theme.LocalChayaColors
@@ -471,11 +474,11 @@ internal fun DownloadsContent(
                     )
                 }
             },
-            // Above the places bar floating at the foot, which would cover it ("Deleted …" could not be read)
+            // Above Chaya's bar floating at the foot, which would cover it ("Deleted …" could not be read)
             snackbarHost = {
                 SnackbarHost(
                     snackbarHostState,
-                    modifier = if (onPlace != null && !choosing) Modifier.padding(bottom = PlacesBarClearance) else Modifier,
+                    modifier = if (onPlace != null && !choosing) Modifier.padding(bottom = ChayaBarClearance) else Modifier,
                 )
             },
             containerColor = MaterialTheme.colorScheme.background
@@ -518,7 +521,7 @@ internal fun DownloadsContent(
                     )
                     else -> LazyColumn(
                         modifier = Modifier.weight(1f),
-                        // Room at the foot for the places bar, when it is there
+                        // Room at the foot for Chaya's bar, when it is there
                         contentPadding = PaddingValues(top = 4.dp, bottom = if (onPlace != null) 120.dp else 24.dp)
                     ) {
                         sections.forEach { section ->
@@ -607,10 +610,13 @@ internal fun DownloadsContent(
         }
 
         if (onPlace != null && !choosing) {
-            PlacesBar(
-                current = Place.LIBRARY,
+            ChayaBar(
+                place = Place.LIBRARY,
+                middle = BarMiddle.Browse,
+                action = BarAction.Go,
+                progress = remember(tasks) { HomeShelf.progressOf(tasks) },
                 onPlace = onPlace,
-                onType = { typing = true },
+                onAction = { typing = true },
                 modifier = Modifier.align(Alignment.BottomCenter),
             )
         }
@@ -715,11 +721,11 @@ private fun EmptyDownloads(
     narrowed: Boolean = false,
 ) {
     val (title, body) = when {
-        !hasAnyDownloads -> "Nothing saved yet" to "Open a page with a video and tap the download pill."
+        !hasAnyDownloads -> "Nothing saved yet" to "Open a page with a video and tap Save at the foot of the screen."
         narrowed -> "Nothing matches" to "Try another kind, site or title."
         filter == DownloadFilter.ACTIVE -> "All caught up" to "Nothing is running, waiting or needs attention."
         filter == DownloadFilter.DONE -> "Nothing finished yet" to "Finished downloads show up here."
-        else -> "Nothing saved yet" to "Open a page with a video and tap the download pill."
+        else -> "Nothing saved yet" to "Open a page with a video and tap Save at the foot of the screen."
     }
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         StaggeredAppear(index = 0) {

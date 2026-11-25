@@ -13,14 +13,9 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
-import com.chaya.app.detection.MediaSheetModel
-import com.chaya.app.detection.RankedMedia
 import com.chaya.app.download.DownloadState
 import com.chaya.app.download.DownloadTask
 import com.chaya.app.history.Suggestion
-import com.chaya.app.model.DetectedMedia
-import com.chaya.app.model.DetectionSource
-import com.chaya.app.model.MediaKind
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -29,9 +24,8 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * Exercises the browser chrome with real Compose semantics: the floating
- * download pill, the address bar's field and site-name modes, and the start
- * screen. Robolectric hosts the composition so these run with no emulator.
+ * Exercises the browser chrome with real Compose semantics: the address bar's
+ * field and site-name modes, and the start screen. Robolectric hosts the composition so these run with no emulator.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
@@ -39,55 +33,6 @@ class BrowserChromeTest {
 
     @get:Rule
     val composeRule = createComposeRule()
-
-    private fun ranked(title: String, kind: MediaKind = MediaKind.STREAM) = RankedMedia(
-        media = DetectedMedia(
-            url = "https://cdn.example/main.m3u8",
-            pageUrl = "https://site.example/watch",
-            mimeType = "application/vnd.apple.mpegurl",
-            source = DetectionSource.NETWORK,
-        ),
-        kind = kind,
-        title = title,
-        subtitle = "10:35 · Stream",
-        thumbnailUrl = null,
-        durationSeconds = 635.0,
-        videoHeight = null,
-        isLikelyAd = false,
-        score = 0,
-    )
-
-    // ---- floating pill ---- //
-
-    @Test
-    fun `pill names the main video and opens the sheet when tapped`() {
-        var opened = 0
-        composeRule.setContent {
-            MediaPill(
-                model = MediaSheetModel(ranked("Big Buck Bunny"), emptyList(), emptyList(), 0),
-                onClick = { opened++ },
-            )
-        }
-
-        composeRule.onNodeWithText("Big Buck Bunny").assertIsDisplayed()
-        composeRule.onNodeWithText("10:35 · Stream").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("Detected media, Big Buck Bunny").performClick()
-
-        assertEquals(1, opened)
-    }
-
-    @Test
-    fun `pill counts the items when there is no main video`() {
-        composeRule.setContent {
-            MediaPill(
-                model = MediaSheetModel(null, listOf(ranked("A"), ranked("B")), emptyList(), 0),
-                onClick = {},
-            )
-        }
-
-        composeRule.onNodeWithText("2 items found").assertIsDisplayed()
-        composeRule.onNodeWithText("Tap to review").assertIsDisplayed()
-    }
 
     // ---- address bar ---- //
 
