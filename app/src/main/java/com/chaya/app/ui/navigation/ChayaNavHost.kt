@@ -25,6 +25,7 @@ import com.chaya.app.history.PagesToOpen
 import com.chaya.app.home.HomeScreen
 import com.chaya.app.home.Place
 import com.chaya.app.home.PlaceStep
+import com.chaya.app.settings.SettingsScreen
 import com.chaya.app.ui.player.PlayerScreen
 import com.chaya.app.ui.theme.ChayaMotion
 
@@ -83,6 +84,7 @@ fun ChayaNavHost(navController: NavHostController) {
             HomeScreen(
                 onPlace = ::go,
                 onPlay = { taskId -> navController.navigate(Screen.playerRoute(taskId)) },
+                onOpenSettings = { navController.navigate(Screen.Settings.route) { launchSingleTop = true } },
             )
         }
         composable(Screen.Browser.route) {
@@ -94,23 +96,23 @@ fun ChayaNavHost(navController: NavHostController) {
             )
         }
         composable(Screen.Downloads.route) {
-            val themeSettings = (LocalContext.current.applicationContext as ChayaApplication).themeSettings
-            val themeMode by themeSettings.mode.collectAsState()
             DownloadsScreen(
-                onNavigateBack = { navController.popBackStack() },
                 onPlay = { taskId ->
                     navController.navigate(Screen.playerRoute(taskId))
                 },
                 onPlayAt = { taskId, atMs -> navController.navigate(Screen.playerRoute(taskId, atMs)) },
-                onNavigateToDiagnostics = {
-                    navController.navigate(Screen.Diagnostics.route)
-                },
-                onNavigateToHistory = { navController.navigate(Screen.History.route) },
-                onNavigateToBookmarks = { navController.navigate(Screen.Bookmarks.route) },
-                onNavigateToAiModel = { navController.navigate(Screen.AiModel.route) },
+                onPlace = ::go,
+            )
+        }
+        composable(Screen.Settings.route) {
+            val themeSettings = (LocalContext.current.applicationContext as ChayaApplication).themeSettings
+            val themeMode by themeSettings.mode.collectAsState()
+            SettingsScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onOpenAiModel = { navController.navigate(Screen.AiModel.route) },
+                onOpenDiagnostics = { navController.navigate(Screen.Diagnostics.route) },
                 themeMode = themeMode,
                 onThemeModeChange = themeSettings::set,
-                onPlace = ::go,
             )
         }
         composable(

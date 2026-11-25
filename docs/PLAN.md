@@ -60,7 +60,7 @@ lines under their videos' names, the words in bold, and a tap on a line plays th
 
 ### 3. Your own videos ☑
 
-**The person gets:** Library › ⋮ › *Add a video* opens the phone's picker for a video or sound; it is listed where it
+**The person gets:** The Library header's *Add a video* opens the phone's picker for a video or sound; it is listed where it
 is (not copied), with a frame of it as its tile, and plays in Chaya ("On this phone" under its name), with everything
 the later steps add. Deleting it only takes it out of Chaya.
 
@@ -83,7 +83,7 @@ changed, with *Undo*.
 
 ### 5. Your own AI model ☑
 
-**The person gets:** Library › ⋮ › *AI model*: a service from a list (OpenAI, Anthropic, Gemini, DeepSeek,
+**The person gets:** Home › Settings › *AI model*: a service from a list (OpenAI, Anthropic, Gemini, DeepSeek,
 OpenRouter, Mistral, Groq, xAI, any OpenAI-compatible address) or Ollama or LM Studio on a PC in the home (at the PC's
 address), with its key, *List models* and *Test* ("llama-3.3-70b answered in 0.8 s").
 

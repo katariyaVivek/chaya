@@ -229,7 +229,7 @@ faster than APKs ship, so the app fetches newer releases itself.
   when its size or time changed. The Library's search box asks it as the typing pauses (`DownloadsViewModel.searchLines`)
   for the videos the kind and site chips leave in view; `SaidRow` says how often the words are said and `SaidSheet`
   lists the lines, a tap playing from that time (`Screen.playerRoute(id, atMs)`).
-- **The person's own videos** (`download/OwnVideo.kt`): Library › ⋮ › *Add a video* opens the phone's picker
+- **The person's own videos** (`download/OwnVideo.kt`): The Library header's *Add a video* opens the phone's picker
   (`OpenDocument`); `DownloadsViewModel.addOwnVideo` keeps the read permission and `DownloadManager.addOwnVideo` lists
   the file as a finished download whose address is `chaya-own:` plus the document's (`isOwn`, `ownUri`), playing
   through `exportedUri`. `deleteTask` only takes it out of Chaya and releases the permission; `CachedLibraryFiles`
@@ -344,8 +344,11 @@ Share. Reached from the Downloads screen's menu.
   new WebView and its page again, unless it stopped within the last ten seconds
   (`RendererLoss`); then it waits for Reload. Other live tabs become discarded and load again when
   shown.
-- `ui/components/TabGrid` is the full-screen tab switcher: a new-tab square, the tab count, ⋮ (*Close
-  all tabs*), search by title and address, and two columns of cards; swiping or × closes with Undo.
+- `ui/components/TabGrid` is the full-screen tab switcher: the header (*3 tabs*, ⋮ for *Close all tabs*),
+  search by title and address, two columns of cards (swiping or × closes with Undo), and Chaya's bar with Tabs
+  lit, whose + is New tab.
+- `ui/components/ScreenHeader` is the header every screen has, its actions `HeaderButton` circles; `settings/` is
+  the Settings screen it leads to from Home (Appearance, AI model, Speech models, Diagnostics).
 - `ChayaWebView` is every tab's WebView: a long press on a link or picture reads its hit test into `PressedOn` (one
   value) for `PageMenu`, *Web search* is added to WebView's bar for chosen words when WebView leaves it out (no app on
   the phone takes web searches; `MainActivity` turns either search into a new tab), and pulling the page down at its top reloads it (`PullGesture`, fed only once WebView over-scrolls at the top, so a list scrolled inside the
@@ -355,7 +358,7 @@ Share. Reached from the Downloads screen's menu.
   `PageFind` sets: Save for what the page has (a site's video, an account's posts, what it plays), else a new
   tab. The sheets (`ui/components/`) sit on top.
 - `downloads/`: the list (cards per state, All/Active/Done filters, swipe to delete with Undo, Share
-  in a finished file's ⋮) or the grid, switched from the top bar and remembered. `DownloadsContent`
+  in a finished file's ⋮) or the grid, switched from the header and remembered. `DownloadsContent`
   is the screen without its view model, so tests drive it directly.
 - `library/`: the grid of finished downloads. `libraryItems` puts a post's files (same `groupKey`)
   on one tile, and `LibraryFilter` narrows by kind, site and title in both the list and the grid.

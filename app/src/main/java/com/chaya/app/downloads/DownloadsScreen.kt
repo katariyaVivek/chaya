@@ -1,5 +1,8 @@
 package com.chaya.app.downloads
 
+import androidx.compose.material.icons.filled.LibraryAdd
+import com.chaya.app.ui.components.HeaderButton
+import com.chaya.app.ui.components.ScreenHeader
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
@@ -29,7 +32,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 // OpenInNew is directional — the plain Filled variant is deprecated in favor
 // of the AutoMirrored one so LTR/RTL layouts mirror the glyph correctly.
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
@@ -88,7 +90,6 @@ import coil3.compose.AsyncImage
 import com.chaya.app.download.DownloadNotification.formatFileSize
 import com.chaya.app.download.DownloadState
 import com.chaya.app.download.DownloadTask
-import androidx.compose.ui.text.font.FontWeight
 import com.chaya.app.history.PagesToOpen
 import com.chaya.app.home.BarAction
 import com.chaya.app.home.BarMiddle
@@ -98,15 +99,10 @@ import com.chaya.app.home.HomeShelf
 import com.chaya.app.home.Place
 import com.chaya.app.ui.theme.ChayaMotion
 import com.chaya.app.ui.theme.LocalChayaColors
-import com.chaya.app.ui.components.AppearanceDialog
 import com.chaya.app.ui.theme.StaggeredAppear
-import com.chaya.app.ui.theme.ThemeMode
 import com.chaya.app.ui.theme.pressScale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import androidx.compose.ui.platform.LocalContext
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.Dispatchers
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -137,17 +133,10 @@ import java.io.File
 
 @Composable
 fun DownloadsScreen(
-    onNavigateBack: () -> Unit,
     /** A saved video, or a stream, plays in Chaya's player. */
     onPlay: (Long) -> Unit,
     /** A saved video plays in Chaya's player from a time (milliseconds). */
     onPlayAt: (Long, Long) -> Unit = { id, _ -> onPlay(id) },
-    onNavigateToDiagnostics: () -> Unit = {},
-    onNavigateToHistory: () -> Unit = {},
-    onNavigateToBookmarks: () -> Unit = {},
-    onNavigateToAiModel: () -> Unit = {},
-    themeMode: ThemeMode = ThemeMode.SYSTEM,
-    onThemeModeChange: (ThemeMode) -> Unit = {},
     /** Chaya's places, at the Library's foot (Stage); none where the Library is shown on its own (tests). */
     onPlace: ((Place) -> Unit)? = null,
     viewModel: DownloadsViewModel = viewModel()
@@ -155,8 +144,6 @@ fun DownloadsScreen(
     val tasks by viewModel.downloads.collectAsState()
     val hidden by viewModel.pendingDeletes.collectAsState()
     val grid by viewModel.grid.collectAsState()
-    var appearanceOpen by remember { mutableStateOf(false) }
-    var speechModelsOpen by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
@@ -188,30 +175,6 @@ fun DownloadsScreen(
         if (uri != null) viewModel.addOwnVideo(uri, ::message)
     }
 
-    if (speechModelsOpen) {
-        val app = LocalContext.current.applicationContext as com.chaya.app.ChayaApplication
-        var fetched by remember { mutableStateOf(com.chaya.app.speech.SpeechModel.entries.filter(app.speechModels::isFetched)) }
-        com.chaya.app.ui.player.SpeechModelsDialog(
-            fetched = fetched,
-            onDelete = { model ->
-                scope.launch {
-                    withContext(Dispatchers.IO) { app.speechModels.delete(model) }
-                    fetched = fetched - model
-                    message("Deleted the ${model.label} model (${model.megabytes})")
-                }
-            },
-            onDismiss = { speechModelsOpen = false },
-        )
-    }
-
-    if (appearanceOpen) {
-        AppearanceDialog(
-            current = themeMode,
-            onSelect = onThemeModeChange,
-            onDismiss = { appearanceOpen = false },
-        )
-    }
-
     DownloadsContent(
         onPlace = onPlace,
         tasks = shown,
@@ -235,14 +198,7 @@ fun DownloadsScreen(
             saveFile = { file, name, mime -> viewModel.saveFile(file, name, mime, ::message) },
         ),
         menu = DownloadsMenu(
-            onNavigateBack = onNavigateBack,
             onAddVideo = { runCatching { pickVideo.launch(arrayOf("video/*", "audio/*")) }.onFailure { message("No app on this phone can pick a file") } },
-            onBookmarks = onNavigateToBookmarks,
-            onHistory = onNavigateToHistory,
-            onAppearance = { appearanceOpen = true },
-            onAiModel = onNavigateToAiModel,
-            onSpeechModels = { speechModelsOpen = true },
-            onDiagnostics = onNavigateToDiagnostics,
         ),
     )
 }
@@ -271,19 +227,13 @@ internal class DownloadActions(
 /** How long typing must pause before what is said in the saved videos is searched. */
 private const val SEARCH_PAUSE_MS = 150L
 
-/** Where the top bar leads. */
+/**
+ * What the header's own actions lead to beyond the Library itself. Settings (how Chaya looks, the AI and speech
+ * models, Diagnostics) are Home's; Bookmarks and History are the browser's.
+ */
 internal class DownloadsMenu(
-    val onNavigateBack: () -> Unit = {},
     /** Opens the phone's picker to add a video of the person's own. */
     val onAddVideo: () -> Unit = {},
-    val onBookmarks: () -> Unit = {},
-    val onHistory: () -> Unit = {},
-    val onAppearance: () -> Unit = {},
-    /** Settings › AI model: the person's own model, for translation and highlights. */
-    val onAiModel: () -> Unit = {},
-    /** The speech models fetched for Make subtitles, to delete one and free its room. */
-    val onSpeechModels: () -> Unit = {},
-    val onDiagnostics: () -> Unit = {},
 )
 
 /** Pictures being looked at in the viewer, and which one first. */
@@ -317,7 +267,6 @@ internal fun DownloadsContent(
     var site by rememberSaveable { mutableStateOf<SourceSite?>(null) }
     var query by rememberSaveable { mutableStateOf("") }
     var searching by rememberSaveable { mutableStateOf(false) }
-    var menuOpen by remember { mutableStateOf(false) }
     var chosen by remember { mutableStateOf(emptySet<String>()) }
     var viewing by remember { mutableStateOf<Viewing?>(null) }
     var zipTaskId by rememberSaveable { mutableStateOf<Long?>(null) }
@@ -408,68 +357,33 @@ internal fun DownloadsContent(
                         colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
                     )
                 } else {
-                    TopAppBar(
-                        // Stage: the Library, and what it holds
-                        title = {
-                            Column {
-                                Text(
-                                    "Library",
-                                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-                                )
-                                Text(
-                                    "${librarySummary(tasks)} · everything stays on this phone",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                        },
-                        navigationIcon = {
-                            IconButton(onClick = menu.onNavigateBack) {
-                                Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                            }
-                        },
-                        actions = {
-                            IconButton(onClick = {
-                                searching = !searching
-                                if (!searching) query = ""
-                            }) {
-                                Icon(Icons.Default.Search, contentDescription = if (searching) "Close search" else "Search downloads")
-                            }
-                            IconButton(onClick = { onGridChange(!grid) }) {
-                                Icon(
-                                    imageVector = if (grid) Icons.AutoMirrored.Filled.ViewList else Icons.Default.GridView,
-                                    contentDescription = if (grid) "Show as list" else "Show as grid"
-                                )
-                            }
-                            Box {
-                                IconButton(onClick = { menuOpen = true }) {
-                                    Icon(imageVector = Icons.Default.MoreVert, contentDescription = "More")
-                                }
-                                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                                    listOf(
-                                        "Add a video" to menu.onAddVideo,
-                                        "Bookmarks" to menu.onBookmarks,
-                                        "History" to menu.onHistory,
-                                        "Appearance" to menu.onAppearance,
-                                        "AI model" to menu.onAiModel,
-                                        "Speech models" to menu.onSpeechModels,
-                                        "Diagnostics" to menu.onDiagnostics,
-                                    ).forEach { (label, action) ->
-                                        DropdownMenuItem(
-                                            text = { Text(label) },
-                                            onClick = {
-                                                menuOpen = false
-                                                action()
-                                            }
-                                        )
-                                    }
-                                }
-                            }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
-                    )
+                    // The header every screen has. The Library is a place, so no Back: the bar leads elsewhere.
+                    Column {
+                        ScreenHeader("Library") {
+                            HeaderButton(
+                                Icons.Default.Search,
+                                if (searching) "Close search" else "Search downloads",
+                                onClick = {
+                                    searching = !searching
+                                    if (!searching) query = ""
+                                },
+                            )
+                            HeaderButton(
+                                if (grid) Icons.AutoMirrored.Filled.ViewList else Icons.Default.GridView,
+                                if (grid) "Show as list" else "Show as grid",
+                                onClick = { onGridChange(!grid) },
+                            )
+                            HeaderButton(Icons.Default.LibraryAdd, "Add a video", onClick = menu.onAddVideo)
+                        }
+                        Text(
+                            "${librarySummary(tasks)} · everything stays on this phone",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 4.dp),
+                        )
+                    }
                 }
             },
             // Above Chaya's bar floating at the foot, which would cover it ("Deleted …" could not be read)
