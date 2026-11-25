@@ -1,15 +1,18 @@
-//! Clips saved as videos or SRT files (`chaya-core`'s `export`), from the player's Export: one job a clip (a clip and a
-//! language, for SRT), done one at a time, the rest waiting their turn. The window hears how each goes as `export`
-//! events, and can stop one, try a failed one again, or show the file in its folder. Files are saved next to the
-//! video, as "Video title - Clip name.mp4".
+//! Clips saved as videos or SRT files (`chaya-core`'s `export`), or as one editor project (`chaya-core`'s `fcpxml`),
+//! from the player's Export: one job a clip (a clip and a language, for SRT; all the clips together, for a project),
+//! done one at a time, the rest waiting their turn. The window hears how each goes as `export` events, and can stop
+//! one, try a failed one again, or show the file in its folder. Files are saved next to the video, as
+//! "Video title - Clip name.mp4".
 
 use std::collections::{BTreeMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
+use chaya_core::clips::Clip;
 use chaya_core::download::manager::State as TaskState;
 use chaya_core::export::{self, Burn, Encoder, ExportError, Job, Language, Look, Quality, Style};
-use chaya_core::subtitles;
+use chaya_core::fcpxml;
+use chaya_core::subtitles::{self, Track};
 use chaya_core::video::Videos;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -49,6 +52,8 @@ pub enum SaveAs {
     Video,
     Gif,
     Srt,
+    /// One FCPXML file for Final Cut Pro and DaVinci Resolve, the clips cut from the video as it is.
+    Fcpxml,
 }
 
 /// A language's subtitles, named by its code ("" for a file that names none), and its style.
@@ -77,8 +82,9 @@ pub struct ExportView {
     pub message: Option<String>,
 }
 
-/// A job: what was asked for, and how it is going.
+/// A job: what was asked for (the clips it is of: one, or all of a project's), and how it is going.
 struct Entry {
+    clips: Vec<u32>,
     options: Options,
     view: ExportView,
 }
@@ -115,8 +121,8 @@ impl Exporting {
         let _ = app.emit("export", view);
     }
 
-    /// Queues a job for clip `clip` (named `name`) of download `id`; its number.
-    fn queue(&self, app: &AppHandle, id: u64, clip: u32, name: &str, options: Options) -> u64 {
+    /// Queues a job for clips `clips` (the first of them named `name`, for the window) of download `id`; its number.
+    fn queue(&self, app: &AppHandle, id: u64, clips: Vec<u32>, name: &str, options: Options) -> u64 {
         let view = {
             let mut jobs = lock(&self.jobs);
             jobs.next += 1;
@@ -124,7 +130,7 @@ impl Exporting {
             let view = ExportView {
                 job,
                 id,
-                clip,
+                clip: clips.first().copied().unwrap_or_default(),
                 name: name.to_string(),
                 save_as: options.save_as,
                 state: "waiting",
@@ -133,7 +139,7 @@ impl Exporting {
                 encoder: None,
                 message: None,
             };
-            jobs.all.insert(job, Entry { options, view: view.clone() });
+            jobs.all.insert(job, Entry { clips, options, view: view.clone() });
             jobs.waiting.push_back(job);
             view
         };
@@ -179,16 +185,18 @@ impl Exporting {
         job: u64,
         stop: &watch::Receiver<bool>,
     ) -> Result<(PathBuf, Option<Encoder>), ExportError> {
-        let (id, clip, options) = {
+        let (id, wanted, options) = {
             let jobs = lock(&self.jobs);
             let entry = jobs.all.get(&job).ok_or(ExportError::Stopped)?;
-            (entry.view.id, entry.view.clip, entry.options.clone())
+            (entry.view.id, entry.clips.clone(), entry.options.clone())
         };
         let failed = |message: &str| ExportError::Failed(message.to_string());
         let task = app.state::<Downloads>().manager.get(id).filter(|t| t.state == TaskState::Completed);
         let task = task.ok_or_else(|| failed("This video isn't saved any more."))?;
-        let clip = app.state::<Videos>().load(id).clips.into_iter().find(|c| c.id == clip);
-        let clip = clip.ok_or_else(|| failed("This clip isn't there any more."))?;
+        // The clips still there, in the video's order.
+        let clips: Vec<Clip> =
+            app.state::<Videos>().load(id).clips.into_iter().filter(|c| wanted.contains(&c.id)).collect();
+        let clip = clips.first().cloned().ok_or_else(|| failed("This clip isn't there any more."))?;
         let folder = task.path.parent().map(PathBuf::from).ok_or(ExportError::CantWrite)?;
         let tracks = subtitles::tracks_for(&task.path);
         let track = |chosen: &Chosen| {
@@ -199,6 +207,20 @@ impl Exporting {
                 .ok_or_else(|| failed("Those subtitles aren't next to the video any more."))
         };
 
+        if options.save_as == SaveAs::Fcpxml {
+            // The project names frames, so it needs the picture's rate, which ffmpeg reads.
+            let ffmpeg = app.state::<Ffmpeg>().0.clone().ok_or(ExportError::NoProgram)?;
+            let probe = export::probe(&ffmpeg, &task.path).await?;
+            let first = options.subtitles.first().map(track).transpose()?;
+            let second = options.subtitles.get(1).map(track).transpose()?;
+            let titles = burn(&options, first, second);
+            let name = if clips.len() == 1 { clip.name.as_str() } else { "Clips" };
+            let path = export::file_for(&folder, &task.title, name, "fcpxml");
+            let source = fcpxml::Source { title: &task.title, path: &task.path, probe };
+            std::fs::write(&path, fcpxml::document(&source, &clips, titles.as_ref()))
+                .map_err(|_| ExportError::CantWrite)?;
+            return Ok((path, None));
+        }
         if options.save_as == SaveAs::Srt && options.together && options.subtitles.len() == 2 {
             let (one, two) = (track(&options.subtitles[0])?, track(&options.subtitles[1])?);
             let both = format!(
@@ -234,12 +256,7 @@ impl Exporting {
         };
         let first = options.subtitles.first().map(track).transpose()?;
         let second = options.subtitles.get(1).map(track).transpose()?;
-        let burn = first.map(|first| Burn {
-            look: options.look,
-            first: Language { lines: &first.lines, style: options.subtitles[0].style },
-            second: second.map(|second| Language { lines: &second.lines, style: options.subtitles[1].style }),
-            second_on_top: options.second_on_top,
-        });
+        let burn = burn(&options, first, second);
         let gif = options.save_as == SaveAs::Gif;
         let out = export::file_for(&folder, &task.title, &clip.name, if gif { "gif" } else { "mp4" });
         let work = app.path().app_cache_dir().map_err(|_| ExportError::CantWrite)?.join("export").join(job.to_string());
@@ -269,6 +286,17 @@ impl Exporting {
         }
         Ok((out, Some(encoder)))
     }
+}
+
+/// The subtitles drawn on a clip (or put over it as titles): `first`'s, and `second`'s with them, in the styles chosen.
+fn burn<'a>(options: &Options, first: Option<&'a Track>, second: Option<&'a Track>) -> Option<Burn<'a>> {
+    let style = |i: usize| options.subtitles.get(i).map(|c| c.style).unwrap_or_default();
+    first.map(|first| Burn {
+        look: options.look,
+        first: Language { lines: &first.lines, style: style(0) },
+        second: second.map(|second| Language { lines: &second.lines, style: style(1) }),
+        second_on_top: options.second_on_top,
+    })
 }
 
 /// A language's code for a file's name ("en"), or "subtitles" for a file that names none.
@@ -310,19 +338,32 @@ pub fn export_clips(
     }
     let kept = videos.load(id).clips;
     let mut jobs = Vec::new();
+    if options.save_as == SaveAs::Fcpxml {
+        // One project holds every clip chosen, in the video's order.
+        let found: Vec<&Clip> = kept.iter().filter(|c| clips.contains(&c.id)).collect();
+        if let Some(first) = found.first() {
+            let name = if found.len() == 1 { first.name.clone() } else { format!("{} clips", found.len()) };
+            jobs.push(exporting.queue(&app, id, found.iter().map(|c| c.id).collect(), &name, options.clone()));
+        }
+        return if jobs.is_empty() { Err("Those clips aren't there any more.".into()) } else { Ok(jobs) };
+    }
     for clip in clips {
         let Some(found) = kept.iter().find(|c| c.id == clip) else { continue };
         match options.save_as {
-            SaveAs::Video | SaveAs::Gif => jobs.push(exporting.queue(&app, id, clip, &found.name, options.clone())),
+            SaveAs::Video | SaveAs::Gif => {
+                jobs.push(exporting.queue(&app, id, vec![clip], &found.name, options.clone()))
+            }
             SaveAs::Srt if options.together && options.subtitles.len() == 2 => {
-                jobs.push(exporting.queue(&app, id, clip, &found.name, options.clone()))
+                jobs.push(exporting.queue(&app, id, vec![clip], &found.name, options.clone()))
             }
             SaveAs::Srt => {
                 for chosen in &options.subtitles {
                     let one = Options { subtitles: vec![chosen.clone()], ..options.clone() };
-                    jobs.push(exporting.queue(&app, id, clip, &found.name, one));
+                    jobs.push(exporting.queue(&app, id, vec![clip], &found.name, one));
                 }
             }
+            // Queued above, as one job.
+            SaveAs::Fcpxml => {}
         }
     }
     if jobs.is_empty() {
@@ -350,12 +391,12 @@ pub fn stop_export(job: u64, app: AppHandle, exporting: State<'_, Exporting>) {
 /// Job `job` again, as a new job; its number.
 #[tauri::command]
 pub fn retry_export(job: u64, app: AppHandle, exporting: State<'_, Exporting>) -> Result<u64, String> {
-    let (id, clip, name, options) = {
+    let (id, clips, name, options) = {
         let jobs = lock(&exporting.jobs);
         let entry = jobs.all.get(&job).ok_or("That export is gone.")?;
-        (entry.view.id, entry.view.clip, entry.view.name.clone(), entry.options.clone())
+        (entry.view.id, entry.clips.clone(), entry.view.name.clone(), entry.options.clone())
     };
-    Ok(exporting.queue(&app, id, clip, &name, options))
+    Ok(exporting.queue(&app, id, clips, &name, options))
 }
 
 /// Shows job `job`'s file in its folder.
@@ -395,6 +436,11 @@ mod tests {
         .unwrap();
         assert_eq!((gif.save_as, gif.fit, gif.even_loudness, gif.together), (SaveAs::Gif, Some(10), true, true));
         assert_eq!(options.fit, None, "no size to fit unless chosen");
+        let project: Options = serde_json::from_str(
+            r#"{"saveAs": "fcpxml", "quality": "p1080", "look": "outline", "subtitles": [{"language": "en"}]}"#,
+        )
+        .unwrap();
+        assert_eq!((project.save_as, project.subtitles.len()), (SaveAs::Fcpxml, 1));
     }
 
     #[test]

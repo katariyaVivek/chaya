@@ -4653,8 +4653,8 @@ playerVideo.addEventListener('loadedmetadata', () => {
 // ── Export ──────────────────────────────────────────────────────────────────────────────────
 //
 // The Clips tab's Export (Ctrl+E): the clip chosen, or all of them, saved next to the video as videos with their
-// subtitles burned in (one language or two, in the look chosen, at the quality chosen), or as SRT files timed from
-// 0:00 for each clip. The app does the work, a job at a time (`export_clips`), and tells of each change with an
+// subtitles burned in (one language or two, in the look chosen, at the quality chosen), as SRT files timed from
+// 0:00 for each clip, or as one editor project for Final Cut Pro or DaVinci Resolve with the subtitles as titles. The app does the work, a job at a time (`export_clips`), and tells of each change with an
 // `export` event. The jobs still going are listed under the clips; when one ends, a notice says so, whatever is shown.
 // The rules are in `export.js`.
 
@@ -4763,8 +4763,10 @@ function showExport() {
   const ids = clipIds(choice, playing.clips, playing.cut);
   const chosen = cutClip();
   const video = choice.saveAs === 'video';
-  // A GIF has a picture, and so subtitles drawn on it and a look, but no sound, size or quality to choose.
+  // A GIF has a picture, and so subtitles drawn on it and a look, but no sound, size or quality to choose. An editor
+  // project has the subtitles as titles, which are the editor's own to style, so no look either.
   const picture = choice.saveAs !== 'srt';
+  const project = choice.saveAs === 'fcpxml';
   const length = (list) => clock(Math.round(list.reduce((sum, c) => sum + (c.end - c.start), 0) / 1000));
 
   // Clips: the one chosen on the timeline, or all of them.
@@ -4807,7 +4809,8 @@ function showExport() {
   exportRow('export-first', burned && tracks.length > 1);
   exportRow('export-second', picture && choice.subtitles === 'two' && tracks.length > 2);
   exportRow('export-top', picture && choice.subtitles === 'two');
-  exportRow('export-look', burned);
+  exportRow('export-look', burned && !project);
+  document.getElementById('export-subtitles-label').textContent = project ? 'Subtitles as titles' : 'Subtitles';
   exportRow('export-quality', video);
   exportRow('export-fit', video);
   exportRow('export-sound', video);
@@ -4861,7 +4864,7 @@ function showExport() {
   const task = tasks.get(playing.id);
   const title = task?.title || (task?.fileName ?? '').replace(/\.[^.]+$/, '');
   const first = playing.clips.find((c) => c.id === ids[0]);
-  document.getElementById('export-where').textContent = whereNote(choice, title, first?.name ?? '');
+  document.getElementById('export-where').textContent = whereNote(choice, title, first?.name ?? '', ids.length);
   exportGo.textContent = exportLabel(choice, ids.length);
   // A GIF of a clip longer than a minute is refused here, before the app would.
   const tooLong = choice.saveAs === 'gif' ? gifTooLong(playing.clips.filter((c) => ids.includes(c.id))) : null;

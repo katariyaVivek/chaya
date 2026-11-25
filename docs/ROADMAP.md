@@ -88,6 +88,10 @@ before: the mark (#114); the shell (#115: the sidebar, its places, Stage's amber
 watching* and *Recently saved* (#117); the browser with its *Found on this page* panel beside the page (#118); the player (#119); and the clip editor, the player while a clip is chosen. Each new place joins the
 sidebar in its own PR. The phone follows in its own stack.
 
+**Clips for an editor, then caption styles (Windows).** Steps 10 and 11 of [`PLAN.md`](PLAN.md), ideas from OpenFilm:
+the clips chosen as one FCPXML project for Final Cut Pro and DaVinci Resolve, cut from the video without re-encoding,
+the subtitles as titles; then word-by-word looks for burned-in subtitles made by Chaya.
+
 The six-part plan after v0.4.0 has shipped (#34 to #39); it is in
 [`history/plan-after-v0.4.md`](history/plan-after-v0.4.md). What is left:
 

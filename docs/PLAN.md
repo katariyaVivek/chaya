@@ -258,7 +258,7 @@ with every word under the names it matches, and a line opens the player there (`
 The Windows tour drops a video from `~/Videos/Chaya tour/`, plays it and removes it (the file stays as it was), and
 finds "walk" in the clip's lines and opens it at 0:25.
 
-### 10. Clips for an editor ☐
+### 10. Clips for an editor ☑
 
 **The person gets:** *Editor project* in the Export dialog: the clips they chose, cut and in order, as one FCPXML
 file for Final Cut Pro and DaVinci Resolve, to finish there (music, colour, titles) without Chaya re-encoding
@@ -283,6 +283,21 @@ idea and the shape of the file are taken, Chaya's writer is its own, since OpenF
   resolving, every time on the frame grid, the spine's length the clips' sum); 23.976, 25, 29.97, 30 and 59.94;
   paths with spaces, accents and a drive letter or a network share becoming `file:///` addresses; names and
   subtitles with `&`, `<` and quotes; the app takes `fcpxml` as a way to save and makes one job for all the clips.
+
+**Done.** `core::fcpxml` writes the file: one `format` and one `asset` (the video by its `file:///` address, its sound's
+channels and a rate FCPXML names), and a project in an event named for the video whose spine holds an `asset-clip`
+for each clip, back to back. `fcpxml::Rate` puts every time on the picture's frames, in lowest terms
+(`1001/100s`), from the rate `core::export::Probe` now reads (with the sound's rate and channels). Titles are
+connected to their clip on lane 1, offset in the clip's own time, made from the same stretches the burned-in
+subtitles use (`export::slices`), so two languages are one title; a stretch shorter than a frame is left out. The app
+makes one job for all the clips chosen (`SaveAs::Fcpxml`, the job keeping its clips for Retry), reads the frame rate
+with ffmpeg, and saves next to the video. The dialog offers *Editor project*, with *Subtitles as titles* and no look,
+quality, size or sound; its note names the file, the programs it is for, not Premiere, and that the video must stay
+where it is. Tests: the file read back with an XML parser (every reference defined, every time on the grid, the
+spine as long as its clips) at nine rates, clips past the end or shorter than a frame, no sound or no length, paths
+of each kind, markup in names and lines, titles inside their clip in two languages, and the tour's own video read by
+ffmpeg (`CHAYA_FFMPEG`); the dialog's rules with Node; the Windows tour exports all its clips as a project. Not yet
+opened in Final Cut Pro or Resolve themselves: neither runs where this was built.
 
 ### 11. Caption styles ☐
 
