@@ -24,6 +24,7 @@ import com.chaya.app.platform.ProfileMatch
 import com.chaya.app.platform.ProfileMatcher
 import com.chaya.app.platform.SignIn
 import com.chaya.app.platform.WebViewSignIn
+import com.chaya.app.platform.subtitlesToSave
 import com.chaya.app.platform.toDownloadRequest
 import com.chaya.app.streaming.ManifestHelper
 import com.chaya.app.streaming.StreamTrack
@@ -419,7 +420,7 @@ class BrowserViewModel @JvmOverloads constructor(
                 onSuccess = { tracks ->
                     if (tracks.isEmpty()) {
                         // Asking for the qualities never downloads by itself: each tap used to add another copy
-                        // of a stream that had none to read. "Download anyway" stays the person's choice.
+                        // of a stream that had none to read. "Save anyway" stays the person's choice.
                         streamError(media, IOException("No qualities could be read from this stream."))
                     } else {
                         QualityPickerState.Ready(
@@ -451,7 +452,7 @@ class BrowserViewModel @JvmOverloads constructor(
     /**
      * One tap: reads the stream's renditions and starts the best one with its audio, without the picker.
      * [onStarted] gets the chosen quality (e.g. "1080p") once the download is queued. If the manifest
-     * can't be read, the picker opens with its "Download anyway" fallback instead.
+     * can't be read, the picker opens with its "Save anyway" fallback instead.
      */
     fun downloadStreamBest(media: DetectedMedia, onStarted: (String?) -> Unit = {}) {
         val generation = _uiState.value.navigationGeneration
@@ -474,7 +475,7 @@ class BrowserViewModel @JvmOverloads constructor(
                     onStarted(chosen.maxOfOrNull { it.height }?.takeIf { it > 0 }?.let { "${it}p" })
                 },
                 onFailure = { error ->
-                    // The picker's "Download anyway" opens on the page that asked, never on one opened since.
+                    // The picker's "Save anyway" opens on the page that asked, never on one opened since.
                     val picker = BrowserSheet.Quality(streamError(media, error))
                     _uiState.update { state ->
                         if (state.navigationGeneration == generation) state.copy(sheet = picker) else state
@@ -496,7 +497,7 @@ class BrowserViewModel @JvmOverloads constructor(
         )
     }
 
-    /** Keeps the URL so the picker's "Download anyway" still works after a failed analysis. */
+    /** Keeps the URL so the picker's "Save anyway" still works after a failed analysis. */
     private fun streamError(media: DetectedMedia, error: Throwable) = QualityPickerState.Error(
         message = error.message ?: "Failed to analyze stream",
         url = media.url,
@@ -684,7 +685,8 @@ class BrowserViewModel @JvmOverloads constructor(
         if (choice.file.isDirectFile) {
             downloadManager.startDownload(choice.toDownloadRequest(found.media, pageUrl = found.match.url))
         } else {
-            downloadManager.startDownload(streamMediaFor(found, choice))
+            val subtitles = if (choice.isAudioOnly) null else found.media.subtitlesToSave(choice.file.url, choice.file.headers)
+            downloadManager.startDownload(streamMediaFor(found, choice), subtitles, found.media.chapters)
         }
         onStarted(choice.label)
     }

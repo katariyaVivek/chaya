@@ -17,6 +17,12 @@ internal data class RetainedWebViewCallbackState(
     val onAddressChanged: (String) -> Unit = {},
     /** The page asked for a link to open in a new window, on the person's tap. */
     val onOpenInNewTab: (String) -> Unit = {},
+    /** A long press on a link or a picture: its menu. */
+    val onPressed: (PressedOn) -> Unit = {},
+    /** How far the page is pulled down at its top, 0 to 1. */
+    val onPulled: (Float) -> Unit = {},
+    /** The page was pulled down far enough and let go: load it again. */
+    val onPullToRefresh: () -> Unit = {},
 )
 
 /** Rebinds retained WebView callbacks so they never retain an obsolete Compose destination. */
@@ -61,6 +67,12 @@ internal class RetainedWebViewCallbacks(initialState: RetainedWebViewCallbackSta
     fun onOpenInNewTab(url: String) {
         state.get().onOpenInNewTab(url)
     }
+
+    fun onPressed(pressed: PressedOn) = state.get().onPressed(pressed)
+
+    fun onPulled(fraction: Float) = state.get().onPulled(fraction)
+
+    fun onPullToRefresh() = state.get().onPullToRefresh()
 
     /** Delivers fullscreen entry to the screen that is currently rendering the retained WebView. */
     fun onEnterFullscreen(view: View, callback: WebChromeClient.CustomViewCallback) {

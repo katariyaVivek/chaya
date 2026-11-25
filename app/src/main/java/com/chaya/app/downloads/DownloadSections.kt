@@ -5,6 +5,7 @@ import com.chaya.app.download.DownloadNotification.formatFileSize
 import com.chaya.app.download.DownloadState
 import com.chaya.app.download.DownloadStep
 import com.chaya.app.download.DownloadTask
+import com.chaya.app.library.LibraryItem
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -61,17 +62,42 @@ fun groupDownloads(
             .forEach { task ->
                 byDay.getOrPut(Instant.ofEpochMilli(task.updatedAt).atZone(zone).toLocalDate()) { mutableListOf() } += task
             }
-        byDay.forEach { (day, items) ->
-            val title = when (day) {
-                today -> "Today"
-                today.minusDays(1) -> "Yesterday"
-                else -> day.format(dayFormat)
-            }
-            sections += DownloadSection(title, items)
-        }
+        byDay.forEach { (day, items) -> sections += DownloadSection(dayTitle(day, today, dayFormat), items) }
     }
 
     return sections
+}
+
+private fun dayTitle(day: LocalDate, today: LocalDate, format: DateTimeFormatter): String = when (day) {
+    today -> "Today"
+    today.minusDays(1) -> "Yesterday"
+    else -> day.format(format)
+}
+
+/** One day of the Library's cards (Stage): its title, as the list's ("Today", "Yesterday", "14 Nov"), and its cards. */
+data class LibraryDay(val title: String, val items: List<LibraryItem>)
+
+/** The Library's cards by the day each was saved, newest first, as the list groups what is finished. */
+fun libraryDays(
+    items: List<LibraryItem>,
+    now: Instant = Instant.now(),
+    zone: ZoneId = ZoneId.systemDefault(),
+    locale: Locale = Locale.getDefault(),
+): List<LibraryDay> {
+    val today = now.atZone(zone).toLocalDate()
+    val format = DateTimeFormatter.ofPattern("d MMM", locale)
+    val byDay = linkedMapOf<LocalDate, MutableList<LibraryItem>>()
+    items.sortedByDescending { it.finishedAt }.forEach { item ->
+        byDay.getOrPut(Instant.ofEpochMilli(item.finishedAt).atZone(zone).toLocalDate()) { mutableListOf() } += item
+    }
+    return byDay.map { (day, dayItems) -> LibraryDay(dayTitle(day, today, format), dayItems) }
+}
+
+/** What the Library holds, under its title: "12 saved · 1.4 GB". The size only when some is known. */
+fun librarySummary(tasks: List<DownloadTask>): String {
+    val saved = tasks.filter { it.state == DownloadState.COMPLETED }
+    val bytes = saved.sumOf { task -> (task.totalBytes?.takeIf { it > 0 } ?: task.downloadedBytes).coerceAtLeast(0) }
+    return listOfNotNull("${saved.size} saved", bytes.takeIf { it > 0 }?.let(::formatFileSize)).joinToString(" · ")
 }
 
 /** What the list calls a download: its title, or the file name for downloads saved before titles existed. */

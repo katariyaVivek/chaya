@@ -29,6 +29,11 @@ Store account, no third-party SDKs.
   download is also copied to your phone's public media folders (Movies, Music, Pictures, Downloads), where
   other apps can see it. Download history (addresses, file names, progress) is kept in
   a database on your phone.
+- **Your own videos, only the ones you pick.** Library › ⋮ › *Add a video* opens Android's file picker; Chaya
+  can read only the video or sound you choose there, and keeps that permission so it still plays after a
+  restart. It keeps the file's address, name and size in its database, on your phone only. The file stays where
+  it is: Chaya never copies, changes, uploads or deletes it. Deleting it in Chaya only takes it out of the
+  Library and gives the permission back.
 - **Notifications.** Download progress, only after you grant the system permission, and only after
   an in-app explanation on first use.
 
@@ -46,6 +51,24 @@ Store account, no third-party SDKs.
   *Save history* switch on the History screen stops pages being kept at all. × beside a bookmark,
   or the star beside the address, removes it.
 - Ad blocker settings (whether it is on, and the sites you let show ads): **on your phone only**.
+- The subtitles saved with a video from a link, as an SRT file, and its chapters (their times and titles, as the
+  site lists them): **on your phone only**, in app-private files, shown on the picture, as the transcript and on the
+  seek bar in Chaya's player. They are deleted with their download. When you put the subtitles right in the
+  player (a line's words, or their timing), Chaya writes the change to that same file; what it said before each
+  change is kept in memory for *Undo* while the app runs, and nowhere else. A translation of them made by your own AI
+  model (*Translate* in the player), a version for each language and model: **on your phone only**, beside them, and
+  deleted with the download. The highlights your model found in them (*Highlights* in the player), and the clips you cut (their names and times):
+  the same. Subtitles made on the phone are kept as the video's own subtitles, above, and the speech model in the app's files.
+  How loud a video's sound is, measured on the phone for the clip timeline, and a clip saved as a video or SRT: in
+  the app's cache, until Android clears it. *Share* hands a clip only to the app you pick; *Save to phone* puts a
+  copy in your phone's Movies (or Downloads, for SRT).
+- Where you stopped each saved video in Chaya's player (the time, the video's length and when you stopped), so
+  it starts there again and Home offers *Continue*: **on your phone only**, in the app's preferences. It is
+  deleted with its download.
+- Settings › AI model (the service you chose, its address and model, and its key): **on your phone only**, in the
+  app's preferences. The key is encrypted with a key kept in the Android Keystore, which never leaves the phone and
+  which Chaya itself cannot read out; it is never stored as you typed it. These settings are left out of Android's
+  backups and of moving to a new phone. *Forget* deletes the key.
 - Open tabs (their addresses, titles, back and forward history, a small picture of each page and
   the site's icon), so they come back after Android closes the app: **on your phone only**, in
   app-private files. Closing a tab deletes its files; *Close all tabs* in the tab grid's ⋮ menu
@@ -67,6 +90,9 @@ Chaya talks only to the sites involved in what you do:
   pictures, a Pinterest pin, or an Instagram post yt-dlp could not read, that site again, which gallery-dl (also running
   on your phone) contacts to list the post's pictures, both when you paste or share a link and when the page you
   are viewing is a single video on one of those sites;
+- when you save a video from such a link and the site has subtitles in the language spoken, that site's server
+  again, for those subtitles, at the address yt-dlp found for them and with the video's own headers (your
+  sign-in cookie only when the subtitles are on the same site as the video);
 - for the ad blocker, about once a week, easylist.to, to fetch fresh copies of the EasyList and
   EasyPrivacy lists. The request carries no cookies and nothing about you or the pages you visit;
   the lists are then used on your phone. Blocked requests never leave the phone at all.
@@ -75,6 +101,24 @@ Chaya talks only to the sites involved in what you do:
   files) to fetch one when they do. The requests carry no cookies and nothing about you, the links
   you look up or the pages you visit. Turn this off under Downloads › ⋮ › Diagnostics › *Keep it up
   to date*.
+- for *Make subtitles*, the first time a model is used, huggingface.co (and the server it sends the file from), to
+  fetch whisper.cpp's Tiny or Base model, or NVIDIA's Parakeet model (as sherpa-onnx's author publishes it), which
+  is then kept in the app's files. The request carries nothing about
+  you or the video. With the phone's own models, the video's sound is listened to on the phone and never sent
+  anywhere.
+- for *Make subtitles* with Groq or OpenAI, only when you choose that service on the card (it is never the default,
+  and is offered only once you have saved that service's key under *AI model*): the video's sound, as five-minute
+  pieces of 16 kHz WAV, with your key, to that service only (api.groq.com or api.openai.com). The card says so before
+  you send it. Nothing else about the video is sent. What the service does with it is up to its own privacy policy.
+  While subtitles are made, a notification says so (with *Stop*), and what has been heard so far is kept in the app's
+  files beside the video's subtitles, so making can carry on after it stops; it is deleted when the subtitles are made
+  or the video is deleted.
+- your own AI model, only once you set one up under Downloads › ⋮ › *AI model*, and only when you ask for something
+  that needs it: *List models* and *Test* there, *Translate* and *Highlights* in the player. Chaya sends the service you chose what that needs (for translation and highlights, the video's
+  subtitles and its title) with your key, to that service only: OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter,
+  Mistral, Groq, xAI, an address you give, or a program such as Ollama or LM Studio on a PC on your own network. What
+  the service does with it is up to its own privacy policy. A key is sent only over `https://`, or over `http://` to an
+  address on your own network.
 
 ## Chaya for Windows
 

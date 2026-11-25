@@ -7,7 +7,8 @@ use std::path::Path;
 use std::process::Stdio;
 
 use tokio::io::{AsyncRead, AsyncReadExt};
-use tokio::process::Command;
+
+use crate::program::program;
 
 /// Peaks a second: a tenth of a second is five of them, as fine as the timeline ever shows sound.
 pub const PER_SECOND: u32 = 50;
@@ -26,7 +27,7 @@ pub enum SoundError {
 
 /// The peaks of `video`'s sound, decoded by `ffmpeg`.
 pub async fn peaks(ffmpeg: &Path, video: &Path) -> Result<Vec<u8>, SoundError> {
-    let mut child = Command::new(ffmpeg)
+    let mut child = program(ffmpeg)
         .args(["-hide_banner", "-loglevel", "error", "-nostdin", "-i"])
         .arg(video)
         .args(["-vn", "-ac", "1", "-ar", &RATE.to_string(), "-c:a", "pcm_s16le", "-f", "wav", "pipe:1"])

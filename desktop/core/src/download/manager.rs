@@ -1466,7 +1466,8 @@ mod tests {
 
     fn joiner() -> Option<Joiner> {
         let ffmpeg = std::env::var_os("CHAYA_FFMPEG").map(PathBuf::from).unwrap_or_else(|| "ffmpeg".into());
-        let works = std::process::Command::new(&ffmpeg).arg("-version").output().is_ok_and(|o| o.status.success());
+        let works =
+            crate::program::program_blocking(&ffmpeg).arg("-version").output().is_ok_and(|o| o.status.success());
         if !works {
             eprintln!("No ffmpeg here; skipping the joined download test.");
         }

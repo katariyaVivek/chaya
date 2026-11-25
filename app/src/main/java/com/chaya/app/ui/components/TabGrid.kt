@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -27,7 +26,6 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.MoreVert
@@ -95,7 +93,6 @@ import java.io.File
 fun TabGrid(
     tabs: List<TabSummary>,
     activeId: Long,
-    canOpenMore: Boolean,
     onSelect: (Long) -> Unit,
     onClose: (Long) -> Unit,
     onNewTab: () -> Unit,
@@ -103,6 +100,11 @@ fun TabGrid(
     onDismiss: () -> Unit,
     /** Changes whenever a tab's picture or icon may have changed, so they are read again. */
     picturesVersion: Int = 0,
+    /**
+     * Chaya's bar at the foot, Tabs lit; given the grid's own New tab, which first closes for good the tabs whose
+     * Undo is still showing.
+     */
+    bottomBar: @Composable (newTab: () -> Unit) -> Unit = {},
 ) {
     var query by remember { mutableStateOf("") }
     var closing by remember { mutableStateOf(emptySet<Long>()) }
@@ -149,40 +151,35 @@ fun TabGrid(
         modifier = Modifier.fillMaxSize(),
         snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = MaterialTheme.colorScheme.background,
+        bottomBar = {
+            bottomBar {
+                commitClosing()
+                onNewTab()
+            }
+        },
         topBar = {
             Column(modifier = Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                // The header every screen has: what is here, and its menu in a tonal circle.
+                val open = tabs.size - closing.size
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    FilledTonalIconButton(
-                        onClick = {
-                            commitClosing()
-                            onNewTab()
-                        },
-                        enabled = canOpenMore,
-                        shape = RoundedCornerShape(14.dp),
-                        colors = IconButtonDefaults.filledTonalIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        ),
-                        modifier = Modifier.size(44.dp).pressScale(0.9f),
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = "New tab")
-                    }
-                    Spacer(Modifier.weight(1f))
-                    // The tab count, as the bottom bar shows it; tab groups would sit beside it later.
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                            .padding(horizontal = 18.dp, vertical = 9.dp),
-                    ) {
-                        TabCountMark(count = tabs.size - closing.size)
-                    }
-                    Spacer(Modifier.weight(1f))
+                    Text(
+                        text = if (open == 1) "1 tab" else "$open tabs",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        modifier = Modifier.weight(1f),
+                    )
                     Box {
                         var menuOpen by remember { mutableStateOf(false) }
-                        IconButton(onClick = { menuOpen = true }) {
+                        FilledTonalIconButton(
+                            onClick = { menuOpen = true },
+                            colors = IconButtonDefaults.filledTonalIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            ),
+                            modifier = Modifier.size(44.dp),
+                        ) {
                             Icon(Icons.Default.MoreVert, contentDescription = "More tab actions")
                         }
                         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
@@ -229,7 +226,7 @@ fun TabGrid(
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.fillMaxSize().padding(padding).navigationBarsPadding(),
+                modifier = Modifier.fillMaxSize().padding(padding),
             ) {
                 items(shown, key = { it.id }) { tab ->
                     SwipeableTabCard(
@@ -262,25 +259,6 @@ fun TabGrid(
                 }) { Text("Close all") }
             },
             dismissButton = { TextButton(onClick = { confirmCloseAll = false }) { Text("Cancel") } },
-        )
-    }
-}
-
-/** The number of tabs in a rounded square, the mark the bottom bar's Tabs button shows. */
-@Composable
-private fun TabCountMark(count: Int) {
-    val tint = MaterialTheme.colorScheme.onSurfaceVariant
-    Box(
-        modifier = Modifier
-            .size(22.dp)
-            .border(1.75.dp, tint, RoundedCornerShape(6.dp))
-            .semantics { contentDescription = if (count == 1) "1 tab" else "$count tabs" },
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = "$count",
-            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-            color = tint,
         )
     }
 }
@@ -369,7 +347,7 @@ private fun TabCard(tab: TabSummary, shown: Boolean, picturesVersion: Int, onOpe
                 )
             } else {
                 Text(
-                    text = if (tab.isStartScreen) "Start page" else MediaUrlClassifier.hostOf(tab.url)?.removePrefix("www.") ?: tab.url,
+                    text = if (tab.isStartScreen) "New tab" else MediaUrlClassifier.hostOf(tab.url)?.removePrefix("www.") ?: tab.url,
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
@@ -381,7 +359,7 @@ private fun TabCard(tab: TabSummary, shown: Boolean, picturesVersion: Int, onOpe
     }
 }
 
-private fun titleOf(tab: TabSummary) = if (tab.isStartScreen) "Start page" else tab.title
+private fun titleOf(tab: TabSummary) = if (tab.isStartScreen) "New tab" else tab.title
 
 /** A picture file, read off the main thread and again whenever it changes. */
 @Composable

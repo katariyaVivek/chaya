@@ -94,15 +94,15 @@ class DownloadsActionsTest {
     @Test
     fun `retryable failure shows retry`() {
         val retryable = render(DownloadState.FAILED, DownloadError.HttpStatus(503))
-        composeRule.onNodeWithContentDescription("Retry").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("Retry").performClick()
+        composeRule.onNodeWithContentDescription("Try again").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Try again").performClick()
         assertEquals(listOf("resume"), retryable)
     }
 
     @Test
     fun `fatal failure hides retry but keeps delete in the menu`() {
         val fired = render(DownloadState.FAILED, DownloadError.HttpStatus(404))
-        assertEquals(0, composeRule.onAllNodesWithContentDescription("Retry").fetchSemanticsNodes().size)
+        assertEquals(0, composeRule.onAllNodesWithContentDescription("Try again").fetchSemanticsNodes().size)
 
         composeRule.onNodeWithContentDescription("More actions").performClick()
         composeRule.onNodeWithText("Delete").performClick()
@@ -110,10 +110,24 @@ class DownloadsActionsTest {
     }
 
     @Test
-    fun `completed file shows open`() {
+    fun `a completed video plays in Chaya`() {
         val fileFired = render(DownloadState.COMPLETED)
+        composeRule.onNodeWithContentDescription("Play").performClick()
+        assertEquals(listOf("play"), fileFired)
+    }
+
+    @Test
+    fun `a completed picture opens in another app`() {
+        val fired = mutableListOf<String>()
+        composeRule.setContent {
+            ActionsRow(
+                task = task(DownloadState.COMPLETED).copy(fileName = "a.jpg", mimeType = "image/jpeg", filePath = "/tmp/a.jpg"),
+                onPause = {}, onResume = {}, onCancel = {}, onDelete = {},
+                onOpen = { fired += "open" }, onPlay = { fired += "play" },
+            )
+        }
         composeRule.onNodeWithContentDescription("Open").performClick()
-        assertEquals(listOf("open"), fileFired)
+        assertEquals(listOf("open"), fired)
     }
 
     @Test
@@ -162,13 +176,13 @@ class DownloadsActionsTest {
     }
 
     @Test
-    fun `a stream saved as a file opens like any file and has nothing to save`() {
+    fun `a stream saved as a file plays in Chaya and has nothing to save`() {
         val saved = cachedStream().copy(filePath = "/tmp/Show.mp4", mimeType = "video/mp4", fileName = "Show.mp4")
         composeRule.setContent {
             ActionsRow(task = saved, onPause = {}, onResume = {}, onCancel = {}, onDelete = {}, onOpen = {}, onPlay = {})
         }
 
-        composeRule.onNodeWithContentDescription("Open").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Play").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("More actions").performClick()
         assertEquals(0, composeRule.onAllNodesWithText("Save as MP4").fetchSemanticsNodes().size)
     }

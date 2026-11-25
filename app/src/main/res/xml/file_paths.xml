@@ -4,4 +4,6 @@
     <files-path name="internal_downloads" path="downloads/" />
     <!-- Files taken out of an account's ZIP, so they can be opened or shared one at a time -->
     <cache-path name="library" path="library/" />
+    <!-- Clips saved as videos or SRT, so they can be shared before (or without) being saved to the phone -->
+    <cache-path name="clips" path="clips/" />
 </paths>

@@ -63,10 +63,12 @@ platform 36, Gradle 8.14.3 and Python 3.13 (Chaquopy). Versions are in `gradle/l
 - **Warnings fail the build.** Kotlin warnings are errors (`allWarningsAsErrors`), and so is any Android Lint
   finding not in `app/lint-baseline.xml`. Fix a warning rather than suppress it; fixing a baselined finding means
   taking it out of the baseline too, so the list only shrinks.
-- **CI is the Android build.** In the cloud container the proxy blocks `dl.google.com`, so the
-  Android Gradle plugin cannot be fetched, and Lint cannot run either. Pure-Kotlin code can still be compiled and tested with a
-  scratch Kotlin/JVM Gradle project whose source set points at the repo's files; keep such code free
-  of Android imports so this stays possible.
+- **CI is the Android build.** Some cloud containers' proxies block `dl.google.com`, so the Android Gradle plugin
+  cannot be fetched and Lint cannot run; check with `curl -sI https://dl.google.com/android/maven2/`. Where it answers,
+  the SDK installs from `commandlinetools-linux-*_latest.zip` (`sdkmanager "platforms;android-36"`, `sdk.dir` in the
+  gitignored `local.properties`), and `gradle --max-workers=2` keeps Maven Central from answering 429. Where it does
+  not, pure-Kotlin code can still be compiled and tested with a scratch Kotlin/JVM Gradle project whose source set
+  points at the repo's files; keep such code free of Android imports so this stays possible.
 - **Chaya for Windows** (`desktop/`) is Tauri 2. Code that does not need the window goes in
   `desktop/core`, plain Rust, tested with `cargo test`. Its UI follows `desktop/design`.
 - **`chaya_engine` is shared.** The phone runs it through Chaquopy; Windows runs it as a program
@@ -74,7 +76,7 @@ platform 36, Gradle 8.14.3 and Python 3.13 (Chaquopy). Versions are in `gradle/l
 - **pytest rewrites tracked `.pyc` files** under `__pycache__/`; run
   `git checkout -- '*__pycache__*'` before committing.
 
-## Chaya's mark (Windows)
+## Chaya's mark
 
 The two suns: an amber sun, its shadow-twin, one line of light through both. Its rules, in full in
 [`desktop/design/README.md`](desktop/design/README.md) (Mark):
@@ -91,7 +93,7 @@ The two suns: an amber sun, its shadow-twin, one line of light through both. Its
 - **Its colours are its own** (`--mark-light`, `--mark-shadow`, the same in both themes), the twin always the
   darker, as a shadow is. It is the one filled amber shape; the interface's accent stays light, never paint.
 - **Not Claude's mark.** A single disc with a line through its middle reads as Claude's; keep the twin in view.
-- The phone still has the older icon (`docs/brand/`) until it moves to this mark.
+- The phone's launcher icon is this mark too, written from the same constants by `docs/brand/android-icon.mjs`.
 
 ## Things that have bitten us
 
@@ -110,8 +112,15 @@ The two suns: an amber sun, its shadow-twin, one line of light through both. Its
 - `minSdk` is 26 and core library desugaring is off, so a newer `java.time` call (`LocalDate.ofInstant` is API 34)
   crashes older phones while every test passes: Robolectric runs on the desktop JVM, the emulators on API 34.
   Lint's `NewApi` check is what catches it.
+- The phone compiles regexes with ICU, not the JVM the unit tests run on, and ICU refuses some of Java's syntax:
+  `Regex("(?U)\\s+")` passed every test and closed the app on the first download that touched subtitles.
+  `AndroidRegexTest` reads the sources for it; for Unicode white space use `Subtitles.isSpace`, not `(?U)`.
 - Kotlin's inlined functions report line numbers beyond the end of the file in stack traces;
   find the real call site, not the reported line.
+- The cloud emulator's legacy SwiftShader GL translator (`-gpu guest` falls back to it on our system image, and
+  `swiftshader_indirect` is the action's default) segfaults on a RenderThread while Android draws video, and the
+  emulator vanishes with no app crash. CI's emulators use `-gpu lavapipe` (ANGLE); a vanished emulator's cause is
+  in the kernel log (`fatal signal`), which the emulator check prints.
 - Gradle parallel project execution stays off (Chaquopy + KSP fail on a project lock).
 - quickjs-kt requires compileSdk 36 and a Kotlin compiler that reads 2.4 metadata; KSP 2.3 needs
   AGP 8.13 or newer. Upgrade these together.

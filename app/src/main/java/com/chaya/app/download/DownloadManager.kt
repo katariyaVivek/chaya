@@ -14,6 +14,7 @@ import android.webkit.WebSettings
 import androidx.annotation.VisibleForTesting
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.core.net.toUri
 import androidx.media3.common.StreamKey
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DataSource
@@ -25,6 +26,9 @@ import com.chaya.app.model.DetectedMedia
 import com.chaya.app.streaming.Media3StreamExporter
 import com.chaya.app.streaming.StreamDownloader
 import com.chaya.app.streaming.StreamExporter
+import com.chaya.app.subtitles.Chapter
+import com.chaya.app.subtitles.SubtitleSource
+import com.chaya.app.subtitles.SubtitleStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -84,6 +88,8 @@ class DownloadManager(
     private val archiveRetryDelaysMillis: List<Long> = ARCHIVE_RETRY_DELAYS_MILLIS,
     /** Saves finished streams as MP4 files; null builds the Media3 one when first needed. Replaced in tests. */
     private val streamExporter: StreamExporter? = null,
+    /** Where a site's subtitles are kept with its videos; null in tests that have none to keep. */
+    private val subtitles: SubtitleStore? = null,
 ) {
     /** Parent of all fire-and-forget persistence and transfer work; [drainBackgroundWork] joins it. */
     private val backgroundJob = SupervisorJob()
@@ -167,6 +173,38 @@ class DownloadManager(
         }
     }
 
+    /**
+     * A stream the engine found for a link, with the site's [subtitles] and [chapters] for it, kept as the stream
+     * saves.
+     */
+    fun startDownload(media: DetectedMedia, subtitles: SubtitleSource?, chapters: List<Chapter> = emptyList()) {
+        ensureServiceRunning()
+        scope.launch {
+            val id = nextId()
+            keepSubtitles(id, subtitles)
+            keepChapters(id, chapters)
+            val (ua, ck) = sessionHeaders(media.url)
+            startStream(id, media, ua, ck, null)
+        }
+    }
+
+    /**
+     * Fetches a site's [source] subtitles for download [id], beside the download and never in its way: they are
+     * fetched now, as their addresses expire, and a failure leaves the video without them.
+     */
+    private fun keepSubtitles(id: Long, source: SubtitleSource?) {
+        val store = subtitles ?: return
+        source ?: return
+        scope.launch { store.save(id, source) }
+    }
+
+    /** Keeps a video's [chapters] with download [id], for the player; a video with none keeps nothing. */
+    private fun keepChapters(id: Long, chapters: List<Chapter>) {
+        val store = subtitles ?: return
+        if (chapters.isEmpty()) return
+        scope.launch(Dispatchers.IO) { store.saveChapters(id, chapters) }
+    }
+
     @androidx.annotation.OptIn(UnstableApi::class)
     fun startDownload(media: DetectedMedia, streamKeys: List<StreamKey>) {
         ensureServiceRunning()
@@ -220,6 +258,8 @@ class DownloadManager(
 
             append(task)
             dao.insert(DownloadEntity.fromTask(task))
+            keepSubtitles(id, request.subtitles)
+            keepChapters(id, request.chapters)
             transfer(task)
         }
     }
@@ -356,9 +396,36 @@ class DownloadManager(
             .forEach { cancelDownload(it.id) }
     }
 
-    /** Remove a task and delete its files (private copy + public MediaStore copy). */
+    /**
+     * Lists one of the person's own videos (or sounds), the document at [uri] the phone's picker gave, as a finished
+     * download that plays in Chaya. The same file added again is the one already listed. Its id.
+     */
+    suspend fun addOwnVideo(uri: String, name: String, mimeType: String?, sizeBytes: Long?): Long {
+        ready.await()
+        _downloads.value.firstOrNull { it.ownUri == uri }?.let { return it.id }
+        val task = OwnVideos.task(nextId(), uri, name, mimeType, sizeBytes, System.currentTimeMillis())
+        append(task)
+        dao.insert(DownloadEntity.fromTask(task))
+        return task.id
+    }
+
+    /**
+     * Remove a task and delete its files (private copy + public MediaStore copy). One of the person's own videos is
+     * only taken out of Chaya: the file stays where it is, and Chaya gives back the right to read it.
+     */
     fun deleteTask(id: Long) {
         val t = find(id)
+        subtitles?.forget(id)
+        if (t != null && t.isOwn) {
+            t.ownUri?.let { u ->
+                runCatching {
+                    context.contentResolver.releasePersistableUriPermission(u.toUri(), Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+            }
+            _downloads.update { list -> list.filterNot { it.id == id } }
+            scope.launch { dao.delete(id) }
+            return
+        }
         savingAsFile.remove(id)?.cancel()
         downloader.cancel(id)
         streamDownloader?.deleteStream(id)

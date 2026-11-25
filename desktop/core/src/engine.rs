@@ -9,7 +9,7 @@
 use std::ffi::OsString;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -19,6 +19,7 @@ use crate::download::archive::{ListRequest, Listed};
 use crate::download::error::DownloadError;
 use crate::links::Platform;
 use crate::media::{self, Failure, FailureKind, Media};
+use crate::program::program_blocking;
 
 /// How long one lookup may take. yt-dlp gives up on a silent server after 20 s and tries twice more, and a
 /// YouTube page with a challenge to solve takes several seconds on its own.
@@ -135,7 +136,7 @@ impl Engine {
     }
 
     fn run_for(&self, args: &[OsString], timeout: Duration) -> Result<String, Failure> {
-        let mut command = Command::new(&self.python);
+        let mut command = program_blocking(&self.python);
         command
             .arg("-I")
             .arg(&self.script)
@@ -146,7 +147,6 @@ impl Engine {
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
-        hide_console_window(&mut command);
         let mut child = command.spawn().map_err(|e| {
             Failure::new(FailureKind::Engine, format!("Could not start {}: {e}", self.python.display()))
         })?;
@@ -197,17 +197,6 @@ fn listing_summary(line: &str, platform: Platform, signed_in: bool) -> Result<Li
         None => Err(DownloadError::CouldNotList),
     }
 }
-
-/// Without this, Windows opens a console window for every lookup.
-#[cfg(windows)]
-fn hide_console_window(command: &mut Command) {
-    use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    command.creation_flags(CREATE_NO_WINDOW);
-}
-
-#[cfg(not(windows))]
-fn hide_console_window(_: &mut Command) {}
 
 /// Reads a pipe to its end on its own thread, so a chatty engine never blocks on a full pipe.
 fn read_in_background(pipe: Option<impl Read + Send + 'static>) -> thread::JoinHandle<String> {
@@ -278,7 +267,7 @@ mod tests {
         ["python3", "python"]
             .into_iter()
             .map(PathBuf::from)
-            .find(|p| Command::new(p).arg("--version").output().is_ok_and(|o| o.status.success()))
+            .find(|p| program_blocking(p).arg("--version").output().is_ok_and(|o| o.status.success()))
     }
 
     /// An engine whose run.py is `body`, in a fresh folder.

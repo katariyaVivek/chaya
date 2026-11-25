@@ -16,6 +16,7 @@ use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::watch;
 
+use crate::program::program;
 use crate::subtitles::{self, Line, Span};
 
 /// How big the video is made: as tall as 720 or 1080 pixels (never taller than it was), or as it is.
@@ -376,7 +377,7 @@ pub fn file_for(folder: &Path, video: &str, clip: &str, extension: &str) -> Path
 
 /// The size and length of `video`'s picture, as `ffmpeg -i` says them.
 pub async fn probe(ffmpeg: &Path, video: &Path) -> Result<Probe, ExportError> {
-    let output = Command::new(ffmpeg)
+    let output = program(ffmpeg)
         .args(["-hide_banner", "-nostdin", "-i"])
         .arg(video)
         .stdin(Stdio::null())
@@ -443,7 +444,7 @@ fn channel_count(layout: &str) -> Option<u32> {
 /// The encoders `ffmpeg` has, to try in turn: Windows' H.264 encoder on the graphics card, then on the processor, then
 /// MPEG-4.
 pub async fn encoders(ffmpeg: &Path) -> Vec<Encoder> {
-    let listed = Command::new(ffmpeg).args(["-hide_banner", "-encoders"]).stdin(Stdio::null()).output().await;
+    let listed = program(ffmpeg).args(["-hide_banner", "-encoders"]).stdin(Stdio::null()).output().await;
     let listed = listed.map(|o| String::from_utf8_lossy(&o.stdout).into_owned()).unwrap_or_default();
     let mut encoders = Vec::new();
     if listed.contains(" h264_mf ") {
@@ -609,7 +610,7 @@ pub async fn export(
 
     if job.gif {
         let part = job.out.with_extension("gif.part");
-        let mut command = Command::new(ffmpeg);
+        let mut command = program(ffmpeg);
         input(&mut command);
         // A palette made for this clip, so its colours aren't muddy, and a fine pattern where they blend.
         command
@@ -637,7 +638,7 @@ pub async fn export(
         // A size to fit is a ceiling: with room to spare, the usual bit rate, not the whole allowance.
         let mut rate = plan.map(|p| p.video.min(bit_rate(width, height)));
         for _ in 0..3 {
-            let mut command = Command::new(ffmpeg);
+            let mut command = program(ffmpeg);
             input(&mut command);
             command.args(["-map", "0:v:0", "-map", "0:a:0?", "-vf"]).arg(&picture);
             if let Some(sound) = sound {

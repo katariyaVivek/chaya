@@ -1,6 +1,19 @@
 package com.chaya.app.ui.components
 
 import androidx.compose.foundation.background
+import com.chaya.app.platform.firstPick
+import com.chaya.app.download.DownloadNotification.formatFileSize
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.semantics.Role
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,6 +29,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ErrorOutline
@@ -108,106 +122,148 @@ private fun Looking(state: LinkState.Looking) {
     }
 }
 
+/**
+ * A video found (Stage): its picture, "Found on YouTube" and its name; its qualities as tiles, one picked (the best at
+ * most 1080p, [firstPick]); and one Save for the pick, in ink.
+ */
 @Composable
 private fun Found(state: LinkState.Found, onChoose: (PlatformChoice) -> Unit) {
-    val best = state.best
-    val others = state.choices.drop(1)
-
-    LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
-        item(key = "hero") {
-            Hero(state = state, best = best, onChoose = onChoose)
+    val choices = state.choices
+    if (choices.isEmpty()) return
+    var picked by remember(state.media.title, choices.size) { mutableIntStateOf(firstPick(choices).coerceAtLeast(0)) }
+    val choice = choices[picked.coerceIn(0, choices.lastIndex)]
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        FoundHeader(state)
+        Qualities(choices, picked, onPick = { picked = it })
+        Button(
+            onClick = { onChoose(choice) },
+            shape = CircleShape,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+            ),
+            modifier = Modifier.fillMaxWidth().height(54.dp).pressScale(0.98f),
+        ) {
+            Icon(imageVector = Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(saveLabel(choice), style = MaterialTheme.typography.titleMedium)
         }
-        if (others.isNotEmpty()) {
-            item(key = "label") {
-                Text(
-                    text = "Other qualities",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 4.dp),
+        if (choice.detail.isNotEmpty()) {
+            Text(
+                text = choice.detail,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+    }
+}
+
+/** The found video's picture, small, beside "Found on YouTube" and its name. */
+@Composable
+private fun FoundHeader(state: LinkState.Found) {
+    val media = state.media
+    var posterFailed by remember(media.thumbnailUrl) { mutableStateOf(false) }
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier
+                .width(96.dp)
+                .height(60.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Default.Movie,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(24.dp),
+            )
+            if (media.thumbnailUrl != null && !posterFailed) {
+                AsyncImage(
+                    model = media.thumbnailUrl,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    onError = { posterFailed = true },
+                    modifier = Modifier.matchParentSize(),
                 )
             }
-            items(others, key = { it.file.id + ":" + it.label }) { choice ->
-                ChoiceRow(choice = choice, onChoose = onChoose)
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "FOUND ON ${state.match.platform.displayName.uppercase()}",
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 0.8.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = media.title,
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, fontSize = 19.sp, lineHeight = 22.sp),
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = subtitleOf(state),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+/** The qualities as tiles, four to a row, the one picked in ink: one choice, as radio buttons are. */
+@Composable
+private fun Qualities(choices: List<PlatformChoice>, picked: Int, onPick: (Int) -> Unit) {
+    Column(modifier = Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        choices.withIndex().chunked(QUALITIES_IN_A_ROW).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                row.forEach { (index, choice) ->
+                    QualityTile(choice, index == picked, onClick = { onPick(index) }, modifier = Modifier.weight(1f))
+                }
+                repeat(QUALITIES_IN_A_ROW - row.size) { Spacer(Modifier.weight(1f)) }
             }
         }
     }
 }
 
-@Composable
-private fun Hero(state: LinkState.Found, best: PlatformChoice, onChoose: (PlatformChoice) -> Unit) {
-    val media = state.media
-    var posterFailed by remember(media.thumbnailUrl) { mutableStateOf(false) }
-    val showPoster = media.thumbnailUrl != null && !posterFailed
+private const val QUALITIES_IN_A_ROW = 4
 
-    Surface(
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surface,
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).fillMaxWidth(),
+@Composable
+private fun QualityTile(choice: PlatformChoice, picked: Boolean, onClick: () -> Unit, modifier: Modifier) {
+    val shape = RoundedCornerShape(16.dp)
+    val size = choice.sizeBytes?.takeIf { it > 0 }?.let(::formatFileSize)
+    Column(
+        modifier = modifier
+            .height(58.dp)
+            .clip(shape)
+            .background(if (picked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerLow)
+            .border(1.dp, if (picked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant, shape)
+            .selectable(selected = picked, role = Role.RadioButton, onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
     ) {
-        Column {
-            if (showPoster) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(16f / 9f)
-                        .background(MaterialTheme.colorScheme.surfaceContainerHigh),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Movie,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(36.dp),
-                    )
-                    AsyncImage(
-                        model = media.thumbnailUrl,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        onError = { posterFailed = true },
-                        modifier = Modifier.matchParentSize(),
-                    )
-                }
-            }
-            Column(modifier = Modifier.padding(18.dp)) {
-                Text(
-                    text = media.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = subtitleOf(state),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(Modifier.height(16.dp))
-                Button(
-                    onClick = { onChoose(best) },
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier.fillMaxWidth().height(48.dp).pressScale(0.98f),
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.FileDownload,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp),
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(downloadLabel(best), style = MaterialTheme.typography.labelLarge)
-                }
-                if (best.detail.isNotEmpty()) {
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        text = best.detail,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-            }
+        Text(
+            text = if (choice.isAudioOnly) "Audio" else choice.label,
+            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+            color = if (picked) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+        )
+        if (size != null) {
+            Text(
+                text = size,
+                style = MaterialTheme.typography.labelSmall,
+                color = if (picked) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.75f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+            )
         }
     }
 }
@@ -239,7 +295,7 @@ private fun Post(state: LinkState.FoundPost, onSave: (List<Int>) -> Unit) {
                 Spacer(Modifier.height(16.dp))
                 Button(
                     onClick = { onSave(postItems.indices.toList()) },
-                    shape = RoundedCornerShape(14.dp),
+                    shape = CircleShape,
                     modifier = Modifier.fillMaxWidth().height(48.dp).pressScale(0.98f),
                 ) {
                     Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(20.dp))
@@ -339,46 +395,6 @@ private fun saveAllLabel(items: List<PostItem>): String =
     if (items.size == 1) "Save ${kindOf(items.single())}" else "Save all ${items.size}"
 
 @Composable
-private fun ChoiceRow(choice: PlatformChoice, onChoose: (PlatformChoice) -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onChoose(choice) }
-            .padding(horizontal = 24.dp, vertical = 12.dp)
-            .semantics { contentDescription = "Download ${choice.label}" },
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            imageVector = if (choice.isAudioOnly) Icons.Default.MusicNote else Icons.Default.Movie,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(20.dp),
-        )
-        Spacer(Modifier.width(16.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = choice.label,
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            if (choice.detail.isNotEmpty()) {
-                Text(
-                    text = choice.detail,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        Icon(
-            imageVector = Icons.Default.FileDownload,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(22.dp),
-        )
-    }
-}
-
-@Composable
 private fun Failed(state: LinkState.Failed, onRetry: () -> Unit, onRetryWithSignIn: () -> Unit) {
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 24.dp)) {
         Row(verticalAlignment = Alignment.Top) {
@@ -397,7 +413,7 @@ private fun Failed(state: LinkState.Failed, onRetry: () -> Unit, onRetryWithSign
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = state.problem.message ?: "Something went wrong.",
+                    text = state.problem.message ?: "The site didn't say why. The video may be private, removed or not shown where you are.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -407,7 +423,7 @@ private fun Failed(state: LinkState.Failed, onRetry: () -> Unit, onRetryWithSign
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(
                 onClick = onRetry,
-                shape = RoundedCornerShape(14.dp),
+                shape = CircleShape,
                 modifier = Modifier.height(48.dp).pressScale(0.98f),
             ) {
                 Text("Try again", style = MaterialTheme.typography.labelLarge)
@@ -415,7 +431,7 @@ private fun Failed(state: LinkState.Failed, onRetry: () -> Unit, onRetryWithSign
             if (state.signInMayHelp) {
                 FilledTonalButton(
                     onClick = onRetryWithSignIn,
-                    shape = RoundedCornerShape(14.dp),
+                    shape = CircleShape,
                     modifier = Modifier.height(48.dp).pressScale(0.98f),
                 ) {
                     Text("Use my sign-in", style = MaterialTheme.typography.labelLarge)
@@ -434,11 +450,11 @@ private fun Failed(state: LinkState.Failed, onRetry: () -> Unit, onRetryWithSign
     }
 }
 
-/** "Download 1080p", "Download audio", or just "Download" for a bare file with no quality to name. */
-private fun downloadLabel(choice: PlatformChoice): String = when {
-    choice.isAudioOnly -> "Download audio"
-    choice.quality == null -> "Download"
-    else -> "Download ${choice.label}"
+/** "Save 1080p", "Save audio", or just "Save" for a bare file with no quality to name. */
+private fun saveLabel(choice: PlatformChoice): String = when {
+    choice.isAudioOnly -> "Save audio"
+    choice.quality == null -> "Save"
+    else -> "Save ${choice.label}"
 }
 
 /** "Rick Astley · 3:33 · YouTube". */

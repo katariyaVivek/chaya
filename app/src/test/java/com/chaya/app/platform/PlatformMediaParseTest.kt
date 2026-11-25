@@ -1,5 +1,6 @@
 package com.chaya.app.platform
 
+import com.chaya.app.subtitles.Chapter
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -246,5 +247,45 @@ class PlatformMediaParseTest {
     @Test
     fun `a video has no items`() {
         assertTrue(PlatformMedia.parse(FULL).items.isEmpty())
+    }
+
+    @Test
+    fun `the video's language and the site's subtitles are read`() {
+        val media = PlatformMedia.parse(
+            """{"media": {"title": "Talk", "formats": [], "language": "en", "subtitles": [
+              {"language": "en", "url": "https://www.youtube.com/api/timedtext?lang=en&fmt=vtt", "automatic": false},
+              {"language": "en-orig", "url": "https://www.youtube.com/api/timedtext?lang=en&kind=asr", "automatic": true},
+              {"language": "de"},
+              {"url": "https://subs.example/x.vtt"}
+            ]}}"""
+        )
+
+        assertEquals("en", media.language)
+        assertEquals(listOf("en" to false, "en-orig" to true), media.subtitles.map { it.language to it.automatic })
+        assertEquals("https://www.youtube.com/api/timedtext?lang=en&fmt=vtt", media.subtitles[0].url)
+    }
+
+    @Test
+    fun `a video's chapters are read and put right`() {
+        val media = PlatformMedia.parse(
+            """{"media": {"title": "Talk", "formats": [], "duration": 120, "chapters": [
+              {"start": 30.5, "end": 200, "title": "The  answer"},
+              {"start": 0, "end": 30.5, "title": "Intro"},
+              {"start": "soon", "end": 5}
+            ]}}"""
+        )
+
+        assertEquals(
+            listOf(Chapter(0, 30_500, "Intro"), Chapter(30_500, 120_000, "The answer")),
+            media.chapters,
+        )
+        assertTrue(PlatformMedia.parse(FULL).chapters.isEmpty())
+    }
+
+    @Test
+    fun `a video whose site lists no subtitles has none`() {
+        val media = PlatformMedia.parse(FULL)
+        assertNull(media.language)
+        assertTrue(media.subtitles.isEmpty())
     }
 }
