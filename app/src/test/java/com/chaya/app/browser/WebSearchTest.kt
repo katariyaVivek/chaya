@@ -66,5 +66,7 @@ class WebSearchTest {
         assertEquals(PageToOpen("https://example.com/", newTab = false), PagesToOpen.pending.value)
         PagesToOpen.openInNewTab("harbour at dusk")
         assertEquals(PageToOpen("harbour at dusk", newTab = true), PagesToOpen.pending.value)
+        PagesToOpen.openBlankTab()
+        assertEquals("the bar's + on Home asks for a blank tab", PageToOpen("", newTab = true), PagesToOpen.pending.value)
     }
 }

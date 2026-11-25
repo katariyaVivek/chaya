@@ -27,36 +27,22 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tab
-import androidx.compose.material.icons.filled.VideoLibrary
-import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -79,11 +65,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.doOnAttach
@@ -106,7 +89,6 @@ import com.chaya.app.detection.MediaInterceptor
 import com.chaya.app.detection.MediaNamer
 import com.chaya.app.detection.MediaRanker
 import com.chaya.app.detection.RankedMedia
-import com.chaya.app.download.DownloadState
 import com.chaya.app.history.BrowsingRecord
 import com.chaya.app.history.PagesToOpen
 import com.chaya.app.home.BarAction
@@ -548,6 +530,8 @@ fun BrowserScreen(
     val adAllowedSites by adBlocker.settings.allowedSites.collectAsState()
     val adEngine by adBlocker.engine.collectAsState()
     var showTabGrid by remember { mutableStateOf(false) }
+    // A fresh tab's address field asks for focus once; the field says when it has it
+    var focusAddress by remember { mutableStateOf(false) }
     // A sheet opening (a link shared from another app, say) shows over the tab grid's place: what was just asked for.
     LaunchedEffect(uiState.sheet) {
         if (uiState.sheet != null) showTabGrid = false
@@ -645,9 +629,6 @@ fun BrowserScreen(
     val downloads by viewModel.downloads.collectAsState()
     // How the downloads still going are getting on, as the bar's Library slot shows it on every screen
     val saving = remember(downloads) { HomeShelf.progressOf(downloads) }
-    val recentDownloads = remember(downloads) {
-        downloads.filter { it.state == DownloadState.COMPLETED }.sortedByDescending { it.updatedAt }.take(3)
-    }
 
     /** Fills the address bar from the clipboard; a link opens straight away. The clipboard is read only when Paste is tapped. */
     fun pasteFromClipboard() {
@@ -699,6 +680,8 @@ fun BrowserScreen(
         }
         val tab = newTab()
         val target = url?.trim()?.takeIf { it.isNotEmpty() }?.let(::addressFor)
+        // A blank tab is for typing in: its field is ready, keyboard up, as a browser's new tab is.
+        if (target == null) focusAddress = true
         // A tab opened for a page shows that page from the start, as a tab restored from disk does, rather than its
         // start screen until the page says it began: a link opened from the long-press menu was left on the start
         // screen with its address in the field.
@@ -783,7 +766,7 @@ fun BrowserScreen(
     LaunchedEffect(pageToOpen) {
         val page = pageToOpen ?: return@LaunchedEffect
         PagesToOpen.consume(page)
-        if (page.newTab) openNewTab(page.text) else navigateToUrl(page.text)
+        if (page.newTab) openNewTab(page.text.ifBlank { null }) else navigateToUrl(page.text)
     }
 
     LaunchedEffect(pendingNewTabUrl) {
@@ -923,7 +906,11 @@ fun BrowserScreen(
                                 homeVisible = uiState.homeVisible,
                                 input = urlInput,
                                 onInputChange = { urlInput = it },
-                                onGo = { navigateToUrl(urlInput) },
+                                // On a new tab the field is where a link is pasted to save it, as Home's + had it: a link
+                                // to a video, post or account opens its sheet; anything else, an address or words, loads.
+                                onGo = {
+                                    if (!(uiState.homeVisible && viewModel.openLink(urlInput))) navigateToUrl(urlInput)
+                                },
                                 onPaste = { pasteFromClipboard() },
                                 onReload = {
                                     invalidateDetectionSession()
@@ -949,6 +936,8 @@ fun BrowserScreen(
                                 },
                                 suggestions = suggestions,
                                 onSuggestion = { url -> navigateToUrl(url) },
+                                focusNow = focusAddress,
+                                onFocused = { focusAddress = false },
                             )
                         }
 
@@ -1004,13 +993,11 @@ fun BrowserScreen(
                     modifier = Modifier.align(Alignment.TopCenter),
                 )
 
-                HomeContent(
+                NewTabPage(
                     visible = uiState.homeVisible,
                     showOnboardingHint = showOnboardingHint,
                     onDismissOnboardingHint = { dismissOnboardingHint() },
-                    recent = recentDownloads,
                     onSelectUrl = { target -> navigateToUrl(target) },
-                    onOpenDownloads = { onPlace(Place.LIBRARY) },
                     bookmarks = bookmarkTiles,
                     onOpenBookmarks = onNavigateToBookmarks,
                     onOpenHistory = onNavigateToHistory,

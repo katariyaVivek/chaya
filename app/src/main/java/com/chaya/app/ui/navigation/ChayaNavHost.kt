@@ -60,7 +60,8 @@ fun ChayaNavHost(navController: NavHostController) {
     LaunchedEffect(sharedLink) {
         if (sharedLink != null) go(Place.BROWSE)
     }
-    // A page picked on the History or Bookmarks screen, or typed into Home's "+", is opened by the browser too.
+    // A page picked on the History or Bookmarks screen, or a blank tab from the bar's + on Home or in the Library, is
+    // opened by the browser too.
     val pageToOpen by PagesToOpen.pending.collectAsState()
     LaunchedEffect(pageToOpen) {
         if (pageToOpen != null) go(Place.BROWSE)

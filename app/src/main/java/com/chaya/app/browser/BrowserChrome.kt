@@ -1,14 +1,11 @@
 package com.chaya.app.browser
 
-import androidx.compose.ui.res.painterResource
-import androidx.compose.foundation.Image
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -37,20 +34,14 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FileDownload
-import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Movie
-import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.Stream
 import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -74,7 +65,6 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.contentDescription
@@ -84,12 +74,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import coil3.compose.AsyncImage
-import com.chaya.app.detection.MediaSheetModel
 import com.chaya.app.detection.MediaUrlClassifier
-import com.chaya.app.download.DownloadTask
-import com.chaya.app.downloads.displayTitle
-import com.chaya.app.downloads.finishedDetails
 import com.chaya.app.ui.theme.ChayaMotion
 import com.chaya.app.ui.theme.StaggeredAppear
 import com.chaya.app.ui.theme.pressScale
@@ -123,6 +108,9 @@ internal fun AddressBar(
     /** Bookmarks and history matching what is typed, shown under the field while it has focus. */
     suggestions: List<com.chaya.app.history.Suggestion> = emptyList(),
     onSuggestion: (String) -> Unit = {},
+    /** A fresh tab asks for its field ready to type in, keyboard up; [onFocused] says that was done, once. */
+    focusNow: Boolean = false,
+    onFocused: () -> Unit = {},
 ) {
     var editing by remember { mutableStateOf(false) }
     var hadFocus by remember { mutableStateOf(false) }
@@ -228,6 +216,15 @@ internal fun AddressBar(
             if (editing) {
                 withFrameNanos { }
                 runCatching { focusRequester.requestFocus() }
+            }
+        }
+
+        LaunchedEffect(focusNow) {
+            if (focusNow) {
+                withFrameNanos { }
+                runCatching { focusRequester.requestFocus() }
+                keyboardController?.show()
+                onFocused()
             }
         }
     } else {
@@ -423,15 +420,16 @@ private val quickSites = listOf(
     QuickSite("X", "X", "https://x.com"),
 )
 
-/** What shows over the browser before any page is open: quick sites and the latest downloads. */
+/**
+ * A new tab, before any page is open: only a place to go, the quick sites (bookmarks first) and the way to Bookmarks and
+ * History. Chaya's name and what was saved are Home's; the address field above is where a link is pasted.
+ */
 @Composable
-internal fun HomeContent(
+internal fun NewTabPage(
     visible: Boolean,
     showOnboardingHint: Boolean,
     onDismissOnboardingHint: () -> Unit,
-    recent: List<DownloadTask>,
     onSelectUrl: (String) -> Unit,
-    onOpenDownloads: () -> Unit,
     /** Bookmarks, shown first among the quick sites. */
     bookmarks: List<QuickSite> = emptyList(),
     onOpenBookmarks: () -> Unit = {},
@@ -452,66 +450,28 @@ internal fun HomeContent(
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 20.dp)
             ) {
-                Spacer(Modifier.height(28.dp))
+                Spacer(Modifier.height(20.dp))
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    // Chaya's own mark, the two suns, as Home has it (res/drawable/chaya_mark.xml, written from the
-                    // mark's constants), not a stock icon
-                    Image(
-                        painter = painterResource(com.chaya.app.R.drawable.chaya_mark),
-                        contentDescription = null,
-                        modifier = Modifier.size(48.dp),
-                    )
-                    Spacer(Modifier.width(14.dp))
-                    Column {
-                        Text(
-                            text = "Chaya",
-                            style = MaterialTheme.typography.headlineMedium,
-                            color = MaterialTheme.colorScheme.onBackground
-                        )
-                        Text(
-                            text = "Find the video on any page.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                SectionTitle("Quick sites")
+                // Bookmarks first, then the sites Chaya knows; one row, scrolled sideways when long.
+                // Just the four known sites spread across the width, as before any bookmark.
+                val sites = (bookmarks + quickSites).distinctBy { it.url }
+                val sideways = rememberScrollState()
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(if (bookmarks.isEmpty()) Modifier else Modifier.horizontalScroll(sideways)),
+                    horizontalArrangement = if (bookmarks.isEmpty()) Arrangement.SpaceBetween else Arrangement.spacedBy(8.dp)
+                ) {
+                    sites.forEach { site -> SiteTile(site, onSelectUrl) }
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    HomeChip(Icons.Default.Star, "Bookmarks", onOpenBookmarks)
+                    HomeChip(Icons.Default.History, "History", onOpenHistory)
                 }
 
-                Spacer(Modifier.height(32.dp))
-
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    SectionTitle("Quick sites")
-                    // Bookmarks first, then the sites Chaya knows; one row, scrolled sideways when long.
-                    // Just the four known sites spread across the width, as before any bookmark.
-                    val sites = (bookmarks + quickSites).distinctBy { it.url }
-                    val sideways = rememberScrollState()
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .then(if (bookmarks.isEmpty()) Modifier else Modifier.horizontalScroll(sideways)),
-                        horizontalArrangement = if (bookmarks.isEmpty()) Arrangement.SpaceBetween else Arrangement.spacedBy(8.dp)
-                    ) {
-                        sites.forEach { site -> SiteTile(site, onSelectUrl) }
-                    }
-                    Spacer(Modifier.height(12.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        HomeChip(Icons.Default.Star, "Bookmarks", onOpenBookmarks)
-                        HomeChip(Icons.Default.History, "History", onOpenHistory)
-                    }
-                }
-
-                Spacer(Modifier.height(32.dp))
-
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    SectionTitle("Recent")
-                    if (recent.isEmpty()) {
-                        EmptyRecent()
-                    } else {
-                        recent.forEach { task -> RecentRow(task, onOpenDownloads) }
-                    }
-                }
-
-                // First-run hint: part of the start screen itself — no overlay, no carousel.
+                // First-run hint: part of the page itself, no overlay, no carousel.
                 if (showOnboardingHint) {
                     Spacer(Modifier.height(24.dp))
                     StaggeredAppear(index = 0) {
@@ -525,7 +485,7 @@ internal fun HomeContent(
     }
 }
 
-/** A pill on the start screen that opens another screen. */
+/** A pill on the new tab page that opens another screen. */
 @Composable
 private fun HomeChip(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
     Row(
@@ -544,12 +504,13 @@ private fun HomeChip(icon: androidx.compose.ui.graphics.vector.ImageVector, labe
 }
 
 @Composable
+/** A section's name, as Home's "Recently saved" has it. */
 private fun SectionTitle(text: String) {
     Text(
         text = text,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(start = 4.dp, bottom = 10.dp)
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.onBackground,
+        modifier = Modifier.padding(bottom = 12.dp)
     )
 }
 
@@ -584,92 +545,6 @@ private fun SiteTile(site: QuickSite, onClick: (String) -> Unit) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
-        )
-    }
-}
-
-@Composable
-private fun RecentRow(task: DownloadTask, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .clickable(onClick = onClick)
-            .padding(vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(width = 64.dp, height = 40.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = if (task.mimeType?.startsWith("audio/") == true) Icons.Default.MusicNote
-                else Icons.Default.Movie,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(20.dp)
-            )
-            task.thumbnailUrl?.let { url ->
-                AsyncImage(
-                    model = url,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.matchParentSize()
-                )
-            }
-        }
-        Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = displayTitle(task),
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            finishedDetails(task).takeIf { it.isNotEmpty() }?.let { details ->
-                Text(
-                    text = details,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun EmptyRecent() {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(44.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Default.FileDownload,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(20.dp)
-            )
-        }
-        Spacer(Modifier.width(14.dp))
-        Text(
-            text = "Videos you save show up here.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }

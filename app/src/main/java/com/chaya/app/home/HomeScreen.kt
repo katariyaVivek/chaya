@@ -1,7 +1,5 @@
 package com.chaya.app.home
 
-import androidx.compose.foundation.layout.imePadding
-import android.content.ClipboardManager
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -12,7 +10,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -28,29 +25,20 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -63,7 +51,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -73,7 +60,6 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import com.chaya.app.ChayaApplication
 import com.chaya.app.R
-import com.chaya.app.SharedLinks
 import com.chaya.app.download.DownloadTask
 import com.chaya.app.downloads.DownloadsViewModel
 import com.chaya.app.downloads.displayTitle
@@ -90,9 +76,7 @@ import com.chaya.app.library.tileLabel
 import com.chaya.app.library.tintFor
 import com.chaya.app.ui.player.Watched
 import com.chaya.app.ui.player.clockOf
-import com.chaya.app.ui.theme.LocalChayaColors
 import kotlinx.coroutines.launch
-import kotlin.math.roundToInt
 
 
 /**
@@ -112,7 +96,6 @@ fun HomeScreen(
     val shelf = remember(tasks, watched) { HomeShelf.of(tasks, watched = watched) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
-    var typing by remember { mutableStateOf(false) }
 
     fun message(text: String) {
         scope.launch { snackbarHostState.showSnackbar(text) }
@@ -161,18 +144,9 @@ fun HomeScreen(
             action = BarAction.Go,
             progress = shelf.progress,
             onPlace = onPlace,
-            onAction = { typing = true },
+            // A blank tab in Browse, its address field ready: where a link is pasted or words searched for
+            onAction = PagesToOpen::openBlankTab,
             modifier = Modifier.align(Alignment.BottomCenter),
-        )
-    }
-
-    if (typing) {
-        TypeSheet(
-            onDismiss = { typing = false },
-            onGo = { typed ->
-                typing = false
-                goTyped(typed, onPlace)
-            },
         )
     }
 }
@@ -268,7 +242,7 @@ private fun Hero(
     }
 }
 
-/** With nothing saved yet: what Chaya is for, and the way to start, which is the "+" at the foot (one way, not two). */
+/** With nothing saved yet: what Chaya is for, and the way to start, which is the bar's + (one way, not two). */
 @Composable
 private fun Welcome() {
     Box(modifier = Modifier.fillMaxWidth().height(420.dp)) {
@@ -283,7 +257,7 @@ private fun Welcome() {
                 color = MaterialTheme.colorScheme.onBackground,
             )
             Text(
-                text = "Tap + to paste a link from YouTube, Instagram, TikTok, X or Pinterest, or to browse to any page " +
+                text = "Tap + and paste a link from YouTube, Instagram, TikTok, X or Pinterest, or go to any page " +
                     "with a video on it.",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -390,71 +364,5 @@ private fun RecentCard(item: LibraryItem, files: LibraryFiles, onClick: () -> Un
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-    }
-}
-
-/** Hands what "+" was given to the browser, as [Typed] says, and brings Browse forward. */
-internal fun goTyped(typed: Typed, onPlace: (Place) -> Unit) {
-    when (typed) {
-        is Typed.LookUp -> SharedLinks.offer(typed.text)
-        is Typed.Open -> PagesToOpen.open(typed.text)
-    }
-    onPlace(Place.BROWSE)
-}
-
-/** "+": a link to save, an address, or words to search for; pasted with one tap. */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-internal fun TypeSheet(onDismiss: () -> Unit, onGo: (Typed) -> Unit) {
-    val context = LocalContext.current
-    var input by remember { mutableStateOf("") }
-    fun paste() {
-        val clipboard = context.getSystemService(ClipboardManager::class.java)
-        val text = clipboard?.primaryClip
-            ?.takeIf { it.itemCount > 0 }
-            ?.getItemAt(0)
-            ?.coerceToText(context)
-            ?.toString()
-            ?.trim()
-            .orEmpty()
-        if (text.isNotEmpty()) input = text
-    }
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-    ) {
-        Column(
-            // Above the keyboard while a link is typed
-            modifier = Modifier.fillMaxWidth().imePadding().padding(start = 24.dp, end = 24.dp, bottom = 28.dp, top = 4.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            Text("Paste a link, or search", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
-            OutlinedTextField(
-                value = input,
-                onValueChange = { input = it },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                placeholder = { Text("A link, an address, or words") },
-                trailingIcon = {
-                    IconButton(onClick = ::paste) {
-                        Icon(Icons.Default.ContentPaste, contentDescription = "Paste")
-                    }
-                },
-                shape = RoundedCornerShape(16.dp),
-            )
-            Button(
-                onClick = { Typed.of(input)?.let(onGo) },
-                enabled = input.isNotBlank(),
-                modifier = Modifier.fillMaxWidth().height(50.dp),
-                shape = CircleShape,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                ),
-            ) {
-                Text("Go", style = MaterialTheme.typography.titleMedium)
-            }
-        }
     }
 }
