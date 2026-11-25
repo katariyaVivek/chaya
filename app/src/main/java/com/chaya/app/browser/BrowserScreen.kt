@@ -779,9 +779,9 @@ fun BrowserScreen(
     // A page picked on the History or Bookmarks screen opens in the tab shown.
     val pageToOpen by PagesToOpen.pending.collectAsState()
     LaunchedEffect(pageToOpen) {
-        val url = pageToOpen ?: return@LaunchedEffect
-        PagesToOpen.consume(url)
-        navigateToUrl(url)
+        val page = pageToOpen ?: return@LaunchedEffect
+        PagesToOpen.consume(page)
+        if (page.newTab) openNewTab(page.text) else navigateToUrl(page.text)
     }
 
     LaunchedEffect(pendingNewTabUrl) {

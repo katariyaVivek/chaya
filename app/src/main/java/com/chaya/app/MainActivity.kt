@@ -13,6 +13,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.chaya.app.browser.webSearchOf
+import com.chaya.app.history.PagesToOpen
 import com.chaya.app.ui.navigation.ChayaNavHost
 import com.chaya.app.ui.navigation.Screen
 import com.chaya.app.ui.theme.ChayaTheme
@@ -50,6 +52,15 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         takeSharedLink(intent)
+    }
+
+    /**
+     * A page's *Web search* on chosen words searches in a new tab here, not in Google's app: WebView starts it through
+     * this activity, its context. Every other intent goes on as asked.
+     */
+    override fun startActivity(intent: Intent, options: Bundle?) {
+        val words = webSearchOf(intent)
+        if (words != null) PagesToOpen.openInNewTab(words) else super.startActivity(intent, options)
     }
 
     private companion object {
