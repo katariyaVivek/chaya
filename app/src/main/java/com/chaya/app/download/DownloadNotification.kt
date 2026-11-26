@@ -6,6 +6,8 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import com.chaya.app.MainActivity
+import com.chaya.app.OpenedDownloads
 import androidx.core.app.NotificationCompat
 
 object DownloadNotification {
@@ -41,7 +43,7 @@ object DownloadNotification {
 
         return NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download)
-            .setContentTitle(task.fileName)
+            .setContentTitle(titleOf(task))
             .setContentText(formatBytes(task.downloadedBytes, task.totalBytes))
             .setOngoing(true)
             .setOnlyAlertOnce(true)
@@ -64,14 +66,33 @@ object DownloadNotification {
             .setOngoing(true)
             .build()
 
+    /**
+     * "Download complete", named by its title. A tap opens it in Chaya: it used to do nothing, as the notification had
+     * nowhere to go.
+     */
     fun buildCompleteNotification(context: Context, task: DownloadTask): Notification =
         NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
-            .setContentTitle(task.fileName)
+            .setContentTitle(titleOf(task))
             .setContentText("Download complete")
             .setOngoing(false)
             .setAutoCancel(true)
+            .setContentIntent(openIntent(context, task.id))
             .build()
+
+    /** What a download is called in its notification: its title (the video's, the page's), else its file's name. */
+    fun titleOf(task: DownloadTask): String = task.title?.trim()?.takeIf { it.isNotEmpty() } ?: task.fileName
+
+    /** Opens the app on download [taskId] ([com.chaya.app.OpenedDownloads]). */
+    private fun openIntent(context: Context, taskId: Long): PendingIntent =
+        PendingIntent.getActivity(
+            context,
+            (COMPLETE_ID_BASE + taskId).toInt(),
+            Intent(context, MainActivity::class.java)
+                .putExtra(OpenedDownloads.EXTRA_DOWNLOAD_ID, taskId)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
 
     private fun serviceIntent(context: Context, action: String, taskId: Long): PendingIntent =
         PendingIntent.getForegroundService(

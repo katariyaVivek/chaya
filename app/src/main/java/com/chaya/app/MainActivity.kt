@@ -24,7 +24,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         // Not again after a rotation: the same share would open its sheet a second time.
-        if (savedInstanceState == null) takeSharedLink(intent)
+        if (savedInstanceState == null) {
+            takeSharedLink(intent)
+            takeOpenedDownload(intent)
+        }
         (application as ChayaApplication).checkEngineSoon()
         setContent {
             val mode by (application as ChayaApplication).themeSettings.mode.collectAsState()
@@ -52,6 +55,7 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         takeSharedLink(intent)
+        takeOpenedDownload(intent)
     }
 
     /**
@@ -70,6 +74,12 @@ class MainActivity : ComponentActivity() {
     }
 
     /** "Share > Chaya" from another app hands over text, usually with a link in it. */
+    /** A "Download complete" notification tapped: its download is opened once the screens are up. */
+    private fun takeOpenedDownload(intent: Intent?) {
+        val id = intent?.getLongExtra(OpenedDownloads.EXTRA_DOWNLOAD_ID, -1L) ?: return
+        if (id >= 0) OpenedDownloads.offer(id)
+    }
+
     private fun takeSharedLink(intent: Intent?) {
         if (intent?.action == Intent.ACTION_SEND && intent.type?.startsWith("text/") == true) {
             intent.getStringExtra(Intent.EXTRA_TEXT)?.let(SharedLinks::offer)

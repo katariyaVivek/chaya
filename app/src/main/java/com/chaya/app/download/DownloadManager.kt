@@ -152,6 +152,42 @@ class DownloadManager(
         _downloads.value = tasks
         idCounter.set(dao.getMaxId())
         ready.complete(Unit)
+        scope.launch(Dispatchers.IO) { reattachMissingFiles() }
+    }
+
+    /**
+     * Finished downloads whose file is not where they say, found again. A server that suggested a name
+     * (Content-Disposition) used to move the download's record to that name before its file existed, while the
+     * bytes went on arriving under the first name: the video was saved, but would not play, share or reach the
+     * gallery. Each such download gets back the file left in the folder that no download claims, when that file is
+     * the only one of its size and the download the only one missing a file of that size; it is moved to the name
+     * the download records and goes to the gallery as any finished download does.
+     */
+    private suspend fun reattachMissingFiles() {
+        val all = _downloads.value
+        val missing = all.filter { t ->
+            t.state == DownloadState.COMPLETED && t.exportedUri == null && !t.isStream && !t.isArchive &&
+                t.filePath?.let { !File(it).isFile } == true && t.downloadedBytes > 0
+        }
+        if (missing.isEmpty()) return
+        val claimed = all.mapNotNull { it.filePath }.toSet()
+        val loose = saveDir.listFiles().orEmpty().filter { f ->
+            f.isFile && f.absolutePath !in claimed && WORK_SUFFIXES.none { f.name.endsWith(it) }
+        }
+        val found = LooseFiles.match(
+            missing = missing.associate { it.id to it.downloadedBytes },
+            loose = loose.associate { it.absolutePath to it.length() },
+        )
+        for ((id, path) in found) {
+            val t = find(id) ?: continue
+            val target = File(t.filePath ?: continue)
+            if (target.exists() || !File(path).renameTo(target)) continue
+            val exported = runCatching { exportToPublicStorage(t) }.getOrNull()
+            val fixed = t.copy(exportedUri = exported)
+            apply(fixed)
+            dao.update(DownloadEntity.fromTask(fixed))
+            eventLog?.record(ChayaEvent.CaughtException("reattached", "task $id found its file again"))
+        }
     }
 
     // ------------------------------------------------------------------ //
@@ -363,7 +399,7 @@ class DownloadManager(
                     onProgress = { d, total -> progress(id, d, total) },
                     onComplete = { result ->
                         result.fold(
-                            onSuccess = { completeTask(id) },
+                            onSuccess = { finishFile(id) },
                             onFailure = { failTask(id, it) }
                         )
                     }
@@ -529,7 +565,7 @@ class DownloadManager(
             onProgress = { d, total -> progress(id, d, total) },
             onComplete = { result ->
                 result.fold(
-                    onSuccess = { completeTask(id) },
+                    onSuccess = { finishFile(id) },
                     onFailure = { failTask(id, it) }
                 )
             }
@@ -1244,10 +1280,32 @@ class DownloadManager(
     private fun ensureFileFor(t: DownloadTask): File =
         t.filePath?.let { File(it) } ?: resolveFileName(saveDir, sanitizeKeepingExtension(t.fileName))
 
-    /** Server suggested a better filename via Content-Disposition. */
+    /**
+     * The names servers suggested (Content-Disposition) for downloads still arriving. The file keeps the name the
+     * downloader writes to until it is whole ([finishFile]): renaming it then, not as the answer arrives, is what
+     * keeps the record and the bytes together. Renamed early, the record pointed at a file that never existed.
+     */
+    private val serverNames = ConcurrentHashMap<Long, String>()
+
+    /** Server suggested a better filename via Content-Disposition; used once the file is whole. */
     private fun onServerFileName(id: Long, suggested: String?) {
         if (suggested.isNullOrBlank()) return
+        serverNames[id] = suggested
+    }
+
+    /** A plain file download arrived whole: it takes the server's name, if one was suggested, and is finished. */
+    private fun finishFile(id: Long) {
+        serverNames.remove(id)?.let { renameToServerName(id, it) }
+        completeTask(id)
+    }
+
+    /**
+     * Gives the file the server's name, when the download has no title of its own: a name worked out from the page
+     * (the video's title in the media sheet) beats a server's, which on many sites is a hash (6cf38ed09...92.mp4).
+     */
+    private fun renameToServerName(id: Long, suggested: String) {
         val current = find(id) ?: return
+        if (!current.title.isNullOrBlank()) return
         val clean = sanitizeKeepingExtension(suggested)
         if (clean.equals(current.fileName, ignoreCase = true)) return
 
@@ -1256,9 +1314,11 @@ class DownloadManager(
             val ext = current.fileName.substringAfterLast('.', "")
             if (ext.isEmpty()) clean else "$clean.$ext"
         }
-        val old = current.filePath?.let(::File)?.takeIf { it.exists() }
+        // Only a file that is there is renamed, and the record follows only a rename that happened.
+        val old = current.filePath?.let(::File)?.takeIf { it.isFile } ?: return
         val newFile = resolveFileName(saveDir, finalName)
-        if (old != null && !old.renameTo(newFile)) return
+        if (!old.renameTo(newFile)) return
+        PieceLog.fileFor(old).delete()
 
         val updated = current.copy(fileName = newFile.name, filePath = newFile.absolutePath)
         apply(updated)
@@ -1339,6 +1399,11 @@ class DownloadManager(
 
         /** A stream being written out as a file, until it is checked and renamed. */
         private const val SAVING_SUFFIX = ".saving"
+
+        /** Files in the folder that are a download's work in progress, never a finished file of its own. */
+        private val WORK_SUFFIXES = listOf(
+            PICTURE_SUFFIX, SOUND_SUFFIX, PART_SUFFIX, JOINING_SUFFIX, SAVING_SUFFIX, PieceLog.SUFFIX, ".tmp",
+        )
 
         /** An archive keeps its list and fetched files in `<saved file>.items/` until they are packed. */
         private const val ITEMS_SUFFIX = ".items"

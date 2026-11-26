@@ -15,6 +15,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.chaya.app.ChayaApplication
+import com.chaya.app.OpenedDownloads
 import com.chaya.app.SharedLinks
 import com.chaya.app.browser.BrowserScreen
 import com.chaya.app.diagnostics.DiagnosticsScreen
@@ -22,6 +23,7 @@ import com.chaya.app.downloads.DownloadsScreen
 import com.chaya.app.history.BookmarksScreen
 import com.chaya.app.history.HistoryScreen
 import com.chaya.app.history.PagesToOpen
+import com.chaya.app.library.playsInChaya
 import com.chaya.app.home.HomeScreen
 import com.chaya.app.home.Place
 import com.chaya.app.home.PlaceStep
@@ -66,6 +68,17 @@ fun ChayaNavHost(navController: NavHostController) {
     val pageToOpen by PagesToOpen.pending.collectAsState()
     LaunchedEffect(pageToOpen) {
         if (pageToOpen != null) go(Place.BROWSE)
+    }
+
+    // A "Download complete" notification tapped: a video or a sound plays, anything else (a picture, an archive) is
+    // shown in the Library.
+    val app = LocalContext.current.applicationContext as ChayaApplication
+    val openedDownload by OpenedDownloads.pending.collectAsState()
+    LaunchedEffect(openedDownload) {
+        val id = openedDownload ?: return@LaunchedEffect
+        OpenedDownloads.consume(id)
+        val task = app.downloadManager.downloads.value.firstOrNull { it.id == id }
+        if (task != null && playsInChaya(task)) navController.navigate(Screen.playerRoute(id)) else go(Place.LIBRARY)
     }
 
     NavHost(

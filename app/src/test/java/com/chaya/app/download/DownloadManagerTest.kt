@@ -358,6 +358,68 @@ class DownloadManagerTest {
 
     // ---- fixtures ---- //
 
+    // ---- a name the server suggests ---- //
+
+    @Test
+    fun `a name the server suggests is taken once the file is whole, and the download keeps its bytes`() = runBlocking {
+        // The server's name moved the download's record to a file that never existed, while the bytes went on
+        // arriving under the first name: "Saved", yet it would not play, share or reach the gallery.
+        manager.restore()
+        manager.startDownload(media())
+        assertTrue(awaitUntil { downloader.starts.size == 1 })
+        val call = downloader.starts.single()
+
+        call.onMeta?.invoke("Holiday clip.mp4") // as the answer arrives, before the first byte is written
+        call.saveFile.writeText("the video's bytes") // where the downloader writes
+        downloader.completeLast(call.taskId)
+
+        assertTrue(awaitUntil { manager.downloads.value.single().state == DownloadState.COMPLETED })
+        val task = manager.downloads.value.single()
+        assertEquals("Holiday clip.mp4", task.fileName)
+        assertEquals("the video's bytes", File(task.filePath!!).readText())
+        assertEquals(task.filePath, awaitDbState(task.id, DownloadState.COMPLETED).filePath)
+        assertTrue(File(task.filePath).delete())
+    }
+
+    @Test
+    fun `a download with a title of its own keeps its name, not the server's hash`() = runBlocking {
+        manager.restore()
+        manager.startDownload(media().copy(title = "Episode 4", suggestedName = "Episode 4"))
+        assertTrue(awaitUntil { downloader.starts.size == 1 })
+        val call = downloader.starts.single()
+
+        call.onMeta?.invoke("6cf38ed091e3ffa8f52a0d36084ad92.mp4")
+        call.saveFile.writeText("bytes")
+        downloader.completeLast(call.taskId)
+
+        assertTrue(awaitUntil { manager.downloads.value.single().state == DownloadState.COMPLETED })
+        val task = manager.downloads.value.single()
+        assertEquals("Episode 4.mp4", task.fileName)
+        assertEquals("bytes", File(task.filePath!!).readText())
+        assertTrue(File(task.filePath).delete())
+    }
+
+    @Test
+    fun `a download that lost its file that way finds it again when the app starts`() = runBlocking {
+        val folder = File(context.filesDir, "downloads").apply { mkdirs() }
+        val recorded = File(folder, "Server name.mp4").apply { delete() }
+        val loose = File(folder, "clip.mp4").apply { writeText("0123456789") }
+        val other = File(folder, "something else.mp4").apply { writeText("a different size") }
+        dao.insert(
+            entity(7, DownloadState.COMPLETED).copy(
+                fileName = recorded.name, filePath = recorded.absolutePath, downloadedBytes = 10, totalBytes = 10,
+            ),
+        )
+
+        manager.restore()
+
+        assertTrue("the loose file was not moved back", awaitUntil { recorded.isFile })
+        assertEquals("0123456789", recorded.readText())
+        assertTrue(!loose.exists())
+        assertTrue("a file of another size is left alone", other.isFile)
+        listOf(recorded, other).forEach { it.delete() }
+    }
+
     private fun media(
         url: String = "https://cdn.example.com/video/clip.mp4",
         mimeType: String? = "video/mp4"
@@ -464,7 +526,8 @@ private class FakeDownloader : MediaDownloader {
         val saveFile: File,
         val referer: String?,
         val fromBytes: Long,
-        val onComplete: (Result<File>) -> Unit
+        val onComplete: (Result<File>) -> Unit,
+        val onMeta: ((String?) -> Unit)? = null,
     )
 
     val starts = mutableListOf<Start>()
@@ -484,7 +547,7 @@ private class FakeDownloader : MediaDownloader {
         onComplete: (Result<File>) -> Unit
     ) {
         synchronized(starts) {
-            starts += Start(taskId, url, saveFile, referer, fromBytes, onComplete)
+            starts += Start(taskId, url, saveFile, referer, fromBytes, onComplete, onMeta)
         }
     }
 
