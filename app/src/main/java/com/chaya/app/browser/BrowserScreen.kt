@@ -122,7 +122,8 @@ import kotlinx.coroutines.launch
 
 /**
  * Holds the open tabs across navigation so each browsing session (history, page, cookies) survives trips
- * to the Downloads screen and back.
+ * to the Downloads screen and back. The tab shown keeps its page state in [BrowserViewModel], which ChayaNavHost
+ * scopes to the activity for the same reason.
  */
 private object WebViewHolder {
     val tabs = BrowserTabs()

@@ -9,6 +9,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -33,27 +36,40 @@ import com.chaya.app.ui.theme.ChayaMotion
 private fun <T> enterTween() = tween<T>(ChayaMotion.DurationMedium, easing = ChayaMotion.EasingStandard)
 private fun exitTween() = tween<Float>(ChayaMotion.DurationShort, easing = ChayaMotion.EasingExit)
 
-@Composable
-fun ChayaNavHost(navController: NavHostController) {
-    // Chaya's places (Stage): Home first; Browse and the Library over it, one at a time, so Back from either is Home.
-    // Which is shown is the back stack's top, never a flag kept beside it.
-    fun go(place: Place) {
-        val route = when (place) {
-            Place.HOME -> Screen.Home.route
-            Place.BROWSE -> Screen.Browser.route
-            Place.LIBRARY -> Screen.Downloads.route
-        }
-        val shown = navController.currentDestination?.route == route
-        val onStack = runCatching { navController.getBackStackEntry(route) }.isSuccess
-        when (PlaceStep.of(shown, onStack)) {
-            PlaceStep.STAY -> Unit
-            PlaceStep.GO_BACK -> navController.popBackStack(route, inclusive = false)
-            PlaceStep.OPEN -> navController.navigate(route) {
-                popUpTo(Screen.Home.route)
-                launchSingleTop = true
-            }
+/** The screen each of Chaya's places is. */
+private val Place.route: String
+    get() = when (this) {
+        Place.HOME -> Screen.Home.route
+        Place.BROWSE -> Screen.Browser.route
+        Place.LIBRARY -> Screen.Downloads.route
+    }
+
+/**
+ * Brings [place] forward (Stage): Home first; Browse over it; the Library over the browser's page when the browser is
+ * open, so Back from it is that page, else over Home. Which is shown is the back stack's top, never a flag kept beside
+ * it.
+ */
+internal fun NavController.goTo(place: Place) {
+    fun onStack(route: String) = runCatching { getBackStackEntry(route) }.isSuccess
+    val route = place.route
+    when (PlaceStep.of(shown = currentDestination?.route == route, onStack = onStack(route))) {
+        PlaceStep.STAY -> Unit
+        PlaceStep.GO_BACK -> popBackStack(route, inclusive = false)
+        PlaceStep.OPEN -> navigate(route) {
+            popUpTo(place.opensOver(browseOpen = onStack(Screen.Browser.route)).route)
+            launchSingleTop = true
         }
     }
+}
+
+@Composable
+fun ChayaNavHost(navController: NavHostController) {
+    fun go(place: Place) = navController.goTo(place)
+
+    // The browser's page state lives as long as the activity, not its screen: the screen leaves the back stack when
+    // Home is brought forward, and a state made afresh on its return would show the start page over the page the tab
+    // still holds, and then save that tab as empty. Its tabs live in WebViewHolder for the same reason.
+    val activityOwner = checkNotNull(LocalViewModelStoreOwner.current) { "Chaya's screens need a ViewModelStoreOwner" }
 
     // A link shared to Chaya is opened by the browser; brought forward, or opened, whatever is showing. The browser's
     // pages live in WebViewHolder, not on its screen, so they are as they were left.
@@ -93,6 +109,7 @@ fun ChayaNavHost(navController: NavHostController) {
                 onPlace = ::go,
                 onNavigateToHistory = { navController.navigate(Screen.History.route) },
                 onNavigateToBookmarks = { navController.navigate(Screen.Bookmarks.route) },
+                viewModel = viewModel(viewModelStoreOwner = activityOwner),
             )
         }
         composable(Screen.Downloads.route) {

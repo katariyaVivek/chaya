@@ -22,4 +22,16 @@ class PlaceStepTest {
     fun `a place not there is opened`() {
         assertEquals(PlaceStep.OPEN, PlaceStep.of(shown = false, onStack = false))
     }
+
+    @Test
+    fun `the Library opens over the browser's page when the browser is open, so Back is that page`() {
+        assertEquals(Place.BROWSE, Place.LIBRARY.opensOver(browseOpen = true))
+        assertEquals(Place.HOME, Place.LIBRARY.opensOver(browseOpen = false))
+    }
+
+    @Test
+    fun `Browse and Home open over Home`() {
+        assertEquals(Place.HOME, Place.BROWSE.opensOver(browseOpen = false))
+        assertEquals(Place.HOME, Place.HOME.opensOver(browseOpen = true))
+    }
 }
