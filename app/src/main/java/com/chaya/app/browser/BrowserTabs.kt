@@ -34,6 +34,9 @@ internal class BrowserTab(
     /** When the tab was last shown, as an order rather than a time; the smallest is discarded first. */
     var lastShown: Long = 0
 
+    /** The tab whose page opened this one (a link for a new window, *Open in new tab*); Back with no history returns to it. */
+    var openerId: Long? = null
+
     /** When this tab's page last lost its renderer ([android.os.SystemClock.elapsedRealtime]); 0 if never. */
     var rendererGoneAt: Long = 0
 }
@@ -68,7 +71,7 @@ data class TabSummary(
 
     companion object {
         fun of(id: Long, state: BrowserUiState, thumbnail: File? = null, icon: File? = null): TabSummary {
-            val url = if (state.homeVisible) "" else state.url
+            val url = if (state.homeVisible) "" else state.address
             val title = when {
                 url.isEmpty() -> ""
                 state.pageTitle.isNotBlank() -> state.pageTitle
@@ -157,6 +160,15 @@ internal class BrowserTabs(val maxTabs: Int = MAX_TABS, val maxLive: Int = MAX_L
         return tabs.getOrNull(at + step)
     }
 
+    /**
+     * The tab Back returns to from the tab shown when its page has no history left: the one that opened it, while that
+     * is still open, as browsers close a tab opened from a link and go back to the page it came from.
+     */
+    fun openerOfShown(): BrowserTab? {
+        val opener = active?.openerId ?: return null
+        return tabs.firstOrNull { it.id == opener }
+    }
+
     fun changed() {
         _version.update { it + 1 }
     }
@@ -196,6 +208,13 @@ internal fun backgroundCallbacks(
     onProgressChanged = { progress, generation -> tab.saved = tab.saved?.withProgress(progress, generation) },
     onNavigationStateChanged = { back, forward ->
         tab.saved = tab.saved?.copy(canGoBack = back, canGoForward = forward)
+    },
+    // A page not shown moves and retitles itself too: its card and its saved address follow.
+    onAddressChanged = { address ->
+        tab.saved?.let { page -> page.movedWithin(address).takeIf { it != page }?.let { tab.saved = it; onChanged() } }
+    },
+    onTitleChanged = { title, generation ->
+        tab.saved?.let { page -> page.withTitle(title, generation).takeIf { it != page }?.let { tab.saved = it; onChanged() } }
     },
     // A tab not shown cannot take over the screen.
     onEnterFullscreen = { _, callback -> callback.onCustomViewHidden() },

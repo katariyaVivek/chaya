@@ -67,6 +67,20 @@ class BrowsingRecordTest {
     }
 
     @Test
+    fun `a title given after the visit renames the page without counting another visit`() = runBlocking {
+        // A page that moves within itself is recorded at once, and gives its title only afterwards
+        record.visited("https://m.youtube.com/watch?v=b", "Old title")
+        record.titled("https://m.youtube.com/watch?v=b", "  Video B ")
+        record.titled("https://m.youtube.com/watch?v=b", "")
+        record.titled("https://m.youtube.com/watch?v=never-visited", "Nothing")
+
+        val rows = record.historyRows.first()
+        assertEquals(1, rows.size)
+        assertEquals("Video B", rows.single().title)
+        assertEquals(1, rows.single().visits)
+    }
+
+    @Test
     fun `only web pages are kept, and nothing while recording is off`() = runBlocking {
         record.visited("about:blank", "")
         record.visited("data:text/html,hi", "")

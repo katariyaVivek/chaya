@@ -147,6 +147,45 @@ class BrowserTabsTest {
     }
 
     @Test
+    fun `a tab not shown follows its page moving within itself and retitling`() {
+        val tabs = BrowserTabs()
+        val tab = tabs.open()
+        tab.saved = BrowserUiState()
+        var generation = 7L
+        var changes = 0
+        val callbacks = backgroundCallbacks(tab, { ++generation }, { changes++ }, {})
+        val started = callbacks.onPageStarted("https://m.youtube.com/watch?v=a")
+
+        callbacks.onAddressChanged("https://m.youtube.com/watch?v=b")
+        callbacks.onTitleChanged("Video B", started)
+        callbacks.onTitleChanged("Late", started - 1)
+
+        assertEquals("https://m.youtube.com/watch?v=b", tab.saved?.address)
+        assertEquals("Video B", tab.saved?.pageTitle)
+        assertEquals("https://m.youtube.com/watch?v=b", TabSummary.of(tab.id, tab.saved!!).url)
+        assertEquals("one change each for the start, the move and the title", 3, changes)
+    }
+
+    @Test
+    fun `Back from a tab a page opened returns to that page's tab, while it is open`() {
+        val tabs = BrowserTabs()
+        val page = tabs.open()
+        tabs.activate(page.id)
+        val opened = tabs.open().also { it.openerId = page.id }
+        val typed = tabs.open()
+
+        tabs.activate(opened.id)
+        assertEquals(page.id, tabs.openerOfShown()?.id)
+
+        tabs.activate(typed.id)
+        assertNull("a tab opened from the bar has no page to return to", tabs.openerOfShown())
+
+        tabs.remove(page.id)
+        tabs.activate(opened.id)
+        assertNull("its page's tab was closed", tabs.openerOfShown())
+    }
+
+    @Test
     fun `what the tab list shows`() {
         assertEquals(TabSummary(1, "", ""), TabSummary.of(1, BrowserUiState()))
         assertTrue(TabSummary.of(1, BrowserUiState()).isStartScreen)

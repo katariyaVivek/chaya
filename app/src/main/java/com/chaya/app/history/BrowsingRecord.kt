@@ -53,6 +53,13 @@ class BrowsingRecord(
         history.recordVisit(url, title.trim(), clock())
     }
 
+    /** The page at [url] gave its title after its visit was recorded (a page that moved within itself, say). */
+    suspend fun titled(url: String, title: String) {
+        val name = title.trim()
+        if (!_recording.value || !isWebPage(url) || name.isEmpty()) return
+        history.retitle(url, name)
+    }
+
     /** Stars or unstars [url]; returns whether it is a bookmark now. */
     suspend fun toggleBookmark(url: String, title: String): Boolean {
         if (!isWebPage(url)) return false

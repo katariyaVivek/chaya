@@ -58,6 +58,10 @@ abstract class HistoryDao {
         if (bump(url, title, at) == 0) insert(HistoryEntity(url, title, at, visits = 1))
     }
 
+    /** The title [url] has now, as the page gave it after its visit was recorded; not another visit. */
+    @Query("UPDATE history SET title = :title WHERE url = :url")
+    abstract suspend fun retitle(url: String, title: String)
+
     @Query("DELETE FROM history WHERE url = :url")
     abstract suspend fun delete(url: String)
 
