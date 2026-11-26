@@ -49,8 +49,8 @@ curl -o app/src/main/assets/adblock/easyprivacy.txt https://easylist.to/easylist
 |---|---|---|
 | `build.yml` | every PR and push to `main` | unit tests, then the debug APK and Android Lint (`lintDebug`). Kotlin warnings fail the build, and so does any Lint finding, warnings included, not listed in `app/lint-baseline.xml` (the report is uploaded as `lint-report`). Lint's checks for newer library and SDK versions are off: they would fail on the day of a release, not because of the change. Test-only changes skip the APK and Lint; a PR that changes only `desktop/`, its workflows, `docs/` or the root's Markdown skips the job altogether (skipped, so it never holds up a merge). A failing test prints its message, and the reports are uploaded. |
 | `build.yml` (manual) | *Run workflow* | also runs the instrumented tests on an emulator |
-| `build.yml` (push to `main`) | a merge that changes the phone's app, or *Run workflow* on `main` | once the build passes, the release APK signed with the release key, published on the `android-preview` pre-release as `Chaya-Android-preview.apk` (`releases/download/android-preview/Chaya-Android-preview.apk`), replaced each time. It installs as an update over a release; a pre-release is never the repository's latest |
-| `build.yml` (tag `v*`) | pushing a version tag | tests, signed release APK, GitHub Release |
+| `build.yml` (push to `main`) | a merge that changes the phone's app, or *Run workflow* on `main` | once the build passes, the release APKs signed with the release key, published on the `android-preview` pre-release as `Chaya-Android-preview.apk` for phones (`releases/download/android-preview/Chaya-Android-preview.apk`) and `Chaya-Android-preview-x86_64.apk` for emulators, replaced each time. It installs as an update over a release; a pre-release is never the repository's latest |
+| `build.yml` (tag `v*`) | pushing a version tag | tests, signed release APKs (`app-release.apk` for phones, `app-release-x86_64.apk` for emulators and Intel Chromebooks), GitHub Release |
 | `engine.yml` | PRs touching the Python engine | pytest with the versions pinned in `app/build.gradle.kts` (`enginePackages`) |
 | `device-tests.yml` | `ui-check` label on a PR, or manual | `connectedDebugAndroidTest` in a cloud emulator |
 | `emulator-check.yml` | `ui-check` label on a PR, or manual | `walkthrough.py` drives the debug build and, beside it, the release build (R8-shrunk, debug-signed), including a link looked up by the engine; screenshots, screen text and logs are uploaded as `emulator-evidence-debug` and `-release`. If the emulator itself stops answering (adb refused, no app crash), the walkthrough leaves `evidence/emulator-gone` and the job walks through once more on a fresh emulator, keeping the first walk's evidence as `evidence-first-walk/`; any other failure fails at once |
@@ -72,11 +72,14 @@ and what Windows needs are in [`../desktop/README.md`](../desktop/README.md).
 2. **Local release builds:** copy `keystore.properties.example` to `keystore.properties`
    (gitignored) and fill it in. Without it, release builds fall back to debug signing, for
    checking only; never distribute that APK.
+   A release APK is built for one processor type (`gradle assembleRelease -Pchaya.abis=arm64-v8a`; `x86_64`
+   for emulators and Intel Chromebooks): each type adds about 43 MB of native code, and a phone needs only its own.
+   Without `-Pchaya.abis`, as for debug builds, tests and the emulator checks, an APK carries both.
 3. **CI releases:** set the repository secrets `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`
    and `KEY_PASSWORD`, then push a tag (`git tag v0.4.0 && git push origin v0.4.0`). The tag must name
    `versionName` (raise `versionCode` with it). What changed goes in `docs/releases/android-VERSION.md`, which
    becomes the release's notes. Without git, publish a release on GitHub's website with the new tag on `main`;
-   the workflow adds the APK and the notes to it, and keeps it the repository's latest.
+   the workflow adds the two APKs and the notes to it, and keeps it the repository's latest.
 
 ### Chaya for Windows
 

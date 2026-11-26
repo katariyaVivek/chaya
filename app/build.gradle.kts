@@ -25,6 +25,10 @@ val enginePackages = listOf(
     "gallery-dl==1.32.16",
 )
 
+// The processor types (ABIs) named by -Pchaya.abis (comma-separated), or null for every one the app supports.
+val chayaAbis: Set<String>? = providers.gradleProperty("chaya.abis").orNull
+    ?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.toSet()
+
 android {
     namespace = "com.chaya.app"
     // quickjs-kt (the YouTube solver's JavaScript engine) only allows apps compiled against API 36. This is the
@@ -42,10 +46,18 @@ android {
 
         buildConfigField("String", "ENGINE_PACKAGES", "\"${enginePackages.joinToString(",")}\"")
 
-        // The Python runtime ships a native build per ABI. Phones are arm64; x86_64 is for emulators
-        // (and the CI walkthrough). 32-bit ABIs are left out to keep the APK from growing further.
+        // The Python runtime, ONNX Runtime and whisper.cpp each ship a native build per ABI. Phones are arm64;
+        // x86_64 is for emulators (and the CI walkthrough) and Intel Chromebooks. 32-bit ABIs are left out.
+        // Each ABI is about 43 MB, so a release is built once per ABI (-Pchaya.abis=arm64-v8a, build.yml) and a
+        // phone downloads only its own; without the property, as in development and tests, an APK carries both.
+        // ABI splits cannot do this: they split lib/ but not Chaquopy's per-ABI assets.
         ndk {
-            abiFilters += listOf("arm64-v8a", "x86_64")
+            // Written out here, so Lint sees that x86_64 (ChromeOS) is supported; chaya.abis only picks among them.
+            abiFilters += listOf("arm64-v8a", "x86_64").filter { chayaAbis == null || it in chayaAbis }
+            val unknown = chayaAbis.orEmpty() - abiFilters
+            if (chayaAbis?.isEmpty() == true || unknown.isNotEmpty()) {
+                throw GradleException("chaya.abis must name some of arm64-v8a and x86_64, not ${unknown.ifEmpty { chayaAbis }}")
+            }
         }
 
         // whisper.cpp for "Make subtitles", built for the phone's processor (src/main/cpp)

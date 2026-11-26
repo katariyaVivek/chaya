@@ -191,20 +191,32 @@ jobs:
       - name: Run unit tests
         run: gradle testDebugUnitTest --stacktrace
 
-      - name: Build signed release APK
+      # One APK per processor type, so a phone downloads only its own (app/build.gradle.kts, chaya.abis): an APK with
+      # both is about 43 MB larger. app-release.apk is the phones' (arm64); app-release-x86_64.apk is for emulators
+      # and Intel Chromebooks.
+      - name: Build signed release APKs
         env:
           KEYSTORE_PATH: ${{ runner.temp }}/chaya-release.keystore
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: gradle assembleRelease --stacktrace
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          gradle assembleRelease -Pchaya.abis=arm64-v8a --stacktrace
+          cp app/build/outputs/apk/release/app-release.apk dist/app-release.apk
+          gradle assembleRelease -Pchaya.abis=x86_64 --stacktrace
+          cp app/build/outputs/apk/release/app-release.apk dist/app-release-x86_64.apk
+          ls -l dist
 
       # The release may already exist: GitHub's website makes a tag only by publishing a release with it. Then
-      # the APK and the notes go onto that release. The phone's release is always the repository's latest.
+      # the APKs and the notes go onto that release. The phone's release is always the repository's latest.
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: app/build/outputs/apk/release/app-release.apk
+          files: |
+            dist/app-release.apk
+            dist/app-release-x86_64.apk
           body_path: ${{ env.NOTES }}
           generate_release_notes: ${{ env.NOTES == '' }}
           make_latest: true
@@ -255,13 +267,21 @@ jobs:
           fi
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/chaya-release.keystore"
 
-      - name: Build the signed release APK
+      # One APK per processor type, as for a release: Chaya-Android-preview.apk for phones (arm64), and
+      # Chaya-Android-preview-x86_64.apk for emulators and Intel Chromebooks.
+      - name: Build the signed release APKs
         env:
           KEYSTORE_PATH: ${{ runner.temp }}/chaya-release.keystore
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: gradle assembleRelease --stacktrace
+        run: |
+          set -euo pipefail
+          gradle assembleRelease -Pchaya.abis=arm64-v8a --stacktrace
+          cp app/build/outputs/apk/release/app-release.apk Chaya-Android-preview.apk
+          gradle assembleRelease -Pchaya.abis=x86_64 --stacktrace
+          cp app/build/outputs/apk/release/app-release.apk Chaya-Android-preview-x86_64.apk
+          ls -l Chaya-Android-preview*.apk
 
       - name: Publish it as the preview
         env:
@@ -269,17 +289,17 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          cp app/build/outputs/apk/release/app-release.apk Chaya-Android-preview.apk
           title="Chaya for Android (preview)"
           notes="The newest Chaya for Android, built from ${GITHUB_SHA::7} on main on $(date -u '+%Y-%m-%d at %H:%M UTC').
           It is replaced after every merge that changes the phone's app; it is not a release.
-          Open Chaya-Android-preview.apk on the phone to install, or to update the Chaya you have: it is signed as the releases are, so your downloads and settings stay."
+          Open Chaya-Android-preview.apk on the phone to install, or to update the Chaya you have: it is signed as the releases are, so your downloads and settings stay.
+          Chaya-Android-preview-x86_64.apk is the same app for emulators and Intel Chromebooks."
           if gh release view android-preview >/dev/null 2>&1; then
             gh release edit android-preview --prerelease --title "$title" --notes "$notes"
           else
             gh release create android-preview --prerelease --latest=false --target "$GITHUB_SHA" --title "$title" --notes "$notes"
           fi
-          gh release upload android-preview Chaya-Android-preview.apk --clobber
+          gh release upload android-preview Chaya-Android-preview.apk Chaya-Android-preview-x86_64.apk --clobber
 
   # Instrumented Compose tests on an emulator (Phase 1.4). Emulator boot is
   # slow (2-5 min), so this never blocks PRs: manual dispatch only (there is
