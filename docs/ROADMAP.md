@@ -118,8 +118,9 @@ Both apps are level again (Android 0.5.0, Windows 0.3.0). What could come next:
   with subtitles drawn on, so Highlight, Karaoke, Pop and One at a time can follow (#155).
 - **Opening an editor project in the editors themselves.** The files are checked as XML and by the Windows tour, but
   not yet imported into Final Cut Pro, Resolve or Premiere Pro.
-- **Signing the Windows installer**, once SignPath can be reached: setting `WINDOWS_SIGN_COMMAND` signs every build
-  from then on, with nothing else to change.
+- **Signing the Windows installer.** The SignPath application is in; `desktop.yml` is ready to sign the program and
+  the installer once `SIGNPATH_ORGANIZATION_ID` and `SIGNPATH_API_TOKEN` are set (docs/BUILD_AND_TEST.md), tried
+  first with a test-signing run.
 - From the Windows plan's *Later, perhaps*: who is speaking, and listening without downloading.
 
 The six-part plan after v0.4.0 has shipped (#34 to #39); it is in

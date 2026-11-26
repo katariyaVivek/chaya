@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SignPath artifact configuration "installer" (slug: the repository variable
+     SIGNPATH_INSTALLER_CONFIGURATION_SLUG, or "installer"): the NSIS installer Tauri makes from the signed program
+     (Chaya_VERSION_x64-setup.exe, one file in the artifact's zip). SignPath does not open NSIS installers, which is
+     why the program is signed on its own first. Paste it into the SignPath project; docs/BUILD_AND_TEST.md. -->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <zip-file>
+    <pe-file path="Chaya_*-setup.exe">
+      <authenticode-sign/>
+    </pe-file>
+  </zip-file>
+</artifact-configuration>

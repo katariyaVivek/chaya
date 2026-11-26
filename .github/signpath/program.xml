@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SignPath artifact configuration "program" (slug: the repository variable SIGNPATH_PROGRAM_CONFIGURATION_SLUG,
+     or "program"): Chaya for Windows' own program, as desktop.yml hands it over (one file in the artifact's zip),
+     signed before the installer is made from it. Paste it into the SignPath project; docs/BUILD_AND_TEST.md. -->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <zip-file>
+    <pe-file path="chaya-desktop.exe">
+      <authenticode-sign/>
+    </pe-file>
+  </zip-file>
+</artifact-configuration>

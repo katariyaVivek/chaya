@@ -98,10 +98,29 @@ Releases are `windows-v*` tags; the phone's stay `v*`, and stay the repository's
    workflow puts it back on the phone's release if it was left on). The Desktop workflow builds and
    tours it, publishes the installer on the tag's release page, and refreshes `latest.json` on the
    `windows-latest` release, which every copy of Chaya for Windows reads at most once a day.
-3. **Signing the installer** (optional): with the secret `WINDOWS_SIGN_COMMAND` set, every build signs the
-   installer with it (Tauri's `bundle.windows.signCommand`, `%1` standing for the file), for example a
-   certificate authority's cloud signing tool. Without it the installer is unsigned and Windows SmartScreen
-   asks before it runs, which the release page explains.
+3. **Signing with a certificate** (SignPath Foundation's free certificate for open-source projects). It is off
+   until the repository variable `SIGNPATH_ORGANIZATION_ID` is set; until then the installer is unsigned and
+   Windows SmartScreen asks before it runs, which the release page explains. Once on, a release (a `windows-v*`
+   tag) is signed with no other change. `desktop.yml` builds the program alone, hands it to SignPath through its
+   GitHub Action (which checks it was built by this repository's workflow on GitHub's own runners), makes the
+   installer from the signed program, hands that over too (SignPath cannot open NSIS installers, so these are two
+   signing requests, each approved in SignPath if the policy asks), and then makes the update's own signature
+   (`.exe.sig`) again from the signed installer, since signing changes its bytes. The uninstaller inside the
+   installer stays unsigned. To set it up:
+   - **In SignPath:** a project (slug `chaya`) linked to this repository with GitHub as its trusted build system;
+     two artifact configurations, `program` and `installer`, each the file of that name in `.github/signpath/`;
+     signing policies `test-signing` and `release-signing`, the release policy allowing the `windows-v*` tags and
+     the test policy `main`; and the maintainer as approver. Make an API token for a user who may submit.
+   - **In GitHub** (Settings › Secrets and variables › Actions): the secret `SIGNPATH_API_TOKEN`, and the
+     variable `SIGNPATH_ORGANIZATION_ID`. Other names than the ones above go in the variables
+     `SIGNPATH_PROJECT_SLUG`, `SIGNPATH_POLICY_SLUG`, `SIGNPATH_TEST_POLICY_SLUG`,
+     `SIGNPATH_PROGRAM_CONFIGURATION_SLUG` and `SIGNPATH_INSTALLER_CONFIGURATION_SLUG`. A request waits up to an
+     hour for its approval (`SIGNPATH_WAIT_SECONDS` to change it), then the run fails and can be run again.
+   - **Try it without a release:** Actions › Desktop app › Run workflow on `main` with *test_signing* ticked. The
+     run signs with the test policy's certificate (not trusted by Windows, but present: the step *Check the
+     signatures* lists both files and their signer), tours the signed installer, and publishes nothing (the
+     `windows-preview` build is left as it was). If SignPath refuses a request, the signing request's page in
+     SignPath, linked from the step's log, says why.
 
 Chaya ships as a direct APK through GitHub Releases. The Play Store is deferred: a media downloader
 is close to its copyrighted-content policy, and the diagnostics assume no Play Services.
