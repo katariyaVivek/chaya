@@ -85,10 +85,12 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.common.MediaItem
+import com.chaya.app.diagnostics.ChayaEvent
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.ExoPlaybackException
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
@@ -162,11 +164,16 @@ fun PlayerScreen(
     }
 
     val player = remember {
-        ExoPlayer.Builder(context, DefaultRenderersFactory(context))
+        // When the phone's preferred decoder will not take the picture (many hardware decoders refuse a portrait
+        // 1080×1920 video, or a stream above the level they advertise), the next one is tried, down to Android's own
+        // software decoder, instead of the video failing outright.
+        ExoPlayer.Builder(context, DefaultRenderersFactory(context).setEnableDecoderFallback(true))
             .apply { source.cached?.let { setMediaSourceFactory(DefaultMediaSourceFactory(it.factory)) } }
             .build()
     }
     var status by remember { mutableStateOf(PlayerStatus.PLAYING) }
+    // Why it would not play, once it failed
+    var failure by remember { mutableStateOf<String?>(null) }
     var atMs by remember { mutableLongStateOf(0L) }
     var lengthMs by remember { mutableLongStateOf(0L) }
     var seeking by remember { mutableStateOf<Float?>(null) }
@@ -258,6 +265,10 @@ fun PlayerScreen(
         val listener = object : Player.Listener {
             override fun onPlayerError(error: PlaybackException) {
                 status = PlayerStatus.FAILED
+                val format = (error as? ExoPlaybackException)?.rendererFormat
+                val track = PlaybackFailure.Track(format?.sampleMimeType, format?.width, format?.height)
+                failure = PlaybackFailure.sentence(error.errorCode, track)
+                app.eventLog.record(ChayaEvent.CaughtException("player", PlaybackFailure.diagnostic(error.errorCodeName, track)))
             }
         }
         player.addListener(listener)
@@ -454,7 +465,7 @@ fun PlayerScreen(
             }
             if (status == PlayerStatus.FAILED) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(16.dp)) {
-                    Text("Chaya can't play this file.", color = NightInk, style = TextStyle(fontSize = 15.sp))
+                    Text(failure ?: "Chaya can't play this file.", color = NightInk, style = TextStyle(fontSize = 15.sp))
                     TextButton(onClick = { openElsewhere(app, task) }) {
                         Text("Open in another app", color = NightInk, style = TextStyle(fontWeight = FontWeight.SemiBold))
                     }
