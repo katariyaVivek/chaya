@@ -18,6 +18,7 @@ pause, resume and retry throughout.
 
 - **Android:** `app-release.apk` from the newest `v*` release on
   [Releases](https://github.com/katariyaVivek/chaya/releases/latest); allow installs from unknown apps when asked.
+  (`app-release-x86_64.apk` beside it is for emulators and Intel Chromebooks.)
 - **Windows:** `Chaya-Windows-VERSION-setup.exe` from the newest `windows-v*` release on
   [Releases](https://github.com/katariyaVivek/chaya/releases). It installs for you alone (no administrator), and
   Chaya then offers its own updates in its settings. See the [code signing policy](#code-signing-policy).
