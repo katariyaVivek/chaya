@@ -122,7 +122,8 @@ import kotlinx.coroutines.launch
 
 /**
  * Holds the open tabs across navigation so each browsing session (history, page, cookies) survives trips
- * to the Downloads screen and back.
+ * to the Downloads screen and back. The tab shown keeps its page state in [BrowserViewModel], which ChayaNavHost
+ * scopes to the activity for the same reason.
  */
 private object WebViewHolder {
     val tabs = BrowserTabs()
@@ -200,9 +201,9 @@ fun BrowserScreen(
     }
 
     // Sync input when page loads
-    LaunchedEffect(uiState.url) {
-        if (uiState.url.isNotEmpty()) {
-            urlInput = uiState.url
+    LaunchedEffect(uiState.address) {
+        if (uiState.address.isNotEmpty()) {
+            urlInput = uiState.address
         }
     }
 
@@ -257,7 +258,7 @@ fun BrowserScreen(
     val adBlocker = remember { (context.applicationContext as ChayaApplication).adBlocker }
     val app = remember { context.applicationContext as ChayaApplication }
     val tabStore = remember { app.tabStore }
-    val pageBookmarked by remember(uiState.url) { app.browsing.isBookmarked(uiState.url) }.collectAsState(initial = false)
+    val pageBookmarked by remember(uiState.address) { app.browsing.isBookmarked(uiState.address) }.collectAsState(initial = false)
     val bookmarkTiles by remember {
         app.browsing.bookmarkRows.map { rows -> rows.take(START_SCREEN_BOOKMARKS).map { QuickSite.of(it.url, it.title) } }
     }.collectAsState(initial = emptyList())
@@ -361,6 +362,7 @@ fun BrowserScreen(
             frameAgentJs = frameAgentJs,
             callbacks = tab.callbacks,
             onVisited = { url, title -> app.appScope.launch { app.browsing.visited(url, title) } },
+            onTitled = { url, title -> app.appScope.launch { app.browsing.titled(url, title) } },
             onRendererGone = {
                 // The page's renderer stopped. This tab's WebView is unusable; the others' get their own call.
                 tab.webView?.let { dead ->
@@ -375,7 +377,7 @@ fun BrowserScreen(
                     tab.rendererGoneAt = now
                     makeLive(tab, restore = false)
                     val page = viewModel.uiState.value
-                    if (reload && !page.homeVisible && page.url.isNotEmpty()) tab.webView?.loadUrl(page.url)
+                    if (reload && !page.homeVisible && page.address.isNotEmpty()) tab.webView?.loadUrl(page.address)
                     rendererNotice = if (reload) "The page stopped working and was opened again"
                     else "The page keeps stopping. Tap reload to try again"
                 }
@@ -398,7 +400,7 @@ fun BrowserScreen(
         val bytes = tabStore.readState(tab.id)
         if (bytes == null || !WebViewStates.restore(web, bytes)) {
             val page = tab.saved
-            if (page != null && !page.homeVisible && page.url.isNotEmpty()) web.loadUrl(page.url)
+            if (page != null && !page.homeVisible && page.address.isNotEmpty()) web.loadUrl(page.address)
         }
     }
 
@@ -439,7 +441,7 @@ fun BrowserScreen(
                 viewModel.switchTab(first.saved, canGoBack = false, canGoForward = false)
                 first.saved = null
                 tabs.activate(first.id)
-                urlInput = viewModel.uiState.value.url
+                urlInput = viewModel.uiState.value.address
             } else {
                 val first = newTab()
                 first.saved = null
@@ -467,7 +469,7 @@ fun BrowserScreen(
     fun savedTabs(): TabStore.Saved = TabStore.Saved(
         tabs = tabs.all.map { tab ->
             val page = if (tab.id == tabs.activeId) viewModel.uiState.value else tab.saved ?: BrowserUiState()
-            TabStore.SavedTab(tab.id, if (page.homeVisible) "" else page.url, if (page.homeVisible) "" else page.pageTitle)
+            TabStore.SavedTab(tab.id, if (page.homeVisible) "" else page.address, if (page.homeVisible) "" else page.pageTitle)
         },
         activeId = tabs.activeId,
     )
@@ -517,7 +519,7 @@ fun BrowserScreen(
         target.saved = null
         tabs.activate(target.id)
         bindTabs()
-        urlInput = viewModel.uiState.value.url
+        urlInput = viewModel.uiState.value.address
         tabs.toDiscard().forEach(::discard)
         persistTabs()
     }
@@ -668,17 +670,21 @@ fun BrowserScreen(
     fun reloadPage() {
         val web = activeWebView() ?: return
         val page = viewModel.uiState.value
-        if (web.url.isNullOrEmpty() && !page.homeVisible && page.url.isNotEmpty()) web.loadUrl(page.url) else web.reload()
+        if (web.url.isNullOrEmpty() && !page.homeVisible && page.address.isNotEmpty()) web.loadUrl(page.address) else web.reload()
     }
 
-    /** Opens a new tab, on the start screen or at [url]; past the limit, [url] opens in the tab shown instead. */
-    fun openNewTab(url: String?) {
+    /**
+     * Opens a new tab, on the start screen or at [url]; past the limit, [url] opens in the tab shown instead. A tab
+     * [fromPage] (a link the page or the long-press menu opened) remembers the tab it came from, which Back returns to.
+     */
+    fun openNewTab(url: String?, fromPage: Boolean = false) {
         if (!tabs.canOpenMore) {
             showMessage("Close a tab to open another (up to ${tabs.maxTabs})")
             if (url != null) navigateToUrl(url)
             return
         }
         val tab = newTab()
+        if (fromPage) tab.openerId = tabs.activeId
         val target = url?.trim()?.takeIf { it.isNotEmpty() }?.let(::addressFor)
         // A blank tab is for typing in: its field is ready, keyboard up, as a browser's new tab is.
         if (target == null) focusAddress = true
@@ -695,9 +701,12 @@ fun BrowserScreen(
         }
     }
 
-    /** Closes [target]; closing the tab shown shows its neighbour, and closing the last opens a fresh one. */
-    fun closeTab(target: BrowserTab) {
-        val next = tabs.remove(target.id)
+    /**
+     * Closes [target]; closing the tab shown shows [then] when it is given and still open, else its neighbour, and
+     * closing the last opens a fresh one.
+     */
+    fun closeTab(target: BrowserTab, then: BrowserTab? = null) {
+        val next = tabs.remove(target.id)?.let { neighbour -> then?.takeIf { it in tabs.all } ?: neighbour }
         target.webView?.let { web ->
             (web.parent as? ViewGroup)?.removeView(web)
             web.destroy()
@@ -713,6 +722,15 @@ fun BrowserScreen(
             }
             else -> persistTabs()
         }
+    }
+
+    // Back on a tab a page opened, with no history of its own left: the tab closes and the page it came from is shown.
+    // (With history, the handler above goes back in the page; with neither, Back leaves the browser.)
+    val backToOpener = if (uiState.canGoBack) null else tabs.openerOfShown()
+    BackHandler(enabled = customView == null && backToOpener != null) {
+        val shown = tabs.active
+        val opener = tabs.openerOfShown()
+        if (shown != null && opener != null) closeTab(shown, then = opener)
     }
 
     /** Closes every tab and deletes their files (history, pictures, icons), then opens a fresh one. */
@@ -734,7 +752,7 @@ fun BrowserScreen(
 
     // Saved when a page finishes and when the tab list changes; history and a picture also when the app goes to
     // the background, which is when Android may close it.
-    LaunchedEffect(uiState.url, uiState.pageTitle, uiState.homeVisible, uiState.isLoading, tabsVersion) {
+    LaunchedEffect(uiState.address, uiState.pageTitle, uiState.homeVisible, uiState.isLoading, tabsVersion) {
         delay(TAB_SAVE_SETTLE_MILLIS)
         if (!uiState.isLoading) tabs.active?.webView?.let { web -> WebViewStates.save(web) }?.let { bytes ->
             val id = tabs.activeId
@@ -772,7 +790,7 @@ fun BrowserScreen(
     LaunchedEffect(pendingNewTabUrl) {
         val url = pendingNewTabUrl ?: return@LaunchedEffect
         pendingNewTabUrl = null
-        openNewTab(url)
+        openNewTab(url, fromPage = true)
     }
 
     // The page let go after being pulled down far enough at its top: it loads again.
@@ -808,12 +826,12 @@ fun BrowserScreen(
         val link = (pressed as? PressedOn.Link)?.url ?: (pressed as? PressedOn.Image)?.link
         val picture = (pressed as? PressedOn.Image)?.src
         when (action) {
-            PageAction.OPEN_IN_NEW_TAB -> link?.let(::openNewTab)
+            PageAction.OPEN_IN_NEW_TAB -> link?.let { openNewTab(it, fromPage = true) }
             PageAction.COPY_LINK -> link?.let { copy("Link", it, "Link copied") }
             PageAction.COPY_LINK_TEXT -> (pressed as? PressedOn.Link)?.let { copy("Link text", it.text, "Link text copied") }
             PageAction.DOWNLOAD_LINK -> link?.let(::downloadAddress)
             PageAction.SHARE_LINK -> link?.let(::shareAddress)
-            PageAction.OPEN_IMAGE_IN_NEW_TAB -> picture?.let(::openNewTab)
+            PageAction.OPEN_IMAGE_IN_NEW_TAB -> picture?.let { openNewTab(it, fromPage = true) }
             PageAction.DOWNLOAD_IMAGE -> picture?.let(::downloadAddress)
             PageAction.COPY_IMAGE_ADDRESS -> picture?.let { copy("Image address", it, "Image address copied") }
             PageAction.SHARE_IMAGE -> picture?.let(::shareAddress)
@@ -902,7 +920,7 @@ fun BrowserScreen(
                                 .padding(horizontal = 12.dp, vertical = 8.dp)
                         ) {
                             AddressBar(
-                                url = uiState.url,
+                                url = uiState.address,
                                 homeVisible = uiState.homeVisible,
                                 input = urlInput,
                                 onInputChange = { urlInput = it },
@@ -923,11 +941,11 @@ fun BrowserScreen(
                                 onAdBlock = { viewModel.openAdBlockSheet() },
                                 bookmarked = pageBookmarked,
                                 // Only a web page can be starred; the start screen and other pages have no star.
-                                onToggleBookmark = if (BrowsingRecord.isWebPage(uiState.url)) {
+                                onToggleBookmark = if (BrowsingRecord.isWebPage(uiState.address)) {
                                     {
                                         val page = uiState
                                         scope.launch {
-                                            val now = app.browsing.toggleBookmark(page.url, page.pageTitle)
+                                            val now = app.browsing.toggleBookmark(page.address, page.pageTitle)
                                             showMessage(if (now) "Added to bookmarks" else "Removed from bookmarks")
                                         }
                                     }
@@ -1231,14 +1249,44 @@ internal fun createChayaWebView(
     frameAgentJs: String = "",
     /** The site's icon for this tab, for its card in the tab grid. */
     onIcon: (Bitmap) -> Unit = {},
-    /** A page finished loading in this tab, for history. */
+    /** A page finished loading in this tab, or moved within itself to another address, for history. */
     onVisited: (url: String, title: String) -> Unit = { _, _ -> },
+    /** The page at url gave its title after its visit was recorded, for history. */
+    onTitled: (url: String, title: String) -> Unit = { _, _ -> },
     /** The page's renderer stopped; this WebView can no longer be used and must be replaced. */
     onRendererGone: () -> Unit = {},
 ): WebView {
     return ChayaWebView(ctx, callbacks).apply {
         // Tracks injection eligibility so a superseded redirect cannot reintroduce an old capability on finish.
         var activeDetectorSession: DetectorNavigationSession? = null
+        // When the person last tapped for a navigation in this page, so a redirect from that tap counts as asked for.
+        var lastTapAt: Long? = null
+        // The address last added to history from this WebView, so a page and its own report of it count once.
+        var lastVisited: String? = null
+
+        fun visited(url: String, title: String) {
+            if (url == lastVisited) return
+            lastVisited = url
+            onVisited(url, title)
+        }
+
+        /**
+         * Opens an address that is not a web page in its app, when the person asked ([ExternalLinks.route]). True when
+         * the WebView must not load it, which is always: it cannot show `tel:` or `intent:`.
+         */
+        fun openOutside(url: String, hasGesture: Boolean, isRedirect: Boolean): Boolean {
+            val now = SystemClock.elapsedRealtime()
+            if (hasGesture) lastTapAt = now
+            val route = ExternalLinks.route(url, hasGesture, isRedirect, lastTapAt?.let { now - it })
+            if (route == ExternalLinks.Route.WEB) return false
+            if (route == ExternalLinks.Route.BLOCK) return true
+            val opened = ExternalLinks.intentFor(url)?.let { intent ->
+                runCatching { context.startActivity(intent) }.isSuccess
+            } == true
+            // No app takes it: an intent: link may name a web page for that case.
+            if (!opened) ExternalLinks.fallbackOf(url)?.let { fallback -> post { loadUrl(fallback) } }
+            return true
+        }
 
         // Invalidates every page-scoped collaborator before a transition can deliver stale callbacks.
         fun invalidateDetectorNavigation() {
@@ -1264,6 +1312,11 @@ internal fun createChayaWebView(
             displayZoomControls = false
             loadWithOverviewMode = true
             useWideViewPort = true
+            // A link that asks for a new window (target="_blank", window.open on a tap) reaches onCreateWindow below,
+            // which opens it in a new tab or blocks it. Without this WebView loaded every such window over the page
+            // itself, so a click-anywhere ad replaced the page, and the pop-up rules in the ad lists never ran. A page
+            // still cannot open one without a tap: javaScriptCanOpenWindowsAutomatically stays off.
+            setSupportMultipleWindows(true)
         }
 
         // The bridge is visible to every frame, so its callbacks validate a per-navigation capability.
@@ -1317,7 +1370,7 @@ internal fun createChayaWebView(
                         view?.title.orEmpty(),
                         session.navigationGeneration,
                     )
-                    onVisited(pageUrl, view?.title.orEmpty())
+                    visited(pageUrl, view?.title.orEmpty())
                     // Reinject after commit because a load-start evaluation can be discarded with the old document.
                     if (detectorJs.isNotEmpty()) {
                         view?.evaluateJavascript(
@@ -1337,9 +1390,10 @@ internal fun createChayaWebView(
                 view: WebView?,
                 request: WebResourceRequest?
             ): Boolean {
-                if (request?.isForMainFrame == true) {
-                    invalidateDetectorNavigation()
-                }
+                if (request?.isForMainFrame != true) return false
+                val target = request.url?.toString() ?: return false
+                if (openOutside(target, request.hasGesture(), request.isRedirect)) return true
+                invalidateDetectorNavigation()
                 return false
             }
 
@@ -1357,8 +1411,13 @@ internal fun createChayaWebView(
                 view?.let {
                     callbacks.onNavigationStateChanged(it.canGoBack(), it.canGoForward())
                 }
-                // Also fires when a video site moves to another video without loading a new document.
-                url?.let { callbacks.onAddressChanged(it) }
+                // Also fires when a video site moves to another video without loading a new document: that address
+                // is the page's now, and goes into history as the page would have.
+                url?.let { address ->
+                    callbacks.onAddressChanged(address)
+                    val document = activeDetectorSession?.pageUrl
+                    if (!isReload && document != null && address != document) visited(address, view?.title.orEmpty())
+                }
                 super.doUpdateVisitedHistory(view, url, isReload)
             }
 
@@ -1386,6 +1445,12 @@ internal fun createChayaWebView(
                 callbacks.onExitFullscreen()
             }
 
+            override fun onReceivedTitle(view: WebView?, title: String?) {
+                val name = title?.takeIf { it.isNotBlank() } ?: return
+                activeDetectorSession?.let { session -> callbacks.onTitleChanged(name, session.navigationGeneration) }
+                view?.url?.let { onTitled(it, name) }
+            }
+
             override fun onReceivedIcon(view: WebView?, icon: Bitmap?) {
                 icon?.let(onIcon)
             }
@@ -1398,27 +1463,26 @@ internal fun createChayaWebView(
                 resultMsg: android.os.Message?
             ): Boolean {
                 if (view == null || resultMsg == null) return false
+                // A window the person did not tap for is a pop-up: blocked, as browsers block them. It used to load
+                // over the page itself.
+                if (!isUserGesture) return false
                 val tempWebView = WebView(view.context).apply {
                     webViewClient = object : WebViewClient() {
                         override fun shouldOverrideUrlLoading(
                             wv: WebView?,
                             request: WebResourceRequest?
                         ): Boolean {
-                            request?.url?.let {
-                                if (adBlock.shouldBlockPopup(it.toString())) {
-                                    destroyLater(wv)
-                                    return true
+                            request?.url?.toString()?.let { target ->
+                                when {
+                                    adBlock.shouldBlockPopup(target) -> Unit
+                                    // An app's link in a new window opens in its app, as from the page itself.
+                                    ExternalLinks.route(target, true, false, null) == ExternalLinks.Route.APP ->
+                                        openOutside(target, hasGesture = true, isRedirect = false)
+                                    // A link the person tapped that wants a new window opens in a new tab.
+                                    else -> callbacks.onOpenInNewTab(target)
                                 }
-                                // A link the person tapped that wants a new window opens in a new tab.
-                                if (isUserGesture) {
-                                    callbacks.onOpenInNewTab(it.toString())
-                                    destroyLater(wv)
-                                    return true
-                                }
-                                invalidateDetectorNavigation()
-                                view.loadUrl(it.toString())
-                                destroyLater(wv)
                             }
+                            destroyLater(wv)
                             return true
                         }
 

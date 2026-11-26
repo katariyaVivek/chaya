@@ -105,7 +105,9 @@ class BrowserViewModelLinksTest {
 
         assertEquals("abc123xyz", viewModel.linkState.value.match?.id)
         assertEquals(listOf(video, other), asked)
-        // The page state stays tied to the document that was loaded.
+        // The address shown follows the page (the bar, a bookmark, a share, history, the saved tab), while what was
+        // found on it stays tied to the document that was loaded.
+        assertEquals(other, viewModel.uiState.value.address)
         assertEquals(video, viewModel.uiState.value.url)
         assertEquals(generation, viewModel.uiState.value.navigationGeneration)
     }

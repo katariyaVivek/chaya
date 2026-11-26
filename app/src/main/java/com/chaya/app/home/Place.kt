@@ -5,6 +5,13 @@ enum class Place(val label: String) {
     HOME("Home"),
     BROWSE("Browse"),
     LIBRARY("Library"),
+    ;
+
+    /**
+     * The place this one opens over when it is not there yet. The Library opens over the browser's page when the
+     * browser is open, so Back from it is that page again; everything else opens over Home, so Back from it is Home.
+     */
+    fun opensOver(browseOpen: Boolean): Place = if (this == LIBRARY && browseOpen) BROWSE else HOME
 }
 
 /**

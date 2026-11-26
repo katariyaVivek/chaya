@@ -55,7 +55,13 @@ data class ThoroughScanRequest(
 data class BrowserUiState(
     /** Distinguishes identical URLs loaded by different top-level document navigations. */
     val navigationGeneration: Long = 0L,
+    /** The address the document was loaded from. Media found on the page is matched to it. */
     val url: String = "",
+    /**
+     * Where the page moved within itself since it loaded, as a video site does going to another video without a new
+     * document; null when it has not. [address] is what the page shows now.
+     */
+    val movedTo: String? = null,
     val pageTitle: String = "",
     /** True while the start screen overlay should cover the WebView. */
     val homeVisible: Boolean = true,
@@ -77,6 +83,12 @@ data class BrowserUiState(
     /** The one sheet shown over the page, or null. Change it only through this; the flags below read it. */
     val sheet: BrowserSheet? = null,
 ) {
+    /**
+     * The address the page shows now: the bar's, and what a bookmark, a share, history and the saved tab keep. [url]
+     * until the page moves within itself; media detection stays with [url], the document's.
+     */
+    val address: String get() = movedTo ?: url
+
     val showMediaSheet: Boolean get() = sheet == BrowserSheet.Media
     val showLinkSheet: Boolean get() = sheet == BrowserSheet.Link
     val showProfileSheet: Boolean get() = sheet == BrowserSheet.Profile
@@ -190,14 +202,22 @@ class BrowserViewModel @JvmOverloads constructor(
      * Only the link lookup follows this: the page state above is deliberately tied to whole documents.
      */
     fun onPageAddressChanged(url: String) {
+        _uiState.update { it.movedWithin(url) }
         followAddress(url)
+    }
+
+    /** The page gave its title, perhaps a new one after moving within itself; a late one from an older document is dropped. */
+    fun onTitleChanged(title: String, navigationGeneration: Long) {
+        _uiState.update { it.withTitle(title, navigationGeneration) }
     }
 
     /** Finalizes only the matching document generation before scheduling its optional deeper media scan. */
     fun onPageFinished(url: String, title: String, navigationGeneration: Long) {
         val state = _uiState.value
+        // The document is known by its generation: a page that moved within itself while loading (its address in
+        // movedTo) still finishes.
         if (url == "about:blank" ||
-            url != state.url ||
+            url != state.url && url != state.movedTo ||
             navigationGeneration != state.navigationGeneration
         ) return
         _uiState.update { activeState -> activeState.finishedPage(url, title, navigationGeneration) }
@@ -230,6 +250,7 @@ class BrowserViewModel @JvmOverloads constructor(
             state.copy(
                 navigationGeneration = navigationGeneration,
                 url = "",
+                movedTo = null,
                 pageTitle = "",
                 homeVisible = true,
                 isLoading = false,
@@ -743,6 +764,7 @@ internal fun BrowserUiState.startedPage(url: String, navigationGeneration: Long)
         copy(
             navigationGeneration = navigationGeneration,
             url = "",
+            movedTo = null,
             pageTitle = "",
             homeVisible = true,
             isLoading = false,
@@ -758,6 +780,7 @@ internal fun BrowserUiState.startedPage(url: String, navigationGeneration: Long)
         copy(
             navigationGeneration = navigationGeneration,
             url = url,
+            movedTo = null,
             homeVisible = false,
             isLoading = true,
             progress = 0,
@@ -772,8 +795,24 @@ internal fun BrowserUiState.startedPage(url: String, navigationGeneration: Long)
 
 /** The document [navigationGeneration] at [url] has loaded; a late report from another document changes nothing. */
 internal fun BrowserUiState.finishedPage(url: String, title: String, navigationGeneration: Long): BrowserUiState =
-    if (this.navigationGeneration != navigationGeneration || this.url != url) this
-    else copy(url = url, pageTitle = title, isLoading = false, progress = 100)
+    if (this.navigationGeneration != navigationGeneration || this.url != url && movedTo != url) this
+    else copy(pageTitle = title.ifBlank { pageTitle }, isLoading = false, progress = 100)
+
+/**
+ * The page moved to [address] without a new document (history.pushState, as video sites do going to another video).
+ * The start screen, and addresses that are not web pages, do not move it.
+ */
+internal fun BrowserUiState.movedWithin(address: String): BrowserUiState = when {
+    homeVisible || url.isEmpty() -> this
+    !address.startsWith("http://") && !address.startsWith("https://") -> this
+    address == this.address -> this
+    else -> copy(movedTo = address.takeUnless { it == url })
+}
+
+/** The page's title for the document [navigationGeneration]; blank titles and late ones from older documents are dropped. */
+internal fun BrowserUiState.withTitle(title: String, navigationGeneration: Long): BrowserUiState =
+    if (this.navigationGeneration != navigationGeneration || homeVisible || title.isBlank()) this
+    else copy(pageTitle = title)
 
 /** Loading progress for the document [navigationGeneration] only. */
 internal fun BrowserUiState.withProgress(progress: Int, navigationGeneration: Long): BrowserUiState =

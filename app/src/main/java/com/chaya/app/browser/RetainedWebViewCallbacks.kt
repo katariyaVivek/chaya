@@ -15,6 +15,8 @@ internal data class RetainedWebViewCallbackState(
     val onExitFullscreen: () -> Unit,
     /** The page's address changed, possibly without a new document (a video site moving to another video). */
     val onAddressChanged: (String) -> Unit = {},
+    /** The page gave its title (or a new one), for the document of that generation. */
+    val onTitleChanged: (String, Long) -> Unit = { _, _ -> },
     /** The page asked for a link to open in a new window, on the person's tap. */
     val onOpenInNewTab: (String) -> Unit = {},
     /** A long press on a link or a picture: its menu. */
@@ -61,6 +63,11 @@ internal class RetainedWebViewCallbacks(initialState: RetainedWebViewCallbackSta
     /** Reports the address the page now shows, to the destination currently attached to the retained WebView. */
     fun onAddressChanged(url: String) {
         state.get().onAddressChanged(url)
+    }
+
+    /** Reports the page's title to the destination currently attached to the retained WebView. */
+    fun onTitleChanged(title: String, navigationGeneration: Long) {
+        state.get().onTitleChanged(title, navigationGeneration)
     }
 
     /** Opens [url] in a new tab, for a link the page wanted in a new window. */
