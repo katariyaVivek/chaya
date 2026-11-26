@@ -25,17 +25,9 @@ val enginePackages = listOf(
     "gallery-dl==1.32.16",
 )
 
-// The processor types (ABIs) an APK is built for: both by default, or those named by -Pchaya.abis (comma-separated).
-val supportedAbis = listOf("arm64-v8a", "x86_64")
-val chayaAbis: List<String> = providers.gradleProperty("chaya.abis").orNull
-    ?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }
-    ?.also { abis ->
-        val unknown = abis - supportedAbis.toSet()
-        if (abis.isEmpty() || unknown.isNotEmpty()) {
-            throw GradleException("chaya.abis must name some of $supportedAbis, not ${unknown.ifEmpty { abis }}")
-        }
-    }
-    ?: supportedAbis
+// The processor types (ABIs) named by -Pchaya.abis (comma-separated), or null for every one the app supports.
+val chayaAbis: Set<String>? = providers.gradleProperty("chaya.abis").orNull
+    ?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }?.toSet()
 
 android {
     namespace = "com.chaya.app"
@@ -60,7 +52,12 @@ android {
         // phone downloads only its own; without the property, as in development and tests, an APK carries both.
         // ABI splits cannot do this: they split lib/ but not Chaquopy's per-ABI assets.
         ndk {
-            abiFilters += chayaAbis
+            // Written out here, so Lint sees that x86_64 (ChromeOS) is supported; chaya.abis only picks among them.
+            abiFilters += listOf("arm64-v8a", "x86_64").filter { chayaAbis == null || it in chayaAbis }
+            val unknown = chayaAbis.orEmpty() - abiFilters
+            if (chayaAbis?.isEmpty() == true || unknown.isNotEmpty()) {
+                throw GradleException("chaya.abis must name some of arm64-v8a and x86_64, not ${unknown.ifEmpty { chayaAbis }}")
+            }
         }
 
         // whisper.cpp for "Make subtitles", built for the phone's processor (src/main/cpp)
