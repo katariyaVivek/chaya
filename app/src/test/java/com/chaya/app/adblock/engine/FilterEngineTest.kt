@@ -160,7 +160,7 @@ class FilterEngineTest {
             "||y.example^\$removeparam=utm", // rewrites the address
             "||z.example^\$redirect-rule=noop.js", // only redirects when something else blocks
             "\$third-party", // would block every third-party request
-            "news.example##+js(set, adsbygoogle, {})", // scriptlet
+            "news.example##+js(trusted-set, adsbygoogle, {})", // a scriptlet Chaya does not carry
             "news.example##.ad:has-text(Sponsored)", // procedural
         )
 

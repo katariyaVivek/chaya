@@ -10,7 +10,9 @@ package com.chaya.app.adblock.engine
  * rules for every site (thousands of `.ad-banner`-like selectors) only for the classes and ids a page actually
  * has.
  *
- * Not supported, so skipped rather than half-applied: regular-expression rules, scriptlets (`##+js`),
+ * Scriptlets (`##+js(...)`) are handed to the page's start script ([scriptlets]), those Chaya carries.
+ *
+ * Not supported, so skipped rather than half-applied: regular-expression rules, uBlock's `trusted-` scriptlets,
  * procedural selectors (`:has-text`...), and options that rewrite rather than block (`csp`, `removeparam`...).
  */
 class FilterEngine private constructor(
@@ -27,6 +29,7 @@ class FilterEngine private constructor(
     private val popupExceptions: List<NetworkFilter>,
     private val pageExceptions: List<Pair<NetworkFilter, Int>>,
     private val cosmetics: CosmeticRules,
+    private val scriptletRules: ScriptletRules,
     /** Rules in use, for the settings screen. */
     val ruleCount: Int,
 ) {
@@ -81,6 +84,18 @@ class FilterEngine private constructor(
         if (blocking.important) return true
         return popupExceptions.none { it.matchesPopup(url, lower, page, requestSite) }
     }
+
+    /**
+     * Whether the page should be stopped from going to [url] on its own (no tap), or a window the person tapped for
+     * from opening it: an ad pop-up by the lists, or an address on a host the lists block outright (`||ads.example^`,
+     * rules for every kind of request), as uBlock Origin blocks such a page.
+     */
+    fun shouldBlockNavigation(url: String, page: PageContext): Boolean =
+        shouldBlockPopup(url, page) || shouldBlock(url, RequestType.UNKNOWN, page)
+
+    /** The scriptlets to run on [page] (a frame's own address for a frame), each its name then its arguments. */
+    fun scriptlets(page: PageContext): List<List<String>> =
+        if (page.allowAll) emptyList() else scriptletRules.forPage(page)
 
     private fun NetworkFilter.matchesPopup(url: String, lower: String, page: PageContext, site: () -> String) =
         (domains == null || domains.allows(page.host, page.site)) &&
@@ -175,6 +190,7 @@ class FilterEngine private constructor(
         private val popupExceptions = ArrayList<NetworkFilter>()
         private val pageExceptions = ArrayList<Pair<NetworkFilter, Int>>()
         private val cosmetics = CosmeticRules.Builder()
+        private val scriptlets = ScriptletRules.Builder()
         private var count = 0
 
         /** Adds one line of a list; comments, blank lines and rules this engine does not support are skipped. */
@@ -183,7 +199,12 @@ class FilterEngine private constructor(
             if (line.isEmpty() || line[0] == '!' || line[0] == '[') return
             val cosmetic = CosmeticRules.separatorIn(line)
             if (cosmetic != null) {
-                if (cosmetics.add(line, cosmetic)) count++
+                val added = if (line.startsWith("+js(", line.indexOf(cosmetic) + cosmetic.length)) {
+                    scriptlets.add(line, cosmetic)
+                } else {
+                    cosmetics.add(line, cosmetic)
+                }
+                if (added) count++
                 return
             }
             // Procedural, scriptlet and CSS-injecting rules (`#?#`, `#$#`, `#%#`, `#@?#`...) are not applied.
@@ -196,7 +217,7 @@ class FilterEngine private constructor(
         fun build(): FilterEngine = FilterEngine(
             resolver, blockedHosts, allowedHosts, hostFilters, hostExceptions, tokenFilters, tokenExceptions,
             untokenizedFilters, untokenizedExceptions, popupFilters, popupExceptions, pageExceptions,
-            cosmetics.build(), count,
+            cosmetics.build(), scriptlets.build(), count,
         )
 
         private fun addNetwork(line: String): Boolean {

@@ -1,6 +1,6 @@
 # Chaya Privacy Policy
 
-**Last updated:** October 2026. Chaya is distributed as a direct APK through GitHub Releases: no Play
+**Last updated:** November 2026. Chaya is distributed as a direct APK through GitHub Releases: no Play
 Store account, no third-party SDKs.
 
 ## What Chaya accesses
@@ -93,9 +93,10 @@ Chaya talks only to the sites involved in what you do:
 - when you save a video from such a link and the site has subtitles in the language spoken, that site's server
   again, for those subtitles, at the address yt-dlp found for them and with the video's own headers (your
   sign-in cookie only when the subtitles are on the same site as the video);
-- for the ad blocker, about once a week, easylist.to, to fetch fresh copies of the EasyList and
-  EasyPrivacy lists. The request carries no cookies and nothing about you or the pages you visit;
-  the lists are then used on your phone. Blocked requests never leave the phone at all.
+- for the ad blocker, about once a week (and the first time the browser opens, for the lists not
+  shipped in the app), easylist.to, to fetch fresh copies of the EasyList and EasyPrivacy lists, and
+  ublockorigin.github.io, for uBlock Origin's lists. The requests carry no cookies and nothing about you or the
+  pages you visit; the lists are then used on your phone. Blocked requests never leave the phone at all.
 - to keep the video-site engine current, about once a day, pypi.org, to ask whether yt-dlp,
   yt-dlp-ejs or gallery-dl have a newer release, and files.pythonhosted.org (where PyPI keeps its
   files) to fetch one when they do. The requests carry no cookies and nothing about you, the links

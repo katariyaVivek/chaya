@@ -66,6 +66,56 @@ class FilterListsTest {
         return engine.shouldBlock(url, RequestType.SCRIPT, engine.page("https://news.example/"))
     }
 
+    /** Lists as Chaya has them: two shipped in the app, and one (uBlock Origin's) that is only ever fetched. */
+    private fun listsWithFetchedOnly() = FilterLists(
+        dir = dir,
+        openBundled = { name -> (if (name == "ads.txt") list("||bundled-ads.example^") else list("||bundled-trackers.example^")).byteInputStream() },
+        prefs = prefs,
+        clock = { now },
+        sources = listOf(
+            FilterLists.Source("Ads", "ads.txt", server.url("/ads.txt").toString()),
+            FilterLists.Source("Trackers", "trackers.txt", server.url("/trackers.txt").toString()),
+            FilterLists.Source("uBlock", "ublock.txt", server.url("/ublock.txt").toString(), bundled = false, minRules = 2),
+        ),
+    )
+
+    @Test
+    fun `a list not shipped in the app is fetched the first time, not a week later, and used once it is`() = runBlocking {
+        val lists = listsWithFetchedOnly()
+        // Before: the shipped lists work, and the missing one makes a fetch due at once
+        assertTrue(blocks(lists, "https://bundled-ads.example/a.js"))
+        assertFalse(blocks(lists, "https://popunder.example/p.js"))
+        assertTrue(lists.isUpdateDue())
+
+        server.enqueue(MockResponse().setBody(list("||bundled-ads.example^")))
+        server.enqueue(MockResponse().setBody(list("||bundled-trackers.example^")))
+        // uBlock Origin's lists start with their title, not an Adblock Plus header, and can be short
+        server.enqueue(MockResponse().setBody("! Title: uBlock filters\n||popunder.example^\n||more.example^\n"))
+        assertTrue(lists.updateIfDue())
+
+        assertTrue(blocks(lists, "https://popunder.example/p.js"))
+        assertFalse("nothing is due again for a week", lists.isUpdateDue())
+    }
+
+    @Test
+    fun `a failed first fetch of a list not shipped is tried again hours later, not on every page`() = runBlocking {
+        val lists = listsWithFetchedOnly()
+        server.enqueue(MockResponse().setResponseCode(503))
+        assertFalse(lists.updateIfDue())
+        assertFalse(lists.isUpdateDue())
+        now += FilterLists.RETRY_AFTER_MILLIS
+        assertTrue(lists.isUpdateDue())
+    }
+
+    @Test
+    fun `a uBlock Origin list is believed by its title, but not a page that only looks like one`() {
+        val good = File(dir.apply { mkdirs() }, "good.txt").apply { writeText("! Title: uBlock filters – Quick fixes\n||a.example^\n||b.example^\n||c.example^\n") }
+        assertTrue(FilterLists.looksLikeList(good, minRules = 2))
+        assertFalse("too short for what it claims", FilterLists.looksLikeList(good, minRules = 10))
+        val html = File(dir, "html.txt").apply { writeText("<!DOCTYPE html>\n<p>Not found</p>\n".repeat(600)) }
+        assertFalse(FilterLists.looksLikeList(html, minRules = 2))
+    }
+
     @Test
     fun `the copies in the app are used until fresh ones are fetched`() {
         val lists = lists()

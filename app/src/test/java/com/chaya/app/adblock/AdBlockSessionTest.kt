@@ -38,10 +38,34 @@ class AdBlockSessionTest {
                 listOf(
                     "||ads.example^", "/banner.\$image", "||popads.example^\$popup",
                     "news.example##.sponsor", "##.ad-banner", "@@||friendly.example^\$document",
+                    "news.example##+js(nowoif, /pop/)",
                 ).forEach(::add)
             }.build(),
         )
         session = blocker.newSession()
+    }
+
+    @Test
+    fun `a document gets its scriptlets as JSON, by its own address, and none where ads are allowed`() {
+        session.beginPage("https://www.news.example/story")
+        val calls = org.json.JSONArray(session.scriptletsFor("https://www.news.example/story"))
+        assertEquals(1, calls.length())
+        assertEquals("no-window-open-if", calls.getJSONArray(0).getString(0))
+        assertEquals("/pop/", calls.getJSONArray(0).getString(1))
+        assertEquals("a frame from elsewhere gets that site's", "[]", session.scriptletsFor("https://player.example/embed"))
+        assertEquals("[]", session.scriptletsFor("about:blank"))
+
+        settings.setAllowed("news.example", true)
+        assertEquals("[]", session.scriptletsFor("https://www.news.example/story"))
+    }
+
+    @Test
+    fun `the page may not go to a blocked host on its own, and each stop is counted`() {
+        session.beginPage("https://www.news.example/story")
+        assertTrue(session.shouldBlockNavigation("https://ads.example/landing"))
+        assertTrue(session.shouldBlockNavigation("https://popads.example/go"))
+        assertFalse(session.shouldBlockNavigation("https://other.example/story"))
+        assertEquals(2, session.blocked.value)
     }
 
     @Test

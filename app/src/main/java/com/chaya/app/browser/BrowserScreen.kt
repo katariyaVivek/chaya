@@ -84,6 +84,7 @@ import com.chaya.app.ChayaApplication
 import com.chaya.app.SharedLinks
 import com.chaya.app.adblock.AdBlockSession
 import com.chaya.app.adblock.CosmeticBridge
+import com.chaya.app.adblock.ScriptletBridge
 import com.chaya.app.detection.MediaBridge
 import com.chaya.app.detection.MediaInterceptor
 import com.chaya.app.detection.MediaNamer
@@ -134,6 +135,9 @@ private val tabDisk = Dispatchers.IO.limitedParallelism(1)
 
 /** The script that runs inside embedded frames ([createChayaWebView]'s frameAgentJs). */
 internal const val FRAME_AGENT_ASSET = "detection/chaya_frame_agent.js"
+
+/** The ad lists' scriptlets, run at the start of every document ([createChayaWebView]'s scriptletJs). */
+internal const val SCRIPTLETS_ASSET = "adblock/chaya_scriptlets.js"
 
 /** How long the page must stay put before the tabs are saved, so a burst of changes saves once. */
 private const val TAB_SAVE_SETTLE_MILLIS = 500L
@@ -283,6 +287,9 @@ fun BrowserScreen(
     val frameAgentJs = remember {
         runCatching { context.assets.open(FRAME_AGENT_ASSET).bufferedReader().readText() }.getOrDefault("")
     }
+    val scriptletJs = remember {
+        runCatching { context.assets.open(SCRIPTLETS_ASSET).bufferedReader().readText() }.getOrDefault("")
+    }
 
     val tabs = WebViewHolder.tabs
     // Read so that opening, closing or showing a tab, or a page loading in a tab not shown, recomposes.
@@ -360,6 +367,7 @@ fun BrowserScreen(
             adBlock = tab.adBlock,
             detectorJs = detectorJs,
             frameAgentJs = frameAgentJs,
+            scriptletJs = scriptletJs,
             callbacks = tab.callbacks,
             onVisited = { url, title -> app.appScope.launch { app.browsing.visited(url, title) } },
             onTitled = { url, title -> app.appScope.launch { app.browsing.titled(url, title) } },
@@ -1247,6 +1255,8 @@ internal fun createChayaWebView(
     callbacks: RetainedWebViewCallbacks,
     /** Runs at the start of every embedded frame's document (not the page's own), where WebView allows it. */
     frameAgentJs: String = "",
+    /** The ad lists' scriptlets: runs at the start of every document, the page's and its frames', before their scripts. */
+    scriptletJs: String = "",
     /** The site's icon for this tab, for its card in the tab grid. */
     onIcon: (Bitmap) -> Unit = {},
     /** A page finished loading in this tab, or moved within itself to another address, for history. */
@@ -1328,6 +1338,13 @@ internal fun createChayaWebView(
         }
         // Hands out only selectors from the public ad lists, so it needs no capability.
         addJavascriptInterface(CosmeticBridge(adBlock), "ChayaCosmetic")
+        // The same for the lists' scriptlets: what a document's address gets, asked by the script below.
+        addJavascriptInterface(ScriptletBridge(adBlock), "ChayaScriptlets")
+        // Before the page's own scripts, so a player's ads are gone before it reads them and a pop-under's
+        // window.open is off before it is called. A WebView too old for that runs it as the page starts, later.
+        val scriptletsAtStart = scriptletJs.isNotEmpty() &&
+            WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT) &&
+            runCatching { WebViewCompat.addDocumentStartJavaScript(this, scriptletJs, setOf("*")) }.isSuccess
 
         webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
@@ -1359,6 +1376,7 @@ internal fun createChayaWebView(
                     )
                 }
                 adBlock.cosmeticScript()?.let { view?.evaluateJavascript(it, null) }
+                if (!scriptletsAtStart && scriptletJs.isNotEmpty()) view?.evaluateJavascript(scriptletJs, null)
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
@@ -1393,6 +1411,12 @@ internal fun createChayaWebView(
                 if (request?.isForMainFrame != true) return false
                 val target = request.url?.toString() ?: return false
                 if (openOutside(target, request.hasGesture(), request.isRedirect)) return true
+                // A page sending itself to an ad host with no tap (a redirect chain from a click-anywhere script) is
+                // stopped; a tap the person made, and its redirects, go where they lead.
+                val sinceTap = lastTapAt?.let { SystemClock.elapsedRealtime() - it }
+                val asked = request.hasGesture() ||
+                    (request.isRedirect && sinceTap != null && sinceTap <= ExternalLinks.TAP_LASTS_MILLIS)
+                if (!asked && adBlock.shouldBlockNavigation(target)) return true
                 invalidateDetectorNavigation()
                 return false
             }
@@ -1474,7 +1498,8 @@ internal fun createChayaWebView(
                         ): Boolean {
                             request?.url?.toString()?.let { target ->
                                 when {
-                                    adBlock.shouldBlockPopup(target) -> Unit
+                                    // An ad pop-up by the lists, or a window to a host they block outright.
+                                    adBlock.shouldBlockNavigation(target) -> Unit
                                     // An app's link in a new window opens in its app, as from the page itself.
                                     ExternalLinks.route(target, true, false, null) == ExternalLinks.Route.APP ->
                                         openOutside(target, hasGesture = true, isRedirect = false)
