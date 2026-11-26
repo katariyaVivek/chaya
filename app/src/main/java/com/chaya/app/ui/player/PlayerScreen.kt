@@ -12,6 +12,15 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.filled.Fullscreen
+import androidx.activity.compose.BackHandler
+import android.os.SystemClock
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.material.icons.filled.Forward10
+import androidx.compose.material.icons.filled.Replay10
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.media3.common.VideoSize
 import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalConfiguration
@@ -246,6 +255,20 @@ fun PlayerScreen(
     }
     var showChapters by rememberSaveable { mutableStateOf(false) }
     var showSubtitles by rememberSaveable { mutableStateOf(true) }
+    // Whether the video is taller than wide (a Short, a Reel), which full screen keeps upright; known once it plays
+    var videoTall by remember { mutableStateOf(false) }
+    // Full screen for a tall video: the picture fills the upright screen (PlayerLayout.TALL)
+    var tallFullScreen by rememberSaveable { mutableStateOf(false) }
+    // The settings: speed, Loop video, the sleep timer, and Lock screen
+    var showSettings by rememberSaveable { mutableStateOf(false) }
+    var speed by rememberSaveable { mutableFloatStateOf(1f) }
+    var loop by rememberSaveable { mutableStateOf(false) }
+    var sleep by remember { mutableStateOf<SleepTimer>(SleepTimer.Off) }
+    var locked by remember { mutableStateOf(false) }
+    var lockHint by remember { mutableStateOf(false) }
+    // The picture held down plays at 2×; a run of double taps on one side, as it shows
+    var holding by remember { mutableStateOf(false) }
+    var streak by remember { mutableStateOf<SeekStreak?>(null) }
     val hasSubtitles by rememberUpdatedState(subtitles != null)
 
     fun keepWhere() {
@@ -269,6 +292,17 @@ fun PlayerScreen(
                 val track = PlaybackFailure.Track(format?.sampleMimeType, format?.width, format?.height)
                 failure = PlaybackFailure.sentence(error.errorCode, track)
                 app.eventLog.record(ChayaEvent.CaughtException("player", PlaybackFailure.diagnostic(error.errorCodeName, track)))
+            }
+
+            override fun onVideoSizeChanged(videoSize: VideoSize) {
+                if (videoSize.width > 0 && videoSize.height > 0) {
+                    videoTall = isTallVideo(videoSize.width, videoSize.height, 0, videoSize.pixelWidthHeightRatio)
+                }
+            }
+
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                // "End of video" on the sleep timer: it has ended, so the timer is done
+                if (playbackState == Player.STATE_ENDED && sleep == SleepTimer.EndOfVideo) sleep = SleepTimer.Off
             }
         }
         player.addListener(listener)
@@ -313,9 +347,10 @@ fun PlayerScreen(
     val translated = subtitles?.let { translations.shown(it.lines.size) }?.lines
     val sayingTranslated = currentLine?.let { translated?.getOrNull(it) }?.takeIf { saying != null }
 
-    // Upright or across, from the screen's shape; the full-screen button turns the phone, and leaving the player lets
-    // it turn as it likes again
-    val layout = PlayerLayout.of(LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE)
+    // Upright, across or tall, from the screen's shape and whether a tall video was put full screen; the full-screen
+    // button turns the phone for a wide video and keeps it upright for a tall one, and leaving the player lets it turn
+    // as it likes again
+    val layout = PlayerLayout.of(LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE, tallFullScreen)
     val activity = remember(context) { context.findActivity() }
     DisposableEffect(activity) {
         onDispose { activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED }
@@ -324,7 +359,7 @@ fun PlayerScreen(
     DisposableEffect(activity, layout) {
         val window = activity?.window
         val bars = window?.let { WindowInsetsControllerCompat(it, it.decorView) }
-        if (layout == PlayerLayout.ACROSS) {
+        if (layout.fullScreen) {
             bars?.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             bars?.hide(WindowInsetsCompat.Type.systemBars())
         }
@@ -349,7 +384,43 @@ fun PlayerScreen(
             Toast.makeText(context, "No subtitles were saved with this video", Toast.LENGTH_SHORT).show()
         }
     }
-    val turn: () -> Unit = { activity?.requestedOrientation = layout.turnTo }
+    fun turnTo(turn: PlayerTurn) {
+        tallFullScreen = turn.tall
+        activity?.requestedOrientation = turn.orientation
+    }
+    val turn: () -> Unit = { turnTo(layout.turn(videoTall)) }
+    // Back in full screen leaves full screen, upright at once, as YouTube's does; it used to close the player, which
+    // left the phone turned for a moment after
+    BackHandler(enabled = layout.fullScreen && !locked) { turnTo(PlayerTurn.EXIT) }
+    // Locked, Back unlocks rather than going anywhere
+    BackHandler(enabled = locked) { locked = false }
+
+    // The speed chosen, or 2× while the picture is held; Loop video, unless the sleep timer stops at its end
+    LaunchedEffect(speed, holding) { player.setPlaybackSpeed(if (holding) HOLD_SPEED else speed) }
+    LaunchedEffect(loop, sleep) {
+        player.repeatMode = if (loop && sleep != SleepTimer.EndOfVideo) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
+    }
+    // A sleep timer of some minutes pauses the video when it runs out
+    LaunchedEffect(sleep) {
+        val timer = sleep as? SleepTimer.At ?: return@LaunchedEffect
+        delay((timer.atMs - SystemClock.elapsedRealtime()).coerceAtLeast(0))
+        player.pause()
+        keepWhere()
+        sleep = SleepTimer.Off
+    }
+    // The unlock button shows for a moment after a touch; a double-tap streak shows until it stops growing
+    LaunchedEffect(lockHint) {
+        if (lockHint) {
+            delay(PlayerLayout.CONTROLS_STAY_MS)
+            lockHint = false
+        }
+    }
+    LaunchedEffect(streak) {
+        if (streak != null) {
+            delay(SeekStreak.STREAK_MS)
+            streak = null
+        }
+    }
     val controls = ControlActions(
         onSeeking = { seeking = it; touched = System.currentTimeMillis() },
         onSeekDone = {
@@ -460,6 +531,40 @@ fun PlayerScreen(
                 onRelease = { view -> view.player = null },
                 modifier = Modifier.fillMaxSize(),
             )
+            // Over the picture: a tap shows or hides the controls in full screen; a double tap on the left goes back
+            // 10 seconds and on the right forward, adding up while the taps go on; held, the video plays at 2×
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(layout) {
+                        detectTapGestures(
+                            onTap = {
+                                if (layout.fullScreen) controlsShown = !controlsShown
+                                touched = System.currentTimeMillis()
+                            },
+                            onDoubleTap = { at ->
+                                val next = SeekStreak.next(streak, SeekSide.of(at.x, size.width.toFloat()), SystemClock.elapsedRealtime())
+                                streak = next
+                                val end = lengthMs.takeIf { it > 0 } ?: Long.MAX_VALUE
+                                player.seekTo((player.currentPosition + next.stepMs).coerceIn(0, end))
+                                touched = System.currentTimeMillis()
+                            },
+                            onLongPress = { if (player.isPlaying) holding = true },
+                            onPress = {
+                                tryAwaitRelease()
+                                holding = false
+                            },
+                        )
+                    }
+                    .semantics { contentDescription = "Video. Double tap a side to skip 10 seconds; hold to play at 2×" },
+            )
+            streak?.let { shown ->
+                SeekStreakBubble(
+                    shown,
+                    modifier = Modifier.align(if (shown.side == SeekSide.BACK) Alignment.CenterStart else Alignment.CenterEnd),
+                )
+            }
+            if (holding) HoldPill(modifier = Modifier.align(Alignment.TopCenter).padding(top = if (layout.fullScreen) 72.dp else 12.dp))
             if (saying != null) {
                 SubtitleOverlay(saying, under = sayingTranslated, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = subtitlesLift))
             }
@@ -475,19 +580,14 @@ fun PlayerScreen(
     }
 
     when (layout) {
-        PlayerLayout.ACROSS -> Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+        PlayerLayout.ACROSS, PlayerLayout.TALL -> Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
             Picture(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clickable(interactionSource = null, indication = null) {
-                        controlsShown = !controlsShown
-                        touched = System.currentTimeMillis()
-                    },
+                modifier = Modifier.fillMaxSize(),
                 // Above the slim bar while it shows
-                subtitlesLift = if (controlsShown) 72.dp else 8.dp,
+                subtitlesLift = if (controlsShown) (if (layout == PlayerLayout.TALL) 120.dp else 72.dp) else 8.dp,
             )
             AnimatedVisibility(
-                visible = controlsShown,
+                visible = controlsShown && !locked,
                 enter = fadeIn(),
                 exit = fadeOut(),
                 modifier = Modifier.fillMaxSize(),
@@ -528,8 +628,13 @@ fun PlayerScreen(
                                 Icon(Icons.Default.Share, contentDescription = null, tint = NightInk, modifier = Modifier.size(20.dp))
                             }
                         }
+                        RoundButton(onClick = { showSettings = true }, label = "Settings") {
+                            Icon(Icons.Default.Settings, contentDescription = null, tint = NightInk, modifier = Modifier.size(20.dp))
+                        }
                     }
                     SlimControls(
+                        // Upright the row is narrow: the seek bar gets a row of its own
+                        stacked = layout == PlayerLayout.TALL,
                         atMs = shownAt,
                         lengthMs = lengthMs,
                         marks = marks,
@@ -556,7 +661,8 @@ fun PlayerScreen(
                     RoundButton(onClick = onNavigateBack, label = "Close player") {
                         Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, tint = NightInk)
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Up to six round buttons beside Close: 4dp apart, they fit a 360dp-wide phone
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         if (subtitles != null) {
                             RoundButton(onClick = { showHighlights = true }, label = "Highlights") {
                                 Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = NightInk, modifier = Modifier.size(20.dp))
@@ -570,6 +676,9 @@ fun PlayerScreen(
                             RoundButton(onClick = { share(app, task) }, label = "Share") {
                                 Icon(Icons.Default.Share, contentDescription = null, tint = NightInk, modifier = Modifier.size(20.dp))
                             }
+                        }
+                        RoundButton(onClick = { showSettings = true }, label = "Settings") {
+                            Icon(Icons.Default.Settings, contentDescription = null, tint = NightInk, modifier = Modifier.size(20.dp))
                         }
                         RoundButton(onClick = turn, label = "Full screen") {
                             Icon(Icons.Default.Fullscreen, contentDescription = null, tint = NightInk, modifier = Modifier.size(22.dp))
@@ -929,6 +1038,30 @@ fun PlayerScreen(
             onDismiss = { showChapters = false },
         )
     }
+
+    if (showSettings) {
+        PlayerSettingsSheet(
+            speed = speed,
+            onSpeed = { speed = it },
+            loop = loop,
+            onLoop = { loop = it },
+            sleep = sleep,
+            nowMs = SystemClock.elapsedRealtime(),
+            onSleep = { sleep = it },
+            onLock = {
+                showSettings = false
+                controlsShown = false
+                locked = true
+                lockHint = true
+            },
+            onDismiss = { showSettings = false },
+        )
+    }
+
+    // Locked, over everything: touches do nothing but show the unlock button
+    if (locked) {
+        LockLayer(hintShown = lockHint, onTouch = { lockHint = true }, onUnlock = { locked = false; lockHint = false })
+    }
 }
 
 /** How long what a change to the subtitles did stays shown. */
@@ -1021,14 +1154,23 @@ private fun PlayButton(playing: Boolean, size: androidx.compose.ui.unit.Dp, onCl
     }
 }
 
+/** Back or forward 10 seconds: the circled 10, as Google's players draw it. */
 @Composable
-private fun SkipButton(text: String, label: String, onClick: () -> Unit) {
-    TextButton(onClick = onClick, modifier = Modifier.semantics { contentDescription = label }) {
-        Text(text, color = NightInk, style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Bold))
+private fun SkipButton(forward: Boolean, onClick: () -> Unit) {
+    IconButton(
+        onClick = onClick,
+        modifier = Modifier.size(48.dp).semantics { contentDescription = if (forward) "Forward 10 seconds" else "Back 10 seconds" },
+    ) {
+        Icon(
+            if (forward) Icons.Default.Forward10 else Icons.Default.Replay10,
+            contentDescription = null,
+            tint = NightInk,
+            modifier = Modifier.size(30.dp),
+        )
     }
 }
 
-/** The bar at the foot, upright: the seek bar, then the time, −10, play in ink, +10 and the length. */
+/** The bar at the foot, upright: the seek bar, then the time, back 10, play in ink, forward 10 and the length. */
 @Composable
 private fun Controls(
     atMs: Long,
@@ -1059,9 +1201,9 @@ private fun Controls(
                     style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold),
                     modifier = Modifier.width(56.dp),
                 )
-                SkipButton("−10", "Back 10 seconds", actions.onBack)
-                PlayButton(playing, 48.dp, actions.onPlayPause)
-                SkipButton("+10", "Forward 10 seconds", actions.onForward)
+                SkipButton(forward = false, onClick = actions.onBack)
+                PlayButton(playing, 52.dp, actions.onPlayPause)
+                SkipButton(forward = true, onClick = actions.onForward)
                 Text(
                     if (lengthMs > 0) clockOf(lengthMs) else "",
                     color = NightMuted,
@@ -1075,8 +1217,9 @@ private fun Controls(
 }
 
 /**
- * The bar across the foot of a full-screen picture: one row, so it covers a strip of the picture rather than half of
- * it. Play, −10, +10, the time, the seek bar, the length, subtitles and back to upright.
+ * The bar across the foot of a full-screen picture: one row across, so it covers a strip of the picture rather than half
+ * of it: play, back and forward 10, the time, the seek bar, the length, subtitles and back to upright. Upright ([stacked],
+ * a tall video full screen) the row is too narrow for the seek bar, which takes a row of its own above the buttons.
  */
 @Composable
 private fun SlimControls(
@@ -1089,19 +1232,44 @@ private fun SlimControls(
     subtitles: Boolean?,
     actions: ControlActions,
     modifier: Modifier = Modifier,
+    stacked: Boolean = false,
 ) {
+    val shade = Modifier
+        .fillMaxWidth()
+        .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.65f))))
+        .navigationBarsPadding()
+        .padding(horizontal = 16.dp, vertical = 8.dp)
+    if (stacked) {
+        Column(modifier = modifier.then(shade)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(clockOf(atMs), color = NightInk, style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold))
+                SeekBar(atMs, lengthMs, marks, actions, Modifier.weight(1f).padding(horizontal = 8.dp), spans)
+                Text(if (lengthMs > 0) clockOf(lengthMs) else "", color = NightMuted, style = TextStyle(fontSize = 13.sp))
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                SubtitlesButton(subtitles = subtitles, onClick = actions.onSubtitles)
+                SkipButton(forward = false, onClick = actions.onBack)
+                PlayButton(playing, 52.dp, actions.onPlayPause)
+                SkipButton(forward = true, onClick = actions.onForward)
+                RoundButton(onClick = actions.onTurn, label = "Exit full screen") {
+                    Icon(Icons.Default.FullscreenExit, contentDescription = null, tint = NightInk, modifier = Modifier.size(22.dp))
+                }
+            }
+        }
+        return
+    }
     Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.65f))))
-            .navigationBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+        modifier = modifier.then(shade),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         PlayButton(playing, 40.dp, actions.onPlayPause)
-        SkipButton("−10", "Back 10 seconds", actions.onBack)
-        SkipButton("+10", "Forward 10 seconds", actions.onForward)
+        SkipButton(forward = false, onClick = actions.onBack)
+        SkipButton(forward = true, onClick = actions.onForward)
         Text(clockOf(atMs), color = NightInk, style = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.SemiBold))
         SeekBar(atMs, lengthMs, marks, actions, Modifier.weight(1f).padding(horizontal = 8.dp), spans)
         Text(if (lengthMs > 0) clockOf(lengthMs) else "", color = NightMuted, style = TextStyle(fontSize = 13.sp))

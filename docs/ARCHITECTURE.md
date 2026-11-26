@@ -226,7 +226,11 @@ faster than APKs ship, so the app fetches newer releases itself.
   the cache through the cache, as above. Pictures, sound and ZIPs open as before (`playsInChaya`). Where
   playback stopped is kept per download (`PlaybackPositions`, `Watched`): the player starts there unless it
   was in the first 5 seconds or the last 10, Home leads with the video left part-way (*Continue · 4:12 of
-  12:40*), and deleting a download forgets it.
+  12:40*), and deleting a download forgets it. The layout is one value (`PlayerLayout`: `UPRIGHT`, `ACROSS`, `TALL`), from
+  the screen's shape and whether a tall video was put full screen; `PlayerTurn` says what full screen and Back do to the
+  phone. The rules behind the gestures and settings are pure and tested (`PlayerModes.kt`: a video's shape, the double
+  taps' streak, the speeds, the sleep timer); the speed (2× while the picture is held), Loop video and the sleep timer
+  are applied to the ExoPlayer from Compose state.
 - **Subtitles and the transcript** (`subtitles/`, a port of `chaya-core`'s `subtitles` with its tests): the engine
   lists a link's subtitles (`subtitles=True`), `Subtitles.pick` takes the language spoken as Windows does, and
   `DownloadManager` fetches them as the download starts, beside it and never in its way (`SubtitleStore`, by
