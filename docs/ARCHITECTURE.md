@@ -56,7 +56,8 @@ What the sheet shows:
 
 ## Ad blocking (`adblock/`)
 
-Android's WebView cannot run extensions, so Chaya blocks with uBlock Origin's base lists itself.
+Android's WebView cannot run extensions, so Chaya blocks with uBlock Origin's lists itself: EasyList and EasyPrivacy,
+shipped in the app, and uBlock Origin's own lists (filters, badware, privacy, quick fixes, unbreak), fetched.
 
 - `adblock/engine/` is plain Kotlin with no Android in it. `FilterEngine` reads the Adblock Plus
   format of EasyList and EasyPrivacy. Bare `||host^` rules (nine in ten) go in a set, looked up by
@@ -64,8 +65,18 @@ Android's WebView cannot run extensions, so Chaya blocks with uBlock Origin's ba
   pattern and tried only on addresses containing it. Exceptions, `$important`, `$third-party`
   (by registered name: OkHttp's public suffix list), `$domain`, kinds of request and page-wide
   exceptions (`$document`, `$elemhide`, `$generichide`) are honoured. Regular expressions,
-  scriptlets, procedural selectors and rewriting options (`csp`, `removeparam`...) are skipped,
-  never half-applied. A request whose kind cannot be told only meets rules that name no kind.
+  uBlock's `trusted-` scriptlets, procedural selectors and rewriting options (`csp`, `removeparam`...) are
+  skipped, never half-applied. A request whose kind cannot be told only meets rules that name no kind.
+  `shouldBlockNavigation` is uBlock's strict blocking: a page may not send itself, with no tap, to a host the lists
+  block for every kind of request, nor to an ad pop-up.
+- `ScriptletRules` keeps the lists' scriptlets (`##+js(...)`, about 2,750 of uBlock's 3,300), by site, with
+  their exceptions. `assets/adblock/chaya_scriptlets.js` is Chaya's own implementation of the ones it carries
+  (`set-constant`, `abort-on-property-read/write`, `abort-current-script`, `addEventListener-defuser`,
+  `no-setTimeout-if`, `no-window-open-if`, `json-prune` and its fetch and XHR forms, `no-fetch-if`, `no-xhr-if`, the
+  timer boosters, `remove-attr`, `remove-class`, `remove-node-text`, `noeval-if`). WebView runs it at the start of
+  every document (`addDocumentStartJavaScript`), before the page's scripts, and it asks `ChayaScriptlets` (a
+  `@JavascriptInterface` handing out only rules from the public lists) what the document's address gets. This is
+  what takes the ads out of YouTube's player data and stops pop-unders. Its tests run in Node (`app/src/test/js`).
 - `CosmeticRules` turns element-hiding rules into CSS. Rules for the site, and the few rules for
   every site that have no class or id to look up, go in the page script. The rest (about 13,000
   `.ad-banner`-style rules) are handed out by the classes and ids the page actually has: the script
@@ -74,11 +85,13 @@ Android's WebView cannot run extensions, so Chaya blocks with uBlock Origin's ba
 - `AdBlocker` (one per app) holds the engine and `AdBlockSettings` (on/off, allowed sites).
   `AdBlockSession` (one per WebView) knows the page shown, answers `shouldInterceptRequest` with an
   empty 204 for a blocked request (before `MediaInterceptor`, so an ad is never offered for
-  download), refuses ad pop-ups and counts what it blocked. Pages themselves are never blocked.
-- `FilterLists` reads the lists shipped in `assets/adblock/`, or fresher copies fetched from
-  easylist.to once a week. All lists are fetched before any is replaced, and a copy that does not
-  look like a list is thrown away. The lists are read in the background when the browser first
-  shows (about a second); pages load unblocked until then.
+  download), refuses ad pop-ups and pages sending themselves to ad hosts, and counts what it blocked. A page the
+  person asked for (typed, a bookmark, a tap) is never blocked.
+- `FilterLists` reads the lists shipped in `assets/adblock/`, or fresher copies fetched once a week (EasyList's
+  from easylist.to, uBlock Origin's from ublockorigin.github.io). uBlock Origin's are not shipped (they are GPLv3;
+  Chaya is MIT), so they are fetched the first time the browser opens. All lists are fetched before any is
+  replaced, and a copy that does not look like a list is thrown away. The lists are read in the background when
+  the browser first shows (a second or two); pages load unblocked until then.
 
 ## Video sites (`platform/` and `src/main/python/chaya_engine`)
 

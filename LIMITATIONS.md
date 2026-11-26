@@ -34,9 +34,14 @@ These are deliberate scope decisions, not open bugs.
   once they pass a check, so a site's change is usually handled within days of yt-dlp's fix, without
   a new APK. It can be turned off under Downloads › ⋮ › Diagnostics.
 - Pause, resume and retry, with a reason shown when something fails.
-- **Blocking ads and trackers** in the browser with EasyList and EasyPrivacy, the lists uBlock
-  Origin starts with: requests to ad and tracking servers are stopped, ad boxes are hidden, and ad
-  pop-ups are refused. It can be turned off everywhere or for one site.
+- **Blocking ads and trackers** in the browser with EasyList, EasyPrivacy and uBlock Origin's own
+  lists: requests to ad and tracking servers are stopped, ad boxes are hidden, pop-ups and pages sending
+  themselves to ad sites or app stores are refused, and the lists' scriptlets run at the start of each page (most
+  of uBlock Origin's, by Chaya's own code), which takes the ads out of YouTube's player. uBlock Origin's lists are
+  fetched the first time the browser opens, so until then, or offline the first time, only EasyList and
+  EasyPrivacy apply. Its `trusted-` scriptlets and procedural hiding (`:has-text`...) are not supported, so some
+  sites' ads, YouTube's among them when it changes how it serves them, can get through until a list catches up
+  with a rule Chaya can run. It can be turned off everywhere or for one site.
 
 ## What Chaya does not do
 

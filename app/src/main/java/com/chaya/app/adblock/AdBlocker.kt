@@ -139,6 +139,28 @@ class AdBlockSession internal constructor(private val blocker: AdBlocker) {
         return block
     }
 
+    /**
+     * Whether the page may not go to [url] on its own, or a tapped window may not open it: an ad pop-up, or a host the
+     * lists block outright. Counted when blocked.
+     */
+    fun shouldBlockNavigation(url: String): Boolean {
+        val (engine, context) = active() ?: return false
+        val block = engine.shouldBlockNavigation(url, context)
+        if (block) _blocked.update { it + 1 }
+        return block
+    }
+
+    /**
+     * The scriptlets for a document at [frameUrl] (the page, or a frame in it) as JSON, `[[name, arg...], ...]`; `[]`
+     * when ads are not blocked on the page shown.
+     */
+    fun scriptletsFor(frameUrl: String): String {
+        val (engine, _) = active() ?: return "[]"
+        if (!frameUrl.startsWith("http")) return "[]"
+        val calls = engine.scriptlets(engine.page(frameUrl))
+        return JSONArray().apply { calls.forEach { call -> put(JSONArray(call)) } }.toString()
+    }
+
     /** A script that hides the page's ad boxes, for the page's main document; null when nothing is hidden there. */
     fun cosmeticScript(): String? {
         val (engine, context) = active() ?: return null
@@ -177,6 +199,22 @@ class CosmeticBridge(private val session: AdBlockSession) {
         const val MAX_REQUEST_CHARS = 200_000
         const val MAX_TOKENS = 4_000
         const val MAX_TOKEN_CHARS = 200
+    }
+}
+
+/**
+ * What the scriptlet script asks for at the start of each document: the scriptlets for its address. Exposed to
+ * pages as `ChayaScriptlets`; it hands out only rules from the public ad lists, so any frame may call it.
+ */
+class ScriptletBridge(private val session: AdBlockSession) {
+    @JavascriptInterface
+    fun forPage(url: String?): String {
+        if (url.isNullOrEmpty() || url.length > MAX_URL_CHARS) return "[]"
+        return runCatching { session.scriptletsFor(url) }.getOrDefault("[]")
+    }
+
+    private companion object {
+        const val MAX_URL_CHARS = 8_192
     }
 }
 

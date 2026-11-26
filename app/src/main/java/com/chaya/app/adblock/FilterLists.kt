@@ -16,9 +16,11 @@ import java.io.InputStream
 import java.util.concurrent.TimeUnit
 
 /**
- * The ad lists Chaya blocks with: EasyList (ads) and EasyPrivacy (trackers), the two lists uBlock Origin starts
- * with besides its own. A copy of each ships inside the app, so blocking works from the first page and offline.
- * About once a week Chaya fetches fresh copies straight from easylist.to; a fetch sends nothing about the person
+ * The ad lists Chaya blocks with: EasyList (ads) and EasyPrivacy (trackers), and uBlock Origin's own lists beside
+ * them (its filters, badware, privacy, quick fixes and unbreak), which stop the pop-ups, pop-unders and video ads
+ * EasyList leaves to them. EasyList and EasyPrivacy ship inside the app, so blocking works from the first page and
+ * offline; uBlock Origin's lists are fetched the first time the browser opens (they are not shipped), from its
+ * own site. About once a week Chaya fetches fresh copies of all of them; a fetch sends nothing about the person
  * (no cookies, no history) and a copy that does not look like the list is thrown away.
  */
 class FilterLists(
@@ -31,15 +33,28 @@ class FilterLists(
     private val clock: () -> Long = System::currentTimeMillis,
     val sources: List<Source> = DEFAULT_SOURCES,
 ) {
-    /** One list: [fileName] in the app's assets under `adblock/` and in [dir], fetched from [url]. */
-    data class Source(val title: String, val fileName: String, val url: String)
+    /**
+     * One list: [fileName] in [dir], fetched from [url], and in the app's assets under `adblock/` when [bundled].
+     * A fetched copy has at least [minRules] lines.
+     */
+    data class Source(
+        val title: String,
+        val fileName: String,
+        val url: String,
+        val bundled: Boolean = true,
+        val minRules: Int = MIN_RULES,
+    )
 
     /** Reads every list, the fetched copy where there is one, into a new engine. Slow (a second or two): not on the main thread. */
     fun buildEngine(resolver: DomainResolver): FilterEngine {
         val builder = FilterEngine.Builder(resolver)
         for (source in sources) {
             val fetched = File(dir, source.fileName)
-            val stream = if (fetched.isFile) fetched.inputStream() else openBundled(source.fileName)
+            val stream = when {
+                fetched.isFile -> fetched.inputStream()
+                source.bundled -> openBundled(source.fileName)
+                else -> continue // not fetched yet
+            }
             stream.bufferedReader().useLines { builder.addAll(it) }
         }
         return builder.build()
@@ -48,12 +63,16 @@ class FilterLists(
     /** When the lists were last fetched, or null while the copies shipped in the app are in use. */
     fun lastUpdated(): Long? = prefs.getLong(KEY_UPDATED, 0L).takeIf { it > 0 }
 
-    /** Whether it is time to fetch: a week since the last fetch, and not within hours of a failed try. */
+    /**
+     * Whether it is time to fetch: a week since the last fetch, or a list that ships without a copy has none yet;
+     * and not within hours of a failed try.
+     */
     fun isUpdateDue(): Boolean {
         val now = clock()
         val updated = prefs.getLong(KEY_UPDATED, 0L)
         val tried = prefs.getLong(KEY_TRIED, 0L)
-        return now - updated >= UPDATE_EVERY_MILLIS && now - tried >= RETRY_AFTER_MILLIS
+        val missing = sources.any { !it.bundled && !File(dir, it.fileName).isFile }
+        return (missing || now - updated >= UPDATE_EVERY_MILLIS) && now - tried >= RETRY_AFTER_MILLIS
     }
 
     /**
@@ -89,7 +108,7 @@ class FilterLists(
             val temp = File(dir, source.fileName + ".download")
             response.body?.byteStream()?.use { input -> temp.outputStream().use { input.copyTo(it) } }
                 ?: throw IOException("Empty response for ${source.fileName}")
-            if (!looksLikeList(temp)) {
+            if (!looksLikeList(temp, source.minRules)) {
                 temp.delete()
                 throw IOException("${source.fileName} is not an ad list")
             }
@@ -106,9 +125,17 @@ class FilterLists(
         /** Fewer rules than this means a cut-off or wrong file, not a real copy of the list. */
         const val MIN_RULES = 1_000
 
+        /** Where uBlock Origin publishes its lists, as its own updater fetches them. */
+        private const val UBLOCK = "https://ublockorigin.github.io/uAssets/filters"
+
         val DEFAULT_SOURCES = listOf(
             Source("EasyList", "easylist.txt", "https://easylist.to/easylist/easylist.txt"),
             Source("EasyPrivacy", "easyprivacy.txt", "https://easylist.to/easylist/easyprivacy.txt"),
+            Source("uBlock filters", "ublock-filters.txt", "$UBLOCK/filters.txt", bundled = false),
+            Source("uBlock filters – Badware risks", "ublock-badware.txt", "$UBLOCK/badware.txt", bundled = false),
+            Source("uBlock filters – Privacy", "ublock-privacy.txt", "$UBLOCK/privacy.txt", bundled = false),
+            Source("uBlock filters – Quick fixes", "ublock-quick-fixes.txt", "$UBLOCK/quick-fixes.txt", bundled = false, minRules = 100),
+            Source("uBlock filters – Unbreak", "ublock-unbreak.txt", "$UBLOCK/unbreak.txt", bundled = false),
         )
 
         fun from(context: Context) = FilterLists(
@@ -117,11 +144,14 @@ class FilterLists(
             prefs = context.getSharedPreferences("chaya_prefs", Context.MODE_PRIVATE),
         )
 
-        /** An Adblock Plus list: its header, then at least [MIN_RULES] lines. */
-        internal fun looksLikeList(file: File): Boolean {
-            val header = file.bufferedReader().use { it.readLine() }.orEmpty()
-            if (!header.startsWith("[Adblock Plus")) return false
-            return file.bufferedReader().useLines { lines -> lines.take(MIN_RULES + 1).count() > MIN_RULES }
+        /**
+         * An ad list: an Adblock Plus header (`[Adblock Plus 2.0]`) or uBlock Origin's (`! Title: ...`), then at least
+         * [minRules] lines.
+         */
+        internal fun looksLikeList(file: File, minRules: Int = MIN_RULES): Boolean {
+            val header = file.bufferedReader().use { it.readLine() }.orEmpty().removePrefix("\uFEFF")
+            if (!header.startsWith("[Adblock Plus") && !header.startsWith("! Title:")) return false
+            return file.bufferedReader().useLines { lines -> lines.take(minRules + 1).count() > minRules }
         }
 
         private fun defaultClient() = OkHttpClient.Builder()

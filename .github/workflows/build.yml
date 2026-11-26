@@ -95,6 +95,10 @@ jobs:
             gradle testDebugUnitTest --stacktrace
           fi
 
+      # The ad lists' scriptlets are JavaScript the WebView runs; Node runs them the same way (app/src/test/js).
+      - name: Run scriptlet tests
+        run: node --test app/src/test/js/*.test.mjs
+
       # The full reports (with each failure's message, stack and output) for when the log is not enough.
       - name: Upload test reports
         if: failure()
